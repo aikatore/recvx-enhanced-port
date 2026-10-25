@@ -2,15 +2,6 @@
 
 ## 0.6.10 (2026-10-25)
 
-> [!NOTE]
-> Hey, sorry for just this small update!
-> There are bigger parts in the works coming next week, so stay tuned!
-> As always please report any issues you encounter, thanks for playing!
->
-> The cutscene modelswap is an early iteration, so it's not perfect yet
->
-> -aikatore
-
 ### Gameplay
 
 - **Rifle ammo stacks** (Gameplay, on by default): rifle and assault rifle bullets stack in one slot
