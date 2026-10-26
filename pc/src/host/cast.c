@@ -109,6 +109,19 @@ int cast_model(unsigned seed, unsigned scene, int c, int all, int imports)
     return pool[pick[c]] == CAST_ZOMBIES ? cast_zombie_look(seed, scene, c) : pool[pick[c]];   /* (the zombie entry: which look, from the same seed and scene) */
 }
 
+int cast_appear_pick(unsigned seed, int imports)
+{
+    int n = cast_pool(1, imports, pool, POOL_MAX), m;
+    unsigned h = seed * 0x9E3779B1u + 0x632BE5ABu;
+    h ^= h >> 16; h *= 0x85EBCA6Bu; h ^= h >> 13; h *= 0xC2B2AE35u; h ^= h >> 16;
+    if (!n) return 0;
+    m = pool[h % (unsigned)n];
+    if (m == CAST_ZOMBIES) m = cast_zombie_look(seed, 0, CAST_CHARACTERS);   /* (as a character of its own) */
+    if (m >= ACTOR_PART) return 1 + m - ACTOR_PART;                         /* player file n: chr 1 + n */
+    if (m >= ACTOR_MODELS) return COOP_CHR_IMPORT + m - ACTOR_MODELS;
+    return appear_canon(COOP_CHR_ACTOR + m);
+}
+
 unsigned cast_import_id(void)
 {
     static int last = -1;

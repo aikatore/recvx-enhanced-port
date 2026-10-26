@@ -39,6 +39,19 @@ int main(void)
         CHECK(got > 20 && got < 400 * CAST_CHARACTERS / 4);   /* zombies now and then, not most of the time */
         CHECK(cast_zombie_look(5, 0, 1) != cast_zombie_look(5, 0, 2) || cast_zombie_look(6, 0, 1) != cast_zombie_look(6, 0, 2));
     }
+    {   /* "Randomize Played as": the same seed the same look; seeds spread over the pool; every pick a listed look */
+        int seen[COOP_CHR_MAX + 1] = { 0 }, kinds = 0;
+        for (s = 0; s < 2000; s++) {
+            int a = cast_appear_pick((unsigned)s, 0);
+            CHECK(a == cast_appear_pick((unsigned)s, 0) && a >= 1 && a <= COOP_CHR_MAX && appear_canon(a) == a && appear_at(appear_pos(a)) == a);
+            CHECK(a != 1 && a != 2 && a != 5 && a != COOP_CHR_ACTOR + 0 && a != COOP_CHR_ACTOR + 1);   /* never Claire's or Chris's own looks */
+            kinds += !seen[a]; seen[a] = 1;
+        }
+        CHECK(kinds >= na - 1);   /* every pool entry (the zombie entry as several looks) */
+        CHECK(cast_appear_pick(123456, 0) != cast_appear_pick(654321, 0));
+        printf("played as: seed 123456 -> %s, 654321 -> %s (%d looks over 2000 seeds)\n", appear_name(cast_appear_pick(123456, 0)),
+               appear_name(cast_appear_pick(654321, 0)), kinds);
+    }
     /* who is cast */
     CHECK(cast_character(91, 0) == 0 && cast_character(43, 0) == 2 && cast_character(96, 1) == 4 && cast_character(98, 0) == 6);
     CHECK(cast_character(99, 0) < 0 && !in(cine, nc, 14) && !in(all, na, 14));   /* the man in the hazmat suit: neither cast nor a pick */

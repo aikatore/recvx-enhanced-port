@@ -4,6 +4,7 @@
 #include "biorand.h"
 #include "settings.h"
 #include "../../include/pc_parse.h"
+#include "../net/biorand_dl.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -99,6 +100,59 @@ const char* biorand_locked(void)
 }
 
 int biorand_setting(void) { return g_config.biorand; }
+
+/* ---------------------------------------------------------------- generating */
+/* p made absolute from the current directory (where the game reads it from) */
+static void abs_path(const char* p, char* out, int n)
+{
+    char* cwd;
+    if (p[0] == '/' || p[0] == '\\' || (p[0] && p[1] == ':') || !(cwd = SDL_GetCurrentDirectory())) { snprintf(out, n, "%s", p); return; }
+    snprintf(out, n, "%s%s", cwd, p[0] == '.' && (p[1] == '/' || p[1] == '\\') ? p + 2 : p);   /* (SDL ends it with a separator) */
+    SDL_free(cwd);
+}
+
+static void mods_abs(char* out, int n)
+{
+    abs_path(mods_dir(), out, n);
+    SDL_CreateDirectory(out);
+}
+
+int biorand_mods_free_mb(void)
+{
+    char m[1100];
+    mods_abs(m, sizeof(m));
+    return biorand_free_mb(m);
+}
+
+int biorand_iso_known(void) { return g_config.iso_path[0] != 0; }
+
+/* BIORAND_CONFIG: <save>/biorand/settings.json, ours only (BioRand's GUI keeps its own). generateCvPcMod: the PC mod
+   folder, not a PS2 image; disableCustomContent: BioRand's custom data folder is always the default config folder,
+   so off, one seed gives one pack everywhere. The CLI adds seedCv and lastSelectedGame; rewritten each run. */
+int biorand_generate(const char* seed_string)
+{
+    char dir[1100], cfg[1200], iso[1100], mods[1100];
+    const char* test = SDL_getenv("RECVX_BIORAND_ISO_TEST");   /* test aid: another image for the CLI (a bad path) */
+    SDL_IOStream* f;
+    int ok;
+    abs_path(g_config.save_dir, dir, sizeof(dir));
+    snprintf(cfg, sizeof(cfg), "%s/biorand", dir);
+    SDL_CreateDirectory(cfg);
+    snprintf(cfg, sizeof(cfg), "%s/biorand/settings.json", dir);
+    f = SDL_IOFromFile(cfg, "wb");
+    ok = f && SDL_IOprintf(f, "{\n  \"lastSelectedGame\": 3,\n  \"generateCvPcMod\": true,\n  \"disableCustomContent\": true\n}\n") > 0;
+    if (f && !SDL_CloseIO(f)) ok = 0;
+    if (!ok) { host_log("biorand: cannot write %s\n", cfg); return -1; }
+    abs_path(test ? test : g_config.iso_path, iso, sizeof(iso));
+    mods_abs(mods, sizeof(mods));
+    return biorand_cli_generate(seed_string, iso, mods, cfg);
+}
+
+void biorand_enable(void)
+{
+    g_config.biorand = 1;
+    settings_save_later();
+}
 
 int biorand_toggle(void)
 {

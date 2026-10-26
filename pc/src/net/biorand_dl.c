@@ -8,6 +8,7 @@
 #include <winhttp.h>
 #else
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #endif
 
 void host_log(const char* fmt, ...);
@@ -22,6 +23,11 @@ char g_biorand_cli_digest[BRDL_DIGEST_CAP];
 static SDL_AtomicInt st_state, st_done, st_total, busy, cancel;
 static char st_error[160];   /* written before st_state turns BRDL_ERROR (SDL's atomics are full barriers) */
 static int job_install;      /* set before the thread starts */
+static int job_gen;          /* the CLI runs (gen below); set before the thread starts */
+static char gen_seed[96], gen_iso[1100], gen_mods[1100], gen_cfg[1100];
+static SDL_SpinLock st_lock;   /* st_msg, st_warn: written by the thread while the UI reads them */
+static SDL_AtomicInt st_pct;
+static char st_msg[96], st_warn[160];
 static int allow_file;       /* test aid: RECVX_BIORAND_API_TEST is a file:// URL */
 static char base[1024];      /* the game's folder, with a trailing separator */
 
@@ -99,23 +105,54 @@ static void rm_tree(const char* path, int depth)
     SDL_RemovePath(path);
 }
 
+/* SDL's process: started without a console window on Windows (SDL's background flag: CREATE_NO_WINDOW; on POSIX
+   it would detach the child, which then cannot be waited for or killed). out: its stdout and stderr in one pipe. */
+static SDL_Process* spawn(const char* const* args, SDL_Environment* env, int out)
+{
+    SDL_PropertiesID props = SDL_CreateProperties();
+    SDL_Process* pr;
+    SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, (void*)args);
+    if (env) SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ENVIRONMENT_POINTER, env);
+    if (out) {
+        SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDOUT_NUMBER, SDL_PROCESS_STDIO_APP);
+        SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_STDERR_TO_STDOUT_BOOLEAN, true);
+    }
+#ifdef _WIN32
+    SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_BACKGROUND_BOOLEAN, true);
+#endif
+    pr = SDL_CreateProcessWithProperties(props);
+    SDL_DestroyProperties(props);
+    return pr;
+}
+
+/* its exit code once SDL_WaitProcess said it ended. SDL reports 0 for every background process, so on Windows it
+   is asked from the system (SDL's handle keeps the process object, so the pid is still this process's). */
+static int exit_code(SDL_Process* pr, int code)
+{
+#ifdef _WIN32
+    DWORD c;
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                           (DWORD)SDL_GetNumberProperty(SDL_GetProcessProperties(pr), SDL_PROP_PROCESS_PID_NUMBER, 0));
+    if (h) {
+        if (GetExitCodeProcess(h, &c)) code = (int)c;
+        CloseHandle(h);
+    }
+#else
+    (void)pr;
+#endif
+    return code;
+}
+
 /* args (argv, no shell) to their end: the exit code; -1 not started, -2 cancelled, -3 `watch` grew past max.
    While it runs, st_done follows the size of the file `watch`. */
 static int run(const char* const* args, const char* watch, Sint64 max)
 {
-    SDL_PropertiesID props = SDL_CreateProperties();
-    SDL_Process* pr;
+    SDL_Process* pr = spawn(args, NULL, 0);
     int code = -1;
-    SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, (void*)args);
-#ifdef _WIN32
-    SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_BACKGROUND_BOOLEAN, true);   /* CREATE_NO_WINDOW: no console window (POSIX: it would detach the child) */
-#endif
-    pr = SDL_CreateProcessWithProperties(props);
-    SDL_DestroyProperties(props);
     if (!pr) return -1;
     for (;;) {
         SDL_PathInfo i;
-        if (SDL_WaitProcess(pr, false, &code)) break;
+        if (SDL_WaitProcess(pr, false, &code)) { code = exit_code(pr, code); break; }
         if (watch && SDL_GetPathInfo(watch, &i)) {
             SDL_SetAtomicInt(&st_done, (int)SDL_min(i.size, max));
             if ((Sint64)i.size > max) code = -3;
@@ -348,14 +385,126 @@ static int job(void)
     return BRDL_INSTALLED;
 }
 
+/* ---------------------------------------------------------------- generate (the CLI runs) */
+int biorand_free_mb(const char* dir)
+{
+    unsigned long long mb;
+#ifdef _WIN32
+    wchar_t w[1100];
+    ULARGE_INTEGER fr;
+    if (!MultiByteToWideChar(CP_UTF8, 0, dir, -1, w, 1100) || !GetDiskFreeSpaceExW(w, &fr, NULL, NULL)) return -1;
+    mb = fr.QuadPart >> 20;
+#else
+    struct statvfs v;
+    if (statvfs(dir, &v)) return -1;
+    mb = (unsigned long long)v.f_bavail * v.f_frsize >> 20;
+#endif
+    return mb > 0x7FFFFFFF ? 0x7FFFFFFF : (int)mb;
+}
+
+/* what a run leaves behind in mods: the CLI's own output folders (killed between its writing and its rename) and
+   our scratch folder for it; nothing else there is touched */
+static void gen_clean(const char* mods)
+{
+    static const char* const pat[] = { "biorand.tmp-*", "biorand.bak-*" };
+    char p[1200];
+    for (int k = 0; k < 2; k++) {
+        int n = 0;
+        char** names = SDL_GlobDirectory(mods, pat[k], 0, &n);
+        for (int i = 0; names && i < n; i++)
+            if (!strchr(names[i], '/') && !strchr(names[i], '\\') && SDL_snprintf(p, sizeof(p), "%s/%s", mods, names[i]) < (int)sizeof(p)) {
+                host_log("biorand-cli: deleting %s\n", p);
+                rm_tree(p, 0);
+            }
+        SDL_free(names);
+    }
+    SDL_snprintf(p, sizeof(p), "%s/biorand-temp", mods);
+    rm_tree(p, 0);
+}
+
+static void gen_line(char* l)
+{
+    const char* t;
+    int pct, k = brdl_line(l, &pct, &t);
+    if (!k) { host_log("biorand-cli: %s\n", l); return; }
+    SDL_LockSpinlock(&st_lock);
+    if (k == 'P') { SDL_strlcpy(st_msg, t, sizeof(st_msg)); SDL_SetAtomicInt(&st_pct, pct); }
+    else if (k == 'W') SDL_strlcpy(st_warn, t, sizeof(st_warn));
+    else SDL_strlcpy(st_error, t, sizeof(st_error));   /* (the UI reads it only once st_state is BRDL_ERROR) */
+    SDL_UnlockSpinlock(&st_lock);
+    if (k != 'P') host_log("biorand-cli: %s\n", l);
+}
+
+static int gen(void)
+{
+    const char* exe = biorand_cli_exe();
+    char out[1200], tmp[1200], line[512];
+    const char* args[] = { exe, "-s", gen_seed, "-i", gen_iso, "-o", out, "-f", NULL };
+    SDL_Environment* env;
+    SDL_Process* pr;
+    SDL_IOStream* io;
+    int code = -1, n = 0, ended = 0, eof = 0;
+    SDL_snprintf(out, sizeof(out), "%s/biorand", gen_mods);
+    SDL_snprintf(tmp, sizeof(tmp), "%s/biorand-temp", gen_mods);
+    gen_clean(gen_mods);
+    if (!exe || !biorand_cli_present()) return fail("the BioRand CLI is not installed");
+    if (!SDL_CreateDirectory(tmp)) return fail("cannot create %s", tmp);
+    if (!(env = SDL_CreateEnvironment(true))) return fail("cannot start the BioRand CLI (%s)", SDL_GetError());
+    SDL_SetEnvironmentVariable(env, "BIORAND_CONFIG", gen_cfg, true);
+    SDL_SetEnvironmentVariable(env, "TMPDIR", tmp, true);   /* its scratch (2.4 GB) next to the pack, not in a RAM /tmp */
+    SDL_SetEnvironmentVariable(env, "TMP", tmp, true);      /* (Windows: GetTempPath) */
+    SDL_SetEnvironmentVariable(env, "TEMP", tmp, true);
+    host_log("biorand-cli: %s -s %s -i \"%s\" -o \"%s\" -f (BIORAND_CONFIG %s)\n", exe, gen_seed, gen_iso, out, gen_cfg);
+    pr = spawn(args, env, 1);
+    SDL_DestroyEnvironment(env);
+    if (!pr) { fail("cannot start the BioRand CLI (%s)", SDL_GetError()); gen_clean(gen_mods); return 0; }
+    io = SDL_GetProcessOutput(pr);
+    while (!eof || !ended) {
+        char buf[1024];
+        size_t got = io && !eof ? SDL_ReadIO(io, buf, sizeof(buf)) : 0;
+        for (size_t i = 0; i < got; i++) {
+            if (buf[i] == '\n' || n == (int)sizeof(line) - 1) {   /* (a longer line is cut) */
+                if (n && line[n - 1] == '\r') n--;
+                line[n] = 0;
+                if (n) gen_line(line);
+                n = 0;
+                if (buf[i] == '\n') continue;
+            }
+            line[n++] = buf[i];
+        }
+        if (!got && (!io || SDL_GetIOStatus(io) != SDL_IO_STATUS_NOT_READY)) eof = 1;
+        if (!ended && SDL_WaitProcess(pr, false, &code)) { code = exit_code(pr, code); ended = 1; }
+        if (cancelled() && !ended) {
+            SDL_KillProcess(pr, true);
+            SDL_WaitProcess(pr, true, NULL);
+            ended = eof = 1;
+            code = -2;
+        }
+        if (!got) SDL_Delay(30);
+    }
+    if (n) { line[n] = 0; gen_line(line); }
+    SDL_DestroyProcess(pr);
+    gen_clean(gen_mods);
+    host_log("biorand-cli: exit code %d\n", code);
+    if (code == 0) return BRDL_GENERATED;
+    SDL_LockSpinlock(&st_lock);
+    SDL_strlcpy(line, st_error, sizeof(line));
+    SDL_UnlockSpinlock(&st_lock);
+    if (code == -2) return fail("cancelled");
+    if (strstr(line, "eed version")) return fail("%s Update the game or use an older BioRand CLI.", line);
+    if (code == 2 && line[0]) return fail("%s", line);
+    if (code == 3) return fail("BioRand failed: %s", line[0] ? line : "no reason given");
+    return fail("BioRand ended with exit code %d%s%s", code, line[0] ? ": " : "", line);
+}
+
 static int SDLCALL worker(void* ud)
 {
     char tmp[1100];
     int s;
     (void)ud;
     crash_thread_init();
-    if (!(s = job())) s = BRDL_ERROR;
-    if (base[0]) {   /* the temporary folder goes in every case */
+    if (!(s = job_gen ? gen() : job())) s = BRDL_ERROR;
+    if (base[0] && !job_gen) {   /* the temporary folder goes in every case */
         SDL_snprintf(tmp, sizeof(tmp), "%sbiorand-dl", base);
         rm_tree(tmp, 0);
     }
@@ -370,10 +519,15 @@ static int start(int install)
     SDL_Thread* t;
     if (!SDL_CompareAndSwapAtomicInt(&busy, 0, 1)) return 0;
     job_install = install;
+    job_gen = install == 2;
     SDL_SetAtomicInt(&cancel, 0);
     SDL_SetAtomicInt(&st_done, 0);
     SDL_SetAtomicInt(&st_total, 0);
-    SDL_SetAtomicInt(&st_state, BRDL_API);
+    SDL_SetAtomicInt(&st_pct, 0);
+    SDL_LockSpinlock(&st_lock);
+    st_msg[0] = st_warn[0] = st_error[0] = 0;
+    SDL_UnlockSpinlock(&st_lock);
+    SDL_SetAtomicInt(&st_state, job_gen ? BRDL_GENERATE : BRDL_API);
     if ((t = SDL_CreateThread(worker, "biorand-dl", NULL))) { SDL_DetachThread(t); return 1; }   /* detached: exit does not wait */
     fail("cannot start a thread");
     SDL_SetAtomicInt(&st_state, BRDL_ERROR);
@@ -383,6 +537,16 @@ static int start(int install)
 
 int biorand_cli_check_update(void) { return start(0); }
 int biorand_cli_install(void) { return start(1); }
+
+int biorand_cli_generate(const char* seed, const char* iso, const char* mods, const char* cfg)
+{
+    if (SDL_GetAtomicInt(&busy)) return 0;   /* (start checks again; the strings are the thread's only once it runs) */
+    SDL_strlcpy(gen_seed, seed, sizeof(gen_seed));
+    SDL_strlcpy(gen_iso, iso, sizeof(gen_iso));
+    SDL_strlcpy(gen_mods, mods, sizeof(gen_mods));
+    SDL_strlcpy(gen_cfg, cfg, sizeof(gen_cfg));
+    return start(2);
+}
 void biorand_cli_cancel(void) { SDL_SetAtomicInt(&cancel, 1); }
 
 void biorand_cli_status(BrdlStatus* s)
@@ -390,6 +554,11 @@ void biorand_cli_status(BrdlStatus* s)
     s->state = SDL_GetAtomicInt(&st_state);
     s->done = SDL_GetAtomicInt(&st_done);
     s->total = SDL_GetAtomicInt(&st_total);
+    s->pct = SDL_GetAtomicInt(&st_pct);
+    SDL_LockSpinlock(&st_lock);
     if (s->state == BRDL_ERROR) SDL_strlcpy(s->error, st_error, sizeof(s->error));
     else s->error[0] = 0;
+    SDL_strlcpy(s->msg, st_msg, sizeof(s->msg));
+    SDL_strlcpy(s->warn, st_warn, sizeof(s->warn));
+    SDL_UnlockSpinlock(&st_lock);
 }

@@ -550,25 +550,131 @@ puts text on the clipboard at the start (`lobby_io.c`).
 
 ### S5: Generate
 
-- Only at the title, and not while a co-op session or lobby is open (as `biorand_locked`).
-- Write the private `settings.json` (above).
-- Run with `SDL_CreateProcessWithProperties`: args
-  `[cli, -s, <string>, -i, <abs iso>, -o, <abs mods>/biorand, -f]`, env plus
-  `BIORAND_CONFIG`, stderr to stdout, piped.
-- A worker thread reads lines: `Progress:` updates the bar, `Warning:` goes to the log and a
-  notice, `Error:` keeps the message. Then `SDL_WaitProcess` gives the exit code: 0, 2 or 3.
-- Cancel is `SDL_KillProcess`. Before each run, delete leftover `mods/biorand.tmp-*` and
-  `mods/biorand.bak-*`.
-- `mods` is `RECVX_MODS` or `mods` under the current directory, made absolute.
-- On success: `biorand_scan()`, then BioRand on (`g_config.biorand = 1`,
-  `settings_save_later`). Show "Seed N generated", log the string, and back to the menu.
-- **Randomize Played as** (on/off, ini): after a successful generation, pick a "You appear as"
-  entry (`settings.c` SP_APPEAR list, `appear_count`) from the seed number and set it through
-  that setting's `set`. The same seed gives the same look.
-- **Cutscene cast**: the existing setting (`cast_random`, `g_enemy_opts.cast`), shown as a row in
-  this menu (find it by its variable, as `lobby_glue.c` does). Nothing else is needed.
-- Error texts: no ISO path, no CLI, exit 2 or 3 with the CLI's `Error:` line, the process could
-  not be started.
+S5a (done) is the generation and "Randomize Played as"; S5b is co-op (the host sends its seed string, the
+partner generates with one click).
+
+#### S5a: GENERATE and "Randomize Played as" (done)
+
+Files: `pc/src/net/biorand_dl.c/.h` (the CLI run, on the downloader's thread), `pc/src/host/biorand.c/.h` (paths,
+settings.json, BioRand on), `pc/glue/biorand_menu.c` (the row, the question, the progress, the result),
+`pc/src/host/cast.c/.h` (the pick), `pc/glue/biorand_glue.c` (the save word), `pc/glue/coop_glue.c` and
+`pc/src/host/settings.c` (the look used), ctests `biorand_dl` and `cast`. No decomp change.
+
+**GENERATE** (`K_GEN` on the SEED page). `row_why` greys it, with the reason in the help strip, when:
+
+- the CLI is not installed ("The BioRand CLI is not installed.");
+- `g_config.iso_path` is empty ("The game's disc image is not known.");
+- a game runs (`pc_in_game`: "Only at the title menu.");
+- we are a co-op guest (`coop_biorand() >= 0`: "Not as a guest in a co-op session.");
+- the mods folder has less than `BRDL_GEN_FREE_MB` (4 GB) free: "Needs about 4 GB free in the mods folder; it has
+  1.2 GB." The free space is looked at when the screen opens, after each job and on GENERATE's OK
+  (`biorand_mods_free_mb`: statvfs / GetDiskFreeSpaceExW; the mods folder is created first).
+
+**Why 4 GB, not 1.5:** measured in S5a, the CLI's scratch (`<temp>/biorand-cli/<guid>/`) peaks at **2.4 GB** while the
+new pack (1.4 GB) is being written next to it. The old pack's space does not count (the free space already excludes
+it), so 3.8 GB must be free. The scratch goes into `mods/biorand-temp/` (below), so one check covers both, and a RAM
+`/tmp` (tmpfs) no longer adds 2.4 GB to the 6 GB memory peak.
+
+OK on the row asks (`A_GEN`, No first): "Generate BioRand seed N into mods/biorand? It replaces the pack there.
+BioRand may use several GB of memory (about 6 GB) for a short time. Free space: 261.9 GB."
+
+Yes: `biorand_generate(bm.str)` (biorand.c):
+
+1. writes `<save_dir>/biorand/settings.json` (absolute), every run:
+   `{ "lastSelectedGame": 3, "generateCvPcMod": true, "disableCustomContent": true }`;
+2. makes the ISO path (`g_config.iso_path`) and the mods folder (`RECVX_MODS`, else `mods`) absolute from the
+   current directory;
+3. calls `biorand_cli_generate(seed, iso, mods, cfg)` (biorand_dl.c): one job at a time with the download
+   (the same `busy` flag); 0 when one runs ("The last download is still ending...").
+
+The thread (`gen()`):
+
+- deletes leftovers first: `mods/biorand.tmp-*`, `mods/biorand.bak-*` (the CLI's, from a killed run) and
+  `mods/biorand-temp/` (ours). `rm_tree` never follows a link. Nothing else in mods is touched.
+- runs `[cli, -s, <string>, -i, <abs iso>, -o, <abs mods>/biorand, -f]` with `SDL_CreateProcessWithProperties`:
+  no shell, stdout piped (`SDL_PROCESS_STDIO_APP`) with stderr into it, stdin null. The environment is ours plus
+  `BIORAND_CONFIG=<cfg>` and `TMPDIR`, `TMP`, `TEMP` = `mods/biorand-temp` (.NET's `Path.GetTempPath`: TMPDIR on
+  Linux, TMP/TEMP on Windows). SDL's background flag only on Windows (CREATE_NO_WINDOW); on POSIX it double-forks.
+- reads the pipe (non-blocking on both systems) into lines: `brdl_line()` (biorand_dl.h, inline, ctest
+  `biorand_dl`) gives `'P'` "Progress: N% text" (percent and message for the bar), `'E'` "Error: text" and `'W'`
+  "Warning: text" (the last of each kept), 0 the rest (Info: lines, logged).
+- exit code: `SDL_WaitProcess`. **Windows:** SDL reports 0 for every background process, so `exit_code()` asks the
+  system (`OpenProcess` by the pid while SDL's handle keeps the process object, `GetExitCodeProcess`). S2's `run()`
+  (curl, wget, tar) uses it too: on Windows it got 0 for a failed tar before.
+- the result: 0 `BRDL_GENERATED`; 2 the CLI's `Error:` line ("CVX ISO not found at '...'. Use -i to point at
+  recvx.iso."); 3 "BioRand failed: <Error line>" ("File is not a valid UDF ISO"); an error mentioning the seed version
+  gets " Update the game or use an older BioRand CLI." (risk 2); other codes "BioRand ended with exit code N".
+- **CANCEL** (`choose()` in `BS_WORK` -> `biorand_cli_cancel`): the thread kills the CLI (`SDL_KillProcess`, forced),
+  waits for it, and deletes the leftovers as above; `BRDL_CANCELLED`. A soft reset (`pc_biorand_menu_close`) cancels
+  too. Quitting the game does not wait (the thread is detached): the CLI then runs to its end on its own
+  (ponytail: no kill at exit; the next run deletes its leftovers).
+
+New states: `BRDL_GENERATE` (busy, before `BRDL_INSTALLED`; the numbers of the later states moved by one) and
+`BRDL_GENERATED` (final, last). `BrdlStatus` has `pct`, `msg` and `warn` (a spinlock guards the strings).
+
+The screen: `BS_WORK` with `bm.gen` draws "BIORAND - GENERATING SEED N", the message (a "[P1] " prefix cut), the bar
+and the percent, CANCEL. The end (`gen_end`) always rescans (`biorand_scan`); success: `biorand_enable()`
+(`g_config.biorand = 1`, saved) and "BioRand seed N generated. BIORAND is on: start a NEW GAME." (plus "BioRand
+warned: ..." if a Warning: came); an error: "BIORAND - ERROR" and the text; cancelled: back to the page with
+"Generating cancelled.". Going straight to NEW GAME was left out: OK goes back to the page, cancel to the title.
+The save-seed warning (`pc_biorand_save_differs`) is unchanged: it compares the save's words with the rescanned pack.
+
+Test aid: `RECVX_BIORAND_ISO_TEST=<path>` gives the CLI another image (the game itself needs the real one).
+
+**"Randomize Played as"** (`g_biorand_appear`):
+
+- The pick: `cast_appear_pick(seed, imports)` (cast.c, pure): a hash of BioRand's seed number indexes
+  `cast_pool(1, imports)`, the cutscene cast's "All models" pool (humanoid catalogue looks and player files, never
+  Claire's or Chris's own looks; the zombies one entry, then `cast_zombie_look(seed, 0, 7)` picks the zombie). Imports
+  count only with the cast's "Include imported models" (`g_enemy_opts.cast_imports`). The result is a "You appear as"
+  chr (player file n: 1 + n; catalogue i: `appear_canon(6 + i)`; import k: `COOP_CHR_IMPORT + k`).
+- When: `pc_quick_start` (a new game, coop_glue.c) calls `pc_biorand_appear_new()` after `pc_biorand_stamp()`. It
+  picks when "Randomize Played as" is on, BioRand is active, the pack's seed is known and we are not a co-op guest.
+  Seed 123456 gives "Zombie: base staff 3", 654321 "Wesker".
+- **Storage: save word `sys->itm[290]` (`BR_APPEAR`)** = `0x41000000 | chr` ('A'), else 0. It is next to BioRand's
+  words 288/289 in the unused part of the item region (coop_glue.c's map updated: 290 BioRand's pick, 291..319
+  unused). The new game writes it (0 when nothing was picked). It is part of the save region, so every save of that
+  game holds it, and **loading a save restores it** (the region is loaded whole; checked: the save file holds
+  0x4100003B at the word after BioRand's 0x4201E240). recvx.ini's `coop_char` (the user's choice) is never written.
+- Use: `pc_biorand_appear()` returns the chr while in game, BioRand is active, we are not a co-op guest and the word
+  is set (an import no longer listed: -1). coop_glue.c `my_chr()` (our look, the cutscene doubles, the voice, what the
+  partner is sent) takes it before `g_coop.chr`; so does the `appear_on` test. The F1 "You appear as" row shows it;
+  choosing a look there drops this game's pick (`pc_biorand_appear_drop`) and becomes the user's choice as before.
+- Co-op: the host's pick is its look, and the partner sees it (as any "You appear as"). A guest's own choice stays
+  its own: a guest neither picks nor reads the word (it runs on the host's state, words and all). Ponytail: a guest's
+  own saves taken in a session may carry the host's word; it applies only if such a save is later loaded solo.
+
+**Tests (2026-10-26, Linux; job dir `biorand-ui/s5a/`, not committed):**
+
+- `scen.sh gen` (keyboard: the title's BIORAND, Down x5 to GENERATE, OK, Yes) with the real nightly CLI into a test
+  folder (`RECVX_MODS`, `RECVX_BIORAND_CLI_DIR_TEST`): the bar went 10, 35, 88, 96 %, then "BioRand seed 123456
+  generated". 205 room files; `log_pl0.txt`'s `Seed:` line equals the menu's string; ini `biorand = 1`;
+  settings.json as above (the CLI added its fields, `seedCv` the string); nothing but `biorand/` left in mods.
+- `scen.sh cancel`: CANCEL at 35 %: `biorand.tmp-<guid>` deleted, `biorand-temp/` gone, no CLI process left, the
+  page says "Generating cancelled.", BioRand stays off.
+- `scen.sh badiso` (`RECVX_BIORAND_ISO_TEST`): a missing file: exit 2, the result shows the CLI's "CVX ISO not found
+  at ..."; a 3 MB file of zeros: exit 3, "BioRand failed: File is not a valid UDF ISO".
+- NEW GAME after generating (`played.sh`, item trace): BioRand on, the pack's files served, and the inventory after
+  0/0's entry is the pack's (seed 123456: Linear Launcher 5, Combat Knife, Lighter, Magnum 6, Magnum Bullets 4, Red
+  Herb, Ink Ribbon, as its log's "Randomizing Inventory 0"; seed 654321 its own list).
+- "Randomize Played as": seed 123456 twice gave chr 59 "Zombie: base staff 3" both times; seed 654321 (a second
+  pack) "Wesker"; off: Claire. `look.sh` shows the three in 0/2. ini `coop_char` stayed 0.
+- ctest `biorand_dl`: `brdl_line` (progress, bounds, error, warning, other lines); ctest `cast`: the pick is
+  deterministic, a listed look, never Claire's or Chris's, 40 looks over 2000 seeds, the two seeds differ.
+- `layout_check.sh` (the 5ef0ae6 build against S5a, with the ISO): see STATUS. ctest: all pass. Linux and mingw
+  (`recvx.exe`, `test_biorand_dl.exe`) build.
+- Screenshots: job dir `biorand-ui/s5a/shots/` (the question, the progress at 10/35/88/96 %, generated, the page,
+  cancel, both errors, the three looks).
+- Not tested: the 4 GB refusal (no small disk here; the reason text is in `row_why`), Windows (as S2), the in-game
+  load of the save (the load screen did not take the scripted keys; the word in the save file was checked instead).
+
+#### S5b: co-op (next)
+
+- The host sends its seed string (bm.str / ini `biorand_seed`) in the session; a guest whose pack differs (the pack
+  id already detects it) is offered "Generate the host's seed" with one click: decode it (`biorand_seed_decode`),
+  then the same `biorand_generate` as S5a. Today a guest cannot generate at all (`row_why`).
+- The same CLI build matters too (risk 3): send the CLI digest (`g_biorand_cli_digest`) and say so when it differs.
+- "Randomize Played as" in co-op stays as S5a has it (the host's pick is its own look).
 
 ### S6: polish
 
@@ -587,7 +693,8 @@ puts text on the clipboard at the start (`lobby_io.c`).
 
 1. **Memory: the CLI peaked at 6.0 GB RSS** for one CVX pack. With the game running, 8 GB
    machines may swap or fail. Ask IntelOrca whether it can be lowered: it reads the whole ISO
-   and keeps every room. Show a note on the generate page?
+   and keeps every room. S5a: GENERATE's question says so. Its 2.4 GB scratch goes to
+   `mods/biorand-temp/`, not a RAM `/tmp`.
 2. **Nightly drift.** The nightly is rolling and unversioned. A new seed-string version gives
    exit 2 ("Seed version N is not supported"), and a changed layout makes our encoder wrong.
    - The S5 error should then say "update the game or use an older CLI".
@@ -628,6 +735,9 @@ puts text on the clipboard at the start (`lobby_io.c`).
   two distribution bars, PORT EXTRAS (Randomize Played as, ini `biorand_appear`; the cutscene cast).
   Every change saves the seed string. Tested by keyboard, gamepad and mouse, with copy and paste and
   the real CLI (see "S4b").
-- **Next: S5** (Generate), from the GENERATE row and `BS_WORK` (see "S4b", "For S5", and "S5").
-- The job-dir tools (not committed): S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
+- **S5a done** (2026-10-26): GENERATE runs the CLI from the menu (preconditions, the memory note, the progress bar from
+  its `Progress:` lines, CANCEL with the leftovers deleted, the CLI's errors, BioRand on afterwards) and "Randomize
+  Played as" picks a look per seed for each new game (save word 290). Tested with the real CLI (see "S5a").
+- **Next: S5b** (co-op: the host sends its seed string, the partner generates with one click), then S6.
+- The job-dir tools (not committed): S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
   encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").

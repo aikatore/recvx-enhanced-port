@@ -7,7 +7,8 @@
    biorand-dl/ (the API answer, the archive, the unpacked files), which it deletes afterwards.
    The pure parts below are checked by pc/tests/test_biorand_dl.c.
    Test aids: RECVX_BIORAND_API_TEST replaces the API URL; a file:// URL there also allows file://
-   for the asset (Linux curl only). RECVX_BIORAND_CLI_DIR_TEST replaces the game's folder. */
+   for the asset (Linux curl only). RECVX_BIORAND_CLI_DIR_TEST replaces the game's folder.
+   The same thread also runs the CLI (biorand_cli_generate, docs/BIORAND_INGAME.md S5): one job at a time. */
 #ifndef RECVX_BIORAND_DL_H
 #define RECVX_BIORAND_DL_H
 #include <string.h>
@@ -26,11 +27,14 @@
 enum {
     BRDL_IDLE,                                                   /* nothing started yet */
     BRDL_API, BRDL_DOWNLOAD, BRDL_VERIFY, BRDL_EXTRACT,          /* busy (DOWNLOAD: done / total bytes) */
+    BRDL_GENERATE,                                               /* busy: the CLI runs (pct, msg) */
     BRDL_INSTALLED,                                              /* install: done */
     BRDL_CURRENT, BRDL_NEWER,                                    /* check: the installed CLI is the newest / a newer one (or none) exists */
     BRDL_ERROR, BRDL_CANCELLED,                                  /* error: the text */
+    BRDL_GENERATED,                                              /* generate: exit 0 */
 };
-typedef struct { int state, done, total; char error[160]; } BrdlStatus;
+/* error: in BRDL_ERROR. pct, msg: the CLI's last "Progress:" line; warn: its last "Warning:" line (any state) */
+typedef struct { int state, done, total, pct; char error[160], msg[96], warn[160]; } BrdlStatus;
 
 extern char g_biorand_cli_digest[BRDL_DIGEST_CAP];   /* ini biorand_cli_digest: the installed archive's digest, "" unknown */
 const char* biorand_cli_exe(void);   /* <game folder>/biorand-cli[.exe], whether or not it is there; NULL if the folder is unknown */
@@ -39,6 +43,28 @@ int  biorand_cli_check_update(void); /* starts the thread: the API only, then BR
 int  biorand_cli_install(void);      /* starts the thread: API, download, verify, extract, install, then BRDL_INSTALLED; 0 if one runs */
 void biorand_cli_cancel(void);       /* the running thread stops (kills curl/wget/tar) and ends BRDL_CANCELLED */
 void biorand_cli_status(BrdlStatus* s);   /* any thread; error only in BRDL_ERROR */
+/* starts the thread: runs `cli -s seed -i iso -o mods/biorand -f` (absolute paths) with BIORAND_CONFIG=cfg (a
+   settings.json) and its temporary files in mods/biorand-temp, reading its stderr; then BRDL_GENERATED, or
+   BRDL_ERROR (exit 2: the CLI's Error: line; 3: that or "failed"), BRDL_CANCELLED (killed). Before and after,
+   it deletes mods/biorand.tmp-* and .bak-* (a killed run's) and mods/biorand-temp; nothing else. 0 if a job runs. */
+int  biorand_cli_generate(const char* seed, const char* iso, const char* mods, const char* cfg);
+#define BRDL_GEN_FREE_MB 4096   /* free space it needs in mods: the pack 1.4 GB, the CLI's scratch 2.4 GB while it runs */
+int  biorand_free_mb(const char* dir);   /* free space of dir's disk in MB (at most INT_MAX), -1 unknown */
+
+/* a line of the CLI's stderr: 'P' "Progress: N% text" (*pct 0..100), 'E' "Error: text", 'W' "Warning: text",
+   0 other (Info:); *text after the prefix */
+static inline int brdl_line(const char* l, int* pct, const char** text)
+{
+    int v = 0, n = 0;
+    if (!strncmp(l, "Error: ", 7)) { *text = l + 7; return 'E'; }
+    if (!strncmp(l, "Warning: ", 9)) { *text = l + 9; return 'W'; }
+    if (strncmp(l, "Progress: ", 10)) return 0;
+    for (l += 10; *l >= '0' && *l <= '9' && n < 3; l++, n++) v = v * 10 + (*l - '0');
+    if (!n || *l != '%' || v > 100) return 0;
+    *pct = v;
+    *text = l[1] == ' ' ? l + 2 : l + 1;
+    return 'P';
+}
 
 /* https://<host>/... with host api.github.com, github.com or <name>.githubusercontent.com (lower case,
    no port, no user), and a path of printable ASCII without '\\' or '"'. allow_file (the test aid): file:///... too. */

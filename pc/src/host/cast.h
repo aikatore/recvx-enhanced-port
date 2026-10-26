@@ -29,6 +29,10 @@ int cast_model(unsigned seed, unsigned scene, int c, int all, int imports);
 /* identity of the imported models list (names, groups, order): co-op uses them only when both sides
    have the same; 0 with none */
 unsigned cast_import_id(void);
+/* "Randomize Played as" (BioRand, docs/BIORAND_INGAME.md S5a): the "You appear as" chr for BioRand seed number
+   seed, from it alone: an entry of the "All models" pool (zombies one entry, then a look of them; imports
+   0..imports-1 too) */
+int cast_appear_pick(unsigned seed, int imports);
 
 #ifdef __cplusplus
 }

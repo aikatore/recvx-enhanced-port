@@ -88,6 +88,21 @@ static void unit(void)
     CHECK(brdl_url_ok("file:///tmp/a.json", 1) && !brdl_url_ok("file://host/a", 1) && !brdl_url_ok("file:///a b", 1));
     CHECK(brdl_url_ok(URL, 1) && !brdl_url_ok("http://github.com/x", 1));
 
+    {   /* the CLI's stderr lines (generate): progress, error, warning, the rest */
+        int pct = -1;
+        const char* t = NULL;
+        CHECK(brdl_line("Progress: 35% [P1] Randomizing items", &pct, &t) == 'P' && pct == 35 && !strcmp(t, "[P1] Randomizing items"));
+        CHECK(brdl_line("Progress: 0% Starting", &pct, &t) == 'P' && pct == 0 && !strcmp(t, "Starting"));
+        CHECK(brdl_line("Progress: 100% Done", &pct, &t) == 'P' && pct == 100 && !strcmp(t, "Done"));
+        CHECK(brdl_line("Progress: 7%", &pct, &t) == 'P' && pct == 7 && !*t);
+        pct = -1;
+        CHECK(!brdl_line("Progress: 101% x", &pct, &t) && !brdl_line("Progress: 1000% x", &pct, &t) && !brdl_line("Progress: % x", &pct, &t) &&
+              !brdl_line("Progress: 5 x", &pct, &t) && !brdl_line("Progress:5% x", &pct, &t) && !brdl_line("progress: 5% x", &pct, &t) && pct == -1);
+        CHECK(brdl_line("Error: Input file not found", &pct, &t) == 'E' && !strcmp(t, "Input file not found"));
+        CHECK(brdl_line("Warning: player models were not found", &pct, &t) == 'W' && !strcmp(t, "player models were not found"));
+        CHECK(!brdl_line("Info: Seed: R840-T1C0", &pct, &t) && !brdl_line("", &pct, &t) && !brdl_line("Error:x", &pct, &t));
+    }
+
     /* the release JSON: valid (the uploader object's "name"/"size" and the body's text are not the asset) */
     j = REL(ASSET("biorand-cli-win-x64.zip", "\"size\":7150735,\"digest\":\"" DIG "\",\"browser_download_url\":\"https://github.com/w.zip\"") ","
             ASSET(LINUX, GOOD_REST) "," ASSET("biorand.zip", GOOD_REST));

@@ -8,6 +8,10 @@
 #include "../../decomp/include/ps2/veronica/prog/main.h"
 #include "../../decomp/include/ps2/veronica/prog/item.h"
 #include "../src/host/biorand.h"
+#include "../src/host/biorand_opts.h"
+#include "../src/host/actors.h"
+#include "../src/host/cast.h"
+#include "../src/host/enemies.h"
 #include "../src/host/savestore.h"
 #include "../include/pc_parse.h"
 #include <stdio.h>
@@ -83,6 +87,46 @@ void pc_biorand_save_accept(void* save)
     memcpy(d + BR_OFFSET, w, sizeof(w));
     for (i = 0; i < SAVE_DATA_BYTES - 4; i++) sum += d[i];   /* its byte sum, as savestore_card_valid checks it */
     memcpy(d + SAVE_DATA_BYTES - 4, &sum, 4);
+}
+
+/* ---------------------------------------------------------------- "Randomize Played as" (docs/BIORAND_INGAME.md S5a)
+   A new game with BioRand on and "Randomize Played as" on (g_biorand_appear) is given a "You appear as" look picked
+   from the pack's seed number (cast_appear_pick: the cutscene cast's "All models" pool, imports with its "Include
+   imported models"). It is this game's, not the user's: save word BR_APPEAR holds 'A' << 24 | chr, so the game's saves
+   keep it and loading one brings it back (the region is loaded whole); a new game without it writes 0. recvx.ini's
+   coop_char (the user's own choice) never changes. It counts while BioRand is on and we are not a co-op guest (a
+   guest's look stays its own; it has the host's state, words and all); choosing a look in game drops it. */
+#define BR_APPEAR 290
+#define BR_APPEAR_ON 0x41000000u
+int pc_in_game(void);   /* options_glue.c */
+
+void pc_biorand_appear_new(void)
+{
+    int chr, seed = biorand_seed();
+    if (!sys) return;
+    sys->itm[BR_APPEAR] = 0;
+    if (!g_biorand_appear || !biorand_active() || coop_biorand() >= 0 || seed < 0) return;
+    chr = cast_appear_pick((unsigned)seed, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0);
+    sys->itm[BR_APPEAR] = BR_APPEAR_ON | (unsigned int)chr;
+    host_log("biorand: randomize played as: seed %d -> %s (chr %d, this game only)\n", seed, appear_name(chr), chr);
+}
+
+int pc_biorand_appear(void)
+{
+    unsigned int w;
+    int chr;
+    if (!sys || !pc_in_game() || !biorand_active() || coop_biorand() >= 0) return -1;
+    w = sys->itm[BR_APPEAR];
+    chr = (int)(w & 0xFFFFFF);
+    if ((w & 0xFF000000u) != BR_APPEAR_ON || chr < 1) return -1;
+    return chr <= COOP_CHR_MAX || chr - COOP_CHR_IMPORT < __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) ? chr : -1;   /* (an import no longer listed: the user's) */
+}
+
+void pc_biorand_appear_drop(void)
+{
+    if (pc_biorand_appear() < 0) return;
+    sys->itm[BR_APPEAR] = 0;
+    host_log("biorand: randomize played as: a look chosen in game; this game's pick dropped\n");
 }
 
 /* the question on the load screen (ps2_LoadScreen.c DispLoadMessageSelect 12), above YES / NO (message 466) */

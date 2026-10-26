@@ -453,8 +453,13 @@ static void self_keep(void)
     }
 }
 
-/* "You appear as" for the character played now ("As played (cutscene)": its cutscene model) */
-static int my_chr(void) { return appear_played(g_coop.chr, sys ? sys->ply_id : 0); }
+/* "You appear as" for the character played now ("As played (cutscene)": its cutscene model); BioRand's "Randomize
+   Played as" pick of this game first (biorand_glue.c) */
+static int my_chr(void)
+{
+    int o = pc_biorand_appear();
+    return appear_played(o >= 0 ? o : g_coop.chr, sys ? sys->ply_id : 0);
+}
 
 /* at the hand-off */
 static void self_frame(void)
@@ -2283,8 +2288,9 @@ static void apply_snapshots(void)
                keeps a count in its low byte, sub1.c 4139 / 6636)
      256..287  IMP_SPOTS, IMP_TAKEN: it_flg bitmaps (any bits)
      288, 289  BioRand: its marker and seed, the pack's id (biorand_glue.c BR_W: any value)
+     290       BioRand "Randomize Played as": its marker and the look (biorand_glue.c BR_APPEAR: any value)
      320..359  GRANT0: pending event items (word 0 of each entry an item word, its floor in bits 24..31)
-     290..319, 360..382  unused (any value: no code reads them)
+     291..319, 360..382  unused (any value: no code reads them)
      383       the files read (fileview.c: a bit per file, 24 files, so bits 16..23 too)
    Only the item words are items: the game indexes item tables with their bits 16..23. */
 static int own_copies(void);
@@ -2449,6 +2455,7 @@ static void quick_start(void)
 void pc_quick_start(void)
 {
     pc_biorand_stamp();   /* the new game's BioRand state into the save words (biorand_glue.c) */
+    pc_biorand_appear_new();   /* and "Randomize Played as" */
     if (coop_on && is_host && rule(OPT_QUICK_START)) quick_start();
 }
 
@@ -6494,7 +6501,7 @@ void coop_frame(void)
     }
     g_coop.at_title = sys && (sys->tk_flg & 0x8);   /* the lobby hint (overlay) */
     if (!coop_on) {   /* "You appear as" also in single player (appear_on: game.c calls coop_control_remote) */
-        appear_on = sys && plp && (g_coop.chr || self_mesh >= 0 || actor_shown(0) || actor_shown(ACTOR_DOUBLE) || cast_n);   /* (cast_n: the cutscene cast's hands and faces, actor_double_tick) */
+        appear_on = sys && plp && (my_chr() || self_mesh >= 0 || actor_shown(0) || actor_shown(ACTOR_DOUBLE) || cast_n);   /* (cast_n: the cutscene cast's hands and faces, actor_double_tick) */
         if (appear_on) self_frame();
         tx_in_game = 0;
         publish_status();
