@@ -129,21 +129,86 @@ Run from the repository root. The disc image is taken from `--iso`, `$RECVX_ISO`
 
 ## Randomizer (BioRand)
 
-For now only with the `--dev` launch option: without it the BioRand settings, the BIORAND row and
-the lobby rule are hidden and `mods/biorand/` is not read.
+For now only with the `--dev` launch option. Without it, all of the following is hidden: the
+BioRand settings, the BIORAND rows of the title menu and of NEW GAME, the BIORAND screen, the
+lobby rule and the co-op offer. `mods/biorand/` is then not read, and nothing goes to GitHub.
 
 [BioRand](https://github.com/biorand/classic) randomizes items, the start inventory, enemies and,
-optionally, doors. It reads your disc image and writes a pack for this game.
+optionally, doors. It reads your disc image and writes a pack for this game into `mods/biorand/`,
+with the spoiler log `log_pl0.txt`. You can make the pack in the game (below) or with BioRand's own
+program.
+
+### In the game: the BIORAND screen
+
+On the title menu, choose **BIORAND** (the last row, after MULTIPLAYER). Keyboard, gamepad and mouse
+all work. Cancel or a right click goes back to the title.
+
+**The BioRand CLI.** The game uses BioRand's command-line program, the nightly build of
+`biorand/classic`.
+
+- The first time, the screen asks whether to download it (about 7 MB). The download is checked
+  against GitHub's SHA-256 checksum. A damaged one is not installed.
+- It is placed next to the game's program, as `biorand-cli.exe` (Linux: `biorand-cli`) with its
+  licence `biorand-cli.LICENSE`. The game's folder must be writable.
+- **CHECK FOR A NEW BIORAND CLI** (SEED page) asks GitHub for a newer nightly and offers it.
+- The CLI needs 64-bit Windows 10 (1803 or later) or 11, or 64-bit Linux with glibc 2.34 or later
+  (Ubuntu 22.04, SteamOS 3). On Linux the download also needs `curl` (or `wget`) and `tar`.
+
+**The options** are BioRand's own, for Code: Veronica, on five pages. Switch pages with left/right
+on the page row, or with L1/R1 (Q/W on the keyboard).
+
+| page | what |
+|---|---|
+| SEED | the seed number; RANDOM SEED; COPY / PASTE SEED STRING; **GENERATE**; CHECK FOR A NEW BIORAND CLI. Below: the seed string |
+| DOORS | Randomize Doors, segments, segment size, cutscene rooms; the estimated completion time |
+| ITEMS | Randomize Items, routes, hidden key items, the custom item pool, the random starting inventory, the weapons; the item distribution |
+| ENEMIES | Randomize Enemies, placements, difficulty, the enemy ratios; the enemy distribution |
+| PORT EXTRAS | the port's own options (not in the seed string): **Randomize Played as**, which picks who you appear as for each seed; the cutscene cast |
+
+- A greyed row says why in the help strip (for example "Randomize Doors sets this.").
+- Every change is saved at once as the **seed string** (recvx.ini `biorand_seed`). The string
+  holds the seed and every option, so the same string gives the same game.
+- COPY puts the string on the clipboard. PASTE takes one from the clipboard, for example from
+  BioRand's own program or from a friend.
+
+**GENERATE** (SEED page) asks first, then runs the CLI with a progress bar. CANCEL stops it.
+
+- It needs the game's disc image (the one the game runs from) and about 4 GB free in the mods
+  folder: the pack takes 1.4 GB, and the CLI's temporary files (`mods/biorand-temp/`) take 2.4 GB
+  while it runs.
+- BioRand may use about 6 GB of memory for a short time.
+- It takes a few seconds once the disc image is in the system's file cache. Otherwise the 1.8 GB
+  image is read first, which takes longer (from a hard disk, tens of seconds).
+- It replaces `mods/biorand/`. When it is done, BioRand is switched on: start a NEW GAME.
+- The CLI's settings file is the game's own, `<save folder>/biorand/settings.json`. The settings of
+  BioRand's own program stay untouched.
+
+**What goes to GitHub.** Only when you choose to download or to check for an update, and only to
+GitHub:
+
+- one request to `api.github.com` for the nightly release's details;
+- for a download, the archive from `github.com`, which redirects to `githubusercontent.com`.
+
+Nothing else is sent: no seed, no options, no game files and no personal data. The requests say
+`User-Agent: recvx-enhanced-port`, and GitHub sees your IP address, as with any download. GitHub
+allows 60 such requests per hour from one address. Generating works offline.
+
+### With BioRand's own program
 
 1. In BioRand choose Code: Veronica, the PC version, your `.iso` as game data and this game's
-   folder (with `recvx.exe` and `mods`) as the PC folder. Generate. The pack goes to
-   `mods/biorand/`, with the spoiler log `log_pl0.txt`.
+   folder (with `recvx.exe` and `mods`) as the PC folder. Generate.
 2. On NEW GAME's difficulty screen, the row **BIORAND ON / OFF** switches it.
    Without Difficulty select, use **BioRand** (GAMEPLAY) at the title.
 
-- It can only be switched at the title. Off, the pack is ignored.
+### Playing
+
+- BioRand can only be switched at the title. When it is off, the pack is ignored.
 - Each generation replaces `mods/biorand/` completely; keep nothing else there.
 - A save remembers its pack. Loading it with BioRand off, another seed, or BioRand on for a normal
   save asks first.
-- **Co-op**: the host switches BIORAND in GAME RULES. The partner needs the same pack (same seed and
-  options) to join.
+- **Co-op**: the host switches BIORAND in GAME RULES. The partner needs the same pack (same seed,
+  options and BioRand build) to join.
+  - The host sends its seed string. A partner whose pack differs is asked at the title or in the
+    lobby whether to generate it. If it has no CLI yet, it is asked to download one first. If its CLI
+    is not the host's build, it is offered the newest. Once the pack is generated, it joins.
+  - The partner needs `--dev` too. Without it, the partner leaves with a message.

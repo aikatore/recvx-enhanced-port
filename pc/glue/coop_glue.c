@@ -6587,7 +6587,7 @@ void coop_frame(void)
     }
     g_coop.at_title = sys && (sys->tk_flg & 0x8);   /* the lobby hint (overlay) */
     if (!coop_on) {   /* "You appear as" also in single player (appear_on: game.c calls coop_control_remote) */
-        appear_on = sys && plp && (my_chr() || self_mesh >= 0 || actor_shown(0) || actor_shown(ACTOR_DOUBLE) || cast_n);   /* (cast_n: the cutscene cast's hands and faces, actor_double_tick) */
+        appear_on = sys && plp && (g_coop.chr || pc_biorand_appear() > 0 || self_mesh >= 0 || actor_shown(0) || actor_shown(ACTOR_DOUBLE) || cast_n);   /* (cast_n: the cutscene cast's hands and faces, actor_double_tick) */
         if (appear_on) self_frame();
         tx_in_game = 0;
         publish_status();

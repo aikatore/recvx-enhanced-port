@@ -1,7 +1,9 @@
 # BioRand in game: plan and state
 
-This file plans the in-game BioRand generator (branch `biorand-ui`) and tracks its progress.
-Each sub-step below should fit one agent session. Update **STATUS** at the end of each step.
+This file plans the in-game BioRand generator (branch `biorand-ui`) and tracks its progress: the developer's and
+state document. The player's usage is in docs/modding/README.md "Randomizer (BioRand)".
+
+**STATUS: All steps done; open: Windows real-machine test list** (in "S6").
 
 The goal: a BIORAND entry on the title menu opens a native generator. It downloads the BioRand CLI
 when it is missing, offers BioRand's Code: Veronica options in the game's menu style, and runs the
@@ -221,8 +223,9 @@ code, nothing borrowed), the ini key in `pc/src/host/config.c`, and `pc/tests/te
      cannot be started: `wget -q --https-only --max-redirect=5 --timeout=60 --tries=2 ...`.
      Progress: the file's size every 100 ms; a file past the limit kills the child.
 5. SHA-256 of the archive against `digest`. A mismatch deletes the archive and reports it.
-6. Extract into `biorand-dl/x/` with the system tar, fixed argv:
-   - Linux: `tar -xzf <archive> -C <dir>` (from PATH).
+6. Extract into `biorand-dl/x/` with the system tar, fixed argv. It runs in `biorand-dl/` with
+   relative arguments (S6):
+   - Linux: `tar -xzf biorand-cli-linux-x64.tar.gz -C x` (from PATH).
    - Windows: `%SystemRoot%\System32\tar.exe -xf`, else `Sysnative`, else `SysWOW64`. None: "Windows'
      tar.exe was not found (it comes with Windows 10 1803 and later)". It starts with SDL's
      background flag (CREATE_NO_WINDOW), so no console window flashes.
@@ -767,18 +770,195 @@ id ed803757, BioRand on, `--coop-host`) and a guest (`--coop-join`, or the lobby
 - Not tested: Windows (as S2), a machine that swaps during the generation.
 - "Randomize Played as" in co-op stays as S5a has it (the host's pick is its own look).
 
-### S6: polish
+### S6: review, `--dev` gating, docs, tests (done)
 
-- `--dev` gating: the title row, the menu and the ini keys exist only with `--dev`. Check the
-  game without `--dev` too.
-- Docs:
-  - docs/USER_GUIDE.md "Randomizer (BioRand)" and docs/modding/README.md, from "generate with
-    BioRand's GUI" to "or in game: BIORAND";
-  - this file's STATUS.
-- Tests: the encoder/decoder test, sha256, the downloader on `file://`, and a headless generation
-  with a test CLI.
-- A test on a real Windows machine (WinHTTP, tar.exe from WOW64, CreateProcess of the 64-bit
-  exe). No CHANGELOG entry until the user says so (BioRand is held back).
+The player-facing usage is in docs/modding/README.md "Randomizer (BioRand)". USER_GUIDE.md and the
+CHANGELOG are untouched: BioRand is held back.
+
+**Review of the whole branch (`git diff main...biorand-ui`).** Fixed:
+
+- **tar.exe and the game folder's name** (`extract`): tar now runs with its working folder set to
+  `biorand-dl/` (`SDL_PROP_PROCESS_CREATE_WORKING_DIRECTORY_STRING`), with the relative, ASCII-only
+  arguments `-xf biorand-cli-win-x64.zip -C x`. Windows' bsdtar reads its command line in the ANSI code page. A
+  game folder with other characters, such as `C:\Spiele\Ünïcode` on a system with another code page,
+  would not have reached it intact. A long path is shorter this way too.
+- **Defender and a fresh exe** (`move_file`): installing `biorand-cli.exe` and the LICENSE retries a
+  failed rename for up to 5 s on Windows (20 x 250 ms, stopped by CANCEL). A virus scanner may still
+  hold the file that tar has just written.
+- **The exit code by PID** (`exit_code`): when Windows cannot give it (OpenProcess or
+  GetExitCodeProcess fails), it is now -4 with a log line. Before, SDL's 0 for background processes
+  stood, so a failure counted as success.
+- **A data race** (`biorand_cli_exe`): the path was rewritten into a static buffer on each call, from both the UI
+  thread and the worker. It is now set once (the screen's first look, before any job), and the worker
+  only reads it.
+- **Main's behaviour kept** (coop_glue.c `appear_on`, single player): the S5a change tested `my_chr()`
+  instead of `g_coop.chr`. With "As played (cutscene)" and a `ply_id` outside 0..3 that is 0, so
+  `self_frame` would have stopped. It is now `g_coop.chr || pc_biorand_appear() > 0`, which is main's
+  test plus BioRand's pick.
+- Test: ctest `biorand_dl_install` now installs into a game folder named `My Game ü` (a space and a
+  non-ASCII letter). tar runs in it.
+
+Checked and left as they are:
+
+- **WinHTTP**:
+  - the automatic proxy (8.1+, else the default);
+  - TLS 1.2 and 1.3, falling back to 1.2;
+  - redirects (never https to http);
+  - the API's error body is read for its message, and other HTTP errors are refused;
+  - the size is capped while reading;
+  - every handle is closed on every path.
+  
+  CANCEL waits for the current read at most (the 60 s receive timeout).
+- **tar.exe from the 32-bit game**: System32 is redirected to SysWOW64, which also holds a
+  tar.exe; Sysnative is the 64-bit one. `GetPathInfo` and `CreateProcess` see the same redirection.
+- **Spaces and backslashes in argv**:
+  - SDL's `join_arguments` quotes an argument with spaces, and doubles the backslashes before a
+    quote or before the closing quote. The ISO path `...\SLUS-20184 ROM.iso`, the output and
+    `BIORAND_CONFIG` reach the CLI intact (.NET splits the wide command line by the same rules).
+  - Mixed separators (`C:\Games\recvx\mods/biorand`) are fine for .NET and for SDL's file
+    functions.
+  - The game's own paths are UTF-8 (`pc_utf8_argv`, SDL), and SDL converts them to UTF-16 for
+    every Windows call and for the environment block.
+- **Long paths**: our buffers hold 1024 or more characters. The game has no `longPathAware` manifest,
+  so on Windows the whole game, not only BioRand, needs its folder below MAX_PATH. The deepest
+  BioRand path is `mods\biorand\SYSTEM.AFS\10`. The CLI (.NET) handles long paths itself.
+- **Threads**:
+  - one job at a time (`busy`, compare-and-swap);
+  - the job's strings are copied before the thread starts;
+  - `st_msg`, `st_warn` and the CLI's `Error:` line are under the spinlock;
+  - the paste request is handed over between the game and the main thread with acquire/release;
+  - a soft reset cancels the job;
+  - quitting the game leaves the CLI running (documented in S5a).
+- **Leaks**:
+  - every `SDL_Process`, environment, property set, glob list, loaded file and IO stream is freed
+    on every return;
+  - `biorand-dl/` is deleted after every job;
+  - the CLI's leftovers are deleted before and after each run.
+
+**`--dev` gating (checked 2026-10-26, Linux).** Without `--dev`:
+
+- **No BIORAND title row.** `pc_title_menu_init` adds it only with `biorand_shown()`. The main
+  build and the S6 build ran the same keys: the title, then MULTIPLAYER (the lobby). All 64 dumps
+  (frames 100..400 and their in-between images) are byte-identical. The ini held every BioRand key,
+  the CLI folder held a CLI, and the mods folder held a pack. Screenshot: job dir
+  `biorand-ui/s6/nodev_title_lobby.png`.
+- **No BioRand settings.**
+  - The settings table's BioRand row has `.shown = biorand_shown`.
+  - The new keys (`biorand_seed`, `biorand_appear`, `biorand_cli_digest`) have no rows. They are
+    read and kept, and written only once the `--dev` screen has set them. In the run above they came
+    back unchanged.
+  - NEW GAME's BIORAND row exists only with a pack (`CursorMax[1]`, `biorand_pack()`), and
+    `biorand_scan` finds none without `--dev`.
+  - `biorand_scan` reads no pack, so `biorand_active()` is 0, and so are Randomize Played as and
+    `EV_BRSEED`.
+- **No co-op offer.** `biorand_from_host` offers only with `biorand_shown()`. A host (`--dev`, pack
+  seed 123457) and a guest without `--dev` ran together. The guest left with the old message ("The
+  host plays BioRand seed 123457; generate the same seed ...") and the host logged "partner left:
+  its BioRand pack is not ours". No BIORAND screen opened, and nothing was written to the guest's
+  mods.
+- **No network access.**
+  - The only callers of `biorand_cli_check_update`, `biorand_cli_install` and `biorand_generate` are
+    the BIORAND screen's (`work`, `gen_start`). That screen is reached only from the title row or the
+    co-op offer, and both are gated.
+  - On Linux, BioRand's network is curl or wget, both child processes. In the run above, shims of
+    curl, wget, tar and the CLI recorded no start.
+  - The game's own update check is unrelated (`RECVX_UPDATE_CHECK`).
+- **Protocol 30** applies with or without `--dev`. Co-op with a build of protocol 29 is refused, as
+  with every protocol bump.
+
+**End to end (2026-10-26, Linux, headless; job dir `biorand-ui/s6/`: `e2e.sh`, `co.sh`, `gate.sh`):**
+
+1. `e2e.sh menu`, `--dev`, an empty CLI folder (`RECVX_BIORAND_CLI_DIR_TEST`) and the real GitHub
+   API:
+   - the title's BIORAND opened the download question; YES downloaded 7 719 279 bytes
+     (`sha256:8465e828…`). The folder held only `biorand-cli` (ELF x86-64, 0755) and
+     `biorand-cli.LICENSE`;
+   - the page: DOORS, Randomize Doors on; SEED, Seed +1 (123456 to 123457);
+   - GENERATE, YES: exit 0, 205 room files, and `log_pl0.txt`'s `Seed:` equals the menu's string
+     `R840-1KR3-V4HH…` (the `expect` tool gives the same for Seed=123457 with doors on). Then
+     "BioRand on", and ini `biorand = 1`, `biorand_seed` and `biorand_cli_digest` were set.
+2. `e2e.sh newgame`: NEW GAME with that pack. The inventory after 0/0's entry was Handgun 18,
+   M-100P 0, Combat Knife, Lighter, Handgun Bullets 21, F. Aid Spray, Ink Ribbon 2. That is the log's
+   "Randomizing Inventory 0" (HandgunGlock17 x18, M1P x0, CombatKnife, Lighter, HandgunBullets x21,
+   FAidSpray, InkRibbon x2).
+3. `co.sh coop`: that pack's host and a guest with no pack (the downloaded CLI). The guest got
+   `EV_BRSEED` and the offer, and YES generated the same pack (id b4f4e7a3 on both). It then logged
+   "compared again", "joined the host's game (stage 0 room 6)".
+4. The packs and frame dumps were deleted afterwards.
+
+ctest: all pass. The Linux and mingw builds pass (`recvx.exe`, `test_biorand_dl.exe`).
+`layout_check.sh` (a main build, 8d0dc30, against S6, with the ISO): vanilla 156 and enhanced 311
+frames identical.
+
+**Merge with main:** main was still 8d0dc30, the branch's base, so there was nothing to merge.
+
+#### Windows real-machine test list (open)
+
+Nothing of BioRand has run on Windows yet (no machine or wine here). Use a release-like
+`recvx.exe` (mingw RelWithDebInfo), started with `--dev --log`, so `recvx.log` is written in the
+folder it is started from.
+
+Setup:
+
+- [ ] 64-bit Windows 10 1803+ or 11, with Defender on (the default).
+- [ ] Put the game into a folder whose name has a space and a non-ASCII letter, for example
+      `C:\Spiele\RE CVX Tést\`. Its ISO path should have a space too (for example
+      `D:\ISOs\SLUS-20184 ROM.iso`).
+
+Download and update:
+
+- [ ] Start the game without `--dev`. Expect no BIORAND row, and no `biorand-cli*` files appearing.
+- [ ] Start it with `--dev`. Expect BIORAND to be the last title row, after MULTIPLAYER.
+- [ ] Open BIORAND and answer YES to the download question. Expect:
+  - the bar and "x.x / 7.1 MB", then "The BioRand CLI is installed.";
+  - no console window flashing (tar.exe);
+  - the game folder holding `biorand-cli.exe` and `biorand-cli.LICENSE`, and no `biorand-dl\`;
+  - log lines "biorand-cli: nightly biorand-cli-win-x64.zip ...", "installed ...", and no
+    "tar.exe was not found" or "cannot move".
+- [ ] CHECK FOR A NEW BIORAND CLI. Expect "You have the newest BioRand CLI."
+- [ ] Quit, change one hex digit of `biorand_cli_digest` in recvx.ini, then CHECK again. Expect
+      "A newer BioRand CLI is available"; YES replaces the exe, which tests replacing it while
+      Defender scans it. Expect "installed", or a "cannot move" line in the log.
+- [ ] Unplug the network and CHECK. Expect "no connection to GitHub (WinHTTP error 12007)" or similar,
+      in orange.
+- [ ] CANCEL during a download. Expect "cancelled", and no `biorand-dl\` left.
+- [ ] Optional: behind a system proxy (Settings > Network > Proxy), the download still works
+      (WinHTTP's automatic proxy).
+
+Generate:
+
+- [ ] GENERATE (SEED page). Expect:
+  - the question to show the free space;
+  - the bar to go to 100 % with BioRand's messages, with no console window;
+  - "BioRand seed N generated";
+  - `mods\biorand\` to hold 205 `RM_*.RDX`, and its `log_pl0.txt` `Seed:` line to equal the
+    string on the SEED page;
+  - no `mods\biorand-temp\`, `biorand.tmp-*` or `biorand.bak-*` left;
+  - `<save folder>\biorand\settings.json` to be written, and `%APPDATA%\biorand` to be untouched.
+- [ ] The exit code read by PID:
+  - Start the game with `RECVX_BIORAND_ISO_TEST=C:\nope.iso` and GENERATE. Expect "CVX ISO not found
+    at ..." (exit 2).
+  - With a 3 MB file of zeros as the test image, expect "BioRand failed: File is not a valid UDF
+    ISO" (exit 3).
+  - The log must not show "the exit code is unknown".
+- [ ] CANCEL during a generation. Expect "Generating cancelled.", no `biorand-cli.exe` in Task
+      Manager, and the leftovers deleted.
+- [ ] NEW GAME. Expect the start inventory to equal `log_pl0.txt`'s "Randomizing Inventory 0" (with
+      Randomize Played as on, a look picked from the seed).
+- [ ] Optional: the same from a game folder with Japanese or Cyrillic letters (the ANSI code page
+      case of tar.exe).
+
+Co-op and the rest:
+
+- [ ] Two machines (or Windows and Linux), both `--dev`: the host has a pack, and the guest has none.
+      Expect the guest to be asked at the title or in the lobby, to generate, and to join. The host's
+      lobby shows "BioRand: generating...".
+- [ ] `test_biorand_dl.exe --live C:\Temp\brtest`: the downloader on its own. Expect "check newer",
+      "installed", "current".
+- [ ] Optional, an 8 GB machine: the game stays responsive while the CLI runs (about 6 GB), and a
+      co-op session survives it.
+
+Report any failure with `recvx.log` (the `biorand-cli:` and `biorand menu:` lines).
 
 ## Risks and open questions
 
@@ -796,8 +976,9 @@ id ed803757, BioRand on, `--coop-host`) and a guest (`--coop-join`, or the lobby
    its seed string, and the partner can generate the pack (S5). Done in S5b, with the CLI digest
    compared and the newest CLI offered.
 4. **Windows untested here**: tar.exe in SysWOW64 (or Sysnative), WinHTTP redirects, Defender
-   scanning a freshly written exe. Downloads made with WinHTTP carry no Mark-of-the-Web, so there
-   is no SmartScreen prompt.
+   scanning a freshly written exe (S6 retries the rename), a game folder outside the ANSI code page
+   (S6 runs tar with relative arguments). Downloads made with WinHTTP carry no Mark-of-the-Web, so
+   there is no SmartScreen prompt. The test list is in "S6".
 5. **The licence**: decided: kept as `biorand-cli.LICENSE`. README and the archive are deleted.
 6. Linux without curl or wget: rare; we show an error ("cannot download: install curl or wget"). In-process TLS would be the alternative
    (a new dependency).
@@ -834,6 +1015,12 @@ id ed803757, BioRand on, `--coop-host`) and a guest (`--coop-join`, or the lobby
   protocol 30); a guest whose pack differs is asked at the title (lobby or title menu) to generate it, with the CLI
   download and the digest warning on the way, and joins once the pack id matches; the session stays meanwhile and the
   host's lobby shows the guest's state. Tested with two instances and the real CLI (see "S5b").
-- **Next: S6** (polish, docs, tests, --dev gating review, Windows test list).
+- **S6 done** (2026-10-26): the review of the whole branch, with five fixes (tar's arguments, the Defender retry, an
+  unknown exit code, a data race, main's `appear_on`); the `--dev` gating checked (title and lobby byte-identical to
+  main, no settings, no co-op offer, no network); the player's docs in docs/modding/README.md; a live end-to-end run
+  (download, options, generate, NEW GAME's inventory, a co-op join with the seed share); main merged (nothing new).
+  `layout_check.sh` (a main build, 8d0dc30, against S6, with the ISO): vanilla 156 and enhanced 311 frames identical.
+  ctest: all pass; Linux and mingw build. See "S6".
+- **STATUS: All steps done; open: Windows real-machine test list** ("S6", "Windows real-machine test list").
 - The job-dir tools (not committed): S5b's `s5b/` (`co.sh`, `scen.sh`, `mkpack.sh`, `build.sh`); S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
   encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").

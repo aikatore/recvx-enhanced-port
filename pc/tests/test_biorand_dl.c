@@ -217,7 +217,7 @@ static int install(const char* real)
     struct stat st;
     snprintf(cmd, sizeof(cmd), "command -v curl >/dev/null && command -v tar >/dev/null");
     if (system(cmd)) { printf("SKIP: no curl or tar\n"); return 77; }
-    snprintf(game, sizeof(game), "%s/game", dir);
+    snprintf(game, sizeof(game), "%s/My Game \xc3\xbc", dir);   /* a game folder with a space and a non-ASCII letter (tar runs in it) */
     snprintf(arc, sizeof(arc), "%s/" LINUX, dir);
     snprintf(cmd, sizeof(cmd), "rm -rf '%s' && mkdir -p '%s/src' '%s' '%s/keep'", dir, dir, game, dir);
     if (system(cmd)) return 1;

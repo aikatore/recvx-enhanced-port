@@ -56,10 +56,9 @@ static int set_base(void)
 
 const char* biorand_cli_exe(void)
 {
-    static char p[1100];
-    if (!base[0] && !set_base()) return NULL;
-    SDL_snprintf(p, sizeof(p), "%s" BRDL_EXE, base);
-    return p;
+    static char p[1100];   /* set once (the UI's first look, before any job): the worker only reads it */
+    if (!p[0] && (base[0] || set_base())) SDL_snprintf(p, sizeof(p), "%s" BRDL_EXE, base);
+    return p[0] ? p : NULL;
 }
 
 /* a symbolic link or junction: deleted itself, never followed */
@@ -106,12 +105,14 @@ static void rm_tree(const char* path, int depth)
 }
 
 /* SDL's process: started without a console window on Windows (SDL's background flag: CREATE_NO_WINDOW; on POSIX
-   it would detach the child, which then cannot be waited for or killed). out: its stdout and stderr in one pipe. */
-static SDL_Process* spawn(const char* const* args, SDL_Environment* env, int out)
+   it would detach the child, which then cannot be waited for or killed). out: its stdout and stderr in one pipe.
+   cwd: its working folder (NULL: ours). */
+static SDL_Process* spawn(const char* const* args, SDL_Environment* env, int out, const char* cwd)
 {
     SDL_PropertiesID props = SDL_CreateProperties();
     SDL_Process* pr;
     SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, (void*)args);
+    if (cwd) SDL_SetStringProperty(props, SDL_PROP_PROCESS_CREATE_WORKING_DIRECTORY_STRING, cwd);
     if (env) SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ENVIRONMENT_POINTER, env);
     if (out) {
         SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDOUT_NUMBER, SDL_PROCESS_STDIO_APP);
@@ -126,28 +127,31 @@ static SDL_Process* spawn(const char* const* args, SDL_Environment* env, int out
 }
 
 /* its exit code once SDL_WaitProcess said it ended. SDL reports 0 for every background process, so on Windows it
-   is asked from the system (SDL's handle keeps the process object, so the pid is still this process's). */
+   is asked from the system (SDL's handle keeps the process object, so the pid is still this process's); -4 when the
+   system cannot tell (never taken for success). */
 static int exit_code(SDL_Process* pr, int code)
 {
 #ifdef _WIN32
     DWORD c;
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
                            (DWORD)SDL_GetNumberProperty(SDL_GetProcessProperties(pr), SDL_PROP_PROCESS_PID_NUMBER, 0));
+    code = -4;
     if (h) {
         if (GetExitCodeProcess(h, &c)) code = (int)c;
         CloseHandle(h);
     }
+    if (code == -4) host_log("biorand-cli: the exit code is unknown (Windows error %lu)\n", GetLastError());
 #else
     (void)pr;
 #endif
     return code;
 }
 
-/* args (argv, no shell) to their end: the exit code; -1 not started, -2 cancelled, -3 `watch` grew past max.
-   While it runs, st_done follows the size of the file `watch`. */
-static int run(const char* const* args, const char* watch, Sint64 max)
+/* args (argv, no shell; in the folder cwd, NULL ours) to their end: the exit code; -1 not started, -2 cancelled,
+   -3 `watch` grew past max. While it runs, st_done follows the size of the file `watch`. */
+static int run(const char* const* args, const char* cwd, const char* watch, Sint64 max)
 {
-    SDL_Process* pr = spawn(args, NULL, 0);
+    SDL_Process* pr = spawn(args, NULL, 0, cwd);
     int code = -1;
     if (!pr) return -1;
     for (;;) {
@@ -232,7 +236,7 @@ static int fetch(const char* url, const char* file, Sint64 max, int api)
                                "--tlsv1.2", "--max-redirs", "5", "--connect-timeout", "20", "--speed-time", "60", "--speed-limit", "1",
                                "--max-filesize", mx, "-A", UA, "-H", api ? "Accept: application/vnd.github+json" : "Accept: */*",
                                "-o", file, "--", url, NULL };
-        if ((r = run(curl, file, max)) == 0) return 1;
+        if ((r = run(curl, NULL, file, max)) == 0) return 1;
         switch (r) {
         case -1: break;   /* no curl */
         case -2: return fail("cancelled");
@@ -251,7 +255,7 @@ static int fetch(const char* url, const char* file, Sint64 max, int api)
         const char* wget[] = { "wget", "-q", "--https-only", "--max-redirect=5", "--timeout=60", "--tries=2", "-U", UA,
                                hdr, api ? "--content-on-error" : "-q", "-O", file, "--", url, NULL };
         SDL_snprintf(hdr, sizeof(hdr), "--header=Accept: %s", api ? "application/vnd.github+json" : "*/*");
-        r = run(wget, file, max);
+        r = run(wget, NULL, file, max);
         if (r == 0 || (api && r == 8)) return 1;   /* 8: an HTTP error; the API's body tells which */
         switch (r) {
         case -1: return fail("cannot download: install curl or wget");
@@ -281,11 +285,14 @@ static int sha256_file(const char* path, char hex[65])
     return !cancelled();
 }
 
-static int extract(const char* archive, const char* dir)
+/* tmp/BRDL_ASSET into tmp/x. tar runs in tmp with relative, ASCII-only arguments: Windows' bsdtar reads its command
+   line in the ANSI code page, so a game folder with other characters (or a long one) would not reach it intact. */
+static int extract(const char* tmp)
 {
     int r;
 #ifdef _WIN32
-    /* Windows 10 1803+ bsdtar reads zip. A 32-bit process sees SysWOW64 as System32; Sysnative is the real one. */
+    /* Windows 10 1803+ bsdtar reads zip. A 32-bit process sees SysWOW64 as System32 (both hold a tar.exe);
+       Sysnative is the real System32. */
     static const char* sub[] = { "System32", "Sysnative", "SysWOW64" };
     const char* root = SDL_getenv("SystemRoot");
     char tar[MAX_PATH] = "";
@@ -296,17 +303,32 @@ static int extract(const char* archive, const char* dir)
     }
     if (!tar[0]) return fail("Windows' tar.exe was not found (it comes with Windows 10 1803 and later)");
     {
-        const char* args[] = { tar, "-xf", archive, "-C", dir, NULL };
-        r = run(args, NULL, 0);
+        const char* args[] = { tar, "-xf", BRDL_ASSET, "-C", "x", NULL };
+        r = run(args, tmp, NULL, 0);
     }
 #else
-    const char* args[] = { "tar", "-xzf", archive, "-C", dir, NULL };
-    r = run(args, NULL, 0);
+    const char* args[] = { "tar", "-xzf", BRDL_ASSET, "-C", "x", NULL };
+    r = run(args, tmp, NULL, 0);
 #endif
     if (r == -1) return fail("cannot start tar to unpack the archive");
     if (r == -2) return fail("cancelled");
     if (r) return fail("tar could not unpack the archive (exit code %d)", r);
     return 1;
+}
+
+/* src renamed over dst. On Windows a fresh file may still be open in a virus scanner (Defender scans what tar
+   wrote), so a failure is retried for up to 5 s. */
+static int move_file(const char* src, const char* dst)
+{
+    bool ok = SDL_RenamePath(src, dst);
+#ifdef _WIN32
+    for (int i = 0; !ok && i < 20 && !cancelled(); i++) {
+        SDL_Delay(250);
+        ok = SDL_RenamePath(src, dst);
+    }
+#endif
+    if (!ok) host_log("biorand-cli: cannot move %s to %s (%s)\n", src, dst, SDL_GetError());
+    return ok;
 }
 
 /* the final state, 0 for BRDL_ERROR */
@@ -365,17 +387,17 @@ static int job(void)
 
     /* 4. unpacked */
     SDL_SetAtomicInt(&st_state, BRDL_EXTRACT);
-    if (!extract(arc, x)) return 0;
+    if (!extract(tmp)) return 0;
     SDL_snprintf(src, sizeof(src), "%s/" BRDL_EXE, x);
     if (!is_file(src)) return fail("the archive holds no " BRDL_EXE);
 
     /* 5. installed: the licence first, the program last (its presence means installed) */
     SDL_snprintf(src, sizeof(src), "%s/LICENSE", x);
     SDL_snprintf(dst, sizeof(dst), "%sbiorand-cli.LICENSE", base);
-    if (!is_file(src) || !SDL_RenamePath(src, dst)) host_log("biorand-cli: no LICENSE in the archive\n");
+    if (!is_file(src) || !move_file(src, dst)) host_log("biorand-cli: no LICENSE in the archive\n");
     SDL_snprintf(src, sizeof(src), "%s/" BRDL_EXE, x);
     if (cancelled()) return fail("cancelled");
-    if (!SDL_RenamePath(src, biorand_cli_exe())) return fail("cannot replace %s (is it running?)", biorand_cli_exe());
+    if (!move_file(src, biorand_cli_exe())) return fail("cannot replace %s (is it running?)", biorand_cli_exe());
 #ifndef _WIN32
     chmod(biorand_cli_exe(), 0755);
 #endif
@@ -455,7 +477,7 @@ static int gen(void)
     SDL_SetEnvironmentVariable(env, "TMP", tmp, true);      /* (Windows: GetTempPath) */
     SDL_SetEnvironmentVariable(env, "TEMP", tmp, true);
     host_log("biorand-cli: %s -s %s -i \"%s\" -o \"%s\" -f (BIORAND_CONFIG %s)\n", exe, gen_seed, gen_iso, out, gen_cfg);
-    pr = spawn(args, env, 1);
+    pr = spawn(args, env, 1, NULL);
     SDL_DestroyEnvironment(env);
     if (!pr) { fail("cannot start the BioRand CLI (%s)", SDL_GetError()); gen_clean(gen_mods); return 0; }
     io = SDL_GetProcessOutput(pr);
