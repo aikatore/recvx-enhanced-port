@@ -9,8 +9,8 @@ CLI into `mods/biorand/`, which the port already loads (`pc/src/host/biorand.c`,
 docs/modding/README.md "Randomizer (BioRand)"). It is `--dev` only, like BioRand now
 (`biorand_shown`).
 
-The option catalogue is `pc/src/host/biorand_options.json`. It holds option metadata and the seed
-string's bit layout, with no game data.
+The options, the seed string's codec and the menu's row table are `pc/src/host/biorand_opts.c/.h`
+(S4a), with no game data. S1's catalogue `biorand_options.json` was folded into it and deleted.
 
 ## The CLI (researched 2026-10-26, nightly = BioRand 3.3.2, commit c8df994)
 
@@ -56,8 +56,8 @@ biorand-cli [-s seed] [-i input] [-o output] [-f]      (--help, --version; no su
 | `-f` | Replace an existing output. It refuses (exit 2) a non-empty folder that does not look like BioRand output (`RM_*.RDX` plus `SYSTEM.AFS/` or `ADV.AFS/`). |
 
 There are no per-option flags and no JSON option file. **Options travel only inside the seed
-string** (`RandoConfig.ToString`). The layout is in the catalogue's `seed_string`, with two
-golden strings that our encoder must reproduce.
+string** (`RandoConfig.ToString`). The layout is `layout[]` in `biorand_opts.c`; ctest
+`biorand_opts` holds S1's two golden strings.
 
 ### settings.json
 
@@ -107,8 +107,8 @@ machine.
   
   This is the layout `biorand.c` and `adx.c` expect.
 - The same seed string gave a byte-identical `log_pl0.txt` on a rerun.
-- The log's `Seed:` line is the config *after* CVX forced its fields off. With our `fixed` values
-  (catalogue) it equals the string we passed, and no `Warning:` lines appear.
+- The log's `Seed:` line is the config *after* CVX forced its fields off. With our forced values
+  (`biorand_opts_rules`) it equals the string we passed, and no `Warning:` lines appear.
 
 ### Test runs (job dir `biorand-ui/`, deleted afterwards)
 
@@ -116,7 +116,7 @@ machine.
 |---|---|
 | `-s 12345`, empty settings | exit 0, 4 s, `R840-T1C0-XXHH4HZZZMEZ9H0007JZZZZZZZ5ZZZ...` (the defaults; 4 warnings) |
 | that string again | exit 0, 4.0 s, same log |
-| doors on, custom ratios and weapons (catalogue `fixed_example`) | exit 0, 3.9 s; the CLI echoed our string; the log seed is equal |
+| doors on, custom ratios and weapons (golden string 2 of ctest `biorand_opts`) | exit 0, 3.9 s; the CLI echoed our string; the log seed is equal |
 | error cases | exit 2 / 2 / 2 / 2 / 3 / 2 as listed above |
 
 ## The user's decisions (2026-10-26)
@@ -369,11 +369,11 @@ is the real GitHub download.
 
 ### S4: the generator pages
 
-- `pc/src/host/biorand_opts.c` holds a C table from the catalogue. Each row has the key, type,
-  range, default, label, help and parent/disabled_if. It also has the config struct, the
-  **encoder** and the **decoder** of the seed string, and a unit test with both golden strings.
-  After that, delete `biorand_options.json`: the C table is the one source.
-- Persist only **one ini key, the seed string** (`biorand_config`); it holds every option. Decode
+S4a (done) is the model below; S4b is the pages.
+
+- `pc/src/host/biorand_opts.c` holds the config struct, the **encoder** and the **decoder** of the
+  seed string, and the row table. `biorand_options.json` is deleted: the C table is the one source.
+- Persist only **one ini key, the seed string** (`biorand_seed`); it holds every option. Decode
   it when the menu opens. A pasted or typed seed string from BioRand's GUI or a friend works the
   same way (the GUI's text box does the same).
 - Rendering: reuse `options_glue.c`'s row renderer (label, value, help line, group headings,
@@ -382,7 +382,72 @@ is the real GitHub download.
   shows the GUI's completion-time estimate.
 - Pages: SEED (seed, random seed, Generate, "Randomize Played as", "Cutscene cast", "Check for a
   new BioRand CLI"), DOORS, ITEMS, INVENTORY & WEAPONS, ENEMIES.
-- Fields the menu does not show are written as the catalogue's `fixed` values.
+- Fields the menu does not show are written with their forced values (`biorand_opts_rules`).
+
+#### S4a: the option model and the seed-string codec (done)
+
+Files: `pc/src/host/biorand_opts.c/.h` (pure C, no SDL), the ini key in `config.c`, and
+`pc/tests/test_biorand_opts.c`. Nothing in the game calls it yet.
+
+**`BioOpts`** holds every field of the seed string as an `int`, in BioRand's names (`RandomDoors`,
+`RatioAmmo`, `EnemyRatios[12]`, ...). A decoded string keeps the hidden fields too, so it re-encodes
+byte for byte.
+
+**API for S4b and S5** (`biorand_opts.h`):
+
+| call | what |
+|---|---|
+| `biorand_opts_default(&o)` | `new RandoConfig { Game = 4 }` (what the CLI uses for `-s <number>`) |
+| `biorand_opts_rules(&o)` | the forced fields: Version 8, Game 4, variant 0, no player change, NPCs, cutscenes, events, music or documents; weapon slots 12-14 = 1 and enemy slots 6-11 = 7, as the GUI writes them; doors on: items on, segmented, custom pool. `set()` runs it. |
+| `biorand_seed_encode(&o, buf, n)` | the 68-character string; -1 if `n` < 69 |
+| `biorand_seed_decode(str, &o)` | NULL, or a sentence for the screen (o untouched): empty, not a seed string, "Seed version 7 is not supported: this game reads version 8.", "This seed string is for RE2, not Code: Veronica.", "... has 17 characters; it needs 68.", "... a wrong character at position 23.". Spaces around it and lower case are accepted. |
+| `biorand_opt[]`, `biorand_opt_n` | the rows, in menu order: `key` (BioRand's name, `EnabledWeapons[3]` for an entry), `group` (`BOG_SEED/DOORS/ITEMS/ENEMIES`, names in `biorand_groups[]`), `type` (`BO_BOOL`, `BO_RANGE`, `BO_ENUM` with `names`, `BO_RATIO`), `lo`/`hi`/`def`, `flags`, `parent` (key of the box toggle), `label`, `help` (NULL for Weapon 1/2), `low`/`high` (slider ends) |
+| `biorand_opt_find(key)` | the row index, or -1 |
+| `biorand_opt_get(&o, i)` / `biorand_opt_set(&o, i, v)` | the shown value (Custom item pool is `!ShuffleItems`, `BOF_INVERT`); set clamps, ignores a locked row, then applies the rules |
+| `biorand_opt_active(&o, i)` | every parent box is on. 0: the GUI greys the row; S4b greys or hides it. |
+| `biorand_opt_locked(&o, i)` | "Randomize Doors sets this." for the `BOF_DOORS` rows (Randomize Items, Allow alternative routes, Segmented placement, Custom item pool) while doors are on; else NULL |
+| `biorand_item_dist(&o, s[5])` | Keys, Gunpowder, Ammo, Health, Ink: `name`, `rgb` (the GUI's colours), `pct` (sums to 100; Keys 12.5, or 100 when all four ratios are 0) |
+| `biorand_enemy_dist(&o, s[6])` | the CVX enemies with a ratio above 0, `pct` summing to 100; returns their count (0: every ratio is 0) |
+| `biorand_doors_estimate(&o, buf, n)` | "4 to 6 hours per scenario", "15 to 30 minutes per scenario", or "" with doors off |
+| `g_biorand_seed`, `biorand_opts_load(&o)`, `biorand_opts_save(&o)` | ini `biorand_seed`. Load: decode and apply the rules; an empty key gives the defaults plus the rules, an invalid one the same and a log line. Save: encode, `settings_save_later()`. |
+
+The 42 rows: Seed; Randomize Doors (box), Number of Segments, Segment Size, Prioritise rooms with
+cutscenes; Randomize Items (box), Allow alternative routes, Segmented placement, Hidden Key Items,
+Custom item pool (box: the 4 ratios, Ammo average quantity, Random inventory (box: Weapon 1, Weapon
+2), the 12 weapons); Randomize Enemies (box), Random enemy placements (box: save rooms, enemies per
+room, rooms with enemies), Difficulty, the 6 enemy ratios.
+
+- Labels and help texts are BioRand's. The help of the group toggles, the seed, the weapons and the
+  enemy ratios is ours (BioRand has none); the enemy ratios end with the GUI's note "Some rooms can
+  only contain certain enemies."
+- Rooms with enemies is inside the placements box, so it greys with it, as in the GUI (the
+  `CheckGroupBox` template greys its whole content; S1's note said otherwise).
+- The seed string has **no checksum**: BioRand's reader takes any character, so the decoder's
+  checks are the shape (R, version, game, length, the dashes, the alphabet). Values are exactly
+  `FromString`'s: GameVariant capped at 1, the unused bits dropped.
+
+**Tests:**
+
+- ctest `biorand_opts`:
+  - both golden strings encode from their options and decode back to them; golden 1 with the rules
+    gives the CLI's log seed of S1 (`R840-T1C0-T4HH...`);
+  - lower case with spaces, and GameVariant capped;
+  - every row at lo, hi and its default, with doors off and on: `get` returns it (unless locked) and
+    the struct round-trips byte for byte; out-of-range values are clamped; 2000 random option sets
+    round-trip; a string of all ones decodes and its re-encoding decodes to the same;
+  - the visibility and lock rules;
+  - rejected without a crash and with `o` untouched: every truncation of a golden string, 10 bad
+    characters at every position, other games and versions, NULL, too long;
+  - the distributions sum to 100 (5000 random sets), the all-zero cases, the estimate's four forms;
+  - the ini: no key, an invalid key (one log line), golden 2, save.
+- **CLI cross-check** (manual, job dir `biorand-ui/s4a/cli_check.sh N SEED`): `test_biorand_opts
+  --random N SEED` prints N random option sets; each runs through the real nightly CLI. 5 sets
+  (2 with doors on): each exit 0, the CLI echoed our string, `log_pl0.txt`'s seed equals it, no
+  `Warning:` lines.
+- The ini key: a recvx.ini with `biorand_seed` keeps it through the game's rewrite (first start).
+- ctest: all pass. The Linux and mingw builds (`recvx.exe`, `test_biorand_opts.exe`) pass.
+  `layout_check.sh` (the 9c219d8 build against S4a, with the ISO): vanilla 156 and enhanced 311
+  frames identical.
 
 ### S5: Generate
 
@@ -455,6 +520,11 @@ is the real GitHub download.
 - **S3 done** (2026-10-26): the BIORAND title row (`--dev`), its screen `pc/glue/biorand_menu.c`
   with the download prompt, the update check, the progress screen and the results. It works by
   keyboard, gamepad and mouse, and was tested headless with a fake release and live (see "S3").
-- **Next: S4**: the generator pages, in `BS_MENU` of `biorand_menu.c` (see "S3", "For S4").
-- The job-dir tools of S1 are `biorand-ui/enc.py` (a reference encoder that reads the
-  catalogue), `gen.sh` and `err.sh`. They are not in git. S4's C encoder replaces enc.py.
+- **S4a done** (2026-10-26): the option model and the seed-string codec `pc/src/host/biorand_opts.c/.h`
+  (row table, encoder, decoder, rules, distributions, the doors estimate), the ini key
+  `biorand_seed`, ctest `biorand_opts`, and a cross-check with the real CLI (see "S4a"). The JSON
+  catalogue is deleted.
+- **Next: S4b** (the generator pages and the bars), in `BS_MENU` of `biorand_menu.c` (see "S3",
+  "For S4", and the API in "S4a").
+- The job-dir tools (not committed): S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
+  encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`.

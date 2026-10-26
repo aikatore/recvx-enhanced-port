@@ -296,6 +296,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_tests_properties(biorand_dl_install PROPERTIES SKIP_RETURN_CODE 77)   # no curl or tar
 endif()
 
+# BioRand's CVX options (pc/src/host/biorand_opts.c): the golden seed strings, every row round-trips,
+# malformed strings rejected, the item and enemy distributions, the ini key
+add_executable(test_biorand_opts tests/test_biorand_opts.c src/host/biorand_opts.c)
+target_compile_options(test_biorand_opts PRIVATE -std=gnu11 -Wall)
+target_link_libraries(test_biorand_opts PRIVATE m)
+add_test(NAME biorand_opts COMMAND test_biorand_opts)
+
 # co-op packets (pc/src/net/coop_proto.c): malformed events of every type, transfers, the event
 # ring, the join code, world event actions, and a fuzz loop
 add_executable(test_coop tests/test_coop.c src/net/coop_proto.c src/net/rdv_proto.c)

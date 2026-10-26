@@ -34,4 +34,4 @@ with any binary release.
 
 | Component | Path | Source | License |
 |---|---|---|---|
-| BioRand option labels, help texts and seed-string layout (no code, no game data) | `pc/src/host/biorand_options.json` | https://github.com/biorand/classic (commit c8df994) | MIT, Copyright (c) 2022-2026 Ted John |
+| BioRand option labels, help texts, defaults and seed-string format (written anew in C from RandoConfig.cs and MainWindow.xaml; no game data) | `pc/src/host/biorand_opts.c` | https://github.com/biorand/classic (commit c8df994) | MIT, Copyright (c) 2022-2026 Ted John |
