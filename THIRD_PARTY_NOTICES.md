@@ -29,3 +29,9 @@ or CRI Middleware.
 
 The built binaries link these libraries statically; ship their license texts
 with any binary release.
+
+## Text from other projects
+
+| Component | Path | Source | License |
+|---|---|---|---|
+| BioRand option labels, help texts and seed-string layout (no code, no game data) | `pc/src/host/biorand_options.json` | https://github.com/biorand/classic (commit c8df994) | MIT, Copyright (c) 2022-2026 Ted John |
