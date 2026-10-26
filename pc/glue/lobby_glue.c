@@ -6,6 +6,7 @@
  * codes 0..94), and the player and actor models, loaded with the stock loaders into buffers of
  * our own and posed, lit and drawn in a small scene of their own in front of the picture.
  * Networking stays in pc/glue/coop_glue.c: the lobby only sets g_coop and requests.
+ * With --dev a BIORAND row follows MULTIPLAYER; mode 30 is then its screen (pc/glue/biorand_menu.c).
  */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
@@ -44,6 +45,8 @@ void host_log(const char* fmt, ...);
 void bhDispFontEx(NJS_POINT2* pos, int code, unsigned int argb, float pri);
 void coop_own_from_save(const void* save);
 void bhReturnTitle(void);
+int  pc_biorand_menu(void);             /* biorand_menu.c: the BIORAND screen, once per frame; 1 back to the title menu */
+void pc_biorand_menu_close(void);
 extern ADV_WORK AdvWork;
 extern float FontScaleY;
 extern const char PlyFlip[23];
@@ -151,24 +154,39 @@ static const struct { short u, v, w; } mp_letters[] = {
     { 67, 320, 23 },  /* R of NORMAL */
 };
 
-static void mp_word(float cx, float y, unsigned int col, unsigned int shadow, float scale)
+/* BIORAND (--dev, biorand_shown) the same way: B of BATTLE (v 224), I O N of OPTION, R of NORMAL, A of GAME, D of LOAD */
+static const struct { short u, v, w; } br_letters[] = {
+    { 146, 224, 20 }, { 268, 128, 12 }, { 201, 128, 22 }, { 67, 320, 23 }, { 286, 64, 24 }, { 304, 128, 22 }, { 226, 64, 23 },
+};
+
+static void plate_word(int br, float cx, float y, unsigned int col, unsigned int shadow, float scale)
 {
+    int i, n = br ? (int)(sizeof(br_letters) / sizeof(br_letters[0])) : (int)(sizeof(mp_letters) / sizeof(mp_letters[0]));
     float w = 0, x;
-    int i;
     QUAD q;
-    for (i = 0; i < (int)(sizeof(mp_letters) / sizeof(mp_letters[0])); i++) w += (mp_letters[i].w + 1) * scale;
+    for (i = 0; i < n; i++) w += ((br ? br_letters[i].w : mp_letters[i].w) + 1) * scale;
     x = cx - w / 2;
-    for (i = 0; i < (int)(sizeof(mp_letters) / sizeof(mp_letters[0])); i++) {
-        SetQuadPos(x, y, mp_letters[i].w * scale, 33.0f * scale, &q);
-        SetQuadUv2(mp_letters[i].u, mp_letters[i].v, mp_letters[i].w, 33.0f, 1, &q);
+    for (i = 0; i < n; i++) {
+        float u = br ? br_letters[i].u : mp_letters[i].u, v = br ? br_letters[i].v : mp_letters[i].v, lw = br ? br_letters[i].w : mp_letters[i].w;
+        SetQuadPos(x, y, lw * scale, 33.0f * scale, &q);
+        SetQuadUv2(u, v, lw, 33.0f, 1, &q);
         AdvEasyDrawTextureS(1, col, &q, 0.5f, 1, shadow);
-        x += (mp_letters[i].w + 1) * scale;
+        x += (lw + 1) * scale;
     }
 }
+static void mp_word(float cx, float y, unsigned int col, unsigned int shadow, float scale) { plate_word(0, cx, y, col, shadow, scale); }
+void pc_title_word_br(float cx, float y, unsigned int col, unsigned int shadow) { plate_word(1, cx, y, col, shadow, 1.0f); }   /* biorand_menu.c */
 
 /* the rows between the logo (to y 235) and the copyright (from y 396): 4 rows as the game's
-   own 4-row layout but 16 higher, 5 rows closer together */
-static float title_row_y(int i, int n) { return n >= 5 ? 234.0f + 30.0f * i : 256.0f + 32.0f * i; }
+   own 4-row layout but 16 higher, 5 rows closer together, 6 (BIORAND) closer still (the letters are
+   rows 6..26 of a 33 px plate: the last ends at y 393) */
+static float title_row_y(int i, int n) { return n >= 6 ? 232.0f + 27.0f * i : n >= 5 ? 234.0f + 30.0f * i : 256.0f + 32.0f * i; }
+static float title_row_h(int n) { return n >= 6 ? 27.0f : n >= 5 ? 30.0f : 32.0f; }
+
+/* the BIORAND row (--dev): the last, after MULTIPLAYER; -1 none. Not in ModeCommandId (5 entries; with
+   BATTLE GAME it is the sixth row): pc_title_mouse takes its confirm before CheckButton reads it. */
+static int br_title_row = -1;
+static int br_screen;                   /* mode 30 is the BioRand screen (biorand_menu.c), not the lobby */
 
 void pc_title_menu_init(void)
 {
@@ -186,6 +204,12 @@ void pc_title_menu_init(void)
     ap->ModeCommandId[n] = TITLE_MP;
     ap->CursorFlag[0][n] = 1;
     ap->CursorMax[0] = n + 1;
+    br_title_row = -1;
+    if (biorand_shown()) {   /* CursorFlag[0][5] is CursorFlag[1][0] (5 columns), 1 as mode 0 set it */
+        br_title_row = n + 1;
+        ap->CursorFlag[0][n + 1] = 1;
+        ap->CursorMax[0] = n + 2;
+    }
 }
 
 void pc_tex_keep_original(int texno);
@@ -246,7 +270,8 @@ void pc_title_plates(int cursor, int n, float fade, int flag)
         if (i == cursor) { alpha += (unsigned int)ap->FlushCount2; col = ap->FontBaseColor; }
         alpha <<= 24;
         if (flag == 0) alpha = 0xFF000000;
-        if (ap->ModeCommandId[i] == TITLE_MP) mp_word(320.0f, y, alpha | col, fade, 1.0f);
+        if (i == br_title_row) plate_word(1, 320.0f, y, alpha | col, fade, 1.0f);
+        else if (ap->ModeCommandId[i] == TITLE_MP) mp_word(320.0f, y, alpha | col, fade, 1.0f);
         else {
             QUAD q;
             SetQuadPos(64.0f, y, 513.0f, 33.0f, &q);
@@ -297,7 +322,7 @@ void pc_title_mouse(int level, int flag)
         else if (level == 1 && i == BR_ROW) { x0 = 140; w = 360; y0 = BR_Y - 4; }   /* the BIORAND row (pc_newgame_plates) */
         else if (level == 1) { x0 = 224; w = 193; y0 = 304.0f + 32.0f * i; }   /* DisplayNewGamePlate, DisplayExtraGamePlate */
         else { x0 = 64.0f + 256.0f * i; w = 256; y0 = 352; }
-        if (mt.x >= x0 && mt.x < x0 + w && mt.y >= y0 && mt.y < y0 + (level == 0 && n >= 5 ? 30 : 32)) hit = i;
+        if (mt.x >= x0 && mt.x < x0 + w && mt.y >= y0 && mt.y < y0 + (level == 0 ? title_row_h(n) : 32)) hit = i;
     }
     if (hit >= 0 && (!ap->CursorFlag[level][hit] || (level == 0 && hit == 0 && !flag))) hit = -1;   /* not selectable now */
     if (hit >= 0 && (mt.moved || mt.left) && hit != ap->Cursor[level]) {
@@ -310,6 +335,15 @@ void pc_title_mouse(int level, int flag)
         /* the BIORAND row: toggled, the screen stays (CheckButton would take it for a difficulty) */
         Pad[ap->PortId].press &= ~(BTN_START | AdvGetOkButton());
         CallSystemSe(0, biorand_toggle() ? 3 : 1);
+    }
+    if (level == 0 && ap->Cursor[0] == br_title_row && (Pad[ap->PortId].press & (BTN_START | AdvGetOkButton()))) {
+        /* BIORAND: its screen in mode 30, as CheckButton opens MULTIPLAYER's (ModeCommandId 4) */
+        Pad[ap->PortId].press &= ~(BTN_START | AdvGetOkButton());
+        ap->LastLevel = 0;
+        ap->NextMode = 30;
+        ap->Mode = 10;
+        br_screen = 1;
+        CallSystemSe(0, 3);
     }
 }
 
@@ -1629,13 +1663,23 @@ static void lobby_close(int keep)
     host_log("lobby: closed\n");
 }
 
-void pc_lobby_close(void) { lobby_close(0); }
+void pc_lobby_close(void)
+{
+    if (br_screen) pc_biorand_menu_close();
+    br_screen = 0;
+    lobby_close(0);
+}
 
 /* Adv_BioCvTitle mode 30, once per frame */
 int pc_lobby(void)
 {
     int r;
     char note[64];
+    if (br_screen) {   /* the BioRand screen (biorand_menu.c): 1 back to the menu */
+        title_font();
+        if ((r = pc_biorand_menu())) br_screen = 0;
+        return r;
+    }
     if (!lb.open) lobby_open();
     if (session_on()) lb.role = !g_coop.host;   /* F3 may host or join meanwhile */
     font_ok = font_ready();

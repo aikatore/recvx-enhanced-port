@@ -235,12 +235,12 @@ extern int pc_enemy_refused;       /* eneset.c: the enemy's code runs on a playe
 void  enemy_room_finished(void);   /* room.c bhFinishRoom: enemy options (pc/glue/enemyopt_glue.c) */
 
 /* title menu MULTIPLAYER entry and the co-op lobby screen (pc/glue/lobby_glue.c) */
-void  pc_title_menu_init(void);                  /* Adv_BioCvTitle mode 0: the MULTIPLAYER row */
+void  pc_title_menu_init(void);                  /* Adv_BioCvTitle mode 0: the MULTIPLAYER row (--dev: and BIORAND) */
 void  pc_title_plates(int cursor, int n, float fade, int flag);   /* DisplayGameModePlate */
 int   pc_newgame_plates(int cursor, float fade, int flag);   /* DisplayNewGamePlate with the BIORAND row (1: drawn) */
 void  pc_title_mouse(int level, int flag);       /* CheckButton: hover moves the cursor, a click confirms */
 void  pc_title_mouse_active(int on);             /* a title menu or the lobby is up: the OS cursor is shown */
-int   pc_lobby(void);                            /* Adv_BioCvTitle mode 30: 1 back, 2 new game, 3 load the chosen save */
+int   pc_lobby(void);                            /* Adv_BioCvTitle mode 30 (or the BIORAND screen, biorand_menu.c): 1 back, 2 new game, 3 load the chosen save */
 void  pc_lobby_close(void);                      /* the title ends */
 void  pc_lobby_load_save(void);                  /* bhSysCallFirstmovie return code 8 */
 void  pc_lobby_textures_released(void);          /* njReleaseTextureAll */

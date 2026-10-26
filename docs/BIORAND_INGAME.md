@@ -278,26 +278,94 @@ POSIX, SDL implements it as a double fork, and such a child cannot be waited for
   the new file. Run `test_biorand_dl --live <dir>` there; the offline test needs curl and is Linux
   only.
 
-### S3: title entry, Yes/No dialogs, progress screen
+### S3: title entry, Yes/No dialogs, progress screen (done)
 
-- `lobby_glue.c pc_title_menu_init` adds a row as MULTIPLAYER does: `TITLE_BR` in
-  `ModeCommandId`, only when `biorand_shown()`.
-  - Its word is in the game's font (the plates' texture lacks B, O, D), or cut from letters as
-    `mp_word` does.
-  - Check `title_row_y` for 6 rows: NEW GAME, LOAD, OPTION, BATTLE, MULTIPLAYER, BIORAND. Its
-    last row ends at about y 384, just above the copyright at 396.
-- A full screen in the style of the MULTIPLAYER lobby (`pc_ui_text`, the lobby's helpers and
-  input). States:
-  - `MENU`: the generator (S4).
-  - `ASK_DOWNLOAD`: "The BioRand CLI is missing. Download it from GitHub (biorand/classic, about
-    7 MB)?" Yes or No; No goes back to the title.
-  - `ASK_UPDATE`: "Check GitHub for a new BioRand CLI?"
-  - `PROGRESS`: a bar, "3.1 / 7.1 MB" (download) or the CLI's message and percent (generate), and
-    Cancel.
-  - `RESULT`: an error or "BioRand CLI is up to date / installed".
-- Entering with no CLI goes to `ASK_DOWNLOAD` first. The update action is a row in the generator
-  ("Check for a new BioRand CLI").
-- Mouse and pad as on the lobby screen (`pc_title_mouse`).
+Files: `pc/glue/biorand_menu.c` (the screen, new) and `pc/glue/lobby_glue.c` (the title row and the
+hand-off). No decomp change.
+
+**The title row** (`lobby_glue.c`):
+
+- `pc_title_menu_init` adds BIORAND after MULTIPLAYER when `biorand_shown()` (`--dev`). Without
+  `--dev` the menu is as before (the layout check and a title screenshot are byte-identical).
+- The row is **not** in `ModeCommandId`: the PC struct has 5 entries, and with BATTLE GAME BIORAND
+  is the sixth row. `br_title_row` holds its index instead. `CursorFlag[0][5]` is
+  `CursorFlag[1][0]` (5 columns), which mode 0 sets to 1.
+- `pc_title_mouse` (it runs at the start of `CheckButton`) takes Start/OK on that row: mode 10, then
+  `NextMode` 30, as CheckButton does for MULTIPLAYER, and `br_screen = 1`. `pc_lobby` (mode 30) then
+  calls `pc_biorand_menu()` instead of the lobby. Its 1 is "back", and the title menu fades in with
+  the cursor still on BIORAND. `pc_lobby_close` (the title ends, a soft reset) calls
+  `pc_biorand_menu_close()`, which cancels a running download.
+- The word is cut from the plate texture as MULTIPLAYER is (`br_letters`: B of BATTLE, I O N of
+  OPTION, R of NORMAL, A of GAME, D of LOAD; measured from the texture's alpha, a pixel of margin
+  each side as `mp_letters`). `plate_word()` draws either word; `pc_title_word_br()` is the export
+  for the screen's heading.
+- 6 rows: `title_row_y` = 232 + 27 i (the letters are rows 6..26 of the 33 px plate, so the last ends
+  at y 393, above the copyright). `title_row_h` gives the mouse its pitch.
+
+**The screen** (`biorand_menu.c`), drawn as the lobby: the title picture darkened, the BIORAND plate
+word at the top, a panel, the font through `pc_ui_text` / `pc_ui_text_w` / `pc_ui_text_wrap` /
+`pc_ui_rect`. One state machine, `bm.state`:
+
+| state | what | keys |
+|---|---|---|
+| `BS_MENU` | the page: heading RANDOMIZER, rows `R_CHECK` "CHECK FOR A NEW BIORAND CLI" and `R_BACK`, a placeholder line and a help strip | Up/Down, OK; cancel or right click: back to the title |
+| `BS_ASK` | a Yes/No box over the page; `bm.ask` is `A_DOWNLOAD` (no CLI: No leaves the screen), `A_CHECK`, `A_NEWER`. NO is selected first | Left/Right/Up/Down toggle, OK; cancel or right click: No |
+| `BS_WORK` | the downloader's job (`bm.install`: install, else check): the stage line, for an install a bar and "3.4 / 7.4 MB", CANCEL. `biorand_cli_status()` every frame; `work_end()` takes the final state | OK, cancel, a click on CANCEL or right click: `biorand_cli_cancel()` ("Cancelling...") |
+| `BS_RESULT` | a message and OK: "The BioRand CLI is installed.", "You have the newest BioRand CLI.", or the module's error (orange, "BIORAND CLI - ERROR") | any of OK/cancel/click: `to_menu()` |
+
+- Entering: `biorand_cli_present()` (cached in `bm.have`, refreshed after each job) decides `BS_MENU`
+  or `BS_ASK`/`A_DOWNLOAD`.
+- `to_menu()` returns to the page, or leaves the screen when there is still no CLI (No, cancel, or an
+  error on the first download).
+- After a check, `BRDL_NEWER` asks `A_NEWER`; Yes installs. `BRDL_CANCELLED` goes straight back.
+- A job that cannot start (the previous thread is still ending) shows "The last download is still
+  ending. Try again in a moment." or the module's error.
+- Each kind of box has its own depth (`Z_ROW`, `Z_BOX`, `Z_BAR`, `Z_FILL`, `Z_BTN`). "Smooth
+  menus" hashes the depth into a polygon's look, so a dialog never pairs with a row's highlight
+  and slides out of it. In-between images checked (`RECVX_INTERP_T=0.5`, every frame of the whole
+  keyboard path): only the Yes/No highlight moves between frames, as the lobby's row cursor.
+- The progress bar is drawn at half pixels (228.5..244.5). With integer rows, the renderer put the two
+  triangles of a long flat opaque quad a row apart (a step in the yellow fill; the lobby's
+  translucent rects hide it). Now at most the last row differs.
+
+**For S4:** put the generator into `BS_MENU`. Extend the `R_*` rows (`rows[]`, `help[]`, `row_at`
+and the Up/Down wrap use `R_N`), and replace the placeholder line in `draw_page()`. Generation can
+reuse `BS_WORK` and `BS_RESULT`: add a job kind next to `bm.install`, and let `draw_work()` show
+the CLI's `Progress:` percent and message on the same bar. `choose()` is where a row's OK goes.
+
+**Test aids** (job dir `biorand-ui/s3/`, not in git): `fake.sh` makes a release in a folder for
+`RECVX_BIORAND_API_TEST=file://...`, with the step-1 archive:
+
+- `fifo`: the asset is a FIFO fed at `RATE` bytes/s, so the progress screen can be seen;
+- `fast`: the archive itself;
+- `bad`: a wrong digest;
+- `SLOWAPI=1`: the API answer comes 3 s after the request (the busy state).
+
+`scen.sh` runs `--dev` with an empty `RECVX_BIORAND_CLI_DIR_TEST` (`PRE=1`: a dummy CLI in it).
+`inputs.sh` is the scripted keyboard (`RECVX_KEYS`), gamepad (`RECVX_VPAD`) and mouse
+(`RECVX_MENU_MOUSE`) paths. `states.sh` covers the error, newer, cancel and busy states. `live.sh`
+is the real GitHub download.
+
+**Tests (2026-10-26, Linux):**
+
+- Scripted keyboard, gamepad and mouse, the same path each: BIORAND, the download prompt, No (back
+  to the title), BIORAND again, Yes, the download at 1.5 MB/s, "installed", OK, the page, CHECK, Yes,
+  "newest", OK, back to the title. All three logged install state 5 and check state 6, and left
+  exactly `biorand-cli` and `biorand-cli.LICENSE`.
+- Other states, by keyboard:
+  - a wrong digest: the module's error, then OK goes back to the title;
+  - a CLI with another digest: the page at once, the check says newer, Yes installs;
+  - CANCEL mid-download: `cancelled`, back to the title;
+  - a slow API: the busy box, then "newest".
+- Live: the nightly from GitHub through the menu into a test folder: 7 719 279 bytes, digest
+  `sha256:8465e828…`, then the check said newest.
+- Without `--dev`, the title screenshot is byte-identical to the build before S3.
+  `layout_check.sh` (the 919ab09 build against S3, with the ISO): vanilla 156 and enhanced 311
+  frames identical.
+- ctest: all pass. Both the Linux and the mingw (`recvx.exe`) builds pass.
+- Screenshots: job dir `biorand-ui/s3/shots/` (title with and without `--dev`, the prompts, the
+  progress, installed, the page, busy, newest, newer, the error, a live download).
+- Not run on Windows (as S2).
 
 ### S4: the generator pages
 
@@ -384,6 +452,9 @@ POSIX, SDL implements it as a double fork, and such a child cannot be waited for
   the ini key `biorand_cli_digest`, ctests `biorand_dl` and `biorand_dl_install`, and a live install
   from GitHub on Linux. Nothing calls it yet (no UI). A real Windows run is still needed (see "S2",
   Tests).
-- **Next: S3**: the title entry, the dialogs and the progress screen, on the API in "S2" above.
+- **S3 done** (2026-10-26): the BIORAND title row (`--dev`), its screen `pc/glue/biorand_menu.c`
+  with the download prompt, the update check, the progress screen and the results. It works by
+  keyboard, gamepad and mouse, and was tested headless with a fake release and live (see "S3").
+- **Next: S4**: the generator pages, in `BS_MENU` of `biorand_menu.c` (see "S3", "For S4").
 - The job-dir tools of S1 are `biorand-ui/enc.py` (a reference encoder that reads the
   catalogue), `gen.sh` and `err.sh`. They are not in git. S4's C encoder replaces enc.py.
