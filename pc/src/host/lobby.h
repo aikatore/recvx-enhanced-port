@@ -17,6 +17,8 @@ typedef struct LobbyIO {
     volatile int keys[64];
     char clip[128];                 /* game thread: text for the clipboard ... */
     volatile int clip_req;          /* ... taken by the main thread */
+    volatile int paste_req;         /* game thread sets 1; the main thread puts the clipboard's text in paste and sets 2 */
+    char paste[160];
 } LobbyIO;
 extern LobbyIO g_lobby_io;
 

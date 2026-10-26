@@ -11,6 +11,7 @@ void host_log(const char* fmt, ...);
 void settings_save_later(void);
 
 char g_biorand_seed[BIORAND_SEED_CAP];
+int g_biorand_appear;
 
 /* ---------------------------------------------------------------- the seed string */
 /* RandoConfig.ToString: fields packed low bit first into 5-bit characters of this alphabet; the

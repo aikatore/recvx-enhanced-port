@@ -63,13 +63,18 @@ void lobby_io_event(const void* e)
     }
 }
 
-/* Test aid: RECVX_LOBBY_KEYS="frame:text,..." types text into the field being edited at that
-   presented frame; '|' = Enter, '`' = Escape, '<' = Backspace (none of them is allowed in a field). */
+/* Test aids: RECVX_LOBBY_KEYS="frame:text,..." types text into the field being edited at that
+   presented frame; '|' = Enter, '`' = Escape, '<' = Backspace (none of them is allowed in a field).
+   RECVX_CLIPBOARD_TEST="text" puts text on the clipboard at the start. */
 static void scripted(void)
 {
     static const char* p;
     static int checked;
-    if (!checked++) p = SDL_getenv("RECVX_LOBBY_KEYS");
+    if (!checked++) {
+        const char* c = SDL_getenv("RECVX_CLIPBOARD_TEST");
+        if (c) SDL_SetClipboardText(c);
+        p = SDL_getenv("RECVX_LOBBY_KEYS");
+    }
     while (p && *p && strtoul(p, NULL, 10) <= gs_frame_count()) {
         char* e;
         strtoul(p, &e, 10);
@@ -91,6 +96,12 @@ void lobby_io_frame(void* window)
     if (g_lobby_io.clip_req) {
         SDL_SetClipboardText(g_lobby_io.clip);
         g_lobby_io.clip_req = 0;
+    }
+    if (g_lobby_io.paste_req == 1) {   /* (a longer text is cut; its reader then reports the wrong length) */
+        char* t = SDL_GetClipboardText();
+        SDL_snprintf(g_lobby_io.paste, sizeof(g_lobby_io.paste), "%s", t ? t : "");
+        SDL_free(t);
+        __atomic_store_n(&g_lobby_io.paste_req, 2, __ATOMIC_RELEASE);
     }
     scripted();
 }

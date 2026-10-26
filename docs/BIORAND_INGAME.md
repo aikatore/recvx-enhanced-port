@@ -369,7 +369,10 @@ is the real GitHub download.
 
 ### S4: the generator pages
 
-S4a (done) is the model below; S4b is the pages.
+S4a (done) is the model below; S4b (done) is the pages. The plan's first ideas follow; S4b changed
+two of them: the pages have their own small renderer in `biorand_menu.c` (options_glue.c stays as
+it is), and the pages are SEED, DOORS, ITEMS (with the inventory and weapons), ENEMIES and PORT
+EXTRAS ("Randomize Played as" and the cutscene cast).
 
 - `pc/src/host/biorand_opts.c` holds the config struct, the **encoder** and the **decoder** of the
   seed string, and the row table. `biorand_options.json` is deleted: the C table is the one source.
@@ -449,6 +452,102 @@ room, rooms with enemies), Difficulty, the 6 enemy ratios.
   `layout_check.sh` (the 9c219d8 build against S4a, with the ISO): vanilla 156 and enhanced 311
   frames identical.
 
+#### S4b: the generator pages (done)
+
+Files: `pc/glue/biorand_menu.c` (`BS_MENU`), the clipboard read in `pc/src/host/lobby.h` /
+`lobby_io.c`, the ini key `biorand_appear` in `config.c` and `biorand_opts.h`. No decomp change.
+
+**The pages** (`bm.page`; `rows[]` rebuilt every frame by `build_rows()`). Row 0 is the page row, as
+in ENHANCED SETTINGS: `< ITEMS >`, the page keys (L1/R1 by name, Q/W on the keyboard) and `3/5`.
+
+| page | rows |
+|---|---|
+| SEED | Seed (a number: left/right step 1; confirm types it); RANDOM SEED; COPY SEED STRING; PASTE SEED STRING; GENERATE (greyed, `K_GEN`); CHECK FOR A NEW BIORAND CLI; BACK. Below: the seed string. |
+| DOORS | the 4 `BOG_DOORS` rows; BACK. Below: "ESTIMATED COMPLETION TIME" (`biorand_doors_estimate`), or "Doors are not randomized." |
+| ITEMS | the 23 `BOG_ITEMS` rows (it scrolls); BACK. Below: the item distribution bar, or a note (items off, custom pool off). |
+| ENEMIES | the 12 `BOG_ENEMIES` rows; BACK. Below: the enemy distribution bar, or a note (enemies off, every ratio None). |
+| PORT EXTRAS | Randomize Played as (`g_biorand_appear`); the cutscene cast's rows of the settings table (`cast_random`, and Character models, Assignment, Include imported models as their `shown()` says); BACK. |
+
+- A `K_OPT` row is drawn by its `type`: On/Off, a number, an enum's name, or a slider (`BO_RATIO`,
+  and `BO_RANGE` with `low`/`high`): the end names around a small bar, no number (as the GUI). Rows
+  are indented by their box depth (the `parent` chain).
+- `row_why()` greys a row and makes it read-only: `biorand_opt_locked` ("Randomize Doors sets
+  this."), an inactive box ("Needs "Custom item pool" on."), a locked setting, GENERATE. The help
+  strip shows the reason in orange before the row's help text; a change is refused with the buzz.
+- Each change: `biorand_opt_set`, then `saved()`: `biorand_opts_save` (ini `biorand_seed`), the string
+  shown, and a log line `biorand menu: <key> = <v>, seed string <s>`.
+- Seed typing: the lobby's field code (`g_lobby_io.text_on`, digits, Backspace, Delete, Home/End,
+  Enter, Esc; the gamepad's up/down change the digit at the caret). At most 7 digits; set clamps to
+  1048575.
+- COPY: `g_lobby_io.clip` and `clip_req`, a message with the string. PASTE: `g_lobby_io.paste_req = 1`;
+  the main thread (`lobby_io_frame`) puts `SDL_GetClipboardText()` into `g_lobby_io.paste` (159
+  characters) and sets 2; the menu decodes it then. An error is the decoder's sentence (orange); a
+  good one replaces the options (rules applied) and says "Pasted: seed N and its options."
+- Messages (`say()`) last 4 s or until the selection or the page changes.
+- The bars (`dist()`): one stacked bar (on a grey frame so the black slices show, 1 px gaps) and a
+  legend of swatches with `name pct%` (the percent rounded), wrapping to a second line. The colours
+  are the GUI's (`biorand_item_dist`, `biorand_enemy_dist`).
+- Input: up/down rows (wrapping), left/right values (enums wrap, ranges stop at the ends), confirm
+  (bool and enum: next; seed: type; actions), L1/R1 or Q/W pages, cancel or right click back to the
+  title. Mouse: hover selects; a click on the label confirms, on the value's `<` steps down and
+  elsewhere up, on a slider's track sets the value there, on the page row's halves changes the page;
+  the wheel moves the selection a row per notch.
+- Layout (640x480, the 4:3 part): page row y 70, 10 rows from y 102 at 21 px (more scroll, with the
+  ENHANCED SETTINGS triangles), the info area from y 314, the help strip from y 384. Widescreen is
+  pillarboxed as the lobby.
+- **Smooth menus**: the title's 2D depth is about 131085 * z, clamped at 65534, so every z is below
+  0.5 (from 0.5 on all depths are one, and the tags pair anything). Each box kind has its own depth;
+  the slices and swatches one per id (item index, enemy row index); a row's arrows, slider track and
+  fill one per row index and scroll parity (`ROW_Z`), so while a row stays they pair with its own,
+  and a scroll shows them at once in their new place, as the letters. Checked on every frame of the
+  keyboard path (`RECVX_INTERP_T` in-between images): only the selection highlight moves (as in the
+  lobby), and a slider's fill when its value changes.
+- `MAX_ROWS` is 30 (ROW_Z's room; ITEMS has 27).
+- **Randomize Played as**: ini `biorand_appear`, written only when 1 (like `biorand_seed`, so a game
+  without `--dev` writes nothing new). It has no settings table row (the --dev screen only), so it is
+  read and written by name in `config.c`, as `biorand_seed`. S5 uses it.
+
+**Test aids** (job dir `biorand-ui/s4b/`, not committed): `run.sh` (a `--dev` run with a dummy CLI);
+`inputs.py` (keyboard, gamepad and mouse runs); `paste.sh`; `expect` (`expect.c` with
+`biorand_opts.c`: the string after given sets, or `-d` a pasted string); `cli_check.sh`; `interp.py`
+(in-between images); `shots_run.sh` and `shots.py`. New in the game: `RECVX_CLIPBOARD_TEST="text"`
+puts text on the clipboard at the start (`lobby_io.c`).
+
+**Tests (2026-10-26, Linux):**
+
+- Scripted keyboard, gamepad and mouse runs (`inputs.py`), each: the seed (typed 12345 then +1; the
+  pad's digit editing to 3 then +1; the mouse's `>` twice), doors on with 3 segments, gunpowder 13
+  and ammo 18 (the mouse on the tracks), Linear Launcher off at the bottom of ITEMS (scrolled by
+  Down x18, the pad's Up wrapping, the mouse wheel x18), Bat None, Randomize Played as on, the cast
+  on, back to the title. All three ini `biorand_seed` equal `expect`'s strings, with
+  `biorand_appear = 1` and `cast_random = 1`.
+- Copy and paste (`paste.sh`): a 9-character clipboard is refused with "The seed string has 9
+  characters; it needs 68."; COPY logs the shown string; PASTE takes it back. Golden string 2 in lower
+  case with spaces is pasted; the ini holds its decoding with the rules.
+- The real nightly CLI (`cli_check.sh`) generated the keyboard run's string (doors on) and the
+  pasted one: exit 0, the string echoed and logged in `log_pl0.txt`, no warnings, 205 rooms.
+- An ini with `biorand_appear = 1` and `cast_random = 1`: the PORT EXTRAS page shows both on and the
+  cast's sub-rows; the ini keeps them.
+- 1280x720: the screen fits in the 4:3 part.
+- `layout_check.sh` (the 1e7013c build against S4b, with the ISO): vanilla 156 and enhanced 311
+  frames identical.
+- ctest: all pass. The Linux and mingw (`recvx.exe`) builds pass.
+- Screenshots: `scratch/biorand-s4b/` and the job dir's `s4b/shots/` (each page, the bars at default
+  and changed ratios, Bat None, locked and greyed rows, the seed being typed, GENERATE refused, the
+  paste error, the copied string, pasted strings).
+
+**For S5:**
+
+- GENERATE: `activate()` `case K_GEN` (now a refusal) starts the job, and `row_why()` `case K_GEN`
+  (now "Generating comes in a later version.") returns NULL, or why not now (no ISO path, a co-op
+  session, `biorand_locked`). Its help text is in `help_text()`.
+- The work state: `BS_WORK` with a job kind next to `bm.install` (`work()` starts it, `work_end()`
+  takes its final state, `draw_work()` draws the stage line and the bar: add the CLI's `Progress:`
+  percent and message). CANCEL already goes through `choose()`; add the CLI's kill there. `BS_RESULT`
+  shows the outcome ("Seed N generated", or the CLI's `Error:` line).
+- The string to run is `bm.str` (equal to ini `biorand_seed`). "Randomize Played as" is
+  `g_biorand_appear`.
+
 ### S5: Generate
 
 - Only at the title, and not while a co-op session or lobby is open (as `biorand_locked`).
@@ -524,7 +623,11 @@ room, rooms with enemies), Difficulty, the 6 enemy ratios.
   (row table, encoder, decoder, rules, distributions, the doors estimate), the ini key
   `biorand_seed`, ctest `biorand_opts`, and a cross-check with the real CLI (see "S4a"). The JSON
   catalogue is deleted.
-- **Next: S4b** (the generator pages and the bars), in `BS_MENU` of `biorand_menu.c` (see "S3",
-  "For S4", and the API in "S4a").
+- **S4b done** (2026-10-26): the generator pages in `BS_MENU` of `biorand_menu.c`: SEED (seed, random,
+  copy, paste, GENERATE greyed, the CLI check), DOORS, ITEMS and ENEMIES with the estimate and the
+  two distribution bars, PORT EXTRAS (Randomize Played as, ini `biorand_appear`; the cutscene cast).
+  Every change saves the seed string. Tested by keyboard, gamepad and mouse, with copy and paste and
+  the real CLI (see "S4b").
+- **Next: S5** (Generate), from the GENERATE row and `BS_WORK` (see "S4b", "For S5", and "S5").
 - The job-dir tools (not committed): S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
-  encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`.
+  encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").
