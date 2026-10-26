@@ -8,6 +8,7 @@
 #include "bindings.h"
 #include "modern.h"
 #include "../net/rdv_proto.h"
+#include "../net/biorand_dl.h"
 #include "../import/import.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -168,6 +169,7 @@ void config_load(void)
         else if (sscanf(line, " hd_textures_dir = %1023[^\r\n]", ini_hd_dir) == 1) { SDL_strlcpy(g_config.hd_textures_dir, ini_hd_dir, sizeof(ini_hd_dir)); continue; }
         else if (sscanf(line, " import_dir = %1023[^\r\n]", g_import.dir) == 1) continue;   /* F9 imports (pc/src/import) */
         else if (sscanf(line, " import_outbreak2_iso = %1023[^\r\n]", g_import.iso[IMPORT_OUTBREAK2]) == 1) continue;
+        else if (sscanf(line, " biorand_cli_digest = %71s", g_biorand_cli_digest) == 1) continue;   /* the installed BioRand CLI (biorand_dl.h) */
         else if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, val) == 2 && bind_ini_line(k, trim(val))) continue;
         else if (sscanf(line, " %63[a-z_0-9] = %d", k, &v) == 2)
             for (size_t i = 0; i < SDL_arraysize(keys); i++)
@@ -222,6 +224,7 @@ static int write_ini(FILE* f, void* ud)
     if (ini_hd_dir[0]) fprintf(f, "hd_textures_dir = %s\n", ini_hd_dir);   /* not --hd-textures */
     if (g_import.dir[0]) fprintf(f, "import_dir = %s\n", g_import.dir);
     if (g_import.iso[IMPORT_OUTBREAK2][0]) fprintf(f, "import_outbreak2_iso = %s\n", g_import.iso[IMPORT_OUTBREAK2]);
+    if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);
     bind_ini_write(f);
     return 0;
 }

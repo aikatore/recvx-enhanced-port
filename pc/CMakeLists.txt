@@ -182,6 +182,7 @@ add_executable(recvx ${LAYOUT_PAD_SRC} ${RECVX_RES} $<TARGET_OBJECTS:recvx_game>
 target_link_libraries(recvx PRIVATE imgui SDL3::SDL3 miniupnpc::miniupnpc natpmp monocypher m)
 if(WIN32)
     target_link_libraries(recvx PRIVATE ws2_32 pthread shell32 dwmapi)   # co-op UDP (src/net); clock_gettime (winpthreads); borderless corners (settings.c)
+    target_link_libraries(recvx PRIVATE winhttp)   # the BioRand CLI download (src/net/biorand_dl.c), a system DLL
     # Same address window as Linux: fixed image base, no ASLR relocation; large-address-aware
     # gives the 32-bit exe 4 GB on 64-bit Windows (Linux already uses addresses above 2 GB). -static: libstdc++,
     # libgcc and winpthread go into the exe, only system DLLs (UCRT, opengl32, ...) remain.
@@ -283,6 +284,17 @@ add_test(NAME net COMMAND test_net)
 # update check (pc/src/net/update.h): the URL, the server's answer (status, body, junk), version comparison
 add_executable(test_update tests/test_update.c)
 add_test(NAME update COMMAND test_update)
+
+# BioRand CLI download (pc/src/net/biorand_dl.h): SHA-256 vectors, the release JSON scan, the URL allowlist;
+# biorand_dl_install (Linux, curl and tar): the whole install from a made-up release over file://
+add_executable(test_biorand_dl tests/test_biorand_dl.c src/net/biorand_dl.c src/net/sha256.c)
+target_compile_options(test_biorand_dl PRIVATE -std=gnu11 -Wall)
+target_link_libraries(test_biorand_dl PRIVATE SDL3::SDL3 $<$<BOOL:${WIN32}>:winhttp>)
+add_test(NAME biorand_dl COMMAND test_biorand_dl)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_test(NAME biorand_dl_install COMMAND test_biorand_dl ${CMAKE_CURRENT_BINARY_DIR}/biorand_dl_test)
+    set_tests_properties(biorand_dl_install PROPERTIES SKIP_RETURN_CODE 77)   # no curl or tar
+endif()
 
 # co-op packets (pc/src/net/coop_proto.c): malformed events of every type, transfers, the event
 # ring, the join code, world event actions, and a fuzz loop

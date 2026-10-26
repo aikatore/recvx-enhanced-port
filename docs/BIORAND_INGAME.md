@@ -119,6 +119,16 @@ machine.
 | doors on, custom ratios and weapons (catalogue `fixed_example`) | exit 0, 3.9 s; the CLI echoed our string; the log seed is equal |
 | error cases | exit 2 / 2 / 2 / 2 / 3 / 2 as listed above |
 
+## The user's decisions (2026-10-26)
+
+1. The CLI comes from the **nightly** release (`biorand-cli-linux-x64.tar.gz` /
+   `biorand-cli-win-x64.zip`), not a tagged one.
+2. **Co-op** (S5): the host sends its seed string, and the partner can generate the same pack
+   from it.
+3. **"Randomize Played as"** (S5) picks once per seed.
+4. BioRand's licence stays next to the exe as `biorand-cli.LICENSE`. The other extracted files
+   (README.md) and the archive are deleted.
+
 ## Options (catalogue summary)
 
 These are the groups as the GUI shows them for CVX (`MainWindow.xaml`; `ReCvRandomiser`
@@ -159,63 +169,114 @@ RE2-only tweaks. None are shown.
 
 ## Design per sub-step
 
-### S2: secure downloader (no UI)
+### S2: secure downloader (done)
 
-New files: `pc/src/net/fetch.c/.h`, `pc/src/net/sha256.c/.h` and `pc/src/host/biorand_cli.c/.h`.
+Files: `pc/src/net/biorand_dl.c/.h` (the module; its pure parts, the JSON scan and the URL
+allowlist, are `static inline` in the header), `pc/src/net/sha256.c/.h` (our own FIPS 180-4
+code, nothing borrowed), the ini key in `pc/src/host/config.c`, and `pc/tests/test_biorand_dl.c`.
 
-**HTTPS:**
+**API for S3 and S5** (`biorand_dl.h`):
 
-- Windows: **WinHTTP** in process (`winhttp.dll` is in every Windows, 32-bit included). It uses
-  the system certificate store and follows the HTTPS→HTTPS redirect by default. A read loop counts
-  bytes for the progress. Link `winhttp`.
-- Linux: a **`curl` child process**, with `wget` as the fallback, started with
-  `SDL_CreateProcess`:
-  - `curl -fsSL --proto =https --tlsv1.2 -A recvx-enhanced-port -o <file> <url>`, or with
-    `-H "Accept: application/vnd.github+json"` and stdout for the API call;
-  - the fallback: `wget -q -O <file> <url>`.
-  
-  Why: the game is a 32-bit process. In-process TLS would need a new dependency and a CA bundle
-  (mbedTLS/BearSSL), or a 32-bit `libcurl.so` that most systems lack (dlopen). The system's
-  64-bit curl has the system's certificates and costs no dependency. Progress comes from polling
-  the output file's size every 100 ms against the API `size`. Neither tool found: the error "Install
-  curl or wget".
+| call | what |
+|---|---|
+| `biorand_cli_present()` | `<game folder>/biorand-cli[.exe]` is a regular file |
+| `biorand_cli_exe()` | that path (S5 runs it), or NULL if `SDL_GetBasePath` fails |
+| `biorand_cli_check_update()` | starts the worker: the API only. Ends `BRDL_CURRENT` (installed, and the digest equals the ini's) or `BRDL_NEWER` (another digest, or no CLI). 0 if a job runs already. |
+| `biorand_cli_install()` | starts the worker: API, download, verify, extract, install. Ends `BRDL_INSTALLED`. 0 if a job runs. |
+| `biorand_cli_cancel()` | the worker kills curl/wget/tar (or leaves the WinHTTP read loop) and ends `BRDL_CANCELLED` |
+| `biorand_cli_status(&s)` | any thread, cheap: `s.state`, `s.done` / `s.total` bytes, `s.error` |
+| `g_biorand_cli_digest` | ini `biorand_cli_digest`: the installed archive's `sha256:<hex>` |
 
-**The steps** (`biorand_cli.c`) run on a worker thread. Its state, bytes done and total, and the
-error text are atomics or under a mutex for the UI.
+**Polling** (each frame of the progress screen):
 
-1. API JSON into memory (max 256 KB). Find the asset by name: `biorand-cli-win-x64.zip` or
-   `biorand-cli-linux-x64.tar.gz`. A plain string scan is enough: the first `"size":`,
-   `"digest":"sha256:` and `"browser_download_url":"` after `"name":"<asset>"` (no JSON parser in
-   the port; the nested `uploader` object has none of those keys).
-2. Download to `<base>/biorand-cli.download`. `<base>` is `SDL_GetBasePath()`, the folder of the
-   game's executable, so the same volume makes the rename atomic.
-3. Check the size and **SHA-256** (portable `sha256.c`, about 100 lines, with the NIST "abc"
-   vector as its test) against `digest`. On a mismatch, delete it and show an error.
-4. Extract into `<base>/biorand-dl/`:
-   - Windows: `%SystemRoot%\System32\tar.exe -xf <zip> -C <dir>`. Windows 10 1803+ has bsdtar,
-     which reads zip. From our 32-bit process System32 is redirected to SysWOW64: verify that
-     SysWOW64 has tar.exe, or use `%SystemRoot%\Sysnative\tar.exe`.
-   - Linux: `tar -xzf`.
-5. Move `biorand-dl/biorand-cli[.exe]` to `<base>/biorand-cli[.exe]` (`SDL_RenamePath`, which
-   replaces). Then `chmod 0755` (Linux), and delete `biorand-dl/` with its LICENSE and README, and
-   the archive.
-6. Remember the installed `digest` in recvx.ini (`biorand_cli_digest`). "Check for a new BioRand
-   CLI" compares it with the API's digest. The nightly has no version, so the digest is the
-   identity.
+- `state` is `BRDL_API`, `BRDL_DOWNLOAD`, `BRDL_VERIFY` or `BRDL_EXTRACT` while busy.
+- `total` is known from `BRDL_DOWNLOAD` on (the API's `size`); `done` follows the file.
+- Any state from `BRDL_INSTALLED` on is final. The next start is accepted a moment later.
+- `error` is filled only in `BRDL_ERROR`. The texts are short sentences for the screen, for example
+  "GitHub allows 60 requests per hour; try again later", "the download is damaged (its SHA-256
+  differs from GitHub's); nothing was installed", "cannot download: install curl or wget".
+- The thread is detached: quitting the game does not wait for it. A killed run's `biorand-dl/` is
+  deleted by the next run.
 
-**API** (`biorand_cli.h`):
+**What it does** (one worker thread, no shell anywhere):
 
-- `biorand_cli_path()`: the executable, or NULL when missing.
-- `biorand_cli_start(int check_only)` starts the worker. `biorand_cli_state()` returns idle,
-  api, download (with done/total), verify, extract, done, newest (no update) or error (with text).
-- `biorand_cli_cancel()`.
+1. `<base>` is `SDL_GetBasePath()`, never the current directory. It writes only
+   `<base>/biorand-dl/` (temporary) and the two installed files. A left-over `biorand-dl/` is
+   deleted first.
+2. API: `GET https://api.github.com/repos/biorand/classic/releases/tags/nightly` with
+   `User-Agent: recvx-enhanced-port` and `Accept: application/vnd.github+json`, into
+   `biorand-dl/release.json` (at most 256 KB).
+3. The scan (`brdl_find_asset`) is a small bounded JSON reader (16 levels; every string and length
+   is checked). It takes the `assets[]` element whose top-level `name` is the platform's asset, with
+   `size` 1..100 MB, `digest` exactly `sha256:` + 64 lower-case hex, and a `browser_download_url`
+   that passes the allowlist. A `name` in the nested `uploader` object or in the release text does
+   not count. GitHub's error answer (no `assets`, a `message`) becomes the error text; the rate limit
+   gets its own sentence.
+4. Download into `biorand-dl/<asset>`, at most the API's `size` bytes; then the size must match.
+   - Windows: WinHTTP. `winhttp.dll` is a system DLL; the static mingw build imports it like ws2_32.
+     Automatic proxy, TLS 1.2/1.3, it follows the redirect to `*.githubusercontent.com` (never https
+     to http), timeouts 20 s connect and 60 s receive.
+   - Linux: `curl -fsSL --proto =https --proto-redir =https --tlsv1.2 --max-redirs 5 --max-filesize
+     <size> --connect-timeout 20 --speed-time 60 --speed-limit 1 -A .. -o <file> -- <url>`. If curl
+     cannot be started: `wget -q --https-only --max-redirect=5 --timeout=60 --tries=2 ...`.
+     Progress: the file's size every 100 ms; a file past the limit kills the child.
+5. SHA-256 of the archive against `digest`. A mismatch deletes the archive and reports it.
+6. Extract into `biorand-dl/x/` with the system tar, fixed argv:
+   - Linux: `tar -xzf <archive> -C <dir>` (from PATH).
+   - Windows: `%SystemRoot%\System32\tar.exe -xf`, else `Sysnative`, else `SysWOW64`. None: "Windows'
+     tar.exe was not found (it comes with Windows 10 1803 and later)". It starts with SDL's
+     background flag (CREATE_NO_WINDOW), so no console window flashes.
+7. Install: `x/LICENSE` becomes `<base>/biorand-cli.LICENSE` (decision 4). Then
+   `x/biorand-cli[.exe]`, which must be a regular file and not a link, is renamed over
+   `<base>/biorand-cli[.exe]`, with `chmod 0755` on Linux. Then `g_biorand_cli_digest` is set and
+   `settings_save_later()` called.
+8. `biorand-dl/` is deleted in every case (error, cancel). The delete never follows a link or a
+   junction out of the folder.
 
-**Test** (Linux, no network):
+**Allowlist** (`brdl_url_ok`): `https://` only. The host is exactly `api.github.com`, `github.com` or
+`<name>.githubusercontent.com` (lower case, no port, no user part). The path is printable ASCII
+without `\` or `"`. Redirect targets are not host-checked (curl and WinHTTP keep them https); the
+digest covers the content.
 
-- `RECVX_BIORAND_API=file:///.../nightly.json`; curl reads `file://`. The JSON's asset URL also
-  points to a local `file://` archive.
-- The check: a good archive installs, and a wrong digest is refused.
-- `sha256.c` gets its own vector check.
+**Test aids:** `RECVX_BIORAND_API_TEST` replaces the API URL; a `file:///` URL there also allows
+`file:///` asset URLs (Linux curl only). `RECVX_BIORAND_CLI_DIR_TEST` replaces the game's folder.
+
+**SDL processes, for S5:** `SDL_PROP_PROCESS_CREATE_BACKGROUND_BOOLEAN` is set on Windows only. On
+POSIX, SDL implements it as a double fork, and such a child cannot be waited for or killed.
+
+**Tests:**
+
+- ctest `biorand_dl`:
+  - SHA-256: the FIPS 180-4 vectors, a million `a`, input fed in pieces across block edges.
+  - The JSON scan: valid, pretty-printed, keys in another order; the other platform only; the name
+    only in nested objects or strings; missing or bad digest, size and URL; every truncation of a
+    valid answer; junk; too deep; the rate-limit and not-found answers.
+  - The allowlist: 5 good and 22 bad URLs.
+- ctest `biorand_dl_install` (Linux; skipped without curl or tar): a made-up archive laid out as the
+  nightly (`./biorand-cli` with mode 644, `./LICENSE`, `./README.md`) and a release JSON, over
+  `file://`. It checks:
+  - check-update says newer; install; one job at a time; progress done = total; mode 0755;
+  - exactly `biorand-cli` and `biorand-cli.LICENSE` are left; the digest is stored and saved once;
+  - a left-over `biorand-dl/` with a symlink to an outside folder is removed without following it;
+  - check-update then says current, and newer for another digest;
+  - a wrong digest is refused and the installed CLI stays; a wrong size; the rate-limit answer; a
+    missing API file; an http:// API URL; cancel; a fresh install.
+- The same test with the step-1 archive (`test_biorand_dl DIR biorand-cli-linux-x64.tar.gz`): all
+  passed. The installed `biorand-cli` and the LICENSE are byte-identical to the archive's.
+- **Live run (2026-10-26, Linux):** `test_biorand_dl --live <job dir>`.
+  - Check-update said newer.
+  - The install took 2.0 s, with download progress, 7 719 279 bytes, digest `sha256:8465e828…6bb63a8c`.
+  - The folder held only `biorand-cli` (ELF x86-64, 0755) and `biorand-cli.LICENSE`.
+  - A second check said current.
+  - curl 8.22 was used. This machine has no wget, so the wget fallback is untested.
+- The ini key: a recvx.ini with `biorand_cli_digest` keeps it through the game's rewrite (first
+  start).
+- Windows: `recvx.exe` and `test_biorand_dl.exe` build and link with mingw; `recvx.exe` imports
+  `WINHTTP.dll`. **Not run on Windows yet** (no machine or wine here). To check there: WinHTTP
+  (proxy, TLS, redirect, the 403 body), tar.exe from the 32-bit process (System32, Sysnative,
+  SysWOW64), the zip layout (`biorand-cli.exe` at the root), replacing the exe, Defender scanning
+  the new file. Run `test_biorand_dl --live <dir>` there; the offline test needs curl and is Linux
+  only.
 
 ### S3: title entry, Yes/No dialogs, progress screen
 
@@ -301,26 +362,28 @@ error text are atomics or under a mutex for the UI.
    - Should we pin a tagged release instead of `nightly` once IntelOrca's port changes are in a
      release?
 3. **Co-op**: partners need the same pack, which takes the same seed string **and** the same CLI
-   build. Different nightlies may differ; the pack id already detects that. Should the lobby send
-   the host's seed string so the guest can generate it?
+   build. Different nightlies may differ; the pack id already detects that. Decided: the host sends
+   its seed string, and the partner can generate the pack (S5).
 4. **Windows untested here**: tar.exe in SysWOW64 (or Sysnative), WinHTTP redirects, Defender
    scanning a freshly written exe. Downloads made with WinHTTP carry no Mark-of-the-Web, so there
    is no SmartScreen prompt.
-5. **The licence**: the user asked us to delete LICENSE and README after extraction. That is
-   fine for a user's own download (not a redistribution). Should we keep `biorand-cli.LICENSE`
-   anyway?
-6. Linux without curl or wget: rare; we show an error. In-process TLS would be the alternative
+5. **The licence**: decided: kept as `biorand-cli.LICENSE`. README and the archive are deleted.
+6. Linux without curl or wget: rare; we show an error ("cannot download: install curl or wget"). In-process TLS would be the alternative
    (a new dependency).
 7. A cold-cache generation reads 1.8 GB. On an HDD that may take tens of seconds; the progress
    then sits at 8% ("Reading ISO file").
-8. "Randomize Played as": should it pick once per generated seed (planned) or anew each new
-   game? Should it include the imported Outbreak models and the event doubles?
+8. "Randomize Played as": decided: once per seed. Open: should it include the imported Outbreak
+   models and the event doubles?
 9. Keep the menu `--dev` only (planned) until told otherwise.
 
 ## STATUS
 
 - **S1 done** (2026-10-26): CLI research, the catalogue `pc/src/host/biorand_options.json` with
   the golden strings, a test generation (4 s, 1.4 GB, the layout matches), this plan.
-- **Next: S2**, the secure downloader.
+- **S2 done** (2026-10-26): the secure downloader `pc/src/net/biorand_dl.c/.h` with `sha256.c/.h`,
+  the ini key `biorand_cli_digest`, ctests `biorand_dl` and `biorand_dl_install`, and a live install
+  from GitHub on Linux. Nothing calls it yet (no UI). A real Windows run is still needed (see "S2",
+  Tests).
+- **Next: S3**: the title entry, the dialogs and the progress screen, on the API in "S2" above.
 - The job-dir tools of S1 are `biorand-ui/enc.py` (a reference encoder that reads the
   catalogue), `gen.sh` and `err.sh`. They are not in git. S4's C encoder replaces enc.py.
