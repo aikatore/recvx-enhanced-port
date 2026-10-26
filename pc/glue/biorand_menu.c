@@ -8,6 +8,10 @@
  *   BS_WORK    the downloader's thread runs (pc/src/net/biorand_dl.h): its stage, a bar, MB, CANCEL; or the
  *              CLI generates the pack (bm.gen, S5): its Progress: percent and message on the bar
  *   BS_RESULT  a message (newest, installed, generated, an error) and OK
+ * A co-op guest whose pack is not the host's opens it from the lobby or the title menu (bm.host, S5b:
+ * coop_biorand_offer): it asks to generate the host's seed string (A_HOST), downloads the CLI first when there is none
+ * (A_DOWNLOAD), offers the newest CLI when the host's digest differs (A_DIGEST), generates, and returns to where it
+ * came from (coop_biorand_reply).
  * Game thread. */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
@@ -39,7 +43,7 @@ int pc_in_game(void);   /* options_glue.c */
 
 enum { BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };
 enum { BS_MENU, BS_ASK, BS_WORK, BS_RESULT };
-enum { A_DOWNLOAD, A_CHECK, A_NEWER, A_GEN };
+enum { A_DOWNLOAD, A_CHECK, A_NEWER, A_GEN, A_HOST, A_DIGEST };
 /* the pages; DOORS..ENEMIES show biorand_opt[]'s groups BOG_DOORS..BOG_ENEMIES (the same numbers) */
 enum { PG_SEED, PG_DOORS, PG_ITEMS, PG_ENEMIES, PG_PORT, PG_N };
 static const char* const page_names[PG_N] = { "SEED", "DOORS", "ITEMS", "ENEMIES", "PORT EXTRAS" };
@@ -111,6 +115,9 @@ static struct {
     int say_t, say_err;
     BioOpts o;                          /* the options, from and to recvx.ini biorand_seed */
     char str[BIORAND_SEED_CAP];         /* their seed string */
+    int host, warned, done;             /* the host's seed (co-op guest; bm.o and bm.str are its, not saved); the CLI
+                                           digest warning was asked; it was generated */
+    char dig[16];                       /* the host's CLI digest, first hex digits ("" unknown) */
 } bm;
 
 static Row rows[MAX_ROWS];
@@ -121,6 +128,9 @@ static const char* const ask_text[] = {
     "Check GitHub for a new BioRand CLI?",
     "A newer BioRand CLI is available. Download it? About 7 MB. It is checked against GitHub's checksum.",
     NULL,   /* A_GEN: gen_text() */
+    NULL,   /* A_HOST: gen_text() */
+    "Your BioRand CLI is not the host's build, so your pack may differ from the host's. Download the newest BioRand CLI first? "
+    "(The host should have the newest too.) No generates with yours.",
 };
 
 static void ask(int a) { bm.state = BS_ASK; bm.ask = a; bm.sel = 1; }   /* No first */
@@ -134,13 +144,13 @@ static void result(const char* m, int err)
 
 static void look_mods(void) { bm.free_mb = biorand_mods_free_mb(); }
 
-/* back to the page, or out when there is no CLI to show it for */
+/* back to the page, or out when there is no CLI to show it for (or it was the host's seed: back to the lobby) */
 static int to_menu(void)
 {
     look_mods();
     bm.have = biorand_cli_present();
     bm.state = BS_MENU;
-    return !bm.have;
+    return !bm.have || bm.host;
 }
 
 static void say(const char* m, int err);
@@ -150,9 +160,12 @@ static const char* gen_text(void)
 {
     static char t[400];
     char f[40] = "";
+    char h[64];
     if (bm.free_mb >= 0) snprintf(f, sizeof(f), " Free space: %.1f GB.", bm.free_mb / 1024.0);
-    snprintf(t, sizeof(t), "Generate BioRand seed %d into mods/biorand? It replaces the pack there. BioRand may use several GB of memory "
-             "(about 6 GB) for a short time.%s", bm.o.Seed, f);
+    if (bm.host) snprintf(h, sizeof(h), "The host plays BioRand seed %d. Generate it now", bm.o.Seed);   /* (A_HOST) */
+    else snprintf(h, sizeof(h), "Generate BioRand seed %d", bm.o.Seed);
+    snprintf(t, sizeof(t), "%s into mods/biorand? It replaces the pack there. BioRand may use several GB of memory "
+             "(about 6 GB) for a short time.%s", h, f);
     return t;
 }
 
@@ -165,15 +178,22 @@ static void gen_start(void)
     bm.cancelling = 0;
     if (r > 0) {
         bm.state = BS_WORK;
-        host_log("biorand menu: generating %s\n", bm.str);
+        if (bm.host) coop_biorand_reply(1);   /* (the host's lobby shows it) */
+        host_log("biorand menu: generating %s%s\n", bm.str, bm.host ? " (the co-op host's)" : "");
     } else result(r < 0 ? "Cannot write BioRand's settings.json into the save folder." : "The last download is still ending. Try again in a moment.", 1);
 }
 
-/* the generation's end: the pack looked at again; done, BioRand on */
-static void gen_end(const BrdlStatus* s)
+/* the generation's end: the pack looked at again; done, BioRand on. The host's seed: back to the lobby (1), which
+   compares the pack again; our own setting stays (the session follows the host's). */
+static int gen_end(const BrdlStatus* s)
 {
     char m[320];
     biorand_scan();   /* (also after an error or cancel: the old pack may be gone) */
+    if (bm.host && s->state != BRDL_ERROR) {
+        bm.done = s->state == BRDL_GENERATED;
+        host_log("biorand menu: the host's seed %s; the pack says seed %d\n", bm.done ? "generated" : "cancelled", biorand_seed());
+        return 1;
+    }
     if (s->state == BRDL_GENERATED) {
         biorand_enable();
         host_log("biorand menu: generated %s; the pack says seed %d; BioRand on\n", bm.str, biorand_seed());
@@ -182,6 +202,26 @@ static void gen_end(const BrdlStatus* s)
         result(m, 0);
     } else if (s->state == BRDL_ERROR) result(s->error, 1);
     else { to_menu(); say("Generating cancelled.", 0); }
+    return 0;
+}
+
+static const char* row_why(const Row* r);
+/* the host's seed (bm.host): the CLI first, the digest's question once, then GENERATE's checks and the CLI */
+static int host_next(void)
+{
+    const Row g = { K_GEN, 0 };
+    const char* ours = strncmp(g_biorand_cli_digest, "sha256:", 7) ? "" : g_biorand_cli_digest + 7;
+    if (!bm.have) { ask(A_DOWNLOAD); return 0; }
+    if (!bm.warned && bm.dig[0] && strncmp(ours, bm.dig, strlen(bm.dig))) {
+        bm.warned = 1;
+        host_log("biorand menu: our CLI %.12s is not the host's %s\n", ours[0] ? ours : "(unknown)", bm.dig);
+        ask(A_DIGEST);
+        return 0;
+    }
+    look_mods();
+    if (row_why(&g)) result(row_why(&g), 1);
+    else gen_start();
+    return 0;
 }
 
 static void work(int install)
@@ -202,9 +242,13 @@ static int work_end(void)
     biorand_cli_status(&s);
     if (s.state < BRDL_INSTALLED) return 0;
     host_log("biorand menu: %s ended in state %d\n", bm.gen ? "generate" : bm.install ? "install" : "check", s.state);
-    if (bm.gen) { gen_end(&s); return 0; }
+    if (bm.gen) return gen_end(&s);
     switch (s.state) {
-    case BRDL_INSTALLED: bm.have = 1; result("The BioRand CLI is installed.", 0); break;
+    case BRDL_INSTALLED:
+        bm.have = 1;
+        if (bm.host) return host_next();
+        result("The BioRand CLI is installed.", 0);
+        break;
     case BRDL_CURRENT: result("You have the newest BioRand CLI.", 0); break;
     case BRDL_NEWER: ask(A_NEWER); break;
     case BRDL_ERROR: result(s.error, 1); break;
@@ -219,6 +263,8 @@ static int choose(int yes)
     CallSystemSe(0, yes ? 3 : 0);
     if (bm.state == BS_ASK) {
         if (yes && bm.ask == A_GEN) { gen_start(); return 0; }
+        if (bm.ask == A_HOST) return yes ? host_next() : to_menu();
+        if (!yes && bm.ask == A_DIGEST) return host_next();   /* with our CLI */
         if (yes) { work(bm.ask != A_CHECK); return 0; }
         return bm.ask == A_DOWNLOAD ? 1 : to_menu();
     }
@@ -283,7 +329,7 @@ static const char* row_why(const Row* r)
         if (!bm.have) return "The BioRand CLI is not installed.";
         if (!biorand_iso_known()) return "The game's disc image is not known.";
         if (pc_in_game()) return "Only at the title menu.";
-        if (coop_biorand() >= 0) return "Not as a guest in a co-op session.";
+        if (coop_biorand() >= 0 && !bm.host) return "Not as a guest in a co-op session.";   /* (the host's own seed: S5b) */
         if (bm.free_mb >= 0 && bm.free_mb < BRDL_GEN_FREE_MB) {
             snprintf(why, sizeof(why), "Needs about %d GB free in the mods folder; it has %.1f GB.", BRDL_GEN_FREE_MB / 1024, bm.free_mb / 1024.0);
             return why;
@@ -868,6 +914,7 @@ void pc_biorand_menu_close(void)
 {
     if (!bm.open) return;
     if (bm.state == BS_WORK) biorand_cli_cancel();   /* the title ends (a soft reset): the download with it */
+    if (bm.host) coop_biorand_reply(bm.done ? 2 : 0);   /* the lobby again: the pack compared, or we leave */
     g_lobby_io.text_on = 0;
     bm.open = 0;
     host_log("biorand menu: closed\n");
@@ -878,16 +925,25 @@ int pc_biorand_menu(void)
 {
     int r = 0;
     if (!bm.open) {
+        const char *dig = "", *hs = coop_biorand_offer(&dig);
         memset(&bm, 0, sizeof(bm));
         bm.open = 1;
         bm.top = 1;
         bm.seed_i = biorand_opt_find("Seed");
         biorand_opts_load(&bm.o);
         biorand_seed_encode(&bm.o, bm.str, sizeof(bm.str));
+        if (hs) {   /* the co-op host's seed string, as it came (coop_glue.c decoded it too); recvx.ini keeps ours */
+            bm.host = 1;
+            biorand_seed_decode(hs, &bm.o);
+            snprintf(bm.str, sizeof(bm.str), "%s", hs);
+            snprintf(bm.dig, sizeof(bm.dig), "%s", dig);
+        }
         g_lobby_io.paste_req = 0;
         look_mods();
-        if (!(bm.have = biorand_cli_present())) ask(A_DOWNLOAD);
-        host_log("biorand menu: open, the CLI is %s, seed string %s\n", bm.have ? "there" : "missing", bm.str);
+        bm.have = biorand_cli_present();
+        if (bm.host) ask(A_HOST);
+        else if (!bm.have) ask(A_DOWNLOAD);
+        host_log("biorand menu: open, the CLI is %s, seed string %s%s\n", bm.have ? "there" : "missing", bm.str, bm.host ? " (the co-op host's)" : "");
     }
     bm.blink++;
     if (bm.say_t > 0) bm.say_t--;
@@ -897,6 +953,7 @@ int pc_biorand_menu(void)
         paste_end(g_lobby_io.paste);
     }
     if (bm.state == BS_WORK) r = work_end();
+    else if (bm.host && !coop_biorand_offer(NULL)) r = 1;   /* the session ended, or the host's pack is no longer needed */
     build_rows();
     if (!r) r = input();
     build_rows();   /* (a page or a box changed) */
@@ -910,13 +967,13 @@ int pc_biorand_menu(void)
     draw_page();
     if (bm.state == BS_ASK) {
         box();
-        pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 20, BOX_X1 - BOX_X0 - 40, bm.ask == A_GEN ? gen_text() : ask_text[bm.ask], 0.55f, 0xFFFFFFFF, 5);
+        pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 20, BOX_X1 - BOX_X0 - 40, bm.ask == A_GEN || bm.ask == A_HOST ? gen_text() : ask_text[bm.ask], 0.55f, 0xFFFFFFFF, 5);
         button(0, "YES", bm.sel == 0);
         button(1, "NO", bm.sel == 1);
     } else if (bm.state == BS_WORK) draw_work();
     else if (bm.state == BS_RESULT) {
         box();
-        pc_ui_text(BOX_X0 + 20, BOX_Y0 + 16, bm.gen ? (bm.err ? "BIORAND - ERROR" : "BIORAND") : bm.err ? "BIORAND CLI - ERROR" : "BIORAND CLI", 0.5f, 0xFFFFE080);
+        pc_ui_text(BOX_X0 + 20, BOX_Y0 + 16, bm.gen || bm.host ? (bm.err ? "BIORAND - ERROR" : "BIORAND") : bm.err ? "BIORAND CLI - ERROR" : "BIORAND CLI", 0.5f, 0xFFFFE080);
         pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 48, BOX_X1 - BOX_X0 - 40, bm.msg, 0.55f, bm.err ? 0xFFFFC060 : 0xFFFFFFFF, 4);
         button(0, "OK", 1);
     }

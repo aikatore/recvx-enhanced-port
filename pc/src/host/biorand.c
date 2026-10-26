@@ -5,6 +5,7 @@
 #include "settings.h"
 #include "../../include/pc_parse.h"
 #include "../net/biorand_dl.h"
+#include "biorand_opts.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,7 @@ static struct {
     int pack, seed;
     unsigned int id;
     char text[24];
+    char str[BIORAND_SEED_LEN + 1];   /* the log's whole seed string when it is one we can decode, else "" */
 } br = { .seed = -1 };
 
 static const char* mods_dir(void) { return SDL_getenv("RECVX_MODS") ? SDL_getenv("RECVX_MODS") : "mods"; }
@@ -39,7 +41,7 @@ void biorand_scan(void)
     unsigned int id = 2166136261u, sum = 0;
     FILE* f;
     if (!g_dev_mode) {   /* without --dev: no pack, so nothing of BioRand is shown or read */
-        br.pack = 0, br.seed = -1, br.id = 0, br.text[0] = 0;
+        br.pack = 0, br.seed = -1, br.id = 0, br.text[0] = br.str[0] = 0;
         return;
     }
     snprintf(dir, sizeof(dir), "%s/biorand", mods_dir());
@@ -53,6 +55,7 @@ void biorand_scan(void)
         }
         SDL_free(list);
     }
+    br.str[0] = 0;
     snprintf(path, sizeof(path), "%s/log_pl0.txt", dir);
     if ((f = pc_fopen(path, "rb"))) {
         size_t k;
@@ -60,7 +63,14 @@ void biorand_scan(void)
         log = 1;
         while (fgets(line, sizeof(line), f)) {   /* "    Seed: R840-0KR3-T4HH..." (line 2; BaseRandomiser.GenerateRdts) */
             const char* l = line + strspn(line, " \t");
-            if (!strncmp(l, "Seed: ", 6)) { seed = pc_biorand_seed(l + 6); break; }
+            if (!strncmp(l, "Seed: ", 6)) {
+                BioOpts o;
+                seed = pc_biorand_seed(l + 6);
+                l += 6;
+                snprintf(br.str, sizeof(br.str), "%.*s", (int)strcspn(l, " \t\r\n"), l);
+                if (strlen(br.str) != BIORAND_SEED_LEN || biorand_seed_decode(br.str, &o)) br.str[0] = 0;   /* (co-op sends it) */
+                break;
+            }
         }
         rewind(f);
         while ((k = fread(buf, 1, sizeof(buf), f)) > 0) id = fnv(id, buf, k);
@@ -80,6 +90,7 @@ int biorand_pack(void) { return br.pack; }
 int biorand_seed(void) { return br.seed; }
 unsigned int biorand_id(void) { return br.id; }
 const char* biorand_seed_text(void) { return br.text; }
+const char* biorand_seed_string(void) { return br.str; }
 
 /* our setting; a co-op guest follows the host (coop_biorand: the host's choice, checked against our pack) */
 int biorand_active(void)

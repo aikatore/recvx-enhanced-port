@@ -33,6 +33,7 @@ int  biorand_pack(void);              /* a generated pack is there */
 int  biorand_seed(void);              /* its seed number (BioRand's, 0..1048575), -1 unknown */
 unsigned int biorand_id(void);        /* the pack: a hash of its seed line (all options), log and room files; 0 none */
 const char* biorand_seed_text(void);  /* "seed 123456", "" unknown */
+const char* biorand_seed_string(void);   /* the pack's whole seed string (68 characters, decodable), "" unknown */
 int  biorand_active(void);            /* the loader serves the pack now: our setting, a co-op guest the host's choice */
 int  biorand_shown(void);            /* the BioRand settings exist: only with --dev (g_dev_mode) */
 const char* biorand_locked(void);     /* why the setting cannot change now (no pack, in game, a co-op guest), or NULL */
@@ -60,6 +61,11 @@ int  pc_biorand_appear(void);                      /* in game: the picked "You a
 void pc_biorand_appear_drop(void);                 /* the user chose a look in game: this game's pick goes */
 /* co-op (coop_glue.c): -1 not a guest in a session (our own setting counts), else the host's choice (0/1) */
 int coop_biorand(void);
+/* a guest whose pack is not the host's, at the title (protocol 30, docs/BIORAND_INGAME.md S5b): the host's seed string
+   while the BIORAND screen offers or generates it, else NULL (*dig: the host's CLI digest, first hex digits, "" unknown);
+   the reply: 1 generating, 2 generated (compared again), 0 not (the guest leaves) */
+const char* coop_biorand_offer(const char** dig);
+void coop_biorand_reply(int r);
 
 #ifdef __cplusplus
 }

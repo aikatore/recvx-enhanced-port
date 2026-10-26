@@ -40,13 +40,15 @@ static Event ev(int type)
     case EV_OWN: e.u.blob.total = COOP_OWN_SIZE; e.u.blob.off = 1536; e.u.blob.len = 28; e.u.blob.pad = 1; break;
     case EV_GONE: e.u.gn.n = 2; e.u.gn.slot[0] = 3; e.u.gn.id[0] = 1; e.u.gn.slot[1] = 30; e.u.gn.id[1] = 1; break;
     case EV_SKIP: e.stg = 0; e.rom = 2; e.u.sk.op = SKIP_GO; break;
+    case EV_BRSEED: memcpy(e.u.br.str, "R840-T1C0-XXHH4HZZZMEZ9H0007JZZZZZZZ5ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ", COOP_BR_STR);
+                    memcpy(e.u.br.dig, "8465e8280f3a", COOP_BR_DIG); break;
     case EV_FX: e.idx = 4; e.u.fx.id = 350; e.u.fx.flg = 1; e.u.fx.owner = 4; e.u.fx.txp = 0; e.u.fx.mlw = -1; e.u.fx.stflg = 0x20; e.u.fx.tex_id = 7;   /* a zombie's vomit */
         coop_fx_put(&e.u.fx.exp0, &e.u.fx.refs, FXR_EXP0, FX_NONE); e.u.fx.s[0] = 896; break;
     }
     return e;
 }
 static int host_sends(int t) { return t != EV_UNGRAB && t != EV_GONE && t != EV_OWN; }
-static int guest_sends(int t) { return t != EV_PLY_HIT && t != EV_BLOB && t != EV_GRAB && t != EV_BOXFIX && t != EV_SPAWN && t != EV_EOPTS && t != EV_SKIP; }
+static int guest_sends(int t) { return t != EV_PLY_HIT && t != EV_BLOB && t != EV_GRAB && t != EV_BOXFIX && t != EV_SPAWN && t != EV_EOPTS && t != EV_SKIP && t != EV_BRSEED; }
 
 /* a generic EV_FX of effect `id` as its FxRule allows it (any rule's for an id without one) */
 static Event fx_sample(int id)
@@ -183,6 +185,20 @@ static void test_events(void)
     BAD(EV_SKIP, 1, e->stg = 10);
     BAD(EV_SKIP, 1, e->rom = 100);
     BAD(EV_SKIP, 0, (void)0);                            /* the guest never decides */
+    /* EV_BRSEED (protocol 30): the host's BioRand seed string in BioRand's alphabet, its CLI digest in lower-case hex;
+       either may be all zero (unknown) */
+    BAD(EV_BRSEED, 0, (void)0);                          /* the host's only */
+    BAD(EV_BRSEED, 1, e->u.br.str[20] = 'I');            /* not in the alphabet */
+    BAD(EV_BRSEED, 1, e->u.br.str[20] = 'h');            /* lower case: the receiver takes what BioRand writes */
+    BAD(EV_BRSEED, 1, e->u.br.str[67] = 0);              /* short */
+    BAD(EV_BRSEED, 1, e->u.br.str[0] = 'S');
+    BAD(EV_BRSEED, 1, e->u.br.str[4] = 'A');
+    BAD(EV_BRSEED, 1, e->u.br.str[9] = '0');
+    BAD(EV_BRSEED, 1, e->u.br.dig[3] = 'E');
+    BAD(EV_BRSEED, 1, e->u.br.dig[11] = 0);
+    BAD(EV_BRSEED, 1, e->u.br.dig[0] = '\n');
+    { Event e = ev(EV_BRSEED); memset(e.u.br.str, 0, sizeof(e.u.br.str)); CHECK(coop_check_event(&e, 1) == COOP_OK); }   /* unknown */
+    { Event e = ev(EV_BRSEED); memset(e.u.br.dig, 0, sizeof(e.u.br.dig)); CHECK(coop_check_event(&e, 1) == COOP_OK); }
     /* EV_GONE: 1..COOP_GONE_MAX enemy slots below COOP_ENE_SLOTS, a room case */
     BAD(EV_GONE, 0, e->u.gn.n = 0);
     BAD(EV_GONE, 0, e->u.gn.n = COOP_GONE_MAX + 1);

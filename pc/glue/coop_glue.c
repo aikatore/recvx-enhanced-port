@@ -38,6 +38,8 @@ int ikou3(BH_PWORK* epw, NJS_POINT3* pos, int add_dir);   /* zonzon.c (its heade
 #include "../src/host/cast.h"
 #include "../src/host/enemies.h"
 #include "../src/host/biorand.h"
+#include "../src/host/biorand_opts.h"
+#include "../src/net/biorand_dl.h"
 #include "../src/net/net.h"
 #include "../src/net/coop_proto.h"
 #include "pc_rules.h"
@@ -2339,6 +2341,13 @@ static unsigned int last[NFLAG];        /* the flag block as the partner knows i
 static int own_live, own_sent_ok;       /* guest: we play in the host's game of this session; our items went to it (EV_OWN) */
 static unsigned int my_sid, peer_sid, blob_end;   /* blob_end: host, id of the last chunk sent */
 static int blob_due, need_blob, pop_pending, popping, follow_pending, host_room = -1;
+/* guest: the host's BioRand seed string and CLI digest (EV_BRSEED, protocol 30), and the offer to generate its pack
+   (biorand_from_host, the BIORAND screen): BR_NONE; BR_ASK and BR_GEN hold the join (no game state is loaded) while
+   the screen asks and the CLI runs; BR_DONE: generated (or not), the next mismatch leaves */
+enum { BR_NONE, BR_ASK, BR_GEN, BR_DONE };
+static char br_str[COOP_BR_STR + 1], br_dig[COOP_BR_DIG + 1];
+static int br_offer, br_got;
+static unsigned int br_wait;            /* when a mismatch was first seen before EV_BRSEED came (net_ms, 0 none) */
 static unsigned char regroups, seen_regroup;   /* host: regroups so far; client: the last one acted on */
 
 static unsigned int* flag_block(void) { return sys->ev_flg; }
@@ -2550,6 +2559,28 @@ void coop_spawn_note(int slot, const SpawnNote* n)
     queue_event(&e);
 }
 
+/* host, while it plays BioRand: its pack's seed string and its CLI's digest (EV_BRSEED, protocol 30) to a new partner
+   and whenever they change, so a guest without the pack can generate it (biorand_from_host). Sent before the
+   extension that says br is read: in the same datagram its events come first. */
+static void brseed_sync(void)
+{
+    static Event sent;
+    static unsigned int sid;
+    Event e = { 0 };
+    const char* s = biorand_seed_string();
+    if (!biorand_active()) return;
+    e.type = EV_BRSEED;
+    memcpy(e.u.br.str, s, strlen(s) < COOP_BR_STR ? strlen(s) : COOP_BR_STR);   /* (68 or 0) */
+    if (!strncmp(g_biorand_cli_digest, "sha256:", 7) && strlen(g_biorand_cli_digest) >= 7 + COOP_BR_DIG)
+        memcpy(e.u.br.dig, g_biorand_cli_digest + 7, COOP_BR_DIG);
+    if (sid == peer_sid && !memcmp(&sent.u.br, &e.u.br, sizeof(e.u.br))) return;
+    sent = e;
+    sid = peer_sid;
+    if (coop_check_event(&e, 1)) { host_log("coop: our BioRand seed string or CLI digest is not one to send: %s\n", s); return; }
+    queue_event(&e);
+    host_log("coop: our BioRand seed string %s sent to the partner\n", s[0] ? s : "(unknown)");
+}
+
 /* host, every frame: the options go out to a new partner (the guest's lobby shows them) and again
    whenever they change (the lobby, F1, OPTION; they take effect at the next room load); a guest that (re)enters our room gets the room's
    added enemies again (it ignores those it has) */
@@ -2559,6 +2590,7 @@ static void enemy_sync(void)
     int now;
     if (!is_host || !have_peer || echo_delay) { was = 0; return; }
     if (eopts_sid != peer_sid || memcmp(&eopts_sent, &g_enemy_opts, sizeof(eopts_sent))) eopts_send();
+    brseed_sync();
     if (kept_out.sent_sid != peer_sid && have_rx && (rx.flags & (PF_IN_GAME | PF_VISIBLE)) == (PF_IN_GAME | PF_VISIBLE)) kept_send();
     now = same_room() && tx_in_game && !(sys->gm_flg & 0x9) && !(sys->cb_flg & 0x1);
     if (now && !was) spawn_replay();
@@ -3408,6 +3440,8 @@ static void session(void)
             point's items, but the host's game goes on: we take back the items we died with (before, whichever came first) */
         if (tx_in_game && in_session_game() && !popping && !pop_pending && !own_fixed && !own_hold) { own_snapshot(); own_send(); }
         if ((sys->tk_flg & 0x28) && !popping && !pop_pending) need_blob = 1;   /* title, or a game (re)start of our own */
+        if (br_offer == BR_ASK || br_offer == BR_GEN) pop_pending = 0;   /* generating the host's BioRand pack: no game yet (a
+            state that came meanwhile would be old: asked for again once it is done) */
         /* load at the title or while we are in control (not from a menu, an event, a door) */
         if (pop_pending && ((sys->tk_flg & 0x8) || (tx_in_game && local_visible()) || (go_running() && rule(OPT_GAMEOVER_BOTH)))) load_blob();
         if (need_blob || pop_pending || popping) return;
@@ -5630,6 +5664,19 @@ static void skip_frame(void)
 static int apply_event(const Event* e)
 {
     if (e->type == EV_EOPTS) { if (!is_host) enemy_opts_from_host(&e->u.eo); return 1; }   /* before the blob it precedes */
+    if (e->type == EV_BRSEED) {   /* the host's BioRand seed string (checked: coop_check_event; decoded here) and CLI digest */
+        BioOpts o;
+        memcpy(br_str, e->u.br.str, COOP_BR_STR);
+        memcpy(br_dig, e->u.br.dig, COOP_BR_DIG);
+        br_str[COOP_BR_STR] = br_dig[COOP_BR_DIG] = 0;
+        if (br_str[0] && (strlen(br_str) != BIORAND_SEED_LEN || biorand_seed_decode(br_str, &o))) {
+            host_log("coop: the host's BioRand seed string cannot be read here: %s\n", br_str);
+            br_str[0] = 0;
+        }
+        br_got = 1;
+        host_log("coop: the host's BioRand seed string %s, its CLI %s\n", br_str[0] ? br_str : "unknown", br_dig[0] ? br_dig : "unknown");
+        return 1;
+    }
     if (pop_pending) return 0;   /* what follows a blob applies to the loaded game */
     if (e->type == EV_SPAWN) return is_host ? 1 : spawn_note_apply(e->idx, &e->u.sp, e->stg, e->rom);
     if (e->type == EV_ESTATE) {   /* EV_GRAB / EV_UNGRAB name the transfer they need complete */
@@ -5796,6 +5843,9 @@ static void stop(void)
     if (have_peer && !echo_delay) send_bye(bye_code);
     bye_code = 0;
     host_br = -1;   /* single player: our own BioRand setting again */
+    br_str[0] = br_dig[0] = 0;
+    br_offer = br_got = 0;
+    br_wait = 0;
     rdv_stop();
     coop_direct_wipe(&direct);
     if (join_dns) { net_resolve_cancel(join_dns); join_dns = NULL; }
@@ -6045,12 +6095,30 @@ static int takeover(const NetAddr* from, const unsigned char* buf, int n)
 
 /* guest: the host's BioRand (protocol 27, docs/COOP.md "BioRand"). The loader follows the host's choice for the
    session (coop_biorand); while the host plays its pack, ours must be the same one (seed, options, files), else we
-   leave with why. */
+   leave with why. At the title (the lobby or the title menu; --dev, as the BIORAND screen), with the host's seed string
+   (EV_BRSEED), the BIORAND screen first offers to generate it (protocol 30, docs/BIORAND_INGAME.md S5b): the join waits
+   meanwhile, the poses keep the session. */
 static void biorand_from_host(void)
 {
     static char why[200];
     host_br = rx_ext.br;
-    if (!rx_ext.br || (biorand_pack() && rx_ext.br_id == biorand_id()) || bye_reason) return;
+    if (bye_reason) return;
+    if (!rx_ext.br || (biorand_pack() && rx_ext.br_id == biorand_id())) {
+        if (br_offer != BR_GEN) br_offer = BR_NONE;   /* (the screen leaves an offer that is no longer needed) */
+        br_wait = 0;
+        return;
+    }
+    if (br_offer == BR_ASK || br_offer == BR_GEN) return;
+    if (br_offer == BR_NONE && br_str[0] && biorand_shown() && sys && !in_session_game()) {
+        if (!(sys->tk_flg & 0x8)) return;   /* (starting up, the attract demo: the title comes) */
+        br_offer = BR_ASK;
+        host_log("coop: the host plays BioRand %s; ours differs: the BIORAND screen offers to generate it\n", br_str);
+        return;
+    }
+    if (br_offer == BR_NONE && !br_got) {   /* the host sends EV_BRSEED with the extension that says br; wait a moment for it */
+        if (!br_wait) br_wait = net_ms() ? net_ms() : 1;
+        if (net_ms() - br_wait < 2000) return;
+    }
     if (rx_ext.br_seed == 0xFFFFFFFFu) snprintf(why, sizeof(why), "The host plays a BioRand pack you do not have; generate the same seed (or ask the host to turn BioRand off)");
     else if (biorand_pack() && (uint32_t)biorand_seed() == rx_ext.br_seed)
         snprintf(why, sizeof(why), "The host plays BioRand seed %u with other options or another BioRand version; generate the same (or ask the host to turn BioRand off)", rx_ext.br_seed);
@@ -6059,6 +6127,24 @@ static void biorand_from_host(void)
     bye_code = COOP_REJ_BIORAND;
 }
 int coop_biorand(void) { return coop_on && !is_host ? host_br : -1; }
+
+/* the BIORAND screen (biorand_menu.c): the host's seed string while it offers or generates it, else NULL; *dig its CLI
+   digest's first hex digits ("" unknown) */
+const char* coop_biorand_offer(const char** dig)
+{
+    if (!coop_on || is_host || (br_offer != BR_ASK && br_offer != BR_GEN)) return NULL;
+    if (dig) *dig = br_dig;
+    return br_str;
+}
+
+/* ... and how it went: 1 generating, 2 generated (the pack is compared again: the same joins, another leaves), 0 No
+   (or it could not): we leave as without the offer */
+void coop_biorand_reply(int r)
+{
+    if (!coop_on || is_host || (br_offer != BR_ASK && br_offer != BR_GEN)) return;
+    br_offer = r == 1 ? BR_GEN : BR_DONE;
+    host_log("coop: the host's BioRand seed: %s\n", r == 1 ? "generating it" : r ? "generated; compared again" : "not generated");
+}
 
 #define RX_DGRAMS 96
 #define RX_BYTES (128 * 1024)
@@ -6386,7 +6472,7 @@ static void send_frame(void)
         else if (!bye_reason) bye_reason = "No randomness from the system for the handshake: cannot join";
         return;
     }
-    if (need_blob) tx.flags |= PF_WANT_BLOB;
+    if (need_blob && br_offer != BR_ASK && br_offer != BR_GEN) tx.flags |= PF_WANT_BLOB;
     tx.ev_ack = in_last;
     for (id = ring.head; id != ring.next && ne < COOP_EV_FRAME && !drop_now(1); id++) evs[ne++] = *coop_ring_get(&ring, id);
     ns = build_snapshots(snaps);
@@ -6526,7 +6612,8 @@ void coop_frame(void)
     tx.type = PKT_POSE;
     memset(&tx_ext, 0, sizeof(tx_ext));
     memcpy(tx_ext.name, g_coop.name, sizeof(tx_ext.name) - 1);
-    memcpy(tx_ext.note, g_coop.note, sizeof(tx_ext.note) - 1);
+    snprintf(tx_ext.note, sizeof(tx_ext.note), "%.*s", (int)sizeof(tx_ext.note) - 1,   /* (the host's lobby shows it under our model) */
+             br_offer == BR_GEN ? "BioRand: generating..." : br_offer == BR_ASK ? "BioRand: asked to generate" : g_coop.note);
     tx_ext.lchr = my_chr() <= COOP_CHR_MAX ? my_chr() : 0;   /* (int8_t; an import: the character played, as in tx.chr; "As played (cutscene)": the cutscene model) */
     tx_ext.lobby = g_coop.lobby;
     if (!is_host) { memcpy(tx_ext.pid, g_coop.pid, 16); memcpy(tx_ext.tag, my_tag, 16); tx_ext.items = (uint8_t)items_wire(); }

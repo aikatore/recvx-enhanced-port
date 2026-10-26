@@ -173,8 +173,18 @@ static int fx_entry_ok(const Event* e)
 /* objects: slots 4..31 (sys->obwp, coop_glue.c OBJ_N); fins also keeps their angles within the int they become */
 static int atr_ok(const AtrRec* r, int kind, int ix) { return fins(r->p, 6) && (kind != ATR_WAL || r->type < 8) && (kind != ATR_OBJ || (ix >= 4 && ix < 32)); }
 
+/* EV_BRSEED: n bytes all 0 (unknown), or each one of `set` (the receiver decodes the seed string too) */
+static int zero_or(const char* b, int n, const char* set)
+{
+    int k, z = 1;
+    for (k = 0; k < n; k++) z &= !b[k];
+    for (k = 0; k < n && !z; k++)
+        if (!b[k] || !strchr(set, b[k])) return 0;
+    return 1;
+}
+
 /* events only the host sends (it runs the session and the enemies), and those only a guest sends */
-static int host_only(int t) { return t == EV_PLY_HIT || t == EV_BLOB || t == EV_GRAB || t == EV_BOXFIX || t == EV_SPAWN || t == EV_EOPTS || t == EV_SKIP; }
+static int host_only(int t) { return t == EV_PLY_HIT || t == EV_BLOB || t == EV_GRAB || t == EV_BOXFIX || t == EV_SPAWN || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED; }
 static int guest_only(int t) { return t == EV_UNGRAB || t == EV_GONE || t == EV_OWN; }
 
 int coop_check_event(const Event* e, int from_host)
@@ -278,6 +288,9 @@ int coop_check_event(const Event* e, int from_host)
         return COOP_OK;
     case EV_SKIP:   /* the host's decision, in a room that exists in a save */
         return e->u.sk.op == SKIP_GO && e->stg <= 9 && e->rom <= 99 ? COOP_OK : COOP_BAD_FIELD;
+    case EV_BRSEED:   /* "R840-XXXX-..." in BioRand's alphabet (upper case), the digest in lower-case hex */
+        if (!zero_or(e->u.br.str, COOP_BR_STR, "0123456789ABCEFGHJKLMNPQRTUVWXYZ-") || !zero_or(e->u.br.dig, COOP_BR_DIG, "0123456789abcdef")) return COOP_BAD_FIELD;
+        return !e->u.br.str[0] || (e->u.br.str[0] == 'R' && e->u.br.str[4] == '-' && e->u.br.str[9] == '-') ? COOP_OK : COOP_BAD_FIELD;
     case EV_GONE:
         if (e->u.gn.n < 1 || e->u.gn.n > COOP_GONE_MAX || e->idx > 9) return COOP_BAD_COUNT;
         for (k = 0; k < e->u.gn.n; k++)

@@ -1,4 +1,4 @@
-/* Online co-op wire format (protocol 29, docs/COOP.md "Protocol 29" and "Security") and
+/* Online co-op wire format (protocol 30, docs/COOP.md "Protocol 30" and "Security") and
    the checks every received packet passes before it may change anything. No game state here:
    pc/glue/coop_glue.c applies what passes; pc/tests/test_coop.c feeds malformed packets. */
 #ifndef RECVX_COOP_PROTO_H
@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 29                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 30                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -30,7 +30,8 @@ extern "C" {
                                            28: direct sessions encrypted after a handshake bound to the whole join code
                                                (PKT_HELLO, CoopDirect); Pose.auth gone (rsv, zero); COOP_REJ_STATE;
                                                generic EV_FX only for the effects in coop_fx_rules, each field checked;
-                                           29: EV_EOPTS cast, cast_all, cast_assign, cast_imports (the cutscene cast), PoseExt.imp_id */
+                                           29: EV_EOPTS cast, cast_all, cast_assign, cast_imports (the cutscene cast), PoseExt.imp_id;
+                                           30: EV_BRSEED (the host's BioRand seed string and CLI digest: a guest can generate the pack) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
 #define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */
@@ -132,7 +133,9 @@ enum { REC_UNKNOWN, REC_NONE, REC_HAVE, REC_OFF };   /* PoseExt.rec: not known y
 enum { EV_ENE_HIT = 1, EV_PLY_HIT = 2, EV_BLOB = 3, EV_FLAGS = 4, EV_PICKUP = 5, EV_LOST = 6,
        EV_ESTATE = 7, EV_GRAB = 8, EV_UNGRAB = 9, EV_TRIG = 10, EV_TRADE = 11, EV_BOX = 12, EV_BOXFIX = 13,
        EV_SPAWN = 14, EV_EOPTS = 15, EV_ATR = 16, EV_FX = 17, EV_GRANT = 18, EV_TSCREEN = 19, EV_GONE = 20, EV_OWN = 21,
-       EV_SKIP = 22, EV_TYPES };
+       EV_SKIP = 22, EV_BRSEED = 23, EV_TYPES };
+#define COOP_BR_STR 68                  /* EV_BRSEED: BioRand's seed string (biorand_opts.h BIORAND_SEED_LEN), no NUL */
+#define COOP_BR_DIG 12                  /*   and the first hex digits of the host's CLI archive's SHA-256 */
 #define SKIP_GO 1                       /* EV_SKIP: both pressed skip, the cutscene ends now (host -> guest) */
 enum { TD_OFFER = 1, TD_ANSWER = 2, TD_CANCEL = 3, TD_QUERY = 4 };
 /* EV_TSCREEN (protocol 14), the trade screen: REQ asks, CANCEL withdraws the request, OPEN accepts it
@@ -311,6 +314,11 @@ typedef struct Event {
             uint8_t n, pad;
             uint8_t slot[COOP_GONE_MAX], id[COOP_GONE_MAX], ver[COOP_GONE_MAX];   /* slot, type, model version */
         } gn;
+        struct {                        /* host, while it plays BioRand (protocol 30): its pack's seed string ("R840-...", every
+                                           byte 0: unknown) and its CLI's digest (lower-case hex, all 0: unknown) */
+            char str[COOP_BR_STR];
+            char dig[COOP_BR_DIG];
+        } br;
         SpawnNote sp;                   /* host: an enemy not in the room file, into slot idx */
         EnemyOpts eo;                   /* host: its enemy options */
     } u;

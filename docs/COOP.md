@@ -5,7 +5,7 @@ over the internet or a LAN (UDP). Co-op is an optional addon: with it off the ga
 as without it (every hook is `#ifdef TARGET_PC` and `if (coop_on)`).
 
 Part 1 is for players: how to host, join and play. Part 2 is the reference: architecture,
-protocol 29, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
+protocol 30, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
 [USER_GUIDE.md](USER_GUIDE.md) (settings, controls), [ACTORS.md](ACTORS.md) (models and voices),
 [ENEMIES.md](ENEMIES.md) (enemy options), [ARCHITECTURE.md](ARCHITECTURE.md),
 [BUILDING.md](BUILDING.md).
@@ -225,7 +225,7 @@ the co-op server ..." (name lookup, at most 5 s, never stalls the game), "The ho
   direct session goes on, a relayed one ends.
 * The server frees a vanished joiner's place after `member_timeout` (default 10 s); see also
   "Rejoin after a crash".
-* Game and server must speak the same server protocol (3); the game protocol (29) is end to end.
+* Game and server must speak the same server protocol (3); the game protocol (30) is end to end.
 
 ## In the game
 
@@ -485,9 +485,22 @@ With BioRand (only with `--dev`; [modding/README.md](modding/README.md#randomize
 On, both play the host's pack:
 
 * The partner needs the same pack: generated with the same seed and options (BioRand's seed string),
-  so the same room files. A partner without a pack, or with another one, is refused when it joins (or when
-  the host turns BIORAND on) with "The host plays BioRand seed N; generate the same seed (or ask the host to
-  turn BioRand off)"; the host's status says "... left: its BioRand pack is not this one".
+  so the same room files. The host sends its pack's seed string and its BioRand CLI's checksum
+  (`EV_BRSEED`). A partner without the pack, or with another one, at the title (the lobby or the title menu)
+  is asked on the BIORAND screen: "The host plays BioRand seed N. Generate it now into mods/biorand? ..."
+  (the memory note and the free space as GENERATE's). **Yes** generates the host's string as GENERATE does
+  ([BIORAND_INGAME.md](BIORAND_INGAME.md) "S5b"): without a BioRand CLI it asks to download it first; when
+  its CLI's checksum is not the host's it warns that the pack may differ and offers the newest CLI (No
+  generates with its own). It then returns to where it came from and compares the pack again: the same one
+  joins, another one leaves as below. The partner's own BioRand setting and seed string (recvx.ini) stay.
+  **No** (or cancel, or an error) leaves. Meanwhile the session stays (both keep sending their poses), the
+  partner loads no game state (one sent meanwhile is asked for again afterwards), and the host's lobby shows
+  "BioRand: asked to generate" or "BioRand: generating..." under the partner's model.
+* Without that (in a game, without `--dev`, a host that sent no seed string, or after generating) a partner
+  without the pack, or with another one, is refused when it joins (or when the host turns BIORAND on) with
+  "The host plays BioRand seed N; generate the same seed (or ask the host to turn BioRand off)" ("... seed N
+  with other options or another BioRand version; ..." when its seed number is the host's); the host's status
+  says "... left: its BioRand pack is not this one".
 * The partner's game follows the host's choice for the session whatever its own setting (its own setting is
   back after the session); THE HOST'S RULES shows BIORAND while it is on.
 * QUICK START is off and hidden (the pack has its own start inventory). A partner without a game of its own
@@ -1193,10 +1206,10 @@ send time minus the echoed datagram's arrival. Sample = arrival - our clock - th
 smoothed (EWMA 0.1). The name tag's point goes with the recorded frame (`stream_point`) and is
 interpolated with the in-between frames; it snaps on camera cuts and in vanilla mode.
 
-## Protocol 29
+## Protocol 30
 
-`COOP_VERSION` is **29**; both players need builds with the same version (a mismatch is reported,
-e.g. "the host runs co-op protocol 28, we 29: both need the same build"). The co-op server does not
+`COOP_VERSION` is **30**; both players need builds with the same version (a mismatch is reported,
+e.g. "the host runs co-op protocol 29, we 30: both need the same build"). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
 tag, `EV_OWN`; 17 trade requests; 18 voices; 19 the game rules `OPT_IMPORTANT`, `OPT_NO_RIBBON`,
@@ -1209,7 +1222,7 @@ make other enemies from the same seed); 21 `COOP_HIT_PRECISE` in `EV_ENE_HIT` (t
 and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid` (see "Game over",
 "Metal detector"); 23 the game rule `OPT_QUICK_START` (see "Quick start"; it takes the last free bit of
 `Pose.opts`, so a further rule needs a field of its own); 24 enemy slots 0..254 (`COOP_ENE_SLOTS`, the PC's
-255 slots) in every slot field, and `EV_FX` marks its `FX_*` references in `refs` (the bytes 253..255 are slots now); 25 `Pose.use`, the trigger the sender is using (one player at a puzzle at a time, see "Puzzles"; the pose grew to 112 bytes); 26 `EneSnap.id`, the enemy type in the slot: a snapshot applies only to a slot holding the same type (`hokan_count` is 16 bits now; the snapshot stays 100 bytes); 27 `PoseExt.br`, `br_seed`, `br_id` (BioRand: the host's choice and each side's pack; `Pose.opts` has no free bit, so a field of its own; the extension grew to 104 bytes); 28 direct sessions are encrypted after a handshake bound to the whole join code (`PKT_HELLO`, `PKT_HELLO_ACK`, see "Security"), so `Pose.auth`, the 32-bit join-code proof, is gone (`rsv`, zero), the goodbye's `COOP_REJ_STATE`, and a generic `EV_FX` only for the effects co-op sends, each field checked (see "Effects and voices"); 29 the cutscene cast: `EV_EOPTS` carries `cast`, `cast_all`, `cast_assign`, `cast_imports` (the event stays 88 bytes) and `PoseExt.imp_id`, the sender's imported models (the extension grew to 108 bytes). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+255 slots) in every slot field, and `EV_FX` marks its `FX_*` references in `refs` (the bytes 253..255 are slots now); 25 `Pose.use`, the trigger the sender is using (one player at a puzzle at a time, see "Puzzles"; the pose grew to 112 bytes); 26 `EneSnap.id`, the enemy type in the slot: a snapshot applies only to a slot holding the same type (`hokan_count` is 16 bits now; the snapshot stays 100 bytes); 27 `PoseExt.br`, `br_seed`, `br_id` (BioRand: the host's choice and each side's pack; `Pose.opts` has no free bit, so a field of its own; the extension grew to 104 bytes); 28 direct sessions are encrypted after a handshake bound to the whole join code (`PKT_HELLO`, `PKT_HELLO_ACK`, see "Security"), so `Pose.auth`, the 32-bit join-code proof, is gone (`rsv`, zero), the goodbye's `COOP_REJ_STATE`, and a generic `EV_FX` only for the effects co-op sends, each field checked (see "Effects and voices"); 29 the cutscene cast: `EV_EOPTS` carries `cast`, `cast_all`, `cast_assign`, `cast_imports` (the event stays 88 bytes) and `PoseExt.imp_id`, the sender's imported models (the extension grew to 108 bytes); 30 `EV_BRSEED`, the host's BioRand seed string and CLI checksum (a guest can generate the host's pack, see "BioRand"; the pose and extension are unchanged). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1313,6 +1326,7 @@ enemy's (`mode[0]` 0) to one whose own Init ran.
 | `EV_GONE` | 20 | joiner | Dead enemies (up to 26: slot, type, model version) |
 | `EV_OWN` | 21 | joiner | The joiner's own items, chunk of 1564 bytes total; `tid`: the last `EV_BLOB` transfer it got |
 | `EV_SKIP` | 22 | host | Both pressed skip: the cutscene ends now (`op` `SKIP_GO` 1; `stg`/`rom` the host's room) |
+| `EV_BRSEED` | 23 | host | While it plays BioRand, to each new partner and when they change: its pack's seed string (`str[68]`, `log_pl0.txt`'s `Seed:`, BioRand's alphabet, `R` and the dashes in place; all 0: unknown) and the first 12 hex digits of its CLI archive's SHA-256 (`dig[12]`, lower case; all 0: unknown). The guest decodes the string too (`biorand_seed_decode`; one it cannot read counts as unknown). |
 
 Transfers (`EV_BLOB`, `EV_ESTATE`, `EV_OWN`) carry a transfer id, total size, offset (a multiple of
 64) and length (64, the last chunk less); a transfer is complete only when every chunk of that id
@@ -1541,7 +1555,7 @@ General test aids used with these (`RECVX_TELEPORT`, `RECVX_WARP`, `RECVX_EQUIP`
 `RECVX_TRACE_SND`, `RECVX_DUMP_*`) are listed in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ctest `coop` (`pc/tests/test_coop.c`) checks every event type from the side that sends it and
-refused from the other, malformed variants of each (`EV_SKIP`: its op, its room, from the joiner), pose
+refused from the other, malformed variants of each (`EV_SKIP`: its op, its room, from the joiner; `EV_BRSEED`: the alphabet, case, length, the dashes, the digest, from the joiner), pose
 fields out of range and every pose flag and game rule (all eight bits of each are in use), datagram headers, every effect co-op sends against its rule (crafted ones refused: unknown effects, type 65535, modes, missing textures and models), the direct handshake (keys of every code character, replays, the backoff and its bounds), transfers, the event
 ring, join address parsing, world event actions, record merging, the target rule and the loop guard, then fuzzes
 200000 random and mutated datagrams. ctest `net` covers the socket (busy port, oversized datagrams,

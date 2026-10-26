@@ -316,6 +316,14 @@ void pc_title_mouse(int level, int flag)
     ADV_WORK* ap = &AdvWork;
     int hit = -1, i, n = ap->CursorMax[level];
     menu_mouse_take(&mt);
+    if (level == 0 && coop_biorand_offer(NULL)) {   /* a co-op guest (F3, --coop-join): the host's BioRand seed, offered on the
+                                                       BIORAND screen as from its row (the lobby opens it itself: pc_lobby) */
+        ap->LastLevel = 0;
+        ap->NextMode = 30;
+        ap->Mode = 10;
+        br_screen = 1;
+        return;
+    }
     for (i = 0; i < n; i++) {
         float x0, y0, w;
         if (level == 0) { x0 = 140; w = 360; y0 = title_row_y(i, n); }
@@ -1675,10 +1683,11 @@ int pc_lobby(void)
 {
     int r;
     char note[64];
-    if (br_screen) {   /* the BioRand screen (biorand_menu.c): 1 back to the menu */
+    if (lb.open && !br_screen && coop_biorand_offer(NULL)) br_screen = 1;   /* a guest: the host's BioRand seed, offered there */
+    if (br_screen) {   /* the BioRand screen (biorand_menu.c): 1 back to the menu, or to the lobby it was offered from */
         title_font();
         if ((r = pc_biorand_menu())) br_screen = 0;
-        return r;
+        return lb.open ? 0 : r;
     }
     if (!lb.open) lobby_open();
     if (session_on()) lb.role = !g_coop.host;   /* F3 may host or join meanwhile */

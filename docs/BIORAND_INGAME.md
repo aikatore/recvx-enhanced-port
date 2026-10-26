@@ -550,7 +550,7 @@ puts text on the clipboard at the start (`lobby_io.c`).
 
 ### S5: Generate
 
-S5a (done) is the generation and "Randomize Played as"; S5b is co-op (the host sends its seed string, the
+S5a (done) is the generation and "Randomize Played as"; S5b (done) is co-op (the host sends its seed string, the
 partner generates with one click).
 
 #### S5a: GENERATE and "Randomize Played as" (done)
@@ -565,7 +565,8 @@ settings.json, BioRand on), `pc/glue/biorand_menu.c` (the row, the question, the
 - the CLI is not installed ("The BioRand CLI is not installed.");
 - `g_config.iso_path` is empty ("The game's disc image is not known.");
 - a game runs (`pc_in_game`: "Only at the title menu.");
-- we are a co-op guest (`coop_biorand() >= 0`: "Not as a guest in a co-op session.");
+- we are a co-op guest (`coop_biorand() >= 0`: "Not as a guest in a co-op session."; S5b lifts it for the host's
+  seed only);
 - the mods folder has less than `BRDL_GEN_FREE_MB` (4 GB) free: "Needs about 4 GB free in the mods folder; it has
   1.2 GB." The free space is looked at when the screen opens, after each job and on GENERATE's OK
   (`biorand_mods_free_mb`: statvfs / GetDiskFreeSpaceExW; the mods folder is created first).
@@ -668,12 +669,102 @@ Test aid: `RECVX_BIORAND_ISO_TEST=<path>` gives the CLI another image (the game 
 - Not tested: the 4 GB refusal (no small disk here; the reason text is in `row_why`), Windows (as S2), the in-game
   load of the save (the load screen did not take the scripted keys; the word in the save file was checked instead).
 
-#### S5b: co-op (next)
+#### S5b: co-op, the host's seed (done)
 
-- The host sends its seed string (bm.str / ini `biorand_seed`) in the session; a guest whose pack differs (the pack
-  id already detects it) is offered "Generate the host's seed" with one click: decode it (`biorand_seed_decode`),
-  then the same `biorand_generate` as S5a. Today a guest cannot generate at all (`row_why`).
-- The same CLI build matters too (risk 3): send the CLI digest (`g_biorand_cli_digest`) and say so when it differs.
+Files: `pc/src/net/coop_proto.c/.h` (`EV_BRSEED`, protocol 30), `pc/glue/coop_glue.c` (send, receive, the offer and
+the hold), `pc/glue/biorand_menu.c` (the host's seed: `bm.host`), `pc/glue/lobby_glue.c` (opening the screen),
+`pc/src/host/biorand.c/.h` (`biorand_seed_string`), ctest `coop`, docs/COOP.md ("BioRand", "Protocol 30",
+"Events"). No decomp change.
+
+**Transport: one reliable event, protocol 30.** `EV_BRSEED` (host only, 80-byte payload): `str[68]`, the pack's
+whole seed string, and `dig[12]`, the first 12 hex digits of the host's CLI archive's SHA-256 (ini
+`biorand_cli_digest`; 48 bits are plenty to tell two builds apart). All zeros mean unknown. The pose and `PoseExt`
+are unchanged (nothing per frame).
+
+- The string is the pack's own: `biorand_scan` keeps `log_pl0.txt`'s `Seed:` value when it is 68 characters and
+  `biorand_seed_decode` reads it (`biorand_seed_string()`, "" otherwise). Not the menu's ini string, which may
+  differ from the pack (BioRand's GUI, an edit after generating).
+- The host: `brseed_sync()` (from `enemy_sync`, as `EV_EOPTS`) queues it while `biorand_active()`, to each new
+  partner session and whenever the string or the digest changes. It goes out in the same frame as the
+  extension's `br`; a datagram's events are applied before its extension, so the guest has it first.
+- Checked on receipt: `coop_check_event` (from the host only; each byte in BioRand's alphabet or `-`, upper
+  case, `R` at 0, dashes at 4 and 9; the digest lower-case hex; or all zero), then `apply_event` decodes the
+  string with `biorand_seed_decode` (length, version 8, game, alphabet); one it cannot read counts as unknown.
+- A build of protocol 29 is refused at the first datagram, both ways: "127.0.0.1:47617 runs co-op protocol 30,
+  we 29" (the existing version check).
+
+**The guest** (`biorand_from_host`, every extension): while the host's `br` is 1 and our pack id differs:
+
+1. no seed string yet: wait up to 2 s for `EV_BRSEED` (`br_wait`), then leave as before;
+2. a seed string, `--dev` (`biorand_shown`), not in a game: at the title, `br_offer = BR_ASK`; while starting up
+   or in the attract demo, wait for the title;
+3. otherwise (in a game, no string, without `--dev`, or `BR_DONE`): leave with the old messages.
+
+`BR_ASK` and `BR_GEN` **hold the join**: the guest asks for no game state (`PF_WANT_BLOB` off) and drops a state
+that comes meanwhile (`pop_pending = 0`); afterwards it is at the title with `need_blob` and asks again, so it
+loads the host's current state, not one from before the generation. The host may start its game meanwhile.
+
+**The screen.** `pc_lobby` (the lobby, mode 30) and `pc_title_mouse` (the title menu at level 0: an F3 join,
+`--coop-join`) open the BIORAND screen while `coop_biorand_offer()` returns the host's string. From the lobby,
+leaving it returns to the lobby (`pc_lobby` returns 0 while `lb.open`); from the title menu, to the title menu.
+On open, `bm.host` = 1, `bm.str` = the host's string as it came, `bm.o` its decode (for the seed number); recvx.ini's
+`biorand_seed` is neither read into it nor written. Then:
+
+| step | shown | Yes | No / cancel |
+|---|---|---|---|
+| `A_HOST` | "The host plays BioRand seed N. Generate it now into mods/biorand? It replaces the pack there. BioRand may use several GB of memory (about 6 GB) for a short time. Free space: X GB." | `host_next()` | leave |
+| `A_DOWNLOAD` (no CLI) | S3's download question | install (S3's progress), then `host_next()` | leave |
+| `A_DIGEST` (once; the host's digest known and not ours) | "Your BioRand CLI is not the host's build, so your pack may differ from the host's. Download the newest BioRand CLI first? (The host should have the newest too.) No generates with yours." | install the newest, then `host_next()` | `host_next()`: generate with ours |
+| GENERATE's checks (`row_why`, the "co-op guest" refusal lifted for `bm.host` only) | the reason as an error (ISO unknown, < 4 GB free) | | OK leaves |
+| `BS_WORK` | S5a's generation progress | | CANCEL: leave |
+
+- `gen_start` tells coop `coop_biorand_reply(1)` (`BR_GEN`); success or cancel leaves the screen at once (no OK);
+  an error shows S5a's error box, OK leaves. `biorand_enable()` is not called: our own BioRand setting stays
+  (the session follows the host's anyway).
+- Leaving (`pc_biorand_menu_close`) replies 2 (generated: `BR_DONE`, the pack compared again; the same id joins,
+  another one leaves with "The host plays BioRand seed N with other options or another BioRand version; generate
+  the same ...") or 0 (`BR_DONE` at once: the next extension leaves with the old message).
+- The screen also leaves when the offer goes (the session ended, the host turned BioRand off, the pack matches).
+
+**Keeping the session** (decided: keepalive, no reconnect): the CLI and the download run on the downloader's
+thread, and the game's frame loop goes on at the title, so `coop_frame` sends the usual poses every frame on
+both sides. Nothing times out (3 s "not responding", 15 s lost). A reconnect would need the join address again
+and a new session id; staying is simpler. Ceiling: a machine that swaps for more than 15 s under the CLI's 6 GB
+(risk 1) loses the session; the pack is then there for the next join.
+
+**The host's lobby** shows the guest's note (`PoseExt.note`, under its model): "BioRand: asked to generate" while
+asked (and downloading), "BioRand: generating..." while the CLI runs (coop_glue.c fills it from `br_offer`).
+
+**Tests (2026-10-26, Linux; job dir `biorand-ui/s5b/`, not committed).** `co.sh` runs a host (pack A, seed 123456,
+id ed803757, BioRand on, `--coop-host`) and a guest (`--coop-join`, or the lobby), both `--dev`, ports 476xx;
+`scen.sh` has the cases; the host teleports into 0/6 so it gets control.
+
+- `nopack` (no pack): the prompt, YES, the real nightly CLI generates seed 123456 (id ed803757 = the host's),
+  "compared again", "joined the host's game (stage 0 room 6)", the pack's files served (RM_0060, SYSTEM.AFS/10),
+  then the follow to 4/4 with RM_4040 from the pack.
+- `packb` (pack B, seed 654321, id 7281350a): the same; pack A replaced B, joined.
+- `nocli` (no CLI, a fake release over `file://` at 3 MB/s): YES, the download question, YES, the download, then
+  the generation without another question, joined.
+- `no`: NO: "session ended: The host plays BioRand seed 123456; generate the same seed (or ask ...)", the host
+  "partner left: its BioRand pack is not ours"; nothing written to mods.
+- `digest` (the guest's ini digest is another): YES, the warning, NO: generated with its CLI, joined. `digesty`:
+  YES on the warning: the fake newest CLI installed (ini digest now the nightly's), generated, joined.
+- `differs` (the host's `log_pl0.txt` changed: id 44c8afab): generated, compared, left with "... with other
+  options or another BioRand version ...".
+- `oldguest` / `oldhost` (the S5a build, protocol 29, on either side): refused, "runs co-op protocol 30, we 29"
+  (and the reverse); no BioRand screen.
+- `lobby`: both in the lobby (address typed, JOIN), no CLI: the screen over the lobby, download, generation, back
+  in the lobby connected; the host's lobby showed "BioRand: asked to generate", then "BioRand: generating...";
+  the host started the game, the guest joined from the lobby. `lobbyno`, `lobbydiff`: the lobby's status line
+  shows the two messages.
+- ctest `coop`: `EV_BRSEED` from the host passes, from the guest refused; a bad letter, lower case, short, no `R`,
+  dashes, an upper-case or short digest refused; an unknown string or digest (zeros) passes.
+- `layout_check.sh` (the S5a build against S5b, with the ISO): vanilla 156 and enhanced 311 frames identical.
+  ctest: all pass. Linux and mingw (`recvx.exe`) build.
+- Screenshots: job dir `biorand-ui/s5b/shots/` (the prompt, the download question and progress, the generation,
+  back in the lobby, the host's lobby notes, both in game, the digest warning, the NO and still-differs
+  messages, `sheet.png`). The generated packs and the frame dumps are deleted.
+- Not tested: Windows (as S2), a machine that swaps during the generation.
 - "Randomize Played as" in co-op stays as S5a has it (the host's pick is its own look).
 
 ### S6: polish
@@ -702,7 +793,8 @@ Test aid: `RECVX_BIORAND_ISO_TEST=<path>` gives the CLI another image (the game 
      release?
 3. **Co-op**: partners need the same pack, which takes the same seed string **and** the same CLI
    build. Different nightlies may differ; the pack id already detects that. Decided: the host sends
-   its seed string, and the partner can generate the pack (S5).
+   its seed string, and the partner can generate the pack (S5). Done in S5b, with the CLI digest
+   compared and the newest CLI offered.
 4. **Windows untested here**: tar.exe in SysWOW64 (or Sysnative), WinHTTP redirects, Defender
    scanning a freshly written exe. Downloads made with WinHTTP carry no Mark-of-the-Web, so there
    is no SmartScreen prompt.
@@ -738,6 +830,10 @@ Test aid: `RECVX_BIORAND_ISO_TEST=<path>` gives the CLI another image (the game 
 - **S5a done** (2026-10-26): GENERATE runs the CLI from the menu (preconditions, the memory note, the progress bar from
   its `Progress:` lines, CANCEL with the leftovers deleted, the CLI's errors, BioRand on afterwards) and "Randomize
   Played as" picks a look per seed for each new game (save word 290). Tested with the real CLI (see "S5a").
-- **Next: S5b** (co-op: the host sends its seed string, the partner generates with one click), then S6.
-- The job-dir tools (not committed): S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
+- **S5b done** (2026-10-26): co-op seed sharing. The host sends its pack's seed string and CLI digest (`EV_BRSEED`,
+  protocol 30); a guest whose pack differs is asked at the title (lobby or title menu) to generate it, with the CLI
+  download and the digest warning on the way, and joins once the pack id matches; the session stays meanwhile and the
+  host's lobby shows the guest's state. Tested with two instances and the real CLI (see "S5b").
+- **Next: S6** (polish, docs, tests, --dev gating review, Windows test list).
+- The job-dir tools (not committed): S5b's `s5b/` (`co.sh`, `scen.sh`, `mkpack.sh`, `build.sh`); S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
   encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").
