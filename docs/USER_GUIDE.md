@@ -94,15 +94,17 @@ Stairs).
 
 **Fixed Camera Controls** (CONTROLS page):
 
-- **Classic**: up walks forward, left / right turn, as on the PS2.
+- **Classic**: up walks forward, left / right turn, as on the PS2: the d-pad, the left stick and
+  the arrow keys.
 - **Modern**: the stick, d-pad or arrow keys point where you walk on screen;
   pushed far, the stick runs. Holding the direction through a camera cut keeps you going the same
   way until you change it or let go.
 - **Combined** (default): the left stick and the arrow keys play Modern, the gamepad's d-pad plays
-  Classic. Choose Classic for tank controls on the keyboard.
+  Classic. Choose Classic for tank controls on the left stick and the keyboard.
 
 Aiming is the same in every scheme. With Modern, bind the **Quick Turn** row (unbound by default).
-The schemes do not apply in third person, and in co-op change only your own player.
+The schemes do not apply in third person (it has its own Gamepad Controls row), and in co-op change
+only your own player.
 
 ### Aiming without auto-aim
 
