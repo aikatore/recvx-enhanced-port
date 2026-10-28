@@ -656,7 +656,7 @@ static int step_choice(int v, int dir, int first, int nfixed, int base)
 
 static void start_label(char* out, int n, int v)
 {
-    static const char* diff[] = { "New game, normal", "New game, easy", "New game, very easy" };
+    static const char* diff[] = { "New Game: Normal", "New Game: Easy", "New Game: Very Easy" };
     if (v < 3) snprintf(out, n, "%s", diff[v < 0 ? 0 : v]);
     else save_label(out, n, v - 3);
 }
@@ -740,7 +740,7 @@ static float ver_text(float x, float y, const char* s, float sc, unsigned int ar
 #define VER_SC 0.5f
 static void title_version(void)
 {
-    static const char* const label[2] = { "Installed Version:", "Newest Version:" };
+    static const char* const label[2] = { "Game Version:", "Latest Version:" };
     ADV_WORK* ap = &AdvWork;
     unsigned int a = (unsigned int)(255.0f * (1.0f - ap->FadeRate) * (1.0f - ap->SaverRate)) << 24;   /* under the title's fade and screen saver */
     char newest[32];
@@ -992,7 +992,7 @@ static void change(int r, int dir)
     case R_QUICK: g_coop.quick_start ^= 1; break;
     case R_BIORAND: if (!biorand_toggle()) { say(biorand_locked()); CallSystemSe(0, 1); return; } break;
     case R_DETECTOR: g_coop.skip_detector ^= 1; break;
-    case R_RIBBON: settings_step(lset("No ink ribbons needed"), dir); break;   /* the GAMEPLAY setting (g_config) */
+    case R_RIBBON: settings_step(lset("Free Typewriter Saves"), dir); break;   /* the GAMEPLAY setting (g_config) */
     case R_START: g_coop.start = step_choice(g_coop.start, dir, 0, 3, 3); break;
     case R_ITEMS: g_coop.items = step_choice(g_coop.items, dir, COOP_ITEMS_HOST, 2, 0); break;
     case R_FOLLOW: g_coop.follow ^= 1; break;   /* the joining player's own choice, also during a session */
@@ -1062,7 +1062,7 @@ static int back(void)
 static int need_server(void)
 {
     if (!lb.mode || g_coop.server[0]) return 0;
-    say("Enter the co-op server's address first (SERVER)");
+    say("Enter the co-op server address first.");
     CallSystemSe(0, 1);
     lb.row = R_SERVER;
     return 1;
@@ -1088,7 +1088,7 @@ static int activate(int r)
         const Setting* st = eset(&g_enemy_opts.seed);
         char m[48];
         settings_set(st, (int)((net_ms() * 2654435761u >> 8) % (unsigned)(st->hi + 1)));
-        snprintf(m, sizeof(m), "new seed %d", g_enemy_opts.seed);
+        snprintf(m, sizeof(m), "New seed: %d", g_enemy_opts.seed);
         say(m);
         CallSystemSe(0, 3);
         return 0;
@@ -1099,7 +1099,7 @@ static int activate(int r)
     case R_RCOPY:
         snprintf(g_lobby_io.clip, sizeof(g_lobby_io.clip), "%.4s-%.4s", g_coop.room, g_coop.room + 4);
         g_lobby_io.clip_req = 1;
-        say("room code copied");
+        say("Room code copied.");
         CallSystemSe(0, 3);
         return 0;
     case R_HOST:
@@ -1115,22 +1115,22 @@ static int activate(int r)
         CallSystemSe(0, 3);
         return 0;
     case R_STOP: g_coop.request = COOP_REQ_STOP; CallSystemSe(0, 0); return 0;
-    case R_KICK: g_coop.request = COOP_REQ_KICK; say("partner removed: the same code works again"); CallSystemSe(0, 0); return 0;
+    case R_KICK: g_coop.request = COOP_REQ_KICK; say("Partner removed. They can rejoin with the same code."); CallSystemSe(0, 0); return 0;
     case R_COPY:
         join_address(g_lobby_io.clip, sizeof(g_lobby_io.clip));
         g_lobby_io.clip_req = 1;
-        say("join address copied");
+        say("Join address copied.");
         CallSystemSe(0, 3);
         return 0;
     case R_GO:
         if (g_coop.start >= 3) {
             static int asked = -1;   /* the save BioRand's question was shown for: START again loads it */
-            if (!lobby_read_save(g_coop.start - 3, save_buf)) { say("that save cannot be read"); CallSystemSe(0, 1); scan_saves(); return 0; }
+            if (!lobby_read_save(g_coop.start - 3, save_buf)) { say("Cannot read that save. Choose another."); CallSystemSe(0, 1); scan_saves(); return 0; }
             if (pc_biorand_save_differs(save_buf)) {   /* (biorand_glue.c, as the load screen asks) */
                 if (asked != g_coop.start) {
                     char m[96];
                     asked = g_coop.start;
-                    snprintf(m, sizeof(m), "%s %s START again to load it.", pc_biorand_ask(0), pc_biorand_ask(1));
+                    snprintf(m, sizeof(m), "%s %s START again to load.", pc_biorand_ask(0), pc_biorand_ask(1));
                     say(m);
                     CallSystemSe(0, 1);
                     return 0;
@@ -1211,47 +1211,47 @@ static const char* heading(void)
     static char h[64];
     if (lb.step == 1) return "HOW DO YOU WANT TO PLAY?";
     if (lb.step == 3) return lb.role ? "THE HOST'S GAME RULES" : "GAME RULES";
-    if (lb.step == 6) return "MODEL - YOU APPEAR AS";
-    if (lb.step == 7) return lb.role ? "THE HOST'S RULES - CUTSCENE CAST" : "GAME RULES - CUTSCENE CAST";
-    if (lb.step > 3) return lb.step == 4 ? (lb.role ? "THE HOST'S RULES - RANDOMIZER" : "GAME RULES - RANDOMIZER")
-                                         : (lb.role ? "THE HOST'S RULES - EXTRA EVENTS" : "GAME RULES - EXTRA EVENTS");
-    snprintf(h, sizeof(h), "%s - %s", lb.role ? "JOIN A GAME" : "HOST A GAME", lb.mode ? "VIA SERVER" : "DIRECT (P2P)");
+    if (lb.step == 6) return "CHARACTER MODEL";
+    if (lb.step == 7) return lb.role ? "HOST RULES - CUTSCENE CAST" : "GAME RULES - CUTSCENE CAST";
+    if (lb.step > 3) return lb.step == 4 ? (lb.role ? "HOST RULES - RANDOMIZER" : "GAME RULES - RANDOMIZER")
+                                         : (lb.role ? "HOST RULES - EXTRA EVENTS" : "GAME RULES - EXTRA EVENTS");
+    snprintf(h, sizeof(h), "%s - %s", lb.role ? "JOIN A GAME" : "HOST A GAME", lb.mode ? "VIA SERVER" : "DIRECT");
     return h;
 }
 
 static void row_text(int r, char* label, char* val, int n)
 {
-    static const char* loots[] = { "Shared (one pickup)", "Individual (each their own)" };
+    static const char* loots[] = { "Shared", "Individual" };
     const EnemyOpts* eo = shown_eo();
     *val = 0;
     switch (r) {
-    case R_MODE: strcpy(label, "CONNECT"); snprintf(val, n, "%s", lb.mode ? "Via server" : "Direct (P2P)"); break;
+    case R_MODE: strcpy(label, "CONNECT"); snprintf(val, n, "%s", lb.mode ? "Via server" : "Direct"); break;
     case R_HOSTSTEP: strcpy(label, hosting() ? "HOST A GAME (OPEN)" : "HOST A GAME"); break;
-    case R_JOINSTEP: strcpy(label, joining() ? "JOIN A GAME (JOINED)" : "JOIN A GAME"); break;
+    case R_JOINSTEP: strcpy(label, joining() ? "JOINED LOBBY" : "JOIN A GAME"); break;
     case R_RELAY: strcpy(label, "RELAY"); snprintf(val, n, "%s", g_coop.conn == COOP_CONN_SERVER ? "Always" : "Only if needed"); break;
     case R_NAME: strcpy(label, "NAME"); snprintf(val, n, "%s", lb.edit == F_NAME ? lb.buf : g_coop.name); break;
     case R_CHAR: strcpy(label, "MODEL"); snprintf(val, n, "%s", appear_name(g_coop.chr)); break;
     case R_PORT: strcpy(label, "PORT"); if (lb.edit == F_PORT) snprintf(val, n, "%s", lb.buf); else snprintf(val, n, "%d", g_coop.port); break;
     case R_LOOT: strcpy(label, "LOOT"); snprintf(val, n, "%s", loots[g_coop.loot & 1]); break;
-    case R_TFREEZE: strcpy(label, "FREEZE ON TRADE"); snprintf(val, n, "%s", g_coop.trade_freeze ? "On" : "Off"); break;
-    case R_IMP: strcpy(label, "IMPORTANT ITEMS"); snprintf(val, n, "%s", g_coop.important ? "For both" : "Shared"); break;
-    case R_SKIPS: strcpy(label, "CUTSCENE SKIP"); snprintf(val, n, "%s", g_coop.skip_sync ? "Together" : "Each alone"); break;
+    case R_TFREEZE: strcpy(label, "TRADING"); snprintf(val, n, "%s", g_coop.trade_freeze ? "On" : "Off"); break;
+    case R_IMP: strcpy(label, "GEAR"); snprintf(val, n, "%s", g_coop.important ? "For both" : "Shared"); break;
+    case R_SKIPS: strcpy(label, "CUTSCENE SKIP"); snprintf(val, n, "%s", g_coop.skip_sync ? "Together" : "Separately"); break;
     case R_GOVER: strcpy(label, "GAME OVER"); snprintf(val, n, "%s", (lb.role ? coop_host_gameover_both() : g_coop.gameover_both) ? "Both" : "Each player"); break;
     case R_BIORAND: strcpy(label, "BIORAND"); snprintf(val, n, (lb.role ? coop_biorand() == 1 : biorand_setting()) && biorand_seed_text()[0] ? "On (%s)" : "%s",
                                                        (lb.role ? coop_biorand() == 1 : biorand_setting()) ? biorand_seed_text()[0] ? biorand_seed_text() : "On" : "Off"); break;
     case R_QUICK: strcpy(label, "QUICK START"); snprintf(val, n, "%s", (lb.role ? coop_quick_start() : g_coop.quick_start) ? "On" : "Off"); break;
-    case R_DETECTOR: strcpy(label, "METAL DETECTOR"); snprintf(val, n, "%s", (lb.role ? coop_skip_detector() : g_coop.skip_detector) ? "Skipped" : "As original"); break;
-    case R_RIBBON: strcpy(label, "INK RIBBONS"); snprintf(val, n, "%s", settings_get(lset("No ink ribbons needed")) ? "Not needed" : "Needed"); break;
+    case R_DETECTOR: strcpy(label, "METAL DETECTOR"); snprintf(val, n, "%s", (lb.role ? coop_skip_detector() : g_coop.skip_detector) ? "Skipped" : "Original"); break;
+    case R_RIBBON: strcpy(label, "INK RIBBONS"); snprintf(val, n, "%s", settings_get(lset("Free Typewriter Saves")) ? "Not needed" : "Needed"); break;
     case R_START: strcpy(label, "START"); start_label(val, n, g_coop.start); break;
-    case R_RULES: strcpy(label, lb.role ? "THE HOST'S RULES" : "GAME RULES"); break;
+    case R_RULES: strcpy(label, lb.role ? "HOST RULES" : "GAME RULES"); break;
     case R_ENEMYPG: strcpy(label, "RANDOMIZER"); snprintf(val, n, "%s", eo->rand ? "On" : "Off"); break;   /* a page (draw_rows adds its arrow) */
     case R_EVENTPG: strcpy(label, "EXTRA EVENTS"); break;   /* a page of many rules: no summary */
     case R_HOST: strcpy(label, "OPEN THE LOBBY"); break;
     case R_GO: strcpy(label, "START THE GAME"); break;
     case R_STOP: strcpy(label, "CLOSE THE LOBBY"); break;
-    case R_KICK: strcpy(label, "REMOVE STUCK PLAYER"); break;
+    case R_KICK: strcpy(label, "REMOVE PARTNER"); break;
     case R_COPY: strcpy(label, "COPY JOIN ADDRESS"); break;
-    case R_RCOPY: strcpy(label, g_coop.room[0] ? "COPY ROOM CODE" : "ROOM CODE: WAITING FOR THE SERVER"); break;
+    case R_RCOPY: strcpy(label, g_coop.room[0] ? "COPY ROOM CODE" : "WAITING FOR ROOM CODE"); break;
     case R_ADDR: strcpy(label, lb.mode ? "CODE" : "ADDRESS"); snprintf(val, n, "%.*s", n - 1, lb.edit == F_ADDR ? lb.buf : coop_shown(g_coop.join)); break;
     case R_SERVER: strcpy(label, "SERVER"); snprintf(val, n, "%.*s", n - 1, lb.edit == F_SERVER ? lb.buf : g_coop.server[0] ? coop_shown(g_coop.server) : "-"); break;
     case R_PW: {   /* shown as stars, also while typing */
@@ -1265,17 +1265,17 @@ static void row_text(int r, char* label, char* val, int n)
     case R_ITEMS: strcpy(label, "ITEMS"); items_label(val, n, g_coop.items); break;
     case R_FOLLOW: strcpy(label, "FOLLOW"); snprintf(val, n, "%s", g_coop.follow ? "On" : "Off"); break;
     case R_EXTRA: strcpy(label, "EXTRA ENEMIES"); snprintf(val, n, "%s", eset(&g_enemy_opts.extra)->names[eo->extra & 3]); break;
-    case R_PLACE: strcpy(label, "REARRANGED"); snprintf(val, n, "%s", eo->place ? "On" : "Off"); break;
+    case R_PLACE: strcpy(label, "LAYOUT"); snprintf(val, n, "%s", eo->place ? "On" : "Off"); break;
     case R_RAND: strcpy(label, "RANDOMIZER"); snprintf(val, n, "%s", eo->rand ? "On" : "Off"); break;
     case R_VARIETY: strcpy(label, "VARIETY"); snprintf(val, n, "%s", eset(&g_enemy_opts.variety)->names[eo->variety & 1]); break;
     case R_EVENTS: strcpy(label, "EVENT ENEMIES"); snprintf(val, n, "%s", eo->events ? "On" : "Off"); break;
     case R_CASTPG: strcpy(label, "CUTSCENE CAST"); snprintf(val, n, "%s", eo->cast ? "On" : "Off"); break;   /* a page */
     case R_CAST: strcpy(label, "RANDOMIZE CAST"); snprintf(val, n, "%s", eo->cast ? "On" : "Off"); break;
-    case R_CASTPOOL: strcpy(label, "CHARACTER MODELS"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_all)->names[eo->cast_all & 1]); break;
-    case R_CASTASSIGN: strcpy(label, "ASSIGNMENT"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_assign)->names[eo->cast_assign & 1]); break;
+    case R_CASTPOOL: strcpy(label, "MODELS"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_all)->names[eo->cast_all & 1]); break;
+    case R_CASTASSIGN: strcpy(label, "ASSIGN"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_assign)->names[eo->cast_assign & 1]); break;
     case R_CASTIMP: strcpy(label, "IMPORTED MODELS"); snprintf(val, n, "%s", eo->cast_imports ? "On" : "Off"); break;
     case R_SEED: strcpy(label, "SEED"); if (lb.edit == F_SEED) snprintf(val, n, "%s", lb.buf); else snprintf(val, n, "%d", eo->seed); break;
-    case R_RSEED: strcpy(label, "NEW RANDOM SEED"); break;
+    case R_RSEED: strcpy(label, "RANDOM SEED"); break;
     case R_JOIN: strcpy(label, session_on() ? "LEAVE" : "JOIN"); break;
     case R_BACK: strcpy(label, "BACK"); break;
     }
@@ -1287,63 +1287,63 @@ static const char* row_help(int r)
     int host = lb.role == 0;
     switch (r) {
     case R_MODE:
-        return lb.mode ? "Via server: a co-op server (recvx-server) puts you together by a room code. It tries a direct connection first and relays only if that fails; for when no port can be opened."
-                       : "Direct (P2P): the partner connects straight to the host's address (ip:port#CODE). The host's port must be reachable: same network, UPnP or port forwarding.";
-    case R_HOSTSTEP: return "Host a game: open a lobby, your partner joins it, and you start the game - a new game or one of your saves.";
-    case R_JOINSTEP: return "Join a game: enter what the host gives you (its address, or its room code via a server) and join; the host starts the game.";
-    case R_SERVER: return "The co-op server's address: host or host:port (port 7141 if none). Both players use the same server.";
-    case R_PORT: return "The UDP port this game listens on (7140). A partner outside your network needs it reachable; UPnP asks the router.";
+        return lb.mode ? "Join with a room code through a co-op server. Tries a direct connection first, then the server relay."
+                       : "Connect to the host's address. The host must allow connections through their router.";
+    case R_HOSTSTEP: return "Open a lobby for your partner, then start a new game or load a save.";
+    case R_JOINSTEP: return "Enter the address or room code from your host. The host starts the game.";
+    case R_SERVER: return "Both players need the same co-op server. Enter its address, with an optional port (default: 7141).";
+    case R_PORT: return "Port used to host (default: 7140). Internet partners need router forwarding or a server relay.";
     case R_ADDR:
-        return lb.mode ? "CODE: the room code the host's lobby shows (XXXX-XXXX; case and dash do not matter). Ctrl+V pastes."
-                       : "ADDRESS: the host's join address, ip:port#CODE, as its COPY JOIN ADDRESS gives it. Ctrl+V pastes.";
-    case R_PW: return host ? "Optional room password: your partner has to type the same one. Not saved." : "The room's password, if the host set one; otherwise leave it empty.";
-    case R_RELAY: return "Only if needed: a direct connection first (about 2 s), then the server's relay. Always: everything goes through the relay (slower, predictable).";
-    case R_NAME: return "What your partner sees above your head and in the lobby. Type it, or change the letter at the caret with up/down.";
+        return lb.mode ? "Enter the host's room code; case and dash do not matter. Ctrl+V: paste."
+                       : "Paste the host's join address, copied with COPY JOIN ADDRESS. Ctrl+V: paste.";
+    case R_PW: return host ? "Set an optional room password for your partner to enter. The password is not saved." : "Enter the host's password, or leave blank if the room has none.";
+    case R_RELAY: return "Only If Needed tries direct first, then relays through the server. Always uses the server relay.";
+    case R_NAME: return "Choose the name your partner sees overhead and in the lobby.";
     case R_CHAR:
-        if (lb.step == 6 && lb.pick >= appear_count()) return "Back to the lobby; your model stays as it is.";
-        return lb.step == 6 ? "Confirm: you appear as this model; your partner sees it, and so do you. Up/down, L1/R1 or Page Up/Down and the wheel scroll; BACK keeps the one you had."
-                            : "The model you appear as: your partner sees it, and so do you. Opens the list of models.";
-    case R_START: return "What the game starts from: a new game (normal, easy, very easy) or one of your saves.";
-    case R_ITEMS: return "The inventory you join with: the one the host kept for you from your last visit, a new inventory, or that of one of your saves.";
+        if (lb.step == 6 && lb.pick >= appear_count()) return "Return to the lobby without changing your model.";
+        return lb.step == 6 ? "Scroll with up/down, L1/R1, Page Up/Down or the wheel. Confirm: use model; BACK: cancel."
+                            : "Choose your appearance. You and your partner both see it.";
+    case R_START: return "Choose a new game and difficulty, or one of your saves.";
+    case R_ITEMS: return "Join with items saved by the host, a new inventory, or items from one of your saves.";
     case R_FOLLOW: return eset(&g_coop.follow)->help;
-    case R_RULES: return host ? "Loot, enemies freezing while you trade, cutscene skips, ink ribbons and game over; the enemy options and extra events have a page each."
-                              : "The host's game over rule, enemy options and extra events (read-only).";
-    case R_ENEMYPG: return host ? "A page of enemy options: extra enemies, rearranged enemies, the randomizer (variety, event enemies, seed) and the cutscene cast."
-                                : "The host's enemy options: extra enemies, rearranged enemies, the randomizer and the cutscene cast (read-only).";
-    case R_EVENTPG: return host ? "A page of rules for single events: a quick start and the prison's metal detector." : "The host's rules for single events: a quick start and the prison's metal detector (read-only).";
-    case R_LOOT: return "Shared: each item lies there once - whoever takes it has it, so you split the supplies; one item box. Individual: each finds their own copy and has their own box. Keys and story go to both.";
+    case R_RULES: return host ? "Set loot, trading, cutscene skipping, saving and game over rules. Open the other pages for more rules."
+                              : "View the host's game rules, enemy settings and extra events. Only the host can change them.";
+    case R_ENEMYPG: return host ? "Set extra enemies, their positions and types, and cutscene models."
+                                : "View the host's enemy and cutscene model settings. Only the host can change them.";
+    case R_EVENTPG: return host ? "Set quick start and prison metal detector rules." : "View the host's quick start and metal detector rules. Only the host can change them.";
+    case R_LOOT: return "Shared divides supplies and shares the item box; Individual gives separate copies and boxes. Keys go to both.";
     case R_TFREEZE: return eset(&g_coop.trade_freeze)->help;
-    case R_BIORAND: return host ? "On: you play the BioRand pack in mods/biorand; your partner needs the same pack (the same seed and options), else it cannot join. Off: the normal game for both."
-                                : "The host plays its BioRand pack; yours is the same, so your game follows it.";
-    case R_QUICK: return "On: a new game starts with the manual already read (it stays in FILE) and the combat knife in your bag instead of on the table, for both of you. Off: as in single player.";
-    case R_DETECTOR: return "Skipped: the prison's metal detector lets both of you pass with weapons and its security boxes stay shut (one holding items still opens). As original: as in single player.";
-    case R_IMP: return "For both: weapons and ink ribbons lie there for each of you, each takes their own copy. Shared: they are one pickup like ammo and herbs - whoever takes it has it.";
-    case R_SKIPS: return "Together: a cutscene both of you watch is skipped when both press skip; the partner sees that you want to. Each alone: as in single player.";
-    case R_RIBBON: return "Not needed: typewriters save without an ink ribbon and use none up (for both players; also in single player, ENHANCED SETTINGS GAMEPLAY).";
-    case R_GOVER: return "Each player: whoever dies retries alone. Both: one game over is both players'; the host's Retry answers for both - Yes: back to the last continue point together, No: to the title.";
+    case R_BIORAND: return host ? "Play your generated BioRand game. Your partner needs the same seed, options and matching game data."
+                                : "Play the host's BioRand game with your matching generated game.";
+    case R_QUICK: return "Start with the manual read and a knife in both players' inventories. No effect with BioRand.";
+    case R_DETECTOR: return "Skipped lets you pass with weapons. Security boxes stay shut unless they hold your items.";
+    case R_IMP: return "For Both gives each player weapons and ink ribbons. Shared gives one pickup to divide between you.";
+    case R_SKIPS: return "Together skips shared cutscenes when both players choose to skip. Separately lets either player skip alone.";
+    case R_RIBBON: return "Not Needed lets both players save at typewriters without using ink ribbons.";
+    case R_GOVER: return "Each Player retries alone. Both lets the host retry or return to the title screen for both players.";
     case R_EXTRA: return eset(&g_enemy_opts.extra)->help;
     case R_PLACE: return eset(&g_enemy_opts.place)->help;
     case R_RAND: return eset(&g_enemy_opts.rand)->help;
     case R_VARIETY: return eset(&g_enemy_opts.variety)->help;
     case R_EVENTS: return eset(&g_enemy_opts.events)->help;
-    case R_CASTPG: return host ? "A page for the cutscene cast: the story characters shown as other models in cutscenes (fixed or per cutscene, from the seed)."
-                               : "The host's cutscene cast: whether and how the story characters are shown as other models in cutscenes (read-only).";
+    case R_CASTPG: return host ? "Choose how story characters' appearances are randomized in cutscenes."
+                               : "View the host's randomized cutscene models. Only the host can change them.";
     case R_CAST: return eset(&g_enemy_opts.cast)->help;
     case R_CASTPOOL: return eset(&g_enemy_opts.cast_all)->help;
     case R_CASTASSIGN: return eset(&g_enemy_opts.cast_assign)->help;
     case R_CASTIMP: return eset(&g_enemy_opts.cast_imports)->help;
     case R_SEED: return eset(&g_enemy_opts.seed)->help;
     case R_RSEED: return "Picks a new random seed.";
-    case R_HOST: return lb.mode ? "Opens your lobby and a room on the co-op server; give your partner the room code that appears."
-                                : "Opens your lobby: your partner can join now. START and the rules can still change while you wait.";
-    case R_GO: return "Starts the game; your partner enters it once you have control.";
-    case R_COPY: return "Copies ip:port#CODE for your partner (the public address once the router forwards the port, else the LAN one).";
-    case R_RCOPY: return "Copies the room code for your partner: Join a game, Via server, CODE.";
-    case R_STOP: return "Closes your lobby: the partner is told, the port is freed.";
-    case R_KICK: return "Ends the session with your partner (a crashed or stuck game) and frees its place; the same address or room code works again.";
+    case R_HOST: return lb.mode ? "Open a lobby on the co-op server. Give your partner the room code shown here."
+                                : "Open your lobby so a partner can join. You can still change the starting game and rules.";
+    case R_GO: return "Start the game. Your partner joins once you can move.";
+    case R_COPY: return "Copy the join address for your partner. Uses your public address if available, otherwise your local address.";
+    case R_RCOPY: return "Copy your room code. Your partner uses JOIN A GAME > VIA SERVER > ROOM CODE.";
+    case R_STOP: return "Close your lobby and disconnect your partner.";
+    case R_KICK: return "Remove your partner and reopen their place. They can rejoin with the same address or room code.";
     case R_JOIN: return session_on() ? "Leaves the host's lobby." : "Joins the host's lobby; the host starts the game.";
     case R_BACK:
-        return lb.step == 1 ? "Back to the title menu; an open lobby or session closes."
+        return lb.step == 1 ? "Return to the title screen and close any open lobby or co-op session."
              : lb.step == 2 ? "Back to choosing how to connect (an open lobby stays open)." : lb.step == 3 ? "Back to the lobby." : lb.step == 7 ? "Back to the randomizer page." : "Back to the game rules.";
     default: return "";
     }
@@ -1578,7 +1578,7 @@ static void draw_info(void)
     y += 16 * text_wrap(24, y, 592, g_coop.status[0] ? coop_shown(g_coop.status) : "Not connected", 0.52f, !session_on() && g_coop.status[0] ? 0xFFFFC060 : col, 2);
     if (!hosting()) return;
     if (g_coop.room[0]) {
-        snprintf(line, sizeof(line), "ROOM CODE %.4s-%.4s (through the co-op server)", g_coop.room, g_coop.room + 4);
+        snprintf(line, sizeof(line), "ROOM CODE %.4s-%.4s (via server)", g_coop.room, g_coop.room + 4);
         text(24, y, line, 0.52f, 0xFFFFFFFF); y += 16;
     }
     portmap_status(&pm);
@@ -1626,7 +1626,7 @@ static void draw_previews(void)
     scene_end();
     if (g_coop.state == COOP_CONNECTED && g_coop.peer_in_game) {
         char t[64];
-        snprintf(t, sizeof(t), "%s is in the game", g_coop.peer_name[0] ? g_coop.peer_name : "The partner");
+        snprintf(t, sizeof(t), "%s is playing", g_coop.peer_name[0] ? g_coop.peer_name : "Your partner");
         text_c(232, 210, t, 0.5f, 0xFFFFE0A0);
     } else if (!partner) text_c(232, 210, joining() ? "Waiting for the host" : hosting() ? "Waiting for a partner" : "", 0.5f, 0xFFA0A0A0);
     else if (!g_coop.peer_lobby) text_c(222, 372, "(in the title menu)", 0.45f, 0xFFA0A0A0);
@@ -1696,7 +1696,7 @@ int pc_lobby(void)
     g_lobby_io.list_on = lb.step == 6;
     /* what we chose, for the partner's screen; the joining items as they change */
     if (lb.role == 0) { start_label(note, sizeof(note), g_coop.start); snprintf(g_coop.note, sizeof(g_coop.note), "Starts: %.*s", (int)sizeof(g_coop.note) - 9, note); }
-    else if (g_coop.items == COOP_ITEMS_HOST) snprintf(g_coop.note, sizeof(g_coop.note), "Items saved with you");
+    else if (g_coop.items == COOP_ITEMS_HOST) snprintf(g_coop.note, sizeof(g_coop.note), "Items saved by host");
     else if (g_coop.items < 0) snprintf(g_coop.note, sizeof(g_coop.note), "New inventory");
     else { items_label(note, sizeof(note), g_coop.items); snprintf(g_coop.note, sizeof(g_coop.note), "Items: %.*s", (int)sizeof(g_coop.note) - 8, note); }
     if (joining() && lb.items_sent != g_coop.items) hand_items();

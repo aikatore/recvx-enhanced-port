@@ -479,7 +479,7 @@ static void test_joiner(void)
     memcpy(c.code, code, 9);
     rdv_start(&c);
     run(300);
-    CHECK(rdv_error() && strstr(rdv_error(), "does not encrypt"));
+    CHECK(rdv_error() && strstr(rdv_error(), "not encrypted"));
     CHECK(srv_stats()->members == 0);   /* it left the room at once (CLOSE) */
     rdv_stop();
     /* both sides allow plaintext: works */
@@ -519,7 +519,7 @@ static void test_joiner(void)
         b[8 + 9] &= ~RDV_F_E2E;
         client_gets(b, n);
     }
-    CHECK(rdv_error() && strstr(rdv_error(), "does not encrypt"));
+    CHECK(rdv_error() && strstr(rdv_error(), "not encrypted"));
     rdv_stop();
 
     /* the right password: the keys match the host's (password-bound) */
@@ -591,7 +591,7 @@ static void test_dns(void)
     rdv_start(&c);
     CHECK(rdv_state() == RDV_ST_RESOLVE && dns_starts == 1);
     run(5100);   /* DNS never answers: a visible deadline */
-    CHECK(rdv_error() && strstr(rdv_error(), "Cannot find the co-op server"));
+    CHECK(rdv_error() && strstr(rdv_error(), "Cannot find co-op server"));
     rdv_stop();
     rdv_start(&c);
     run(100);
@@ -617,12 +617,12 @@ static void test_no_randomness(void)
     reset_server();
     rdv_test_fail = 1;
     rdv_start(&c);
-    CHECK(rdv_error() && strstr(rdv_error(), "randomness"));
+    CHECK(rdv_error() && strstr(rdv_error(), "Cannot secure the connection"));
     rdv_stop();
     rdv_test_fail = 2;   /* the password KDF cannot allocate */
     snprintf(c.password, sizeof(c.password), "pw");
     rdv_start(&c);
-    CHECK(rdv_error() && strstr(rdv_error(), "password key"));
+    CHECK(rdv_error() && strstr(rdv_error(), "secure the room password"));
     rdv_stop();
     rdv_test_fail = 0;
 }

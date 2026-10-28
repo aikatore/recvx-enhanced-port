@@ -65,8 +65,7 @@ static int wait_stop(Job* j, int ms)
 static const char* cgnat_hint(const char* wan)
 {
     static char s[256];
-    snprintf(s, sizeof(s), "but the router's own internet address %s is not public (carrier-grade NAT or a second router): "
-             "friends cannot reach you this way - use a VPN overlay (Tailscale, ZeroTier)", wan);
+    snprintf(s, sizeof(s), "Your router's address %s is not public. Direct internet joins may fail; try Via Server.", wan);
     return s;
 }
 
@@ -96,14 +95,14 @@ static int try_upnp(Job* j, const char* lan_fallback)
            leave the port forwarded to this PC for good; NAT-PMP next, else by hand */
         if (r == 725) { FreeUPNPUrls(&urls); return 2; }
         if (r != UPNPCOMMAND_SUCCESS) {
-            set(j, PM_FAILED, NULL, 0, "UPnP: the router refused to forward UDP port %s (error %d: %s) - forward it by hand to %s",
+            set(j, PM_FAILED, NULL, 0, "Could not open port %s (error %d: %s). Forward it to %s in your router settings, or try Via Server.",
                 port, r, strupnperror(r) ? strupnperror(r) : "?", lan);
             break;
         }
         if (UPNP_GetExternalIPAddress(urls.controlURL, data.first.servicetype, wan) != UPNPCOMMAND_SUCCESS || !wan[0])
             SDL_strlcpy(wan, "?", sizeof(wan));
-        if (unroutable(wan)) set(j, PM_FAILED, NULL, 0, "UPnP: UDP port %s forwarded to %s, %s", port, lan, cgnat_hint(wan));
-        else set(j, PM_OK, wan, j->port, "UPnP: UDP port %s forwarded to %s (renewed while hosting)", port, lan);
+        if (unroutable(wan)) set(j, PM_FAILED, NULL, 0, "Port %s forwarded to %s, but %s", port, lan, cgnat_hint(wan));
+        else set(j, PM_OK, wan, j->port, "Port %s forwarded to %s while hosting.", port, lan);
         if (wait_stop(j, LEASE_S * 1000 / 2)) {
             r = UPNP_DeletePortMapping(urls.controlURL, data.first.servicetype, port, "UDP", NULL);
             host_log("portmap: UPnP mapping of port %s removed (%d)\n", port, r);
@@ -141,12 +140,12 @@ static int try_natpmp(Job* j)
     snprintf(wan, sizeof(wan), "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
     for (;;) {
         if (natpmp_ask(j, &n, &resp, 1, LEASE_S) < 0) {
-            set(j, PM_FAILED, NULL, 0, "NAT-PMP: the router refused to forward UDP port %d - forward it by hand", j->port);
+            set(j, PM_FAILED, NULL, 0, "Could not open port %d. Set router forwarding manually, or try Via Server.", j->port);
             break;
         }
         pub = resp.pnu.newportmapping.mappedpublicport;
-        if (unroutable(wan)) set(j, PM_FAILED, NULL, 0, "NAT-PMP: UDP port %d forwarded, %s", j->port, cgnat_hint(wan));
-        else set(j, PM_OK, wan, pub, "NAT-PMP: UDP port %d forwarded as public port %d (renewed while hosting)", j->port, pub);
+        if (unroutable(wan)) set(j, PM_FAILED, NULL, 0, "Port %d forwarded, but %s", j->port, cgnat_hint(wan));
+        else set(j, PM_OK, wan, pub, "Host port %d opened as internet port %d while hosting.", j->port, pub);
         if (wait_stop(j, LEASE_S * 1000 / 2)) {
             natpmp_ask(j, &n, &resp, 1, 0);   /* lifetime 0 = delete */
             host_log("portmap: NAT-PMP mapping of port %d removed\n", j->port);
@@ -179,12 +178,10 @@ static int SDLCALL thread(void* ud)
     if (j == cur) SDL_strlcpy(st.local_ip, lan, sizeof(st.local_ip));
     SDL_UnlockSpinlock(&lock);
     if (!j->automatic)
-        set(j, PM_OFF, NULL, 0, "automatic port opening is off: forward UDP port %d to %s on the router, or use a VPN overlay",
+        set(j, PM_OFF, NULL, 0, "Automatic forwarding is off. Forward port %d to %s in your router settings, or try Via Server.",
             j->port, lan[0] ? lan : "this PC");
     else if ((up = try_upnp(j, lan)) != 1 && !SDL_GetAtomicInt(&j->stop) && !try_natpmp(j))
-        set(j, PM_FAILED, NULL, 0, up == 2 ? "the router's UPnP forwards only permanently (it would stay after a crash), so it was not asked: "
-            "forward UDP port %d to %s by hand, or use a VPN overlay" : "no UPnP or NAT-PMP router found (none on this network, or switched off in the router): "
-            "forward UDP port %d to %s by hand, or use a VPN overlay", j->port, lan[0] ? lan : "this PC");
+        set(j, PM_FAILED, NULL, 0, up == 2 ? "Router only supports permanent forwarding. Forward port %d to %s manually, or try Via Server." : "Automatic forwarding unavailable. Forward port %d to %s manually, or try Via Server.", j->port, lan[0] ? lan : "this PC");
     SDL_UnlockMutex(serial);
     job_done(j);
     return 0;
@@ -220,11 +217,11 @@ void portmap_start(int port, int automatic)
     SDL_LockSpinlock(&lock);
     cur = j;
     st.state = automatic ? PM_BUSY : PM_OFF;
-    SDL_strlcpy(st.msg, automatic ? "looking for a UPnP / NAT-PMP router..." : "", sizeof(st.msg));
+    SDL_strlcpy(st.msg, automatic ? "Checking router for port forwarding..." : "", sizeof(st.msg));
     SDL_UnlockSpinlock(&lock);
     SDL_AddAtomicInt(&running, 1);
     if (!(t = SDL_CreateThread(thread, "portmap", j))) {
-        set(j, PM_FAILED, NULL, 0, "cannot start the port mapping thread: %s", SDL_GetError());
+        set(j, PM_FAILED, NULL, 0, "Could not set up port forwarding: %s. Try Via Server.", SDL_GetError());
         job_done(j);
         return;
     }

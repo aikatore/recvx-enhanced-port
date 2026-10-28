@@ -235,7 +235,7 @@ static void draw_screen(void)
         else grid(side);
         snprintf(b, sizeof(b), "%s", w ? coop_item_name(w) : g_trade.sel[side] >= 0 ? "(nothing)" : "");
         text_c(cx, GY + 5 * CH + 6, b, 0.55f, 0xFFE0E0E0);
-        if (side) text_c(cx, BTN_Y, g_trade.ready[1] ? "READY" : "choosing", 0.6f, g_trade.ready[1] ? 0xFF40E040 : 0xFF909090);
+        if (side) text_c(cx, BTN_Y, g_trade.ready[1] ? "READY" : "CHOOSING", 0.6f, g_trade.ready[1] ? 0xFF40E040 : 0xFF909090);
         else {
             int can = coop_trade_back_what() != TB_LEAVE;
             frame(OK_X0, BTN_Y - 4, OK_X1, BTN_Y + 22, 1, g_trade.ready[0] ? 0xFF40E040 : 0xFF6080A0);
@@ -260,7 +260,7 @@ static void draw_screen(void)
     /* the middle: what goes which way */
     if (mine) { text_c(320, 150, coop_item_name(mine), 0.5f, 0xFFFFE080); pc_ui_arrow(352, 176, 1, 0xFFFFE080); pc_ui_rect(288, 175, 345, 177, 0xFFFFE080, Z_UI); }
     if (theirs) { text_c(320, 206, coop_item_name(theirs), 0.5f, 0xFF90D0FF); pc_ui_arrow(288, 232, -1, 0xFF90D0FF); pc_ui_rect(295, 231, 352, 233, 0xFF90D0FF, Z_UI); }
-    if (g_trade.waiting) text_c(320, 262, "swapping...", 0.55f, 0xFFFFFFFF);
+    if (g_trade.waiting) text_c(320, 262, "Trading...", 0.55f, 0xFFFFFFFF);
     frame(LEAVE_X0, LEAVE_Y - 4, LEAVE_X1, LEAVE_Y + 22, 1, 0xFF6080A0);
     text_c(320, LEAVE_Y, "LEAVE", 0.6f, 0xFFFFFFFF);
     /* the result of the last swap, else why this pair does not swap */
@@ -269,7 +269,7 @@ static void draw_screen(void)
     else if (g_trade.ready[0] && !g_trade.ready[1]) { snprintf(b, sizeof(b), "Waiting for %s to confirm", g_trade.name); text_c(320, 406, b, 0.55f, 0xFFC0C0C0); }
     {
         static const char* const back[] = { "", "withdraw the request", "take back the offer", "decline the request", "leave" };
-        snprintf(b, sizeof(b), "Confirm: offer the slot (again: ready); on %s's side: request.  Cancel: %s", g_trade.name, back[coop_trade_back_what()]);
+        snprintf(b, sizeof(b), "Confirm: offer item, then ready. On %s's side: request item. Cancel: %s", g_trade.name, back[coop_trade_back_what()]);
         text_c(320, 438, b, 0.42f, 0xFFA0A0A0);
     }
 }

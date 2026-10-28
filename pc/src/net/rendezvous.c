@@ -172,7 +172,7 @@ static void send_punch(const NetAddr* to)
 static int fresh_keys(void)
 {
     if (!rdv_random(sk, 32) || !rdv_random(&nonce, sizeof(nonce)) || !rdv_random(&req_id, sizeof(req_id))) {
-        fail("No randomness from the system: cannot make keys");
+        fail("Cannot secure the connection. Try restarting the game.");
         return 0;
     }
     crypto_x25519_public_key(pk, sk);
@@ -185,7 +185,7 @@ static void begin_hello(void)
     st = RDV_ST_HELLO;
     t_start = net_ms();
     t_sent = t_start - RETRY_MS;
-    snprintf(status, sizeof(status), "contacting the co-op server %s", net_addr_str(&cfg.server));
+    snprintf(status, sizeof(status), "Contacting co-op server %s...", net_addr_str(&cfg.server));
 }
 
 /* the server name: "host" or "host:port"; 1 with host and port split off */
@@ -227,7 +227,7 @@ void rdv_start(const RdvConfig* c)
     room[0] = err[0] = 0;
     if (!fresh_keys()) return;
     if (cfg.host && cfg.password[0]) {   /* the host's password key, once (Argon2id); the password itself is not kept */
-        if (!rdv_random(salt, 16) || !rdv_pw_key(cfg.password, salt, pw_key)) { fail("Cannot derive the password key (no randomness or memory)"); return; }
+        if (!rdv_random(salt, 16) || !rdv_pw_key(cfg.password, salt, pw_key)) { fail("Cannot secure the room password. Try restarting the game."); return; }
         pw_used = 1;
         crypto_wipe(cfg.password, sizeof(cfg.password));
     }
@@ -240,14 +240,14 @@ void rdv_start(const RdvConfig* c)
         char host[128];
         int port;
         uint32_t now = net_ms();
-        if (!split_server(cfg.server_name, host, sizeof(host), &port)) { fail("The co-op server's address is not host or host:port"); return; }
+        if (!split_server(cfg.server_name, host, sizeof(host), &port)) { fail("Invalid co-op server address. Use a name or name:port."); return; }
         if (numeric_ip(host, port, &cfg.server)) { begin_hello(); return; }
         if (dns_cache.ok && !strcmp(dns_cache.name, cfg.server_name) && now - dns_cache.at < DNS_CACHE_MS) { cfg.server = dns_cache.a; begin_hello(); return; }
         snprintf(dns_name, sizeof(dns_name), "%s", cfg.server_name);
-        if (!(dns = net_resolve_start(host, port))) { fail("Cannot look up the co-op server (no thread)"); return; }
+        if (!(dns = net_resolve_start(host, port))) { fail("Cannot look up the co-op server. Try restarting the game."); return; }
         st = RDV_ST_RESOLVE;
         t_start = now;
-        snprintf(status, sizeof(status), "looking up the co-op server %s", host);
+        snprintf(status, sizeof(status), "Looking up co-op server %s...", host);
         return;
     }
     begin_hello();
@@ -291,7 +291,7 @@ void rdv_kick(void)
     st = RDV_ST_WAITING;
     t_ack = net_ms();
     t_ka = t_ack - KA_WAIT_MS;
-    snprintf(status, sizeof(status), "room %s open", fmt_code(room));
+    snprintf(status, sizeof(status), "Room %s is open.", fmt_code(room));
     host_log("rdv: partner (member %u) removed from room %s\n", kick_seq, fmt_code(room));
 }
 
@@ -306,14 +306,14 @@ static void reregister(void)
     room[0] = 0;
     if (!fresh_keys()) return;
     begin_hello();
-    snprintf(status, sizeof(status), "the co-op server lost the room (restarted?): opening a new one");
+    snprintf(status, sizeof(status), "Server lost your room. Opening a new one...");
 }
 
 static void set_path_status(void)
 {
-    snprintf(status, sizeof(status), "%s%s%s%s", st == RDV_ST_DIRECT ? (path_lan ? "connected directly (LAN)" : "connected directly")
-             : st == RDV_ST_RELAY ? "connected via the relay" : "reaching the partner",
-             !e2e ? "" : keys_ok ? ", encrypted, check code " : ", encrypted (keys not yet confirmed)", e2e && keys_ok ? ses.verify : "",
+    snprintf(status, sizeof(status), "%s%s%s%s", st == RDV_ST_DIRECT ? (path_lan ? "Connected directly (local network)" : "Connected directly")
+             : st == RDV_ST_RELAY ? "Connected via server relay" : "Connecting to partner...",
+             !e2e ? "" : keys_ok ? ", encrypted, check code " : ", encrypted (securing connection...)", e2e && keys_ok ? ses.verify : "",
              orphan ? " - the co-op server lost the room" : "");
 }
 
@@ -370,11 +370,11 @@ static void on_intro(const RdvMsg* m)
         memcpy(token, m->token, 16);
         enc = (m->flags & RDV_F_E2E) != 0;
         if (!enc && (cfg.e2e || cfg.password[0] || pw_used)) {   /* a plaintext session only when this side allows one */
-            fail("The host does not encrypt (refused: this game requires encryption through the server)");
+            fail("Host connection is not encrypted. Ask the host to update the game.");
             return;
         }
         if ((cfg.password[0] || pw_used) && !(m->flags & RDV_F_PW)) {   /* we expect a password room: not some other room */
-            fail("This room has no password, but you entered one (clear PASSWORD to join it)");
+            fail("This room has no password. Clear PASSWORD to join.");
             return;
         }
         use_pw = (m->flags & RDV_F_PW) && pw_used;
@@ -422,8 +422,8 @@ static void on_intro(const RdvMsg* m)
 
 static void on_error(const RdvMsg* m)
 {
-    static const char* msgs[] = { "", "", "Room not found (check the code)", "This room needs a password", "Wrong password",
-                                  "The room is full", "Too many attempts: wait a minute", "", "The co-op server is full or busy",
+    static const char* msgs[] = { "", "", "Room not found. Check the code.", "This room needs a password", "Wrong password",
+                                  "The room is full", "Too many attempts. Wait a minute.", "", "The co-op server is full or busy",
                                   "Too many rooms from your address" };
     char b[120];
     switch (m->err) {
@@ -432,16 +432,16 @@ static void on_error(const RdvMsg* m)
     case RDV_E_BAD_PW:
         if (m->err == RDV_E_NEED_PW && !cfg.host && cfg.password[0] && !pw_used) {
             memcpy(salt, m->salt, 16);
-            if (!rdv_pw_key(cfg.password, salt, pw_key)) { fail("Cannot derive the password key (out of memory)"); return; }
+            if (!rdv_pw_key(cfg.password, salt, pw_key)) { fail("Not enough memory to secure the password. Try restarting."); return; }
             pw_used = 1;
             crypto_wipe(cfg.password, sizeof(cfg.password));
             send_request();
             return;
         }
-        fail(m->err == RDV_E_NEED_PW ? "This room needs a password (PASSWORD)" : msgs[m->err]);
+        fail(m->err == RDV_E_NEED_PW ? "Enter the room password in PASSWORD." : msgs[m->err]);
         return;
     case RDV_E_VERSION:
-        snprintf(b, sizeof(b), "The co-op server speaks protocol %d, this game %d: update the %s", m->version, RDV_VERSION,
+        snprintf(b, sizeof(b), "Server compatibility version: %d. Game: %d. Update the %s.", m->version, RDV_VERSION,
                  m->version > RDV_VERSION ? "game" : "server");
         fail(b);
         return;
@@ -478,7 +478,7 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
         if ((t = rdv_parse(buf, n, &m)) < 0) {
             if (t == RDV_BAD_VERSION && same(from, &cfg.server) && st >= RDV_ST_HELLO && st < RDV_ST_WAITING) {
                 char b[120];
-                snprintf(b, sizeof(b), "The co-op server speaks protocol %d, this game %d", m.version, RDV_VERSION);
+                snprintf(b, sizeof(b), "Server compatibility version: %d. Game: %d. Use compatible versions.", m.version, RDV_VERSION);
                 fail(b);
             }
             return -1;
@@ -505,7 +505,7 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
             memcpy(cookie, m.cookie, 16);
             my_pub = m.pub;
             st = RDV_ST_REQUEST;
-            snprintf(status, sizeof(status), cfg.host ? "creating a room on the co-op server" : "looking for room %s", fmt_code(cfg.code));
+            snprintf(status, sizeof(status), cfg.host ? "Opening a room on the co-op server..." : "Looking for room %s...", fmt_code(cfg.code));
             send_request();
             return -1;
         case RDV_ROOM:
@@ -515,7 +515,7 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
             memcpy(room, m.code, sizeof(room));
             st = RDV_ST_WAITING;
             t_ka = t_ack = net_ms();
-            snprintf(status, sizeof(status), "room %s open", fmt_code(room));
+            snprintf(status, sizeof(status), "Room %s is open.", fmt_code(room));
             host_log("rdv: room %s\n", fmt_code(room));
             return -1;
         case RDV_INTRO:
@@ -588,7 +588,7 @@ void rdv_frame(void)
             char b[200];
             if (!r) net_resolve_cancel(dns);
             dns = NULL;
-            snprintf(b, sizeof(b), "Cannot find the co-op server '%s'%s", dns_name, r ? "" : " (no answer from DNS within 5 s)");
+            snprintf(b, sizeof(b), "Cannot find co-op server %s%s. Check the address.", dns_name, r ? "" : " (lookup timed out)");
             fail(b);
         }
         return;
@@ -597,7 +597,7 @@ void rdv_frame(void)
     case RDV_ST_REQUEST:
         if (now - t_start > GIVE_UP_MS) {
             char b[160];
-            snprintf(b, sizeof(b), "The co-op server %s does not answer (UDP %d blocked, or no server there?)%s", net_addr_str(&cfg.server),
+            snprintf(b, sizeof(b), "No reply from co-op server %s. Check port %d and your connection.%s", net_addr_str(&cfg.server),
                      ntohs(cfg.server.port), cfg.host ? " - direct joins still work" : "");
             fail(b);
             return;
@@ -626,7 +626,7 @@ void rdv_frame(void)
                 set_path_status();
                 host_log("rdv: the co-op server lost the room; the direct session goes on\n");
             } else if (cfg.host) { reregister(); return; }   /* a relayed session is over: a new room for the next partner */
-            else { fail("The co-op server lost the room (restarted?): the relayed session ended"); return; }
+            else { fail("Server lost the room. Your relayed session has ended."); return; }
         }
         if (orphan) {
             if (cfg.host && now - t_rx > ORPHAN_IDLE_MS) reregister();   /* the partner is gone too: a new room */
