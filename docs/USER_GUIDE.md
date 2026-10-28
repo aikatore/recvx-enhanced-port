@@ -296,6 +296,9 @@ voices and what happens stay as they are.
   (all zombie looks count as one choice, so zombies do not crowd out the rest); most of those keep a
   still face. A model with hands of its own shows them instead of the character's gloves. Claire's
   and Chris's looks are never given to someone else: how they look is up to "Character Model".
+  *Custom* uses only the models you check in a list of the *All Models* ones (with SELECT ALL and
+  DESELECT ALL): in F1 under Model Selection, or in the co-op lobby (GAME RULES, RANDOMIZER, CUTSCENE
+  CAST, CHOOSE MODELS). Your choice is saved. With nothing checked, nobody changes.
 * **Model Assignment**: *Per Character*: e.g. Steve is shown as Alfred in every cutscene, and no two
   characters share a model. *Per Cutscene*: each cutscene room picks again. Both come from
   the enemy seed: the same seed gives the same cast.

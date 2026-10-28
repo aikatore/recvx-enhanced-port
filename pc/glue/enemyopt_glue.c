@@ -15,6 +15,7 @@
 #include "../../decomp/include/ps2/veronica/prog/MdlPut.h"
 #include "../../decomp/include/ps2/veronica/prog/hitchk.h"
 #include "../src/host/actors.h"
+#include "../src/host/cast.h"
 #include "../src/host/enemies.h"
 #include "../src/host/variants.h"
 #include <math.h>
@@ -38,6 +39,7 @@ void bhCheckEneWorkNum(void);   /* eneset.h */
 EnemyOpts g_enemy_opts = { .variety = 1, .events = 1 };   /* settings (F1, recvx.ini) */
 static EnemyOpts host_opts;             /* a co-op guest's: the host's */
 static int have_host_opts;
+static unsigned char host_off[CAST_OFF_BYTES];   /* and its "Custom" list's unchecked models (EV_CASTOFF) */
 int enemy_room_gen;                     /* room loads so far */
 
 /* test aids: RECVX_ENEMY_EXTRA / _PLACE / _RANDOM / _SEED / _VARIETY / _EVENTS override the settings */
@@ -52,6 +54,7 @@ __attribute__((constructor)) static void opts_env(void)
     if ((e = getenv("RECVX_ENEMY_EVENTS"))) g_enemy_opts.events = atoi(e);
     if ((e = getenv("RECVX_CAST"))) g_enemy_opts.cast = atoi(e) != 0;   /* the cutscene cast: 0/1, then ":all" / ":random" / ":imports" */
     if (e && strstr(e, "all")) g_enemy_opts.cast_all = 1;
+    if (e && strstr(e, "custom")) g_enemy_opts.cast_all = 2;   /* (the models: recvx.ini cast_custom_off) */
     if (e && strstr(e, "random")) g_enemy_opts.cast_assign = 1;
     if (e && strstr(e, "imports")) g_enemy_opts.cast_imports = 1;
 }
@@ -67,13 +70,21 @@ static int kept_n;
 void enemy_opts_from_host(const EnemyOpts* o)
 {
     have_host_opts = o != NULL;
-    if (!o) kept_n = 0;   /* (enemy_rand_kept: the host's kept records go with its session) */
+    if (!o) { kept_n = 0; memset(host_off, 0, sizeof(host_off)); }   /* (enemy_rand_kept, EV_CASTOFF: the host's go with its session) */
     if (o) {
         host_opts = *o;
         host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s%s), seed %d, cutscene cast %d (%s, %s%s)\n", o->extra, o->place, o->rand,
-                 o->variety ? "wild" : "mild", o->events ? ", event enemies" : "", o->seed, o->cast, o->cast_all ? "all models" : "cutscene models",
+                 o->variety ? "wild" : "mild", o->events ? ", event enemies" : "", o->seed, o->cast, o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models",
                  o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "");
     }
+}
+
+const unsigned char* enemy_cast_off(void) { return coop_is_guest() ? host_off : cast_off; }
+
+void enemy_cast_off_from_host(int at, int n, const unsigned char* bits)
+{
+    if (at < 0 || n < 0 || at + n > (int)sizeof(host_off)) return;   /* (coop_check_event checked it) */
+    memcpy(host_off + at, bits, (size_t)n);
 }
 
 /* ---------------------------------------------------------------- helpers */

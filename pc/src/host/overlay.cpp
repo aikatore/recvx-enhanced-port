@@ -11,6 +11,8 @@ extern "C" {
 #include "cheat.h"
 #include "coop.h"
 #include "actors.h"
+#include "cast.h"
+#include "enemies.h"
 #include "net/net.h"
 #include "net/coop_proto.h"   /* REC_*: what the host keeps for us */
 #include "../gs/stream.h"
@@ -104,6 +106,40 @@ static void calib_pattern(void)
     ImGui::Dummy(ImVec2(2 * w + gap, sq + 2 * gap));
 }
 
+/* the cutscene cast's "Custom" models under Model Selection (cast.h; the lobby and the BIORAND screen list the same) */
+static bool cast_custom_imgui()
+{
+    static short pos[CAST_CUSTOM_MAX];
+    static int mdl[CAST_CUSTOM_MAX];
+    int n = cast_custom_list(g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, pos, mdl, CAST_CUSTOM_MAX), on = 0, set = -1;
+    bool changed = false;
+    char head[80];
+    for (int k = 0; k < n; k++) on += !cast_off_at(cast_off, pos[k]);
+    SDL_snprintf(head, sizeof head, "Custom Models (%d of %d checked)###castcustom", on, n);
+    if (!ImGui::TreeNodeEx(head, ImGuiTreeNodeFlags_DefaultOpen)) return false;
+    if (ImGui::Button("Select All")) set = 0;
+    ImGui::SameLine();
+    if (ImGui::Button("Deselect All")) set = 1;
+    if (set >= 0) { for (int k = 0; k < n; k++) cast_off_put(cast_off, pos[k], set); changed = true; }
+    if (!on) { ImGui::SameLine(); ImGui::TextDisabled("None checked: the characters keep their own looks."); }
+    if (ImGui::BeginChild("##castcustom", ImVec2(0, ImGui::GetFrameHeightWithSpacing() * (n < 12 ? n + 1 : 12)), ImGuiChildFlags_Borders)) {
+        const char* grp = nullptr;
+        for (int k = 0; k < n; k++) {
+            const char* g = cast_entry_group(mdl[k]);
+            char label[128];
+            bool b = !cast_off_at(cast_off, pos[k]);
+            if (!grp || strcmp(g, grp)) ImGui::SeparatorText(g);
+            grp = g;
+            SDL_snprintf(label, sizeof label, "%s##cc%d", cast_entry_name(mdl[k]), k);
+            if (ImGui::Checkbox(label, &b)) { cast_off_put(cast_off, pos[k], !b); changed = true; }
+        }
+    }
+    ImGui::EndChild();
+    ImGui::TreePop();
+    if (changed) settings_save_later();
+    return changed;
+}
+
 static bool settings_imgui(int page, bool all = true)
 {
     bool changed = false;
@@ -129,6 +165,13 @@ static bool settings_imgui(int page, bool all = true)
                     if (k == v) ImGui::SetItemDefaultFocus();   /* the list opens at the current value (a long one: "You appear as") */
                 }
                 ImGui::EndCombo();
+            }
+            if (s->val == &g_enemy_opts.cast_all && v == 2) {   /* "Custom": its list below (its tooltip stays the row's) */
+                bool hover = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+                if (hover && s->help) ImGui::SetTooltip("%s", s->help);
+                ImGui::EndDisabled();
+                changed |= cast_custom_imgui();
+                continue;
             }
         } else {   /* a number; a value name (tenths) is shown as the slider's text */
             char fmt[96];

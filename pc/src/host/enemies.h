@@ -14,7 +14,8 @@ typedef struct EnemyOpts {
     int variety;                /* randomizer: 0 Mild (two common kinds per room), 1 Wild (every kind that fits; default) */
     int events;                 /* randomizer: 1 also event enemies (default) */
     int cast;                   /* cutscene cast randomizer (cast.h): 1 the story characters drawn as other models in cutscenes */
-    int cast_all;               /* its characters: 0 from the cutscene models (faces move), 1 from all models */
+    int cast_all;               /* its characters: 0 from the cutscene models (faces move), 1 from all models, 2 "Custom":
+                                   the models checked in its list (cast.h cast_off; co-op: the host's, EV_CASTOFF) */
     int cast_assign;            /* 0 fixed per character (the seed), 1 random per cutscene (seed and room file) */
     int cast_imports;           /* 1: imported models too (co-op: only while both sides have the same, cast_import_id) */
 } EnemyOpts;
@@ -46,6 +47,8 @@ int  spawn_slots_needed(int id);                /* a type and the enemies its In
 const EnemyOpts* enemy_opts(void);              /* in effect: ours, or the host's on a co-op guest */
 int  room_file_now(void);                       /* the room file we are in: RM_<stg * 1000 + rom * 10 + case> */
 void enemy_opts_from_host(const EnemyOpts* o);  /* co-op guest (NULL: none yet / session over) */
+const unsigned char* enemy_cast_off(void);      /* "Custom"'s unchecked models (cast.h) in effect: ours, or the host's on a co-op guest */
+void enemy_cast_off_from_host(int at, int n, const unsigned char* bits);   /* co-op guest: bytes at..at+n-1 of the host's */
 int  spawn_note_apply(int slot, const SpawnNote* n, int stg, int rom);   /* guest: placed now or once the room runs (1) */
 void spawn_pending(int run);                    /* guest, every co-op frame (0: the session ended, forget them) */
 void enemy_rand_kept(int room, int rec, int id); /* guest: the host's randomizer kept that record (SPAWN_NOTE_KEPT) */

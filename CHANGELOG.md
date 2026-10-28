@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Gameplay
+
+- **Custom cutscene cast**: Model Selection has a new Custom choice. Check the models you want in a
+  list (F1 or the co-op lobby); the choice is saved, and in co-op the host's list counts.
+
 ### Menus
 
 - **OPTION layout**: ENHANCED SETTINGS is now below VIBRATION, in place of DEFAULT (no longer

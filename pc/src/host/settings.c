@@ -326,7 +326,7 @@ static const char* const noclips[] = { "Off", "Walls", "Walls and Flight" };
 static const char* const sources[] = { "Auto", "Keyboard and Mouse", "Gamepad Only" };
 static const char* const extras[] = { "Off", "Up to 1", "Up to 2", "Up to 3" };
 static const char* const varieties[] = { "Mild", "Wild" };
-static const char* const cast_pools[] = { "Cutscene Models", "All Models" };
+static const char* const cast_pools[] = { "Cutscene Models", "All Models", "Custom" };
 static const char* const cast_assigns[] = { "Per Character", "Per Cutscene" };
 static int cast_on(void) { return g_enemy_opts.cast != 0; }
 static int cast_imports_shown(void) { return cast_on() && __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0; }
@@ -405,8 +405,8 @@ const Setting g_settings[] = {
     { SP_GAMEPLAY, "Enemy Seed", V(g_enemy_opts.seed), 0, 99999, 1, .fmt = "%d", .help = "Use the same seed for repeatable enemy and cast choices. In co-op, both players use the host's seed." },
     { SP_GAMEPLAY, "Randomize Cutscene Cast", V(g_enemy_opts.cast), 0, 1, 1, .group = "CUTSCENE CAST",
       .help = "Change story characters' appearance in cutscenes using the enemy seed. Applies next room." },
-    { SP_GAMEPLAY, "Model Selection", V(g_enemy_opts.cast_all), 0, 1, 1, cast_pools, .shown = cast_on,
-      .help = "Cutscene Models have animated faces. All Models includes creatures and others with still faces." },
+    { SP_GAMEPLAY, "Model Selection", V(g_enemy_opts.cast_all), 0, 2, 1, cast_pools, .shown = cast_on,
+      .help = "Cutscene Models have animated faces. All Models includes creatures and others with still faces. Custom uses only the models you check." },
     { SP_GAMEPLAY, "Model Assignment", V(g_enemy_opts.cast_assign), 0, 1, 1, cast_assigns, .shown = cast_on,
       .help = "Keep one model for each character, or choose again for each cutscene room. The seed fixes the choices." },
     { SP_GAMEPLAY, "Include Imported Models", V(g_enemy_opts.cast_imports), 0, 1, 1, .shown = cast_imports_shown,

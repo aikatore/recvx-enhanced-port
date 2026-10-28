@@ -18,6 +18,7 @@
 #include "../src/host/actors.h"
 #include "../src/host/cast.h"
 #include "../src/host/enemies.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -79,6 +80,7 @@ void cast_release(void)
 void cast_room(const EnemyOpts* o)
 {
     int want[RECS], k, j, n = 0, room = room_file_now(), imports;
+    char custom[40];
     unsigned scene;
     if (getenv("RECVX_CAST_TRACE")) {   /* test aid: the game's state at each room load (the same with the cast on and off) */
         const unsigned char* b = (const unsigned char*)sys->ev_flg;
@@ -96,7 +98,7 @@ void cast_room(const EnemyOpts* o)
         if (!(ep->flg & 0x1) || !ep->mlwP || (c = cast_character(ep->id, ep->mdlver)) < 0) continue;   /* (the character played's doubles too: played()) */
         for (j = 0; j < (int)(sizeof(kept) / sizeof(kept[0])) && !(kept[j].room == room && kept[j].rec == k); j++);
         if (j < (int)(sizeof(kept) / sizeof(kept[0]))) { host_log("cast: room %04d record %d (type %d) stays: %s\n", room, k, ep->id, kept[j].why); continue; }
-        want[k] = cast_model((unsigned)o->seed, scene, c, o->cast_all, imports);
+        want[k] = cast_model((unsigned)o->seed, scene, c, o->cast_all, imports, enemy_cast_off());
         rec_chr[k] = (unsigned char)c;
     }
     cast_release();   /* (normally all went with the last room's textures; their buffer is free again) */
@@ -125,8 +127,9 @@ void cast_room(const EnemyOpts* o)
         n++;
         host_log("cast: room %04d record %d (type %d model %d) -> %s (slot %d)\n", room, k, ene[k].id, ene[k].mdlver, name, s);
     }
+    if (o->cast_all == 2) snprintf(custom, sizeof(custom), "custom models: %d checked", cast_custom_count(enemy_cast_off(), imports, NULL));
     host_log("cast: room %04d: %d records drawn as other models in cutscenes (seed %d, %s, %s%s)\n", room, n, o->seed,
-             o->cast_assign ? "random per cutscene" : "fixed", o->cast_all ? "all models" : "cutscene models", imports ? ", imported models" : "");
+             o->cast_assign ? "random per cutscene" : "fixed", o->cast_all == 2 ? custom : o->cast_all ? "all models" : "cutscene models", imports ? ", imported models" : "");
 }
 
 /* a double of a character played: "You appear as" and "Swapped model in cutscenes" decide how it looks. Read when it
