@@ -22,7 +22,7 @@ int g_lang, g_subtitles = 1;
 
 typedef struct LangInfo {
     int ok, subs, nw;
-    char dir[1100];
+    char dir[1200];
     unsigned char w[256];
     unsigned int fstbl[24], fsheader[24];
 } LangInfo;
@@ -54,13 +54,13 @@ void lang_scan(void)
         if (import_sources[s].cat != IMPORT_CAT_LANGUAGES) continue;
         for (int l = 1; l < LANG_COUNT; l++) {
             LangInfo* x = &fresh[l];
-            char base[1100], p[1300], line[2048];
+            char base[1100], p[1300], line[2048];   /* (dir: base + "/xx") */
             unsigned v[256];
             int nf = 0, nh = 0;
             FILE* f;
             if (x->ok) continue;
             import_source_dir(s, base, sizeof(base));
-            snprintf(x->dir, sizeof(x->dir), "%s/%s", base, lang_codes[l]);
+            snprintf(x->dir, sizeof(x->dir), "%s/%.3s", base, lang_codes[l]);
             snprintf(p, sizeof(p), "%s/lang.txt", x->dir);
             if (!(f = pc_fopen(p, "r"))) continue;
             while (fgets(line, sizeof(line), f)) {

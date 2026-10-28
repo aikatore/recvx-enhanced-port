@@ -1,24 +1,28 @@
 # Languages (European disc import)
 
-State document of the language work: what the European disc holds, how the port uses it, the plan and
-how far it is. Nothing from any disc is in the repository: the importer reads the player's own image
-of the European release (**SLES-50306**) and writes what it needs to `<import_dir>/lang/<code>/`
-(default `mods/import/lang/`), as the Outbreak import does ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)).
+State document of the language work: what the European disc holds, how the port uses it, and how far it is.
+Nothing from any disc is in the repository: the importer reads the player's own image of the European release
+(**SLES-50306**) and writes what it needs to `<import_dir>/sles50306/<code>/` (default
+`mods/import/sles50306/fr`, `de`, `es`), as the Outbreak import does ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)).
+The import is `--dev` only (title menu EXTRA > IMPORT > LANGUAGES, or F9); the Language and Subtitles settings are
+always there (English alone until a language is imported).
 
 ## PROGRESS
 
 | Step | State |
 |---|---|
 | 1. Research (this document) | done |
-| 2. Importer: IMPORT > LANGUAGES, `pc/src/import/lang.c` | planned |
-| 3. Runtime: the language overlay, room messages, font widths, file pages, Language setting | planned |
-| 4. Cutscene subtitles, Subtitles setting | planned |
-| 5. Our own texts: the string table, the game font's accents, the overlay | planned |
-| 6. Verification (runs per language, layout check, builds, ctest) | planned |
+| 2. Importer: IMPORT > LANGUAGES, F9, `pc/src/import/lang.c` | done: French, German, Spanish in about 7 s, 18-47 MB each |
+| 3. Runtime: the language's files, room messages, font widths, file pages, the European title and OPTION pictures, Language setting | done |
+| 4. Cutscene subtitles, Subtitles setting | done (French, German, Spanish; English has none on the disc) |
+| 5. Our own texts: `tr()`, the table (French, German, Spanish, Japanese, Russian), the game font's accents, the overlay's fonts | done (about 1150 texts) |
+| 6. Verification | done: runs per language (below), layout check identical, Linux and Windows builds, ctest |
 
-Resume notes: research scripts (Python, capstone in a venv) and runs are in the job folder
-`/home/dev/.claude/jobs/c1d3e63f/lang/` (outside the repository); `x/` there holds the two discs'
-files unpacked with `bsdtar` (`x/us`, `x/pal`), never copied into the repository.
+Resume notes: research scripts (Python, capstone in a venv), the translation pipeline and the runs are in the job
+folder `/home/dev/.claude/jobs/c1d3e63f/lang/` (outside the repository); `x/` there holds the two discs' files
+unpacked with `bsdtar`, never copied into the repository. Headless import:
+`RECVX_MODS=<out> RECVX_IMPORT=sles50306 RECVX_IMPORT_ISO=<SLES image> build/pc/recvx "<US image>" --save-dir <tmp>`
+(exit status 0: every language imported). Then `language = de` (or `fr`, `es`) and `subtitles = 0/1` in recvx.ini.
 
 ## The European disc (SLES-50306)
 
@@ -135,26 +139,102 @@ title rows (EXTRA, MULTIPLAYER, BIORAND, IMPORT) are cut letter by letter from t
 (`lobby_glue.c plate_word`). Only EXTRA's letters (from EXTREAM) are at the same place in every European
 picture; with another language the other rows are drawn in the game's font.
 
-## Design
+## How the port uses it
 
-- **Import** (`pc/src/import/lang.c`, the IMPORT screen's LANGUAGES category, F9): a table of language
-  sources (`lang_sources[]`: disc ID, folder of each language, the executable's tables); the European disc
-  now, Japanese and Russian later. The disc is checked by its `SYSTEM.CNF` (`SLES_503.06`). Per language
-  (French, German, Spanish; the European English is the US text without subtitles and is not installed):
-  `<import_dir>/lang/<code>/` with `SYSMES.ALD` (US order), `SYSTEM.AFS/1`, the differing `ADV.AFS/n`,
-  `MRY.AFS/n`, `ITEM1.AFS/n`, `ITEM2.AFS/n` (as the mods folder names entries), `ROOMS.MES` (the messages of
-  every room) and `lang.txt` (name, source, the width table, the file tables). About 25 MB per language.
-- **Runtime**: setting `language` (`en` default and always there, plus each installed folder). The file
-  loader (`adx.c mod_open_path`) looks in the language's folder after the mods folder and before the disc;
-  `bhSetRoom` swaps the room's message table; `bhGetFontSize` and the direct `FontSz` reads use the
-  language's widths; `fileview.c` uses its file tables. The language changes at the title screen only (the
-  font and system messages are read when a game starts, the title pictures when the title starts).
-- **Subtitles** setting (On by default): per subtitle message, the language's or the US one.
-- **Our texts**: `tr()` with a table keyed by the English text (French, German, Spanish, Japanese, Russian);
-  the game font draws accented letters with the European font's codes when that font is loaded, and the
-  letter without its accent otherwise.
+**Import** (`pc/src/import/lang.c`; `import_sources[]` entry `sles50306`, category `IMPORT_CAT_LANGUAGES`): the
+sources table `lang_discs[]` names per disc its executable (checked in `SYSTEM.CNF`: another image is refused with
+"Use a European Resident Evil Code: Veronica X disc (SLES-50306).") and per language its folder, the digit of its
+file names and its index in the executable's tables. Per language, into `<code>/`:
+
+| File | From | How |
+|---|---|---|
+| `SYSMES.ALD` | `<DIR>/SYSMES<d>.ALD` | rebuilt in the US order (`lang_sysmes`, "System messages"; the US disc's `SYSMES.ALD` is read for its layout); the language's file pages appended |
+| `SYSTEM.AFS/1` | `SYSTEM<d>.AFS` entry 1 | the effect textures with the language's font and its "YOU ARE DEAD" picture |
+| `ADV.AFS/n`, `MRY.AFS/n`, `ITEM1.AFS/n`, `ITEM2.AFS/n` | the language's archives | the entries that differ from the disc's European English |
+| `ROOMS.MES` | `RDX_LNK<d>.AFS` | every room's message table, by room index (`"RMES"`, version, count, offset/size pairs) |
+| `lang.txt` | the executable | written last (a folder without it is not offered): the font's 162 widths, the file tables (`fstbl`, `fsheader` moved to the appended pages), the number of subtitle messages |
+
+The European English is not installed: its text is the US text, and it has no subtitles.
+
+**Run time** (`pc/glue/lang_glue.c`, `lang.h`):
+
+- `lang_scan` (start, after an import or a delete) lists the installed languages; ini `language = fr|de|es`
+  (English when that language is not installed), ini `subtitles` (default On).
+- Files: `audio/adx.c mod_open_path` looks for a file the game opens (by name, or `ARCHIVE.AFS/n`) in BioRand's
+  pack, the mods folder, then the language's folder (upper-case names; the game asks for `sysmes.ald`), then the
+  disc. `pc_lang_file_opened` learns from it which language the loaded font (`SYSTEM.AFS/1`), the title and OPTION
+  pictures (`ADV.AFS/2`, `/4`) and the system messages are in; with `SYSMES.ALD` it puts the language's (or the
+  US) file tables into `fileview.c fstbl / fsheader`.
+- Rooms: `room.c bhSetRoom` (TARGET_PC) replaces `rom->mesp` with a merged table: per message the language's,
+  the US one where the language has none (the 8 rooms with other counts), and for a subtitle (the US message shows
+  nothing) the language's only with Subtitles On. Rooms of the mods folder keep their text; BioRand's are
+  translated. `lang_frame` rebuilds the table when Subtitles changes in a room.
+- Font: `message.c bhGetFontSize` and the direct `FontSz` reads (`adv.c` AdvEasyDispMessage,
+  AutoSaveLoadEasyDispMessage; `system.c`) take the language font's widths while it is loaded (`pc_font_width`).
+- The European title picture: its copyright is one block (`DisplayTitleBg` skips the US second block), the French
+  PRESS START has two rows (`DisplayPressStartPlate`); our title rows MULTIPLAYER, BIORAND and IMPORT, and in OPTION
+  ENHANCED SETTINGS, RETURN TO TITLE, EXIT and the dialogs' YES / NO, are drawn in the game font (translated) when the
+  picture is not the US one (their letters are cut from the US plates); EXTRA keeps its plate letters (EXTREAM is
+  on every European picture).
+- **Language** (GAMEPLAY > GENERAL, F1 and ENHANCED SETTINGS): English and the installed languages in their own
+  names; locked "No other language is installed." or, in a game, "Change it on the title screen." It applies from
+  the next screen: leaving OPTION reloads the title in the new language (checked), a game start reads the system
+  messages and the font, a room its messages. **Subtitles**: locked "No language with subtitles is installed." or,
+  with English chosen, "Only the imported languages have subtitles."
+
+**Our texts** (`pc/src/host/tr.c`, `tr_table.inc`): `tr(en)` looks the English text up (sorted table, binary search;
+an ImGui label's `##id` is kept) and returns the language of the setting, or the English. Translated where they are
+drawn: the game-font text functions (`lobby_glue.c text`, `text_w`, `text_wrap`: every screen using `pc_ui_text*`),
+the dialogs (`pc_ui_dialog*`), the settings' labels, values, help, headings and lock reasons (both menus), the
+bindings' names, the formats of the screens' `snprintf`s, the co-op status and notes, the import's progress, and
+the overlay's ImGui labels (F1, F2, F3, F9). Not translated: names of models and rooms the port lists from its
+own tables (teleport list, imported models), BioRand's seed strings, the co-op texts sent to the partner (its
+lobby note). Test aid: `RECVX_TR_MISSES=file` writes the texts asked for that have no row.
+
+**Letters**: our UTF-8 texts go to the game font through `pc_glyph_next`: with a European font loaded the accented
+letters use its codes (95..149), with the US font the letter without its accent (Français -> Francais). The
+game font has no Cyrillic, kana or kanji (a later Japanese or Russian import brings its own font: their columns
+are in the table, the glyph mapping is to be added then). The overlay (ImGui's default font) has ASCII and
+Latin-1; for Japanese and Russian it merges a font of the system once such a language is chosen (Windows: Meiryo,
+MS Gothic, Yu Gothic / Segoe UI, Arial; Linux: Noto Sans CJK / DejaVu Sans), else those letters stay missing.
+
+**Layout**: the European font is monospaced (16 units for most letters, the US font 10..24), so translated text is
+wider; the translations were kept short (labels at most about 15% longer, sentences 30%) and the long ones
+abbreviated (e.g. German ERW. EINSTELLUNGEN). Rows that still do not fit are scaled down by the menus as before
+(`text_fit`); help lines wrap to their 3 lines.
+
+## Verification (2026-10-28, Linux, headless; job folder `lang/`)
+
+- Import: `imp.sh` (headless) and the IMPORT screen (`impmenu.sh`: EXTRA > IMPORT > LANGUAGES > the disc, START
+  IMPORT, OK, DELETE IMPORTED LANGUAGES, YES): 3 languages, 202 rooms each, 468-471 subtitles; the US disc as the
+  image: refused. A second import gives the same files byte for byte.
+- Per language (French, German, Spanish; `ingame.sh`, `scene.sh`, `menus.sh`, `overlays.sh`): title menu (the
+  European picture, MULTIPLAYER in the font), OPTION (European plates, ENHANCED SETTINGS in the font), every ENHANCED
+  SETTINGS page, the lobby (MULTIPLAYER, HOST A GAME), EXTRA > IMPORT, BIORAND, F1 / F2 / F3 / F9; in a new game the
+  opening's subtitles, the cell's message, the inventory (its pictures and item names), the inventory's help
+  texts, the map, the FILE page and the manual's pages (German: the remapped pages), Rodrigo's scene with Subtitles
+  On (subtitles) and Off (none). English with the languages installed: unchanged (no subtitles, the US font).
+- Switching at the title: GAMEPLAY > Language in ENHANCED SETTINGS, back to the title: the title in the new language.
+- `pc/tools/layout_check.sh` main build vs this build (English): identical. ctest all passed (`import` checks the
+  system messages' rebuild on a synthetic layout).
+
+## Not done, and why
+
+- **English subtitles**: the European English rooms have only the US placeholders; there is no English subtitle
+  text on either disc.
+- **FMV subtitles**: none on the disc (one set of movies, no subtitle data, no code in the executable's movie player).
+- **The European executable's layouts**: about 100 places move text per language (file screen, map, computer
+  terminal, ranking, option plates); the port keeps the US positions. Text sits where the US text sits.
+- **Room textures with writing**: the German room 87 (`RM_5500`) and room 26 (`RM_1050`) have 6 and 2 textures of
+  their own; only messages are taken from rooms (the European rooms also carry non-language changes).
+- **Italian**: planned by Capcom (the executable has its tables) but not on the disc.
+- **Japanese and Russian imports**: not implemented (sources table ready; translations of our texts ready).
 
 ## Notes for later
 
-- Japanese (SLPM-65022) and Russian (a fan translation) imports: add a row to `lang_sources[]` and their font
-  (kana and kanji pages, Cyrillic) handling; our strings for both are in the table already.
+- Japanese (SLPM-65022) and Russian (a fan translation) imports: a row in `import_sources[]` and `lang_discs[]`,
+  their message and font layouts (the Japanese font uses texture pages 1..3 for kanji: `bhDispFont`'s code / 324),
+  and `pc_glyph_next`'s mapping for their letters; our strings for both are in `tr_table.inc` already.
+- Adding a text of ours: write it in English as usual; it is translated where it is drawn if it is a literal
+  (else wrap its format in `tr()`), and needs a row in `tr_table.inc` (the job folder's `tr/` scripts: `keys.py`
+  lists the texts, `check.py` checks a language's file, `gen.py` writes the table).
