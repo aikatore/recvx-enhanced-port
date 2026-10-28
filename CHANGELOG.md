@@ -17,13 +17,10 @@
 
 - **Grenade launcher aim with another Character Model**: in third person the grenade launcher no longer
   points up while aiming with another model; it points at the crosshair.
-- **Co-op card doors**: a door your partner opens with the Emblem Card or the Biohazard Card now opens
-  for you too; before, it let you through but still looked closed.
-- **Co-op levers**: once your partner has moved the submarine's lever or the airport hangar's bridge
-  switch, it reads "<name> already used this" for you until you leave the room; before, pulling it again
-  at once sent the submarine back or lowered the bridge for both.
-- **Co-op airport bridge**: the hangar bridge one of you raises no longer stays down for that player
-  (while it could already be crossed) or rises too high for the other.
+- **Co-op card doors**: a door your partner opens with a card now also looks open for you.
+- **Co-op levers**: the submarine lever and the hangar bridge switch can't be used again right after
+  your partner used them, which used to undo the trip or the bridge for both.
+- **Co-op airport bridge**: the hangar bridge now rises to the same height for both players.
 
 ## 0.6.10 (2026-10-25)
 
