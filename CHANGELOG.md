@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Gameplay
+
+- **Custom cutscene cast**: Model Selection has a new Custom choice. Check the models you want in a
+  list (F1 or the co-op lobby); the choice is saved, and in co-op the host's list counts.
+
 ### Menus
 
 - **OPTION layout**: ENHANCED SETTINGS is now below VIBRATION, in place of DEFAULT (no longer
@@ -10,8 +15,7 @@
 
 ### Co-op
 
-- **Simpler hosting status**: the lobby and F3 no longer show router port-forwarding details; they
-  show the join address and code, and a short hint when your partner may need a co-op server.
+- **Clearer co-op texts**: some wording and information in the lobby and F3 was cleaned up.
 
 ### Fixes
 
@@ -25,6 +29,9 @@
   palace main hall.
 - **Co-op security camera**: in the training facility only the player using the camera sees its view;
   neither of you ends up past the code door.
+- **"Cannot reserve game memory" at start-up**: happens less often, and when another program blocks
+  the game's memory, the message now names it. A full fix is planned for later, as it needs a larger
+  rework done with care.
 
 ## 0.6.10 (2026-10-25)
 

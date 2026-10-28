@@ -757,7 +757,7 @@ picks; no game state, ctest `cast`), `pc/glue/cast_glue.c` (in the game), the di
 | Setting | ini | Values |
 |---|---|---|
 | Randomize Cutscene Cast | `cast_random` | **0 Off**, 1 On (`EnemyOpts.cast`; a file from the first version: 1 Characters and 3 Both read as On, 2 Enemies as Off) |
-| Model Selection (shown while on) | `cast_models` | **0 Cutscene Models**, 1 All Models |
+| Model Selection (shown while on) | `cast_models` | **0 Cutscene Models**, 1 All Models, 2 Custom (below, "Custom") |
 | Model Assignment (shown while on) | `cast_assign` | **0 Per Character**, 1 Per Cutscene |
 | Include Imported Models (shown while on and imported models exist) | `cast_imports` | **0**/1 |
 
@@ -803,7 +803,30 @@ with where the cast records are.
 |---|---|
 | *Cutscene Models* | the cutscene models with a face mask: Steve (catalogue 3), Wesker (5), Alfred (8), Alexia (12), Rodrigo (13) |
 | *All Models* | the five player files (`ACTOR_PART + n`) and every listed humanoid catalogue model (`anim` not `ANIM_IDLE`, not a hidden twin): the cast, Alexia's first form, Nosferatu, the Tyrant, Monster Steve, the Hunters, the Bandersnatch, the anatomist, and **the zombies as one entry** (`CAST_ZOMBIES`): a character that draws it gets one of the 27 zombie looks, from (seed, scene, character) (`cast_zombie_look`: Per Character, the same look everywhere; Per Cutscene, per room). As 27 entries they were more than half of the pool, and most characters became zombies. Not "Alfred Ashford (Wounded)" (a special state). No other family is large: each player character has two or three looks (its player files and its cutscene model), Hunter and Sweeper two; the event models and Tyrant 2 are hidden twins already |
+| *Custom* | the *All Models* entries the player checked ("Custom" below) |
 | with imported models | the imported models after them (playable characters and NPCs, `IMPORT_OFFERED`: people with jaw and lid bones, [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md) "Faces", so they count as cutscene models: their jaw follows the record's mask, `imp_face`) |
+
+### Custom
+
+*Custom* is the *All Models* pool (with Include Imported Models on, the imported models too) cut down to the
+entries the player checks in a list: SELECT ALL / DESELECT ALL, then a check box per entry, in the order and
+groups of the lobby's model page (`cast_custom_list`: the "You appear as" list's order, the zombies' one entry
+where their looks start, the imports last). Shared code `pc/glue/cast_list.c`, shown at two places: the lobby's
+CUTSCENE CAST page (CHOOSE MODELS, "12 of 16", opens it as step 8) and the BIORAND screen's EXTRA OPTIONS page
+(Choose Models; `--dev`); F1 shows the same list as check boxes under Model Selection
+(`overlay.cpp cast_custom_imgui`). OPTION > ENHANCED SETTINGS shows only the value.
+
+* Stored as the entries **not** checked (so a model imported later starts checked): `cast_off`, a bit per
+  position in `cast_pool(1, every import)` (the built-in entries, then import k). In `recvx.ini` one line per
+  unchecked entry, by key, not position: `cast_custom_off = Tyrant` (the list's name; the zombies' entry
+  `Zombies`), an import by its folder, `cast_custom_off = import:HN01` (names repeat). Read after the imports are
+  listed (`config_load`); a key no entry has (an import deleted since) is ignored and dropped at the next save.
+* **Nothing checked**: nothing to swap; every character keeps its own look (`cast_model` returns -1; the list
+  says "0/16" in amber). One checked: every character but that model's own is drawn as it (a character whose
+  only choices are its own looks stays itself, e.g. Steve with only Steve's player file checked).
+* Co-op: the host's list goes to the guest (`EV_CASTOFF`, protocol 31: the bit list in 64-byte chunks, each
+  chunk that changed, all to a new partner, before `EV_EOPTS`), so both pick from the host's; the guest's own
+  list stays in its `recvx.ini`. Imported entries count only while both sides have the same imports, as before.
 
 ### The picks
 
@@ -814,7 +837,7 @@ switch to Chris, was drawn as Chris's cutscene model: it looked as if Chris's pa
 Chris instead of the chosen model). Claire and Chris themselves are still cast when they appear as the
 other, non-played character.
 
-`cast_model(seed, scene, character)`: all seven characters are assigned at once from a Fisher-Yates
+`cast_model(seed, scene, character, ...)`: all seven characters are assigned at once from a Fisher-Yates
 shuffle of the pool by xorshift32 seeded with (seed, scene): each character in turn takes the first model
 of the shuffle not taken and not its own look (its own cutscene model or player file); when only its own
 are left it trades with an earlier character; with the pool used up (seven characters, five cutscene

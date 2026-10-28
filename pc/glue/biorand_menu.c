@@ -4,7 +4,8 @@
  * (options_glue.c pc_ui_dialog). States:
  *   BS_MENU    the generator's pages SEED, DOORS, ITEMS, ENEMIES, EXTRA OPTIONS: BioRand's options
  *              (biorand_opts.h; each change re-encodes the seed string into recvx.ini biorand_seed),
- *              the doors estimate, the item and enemy distribution bars, the seed string's copy / paste
+ *              the doors estimate, the item and enemy distribution bars, the seed string's copy / paste;
+ *              on EXTRA OPTIONS, Choose Models opens the cutscene cast's "Custom" list there (cast_list.c, bm.list).
  *   BS_ASK     a Yes/No question over it (A_DOWNLOAD with no CLI: No leaves; A_CHECK; A_NEWER; A_GEN; A_DISK: GENERATE's
  *              warning when the mods folder's disk has less than GEN_WARN_MB free)
  *   BS_WORK    the downloader's thread runs (pc/src/net/biorand_dl.h): its stage, a bar, MB, CANCEL; or the
@@ -29,6 +30,7 @@
 #include "../src/host/settings.h"
 #include "../src/host/bindings.h"
 #include "../src/host/enemies.h"
+#include "../src/host/cast.h"
 #include "../src/host/biorand_opts.h"
 #include "../src/net/biorand_dl.h"
 #include "../src/host/biorand.h"
@@ -52,6 +54,12 @@ int pc_in_game(void);   /* options_glue.c */
 void pc_ui_dialog_btns(float y0, float y1, float z, const char* l1, const char* l2, float sc2, unsigned int col2, int lines,
                        const char* const* b, int n, int sel);
 int pc_ui_dialog_btns_hit(float y1, const char* const* b, int n, float x, float y);
+/* cast_list.c: the cutscene cast's "Custom" list (the lobby's too); 1 back */
+void cast_list_open(float x0, float x1, float y0, float h, float sc, int rows);
+int  cast_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
+void cast_list_draw(void);
+const char* cast_list_help(void);
+const char* cast_list_summary(const unsigned char* off, int imports, char* buf, int n);
 static const char* const diff_btn[] = { "NORMAL", "EASY", "VERY EASY", "CANCEL" };   /* sys->gm_mode 0, 1, 2 (adv.c NewGameDef) */
 
 enum { BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };
@@ -62,7 +70,7 @@ enum { A_DOWNLOAD, A_CHECK, A_NEWER, A_GEN, A_HOST, A_DIGEST, A_DISK };
 enum { PG_SEED, PG_DOORS, PG_ITEMS, PG_ENEMIES, PG_PORT, PG_N };
 static const char* const page_names[PG_N] = { "SEED", "DOORS", "ITEMS", "ENEMIES", "EXTRA OPTIONS" };
 /* row kinds: K_OPT a biorand_opt[] row, K_SET a settings table row (the cutscene cast) */
-enum { K_PAGE, K_OPT, K_RANDOM, K_COPY, K_PASTE, K_GEN, K_START, K_CHECK, K_APPEAR, K_SET, K_BACK };
+enum { K_PAGE, K_OPT, K_RANDOM, K_COPY, K_PASTE, K_GEN, K_START, K_CHECK, K_APPEAR, K_SET, K_CUSTOM, K_BACK };   /* K_CUSTOM: the cast's "Custom" list */
 typedef struct { int kind, idx; } Row;
 #define MAX_ROWS 30          /* (ROW_Z has room for 30; ITEMS has 27) */
 
@@ -119,6 +127,7 @@ static struct {
     int err;
     MouseTake mt;
     int page, top, seed_i;              /* seed_i: the Seed row of biorand_opt[] */
+    int list;                           /* the cutscene cast's "Custom" list is up (cast_list.c) */
     int edit, caret, pasting, blink;    /* the seed number is typed; the clipboard was asked for (lobby_io.c) */
     char buf[12];
     char say[192];
@@ -330,6 +339,7 @@ static void build_rows(void)
         for (int k = 0; k < 4; k++) {
             const Setting* s = cast_row(k);
             if (s && (!s->shown || s->shown())) add(K_SET, (int)(s - g_settings));
+            if (k == 1 && g_enemy_opts.cast && g_enemy_opts.cast_all == 2) add(K_CUSTOM, 0);   /* (after Model Selection) */
         }
     } else
         for (int i = 0; i < biorand_opt_n; i++)
@@ -560,6 +570,7 @@ static int activate(const Row* r)
         bm.sel = 0;
         return 0;
     case K_CHECK: CallSystemSe(0, 3); ask(A_CHECK); return 0;
+    case K_CUSTOM: bm.list = 1; cast_list_open(ROW_X, 600, ROW_Y0, ROW_H, ROW_SC, 10); host_log("biorand menu: the cutscene cast's custom models\n"); return 0;
     case K_BACK: CallSystemSe(0, 0); return 1;
     default: change(r, 1); return 0;   /* K_APPEAR, K_SET */
     }
@@ -647,6 +658,7 @@ static int input(void)
     if (press || rept || m->left || m->right || m->moved || m->wheel || bm.state == BS_WORK || g_lobby_io.head != g_lobby_io.tail)
         StopAdvScreenSaver(0);   /* (a download is no idle screen) */
     if (bm.state == BS_MENU) {
+        if (bm.list) { if (cast_list_input(m, press, rept, ok, cancel)) bm.list = 0; return 0; }
         if (bm.edit) {
             if (m->left && row_at(m->x, m->y) != bm.row) edit_end(1);   /* a click elsewhere takes the number */
             else if (m->right) edit_end(0);
@@ -750,7 +762,7 @@ static void draw_row(int i)
     float y = i ? row_y(i) : PAGE_Y;
     unsigned int col = !live ? (sel ? 0xFF909090 : 0xFF686868) : sel ? 0xFFFFFFFF : 0xFFB0B0B0;
     static const char* const names[] = { "", "", "RANDOM SEED", "COPY SEED STRING", "PASTE SEED STRING", "GENERATE", "START",
-                                         "CHECK FOR UPDATES", "Randomize Character Model", "", "BACK" };
+                                         "CHECK FOR UPDATES", "Randomize Character Model", "", "Choose Models", "BACK" };
     char v[96];
     if (sel) pc_ui_rect(ROW_X - 8, y - 3, 600, y + ROW_H - 4, bm.edit ? 0x60406080 : 0x50FFFFFF, Z_ROW);
     switch (r->kind) {
@@ -785,6 +797,10 @@ static void draw_row(int i)
         return;
     }
     case K_APPEAR: snprintf(v, sizeof(v), "%s", g_biorand_appear ? "On" : "Off"); break;
+    case K_CUSTOM:   /* how many are checked; confirm opens the list */
+        text_fit(ROW_X, y, names[r->kind], ROW_SC, VAL_X - 16 - ROW_X, col);
+        text_fit(VAL_X + 12, y, cast_list_summary(cast_off, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, v, sizeof(v)), ROW_SC, 196, col);
+        return;
     case K_SET: {
         const Setting* s = &g_settings[r->idx];
         text_fit(ROW_X, y, s->label, ROW_SC, VAL_X - 16 - ROW_X, col);
@@ -879,6 +895,7 @@ static void help_text(char* t, int n, unsigned int* col)
     *col = 0xFFA0D0FF;
     if (bm.edit) { snprintf(t, n, tr("Type seed 0 to %d. Enter: confirm; Esc: cancel; gamepad: up/down edits, left/right moves."), BIORAND_SEED_MAX); return; }
     if (bm.say_t > 0) { snprintf(t, n, "%s", bm.say); *col = bm.say_err ? 0xFFFFC060 : 0xFFFFE080; return; }
+    if (bm.list) { snprintf(t, n, "%s", cast_list_help()); return; }
     switch (r->kind) {
     case K_PAGE:
         snprintf(t, n, tr("Left/right or %s: change page; up/down: choose an option. Changes save automatically."), page_keys(k, sizeof(k)));
@@ -907,6 +924,7 @@ static void help_text(char* t, int n, unsigned int* col)
     case K_APPEAR:
         snprintf(t, n, tr("Choose a character model for each generated seed. Saved separately from the seed string."));
         return;
+    case K_CUSTOM: snprintf(t, n, "Choose the models the characters can appear as."); return;
     case K_SET: {
         const Setting* s = &g_settings[r->idx];
         snprintf(t, n, "%s%s%s", why ? why : "", why ? " " : "", s->help ? tr(s->help) : "");
@@ -925,16 +943,17 @@ static void draw_page(void)
     draw_row(0);
     if (bm.state != BS_MENU) return;   /* (text is drawn over any box: a dialog shows the page row only) */
     pc_ui_rect(40, 94.5f, 600, 95.5f, 0x60FFFFFF, Z_RULE);
-    for (int i = bm.top; i < nrows && i < bm.top + VISIBLE; i++) draw_row(i);
-    if (bm.top > 1) {   /* more above / below */
+    if (bm.list) cast_list_draw();
+    for (int i = bm.top; !bm.list && i < nrows && i < bm.top + VISIBLE; i++) draw_row(i);
+    if (bm.top > 1 && !bm.list) {   /* more above / below */
         NJS_POLYGON_VTX v[3] = { { 604, 106, 0.3f, 0xFFA0A0A0 }, { 616, 106, 0.3f, 0xFFA0A0A0 }, { 610, 99, 0.3f, 0xFFA0A0A0 } };
         njDrawPolygon(v, 3, 1);
     }
-    if (nrows > bm.top + VISIBLE) {
+    if (nrows > bm.top + VISIBLE && !bm.list) {
         NJS_POLYGON_VTX v[3] = { { 604, 300, 0.3f, 0xFFA0A0A0 }, { 616, 300, 0.3f, 0xFFA0A0A0 }, { 610, 307, 0.3f, 0xFFA0A0A0 } };
         njDrawPolygon(v, 3, 1);
     }
-    draw_info();
+    if (!bm.list) draw_info();
     help_text(t, sizeof(t), &col);
     pc_ui_text_wrap(24, 390, 592, t, 0.5f, col, 5);
 }
@@ -983,6 +1002,7 @@ void pc_biorand_menu_close(void)
     if (bm.state == BS_WORK) biorand_cli_cancel();   /* the title ends (a soft reset): the download with it */
     if (bm.host) coop_biorand_reply(bm.done ? 2 : 0);   /* the lobby again: the pack compared, or we leave */
     g_lobby_io.text_on = 0;
+    g_lobby_io.list_on = 0;
     bm.open = 0;
     host_log("biorand menu: closed\n");
 }
@@ -1020,6 +1040,7 @@ int pc_biorand_menu(void)
         g_lobby_io.paste_req = 0;
         paste_end(g_lobby_io.paste);
     }
+    g_lobby_io.list_on = bm.list;   /* (Page Up / Down, Home, End) */
     if (bm.state == BS_WORK) r = work_end();
     else if (bm.host && !coop_biorand_offer(NULL)) r = 1;   /* the session ended, or the host's pack is no longer needed */
     build_rows();

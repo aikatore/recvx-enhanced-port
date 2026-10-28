@@ -184,7 +184,7 @@ static int zero_or(const char* b, int n, const char* set)
 }
 
 /* events only the host sends (it runs the session and the enemies), and those only a guest sends */
-static int host_only(int t) { return t == EV_PLY_HIT || t == EV_BLOB || t == EV_GRAB || t == EV_BOXFIX || t == EV_SPAWN || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED; }
+static int host_only(int t) { return t == EV_PLY_HIT || t == EV_BLOB || t == EV_GRAB || t == EV_BOXFIX || t == EV_SPAWN || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED || t == EV_CASTOFF; }
 static int guest_only(int t) { return t == EV_UNGRAB || t == EV_GONE || t == EV_OWN; }
 
 int coop_check_event(const Event* e, int from_host)
@@ -260,7 +260,7 @@ int coop_check_event(const Event* e, int from_host)
         return fin(e->u.sp.px) && fin(e->u.sp.py) && fin(e->u.sp.pz) ? COOP_OK : COOP_BAD_FLOAT;
     case EV_EOPTS:
         return e->u.eo.extra >= 0 && e->u.eo.extra <= 3 && (unsigned)e->u.eo.place <= 1 && (unsigned)e->u.eo.rand <= 1 && e->u.eo.seed >= 0 &&
-               (unsigned)e->u.eo.variety <= 1 && (unsigned)e->u.eo.events <= 1 && (unsigned)e->u.eo.cast <= 1 && (unsigned)e->u.eo.cast_all <= 1 &&
+               (unsigned)e->u.eo.variety <= 1 && (unsigned)e->u.eo.events <= 1 && (unsigned)e->u.eo.cast <= 1 && (unsigned)e->u.eo.cast_all <= 2 &&
                (unsigned)e->u.eo.cast_assign <= 1 && (unsigned)e->u.eo.cast_imports <= 1 ? COOP_OK : COOP_BAD_FIELD;
     case EV_FX:   /* (a burst: Event.idx is not read) */
         if (e->u.fx.id == FX_BURST) {   /* counts and times bounded (the effect loops over them), floats finite */
@@ -291,6 +291,9 @@ int coop_check_event(const Event* e, int from_host)
     case EV_BRSEED:   /* "R840-XXXX-..." in BioRand's alphabet (upper case), the digest in lower-case hex */
         if (!zero_or(e->u.br.str, COOP_BR_STR, "0123456789ABCEFGHJKLMNPQRTUVWXYZ-") || !zero_or(e->u.br.dig, COOP_BR_DIG, "0123456789abcdef")) return COOP_BAD_FIELD;
         return !e->u.br.str[0] || (e->u.br.str[0] == 'R' && e->u.br.str[4] == '-' && e->u.br.str[9] == '-') ? COOP_OK : COOP_BAD_FIELD;
+    case EV_CASTOFF:   /* a chunk of the bit list, in place */
+        return e->u.co.n >= 1 && e->u.co.n <= COOP_CASTOFF_CHUNK && !(e->u.co.at % COOP_CASTOFF_CHUNK) && e->u.co.at + e->u.co.n <= COOP_CASTOFF_MAX &&
+               !e->u.co.pad ? COOP_OK : COOP_BAD_FIELD;
     case EV_GONE:
         if (e->u.gn.n < 1 || e->u.gn.n > COOP_GONE_MAX || e->idx > 9) return COOP_BAD_COUNT;
         for (k = 0; k < e->u.gn.n; k++)

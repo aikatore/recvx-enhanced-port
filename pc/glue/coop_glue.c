@@ -2514,9 +2514,31 @@ static void own_restore(void)
    randomizer change records at the room load on both sides alike */
 static EnemyOpts eopts_sent;
 static unsigned int eopts_sid;          /* the partner session they went to */
+/* and the cutscene cast's "Custom" list (cast.h cast_off, EV_CASTOFF, protocol 31): each chunk that changed, all of
+   it to a new partner; before the options that use it */
+_Static_assert(CAST_OFF_BYTES <= COOP_CASTOFF_MAX, "EV_CASTOFF");
+static unsigned char castoff_sent[CAST_OFF_BYTES];
+static unsigned int castoff_sid;
+static void castoff_sync(void)
+{
+    int at, n;
+    for (at = 0; at < CAST_OFF_BYTES; at += COOP_CASTOFF_CHUNK) {
+        Event e = { 0 };
+        n = CAST_OFF_BYTES - at < COOP_CASTOFF_CHUNK ? CAST_OFF_BYTES - at : COOP_CASTOFF_CHUNK;
+        if (castoff_sid == peer_sid && !memcmp(castoff_sent + at, cast_off + at, n)) continue;
+        e.type = EV_CASTOFF;
+        e.u.co.at = (uint16_t)at;
+        e.u.co.n = (uint8_t)n;
+        memcpy(e.u.co.bits, cast_off + at, n);
+        memcpy(castoff_sent + at, e.u.co.bits, n);
+        queue_event(&e);
+    }
+    castoff_sid = peer_sid;
+}
 static void eopts_send(void)
 {
     Event e = { 0 };
+    castoff_sync();
     e.type = EV_EOPTS;
     e.u.eo = g_enemy_opts;
     queue_event(&e);
@@ -2590,6 +2612,7 @@ static void enemy_sync(void)
     static int was;
     int now;
     if (!is_host || !have_peer || echo_delay) { was = 0; return; }
+    castoff_sync();
     if (eopts_sid != peer_sid || memcmp(&eopts_sent, &g_enemy_opts, sizeof(eopts_sent))) eopts_send();
     brseed_sync();
     if (kept_out.sent_sid != peer_sid && have_rx && (rx.flags & (PF_IN_GAME | PF_VISIBLE)) == (PF_IN_GAME | PF_VISIBLE)) kept_send();
@@ -5827,6 +5850,7 @@ static void skip_frame(void)
 static int apply_event(const Event* e)
 {
     if (e->type == EV_EOPTS) { if (!is_host) enemy_opts_from_host(&e->u.eo); return 1; }   /* before the blob it precedes */
+    if (e->type == EV_CASTOFF) { if (!is_host) enemy_cast_off_from_host(e->u.co.at, e->u.co.n, e->u.co.bits); return 1; }   /* (and EV_EOPTS) */
     if (e->type == EV_BRSEED) {   /* the host's BioRand seed string (checked: coop_check_event; decoded here) and CLI digest */
         BioOpts o;
         memcpy(br_str, e->u.br.str, COOP_BR_STR);

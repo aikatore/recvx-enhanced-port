@@ -514,7 +514,7 @@ count for both. Code: `pc/glue/enemyopt_glue.c`, one decomp hook at the end of
 | "Enemy Seed" (GAMEPLAY) | `enemy_seed` | seed for placements and randomizer | `RECVX_ENEMY_SEED` |
 | "Randomizer Variety" (GAMEPLAY) | `enemy_variety` | 0 = Mild, **1 = Wild** | `RECVX_ENEMY_VARIETY` |
 | "Randomize Event Enemies" (GAMEPLAY) | `enemy_random_events` | 0/**1** | `RECVX_ENEMY_EVENTS` |
-| "Randomize Cutscene Cast" and its page (GAMEPLAY, CUTSCENE CAST) | `cast_random`, `cast_models`, `cast_assign`, `cast_imports` | the story characters drawn as other models in cutscenes, visual only (no enemy is touched): [ACTORS.md](ACTORS.md) "Cutscene cast" | `RECVX_CAST` |
+| "Randomize Cutscene Cast" and its page (GAMEPLAY, CUTSCENE CAST) | `cast_random`, `cast_models`, `cast_assign`, `cast_imports`, `cast_custom_off` lines | the story characters drawn as other models in cutscenes, visual only (no enemy is touched): [ACTORS.md](ACTORS.md) "Cutscene cast" | `RECVX_CAST` |
 
 Every option first reads the room script once per load (`scan_script`) and marks records that an
 event drives (`LoadWork`, motion pauses, links, positioning, zombie/face/look/render ops), that the

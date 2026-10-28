@@ -40,6 +40,7 @@ static Event ev(int type)
     case EV_OWN: e.u.blob.total = COOP_OWN_SIZE; e.u.blob.off = 1536; e.u.blob.len = 28; e.u.blob.pad = 1; break;
     case EV_GONE: e.u.gn.n = 2; e.u.gn.slot[0] = 3; e.u.gn.id[0] = 1; e.u.gn.slot[1] = 30; e.u.gn.id[1] = 1; break;
     case EV_SKIP: e.stg = 0; e.rom = 2; e.u.sk.op = SKIP_GO; break;
+    case EV_CASTOFF: e.u.co.at = 4 * COOP_CASTOFF_CHUNK; e.u.co.n = 9; e.u.co.bits[0] = 0x5A; break;
     case EV_BRSEED: memcpy(e.u.br.str, "R840-T1C0-XXHH4HZZZMEZ9H0007JZZZZZZZ5ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ", COOP_BR_STR);
                     memcpy(e.u.br.dig, "8465e8280f3a", COOP_BR_DIG); break;
     case EV_FX: e.idx = 4; e.u.fx.id = 350; e.u.fx.flg = 1; e.u.fx.owner = 4; e.u.fx.txp = 0; e.u.fx.mlw = -1; e.u.fx.stflg = 0x20; e.u.fx.tex_id = 7;   /* a zombie's vomit */
@@ -48,7 +49,7 @@ static Event ev(int type)
     return e;
 }
 static int host_sends(int t) { return t != EV_UNGRAB && t != EV_GONE && t != EV_OWN; }
-static int guest_sends(int t) { return t != EV_PLY_HIT && t != EV_BLOB && t != EV_GRAB && t != EV_BOXFIX && t != EV_SPAWN && t != EV_EOPTS && t != EV_SKIP && t != EV_BRSEED; }
+static int guest_sends(int t) { return t != EV_PLY_HIT && t != EV_BLOB && t != EV_GRAB && t != EV_BOXFIX && t != EV_SPAWN && t != EV_EOPTS && t != EV_SKIP && t != EV_BRSEED && t != EV_CASTOFF; }
 
 /* a generic EV_FX of effect `id` as its FxRule allows it (any rule's for an id without one) */
 static Event fx_sample(int id)
@@ -199,6 +200,16 @@ static void test_events(void)
     BAD(EV_BRSEED, 1, e->u.br.dig[0] = '\n');
     { Event e = ev(EV_BRSEED); memset(e.u.br.str, 0, sizeof(e.u.br.str)); CHECK(coop_check_event(&e, 1) == COOP_OK); }   /* unknown */
     { Event e = ev(EV_BRSEED); memset(e.u.br.dig, 0, sizeof(e.u.br.dig)); CHECK(coop_check_event(&e, 1) == COOP_OK); }
+    /* EV_CASTOFF (protocol 31): a chunk of the host's "Custom" list, in place; EV_EOPTS's cast_all 2 */
+    BAD(EV_CASTOFF, 0, (void)0);                         /* the host's only */
+    BAD(EV_CASTOFF, 1, e->u.co.n = 0);
+    BAD(EV_CASTOFF, 1, e->u.co.n = COOP_CASTOFF_CHUNK + 1);
+    BAD(EV_CASTOFF, 1, e->u.co.n = 17);                  /* past the list's end */
+    BAD(EV_CASTOFF, 1, e->u.co.at = 3);                  /* not a chunk's start */
+    BAD(EV_CASTOFF, 1, e->u.co.at = 5 * COOP_CASTOFF_CHUNK);
+    BAD(EV_CASTOFF, 1, e->u.co.pad = 1);
+    { Event e = ev(EV_CASTOFF); e.u.co.at = 0; e.u.co.n = COOP_CASTOFF_CHUNK; CHECK(coop_check_event(&e, 1) == COOP_OK); }
+    { Event e = ev(EV_EOPTS); e.u.eo.cast_all = 2; CHECK(coop_check_event(&e, 1) == COOP_OK); }
     /* EV_GONE: 1..COOP_GONE_MAX enemy slots below COOP_ENE_SLOTS, a room case */
     BAD(EV_GONE, 0, e->u.gn.n = 0);
     BAD(EV_GONE, 0, e->u.gn.n = COOP_GONE_MAX + 1);
@@ -252,7 +263,7 @@ static void test_events(void)
     BAD(EV_EOPTS, 1, e->u.eo.variety = 2);
     BAD(EV_EOPTS, 1, e->u.eo.events = -1);
     BAD(EV_EOPTS, 1, e->u.eo.cast = 2);
-    BAD(EV_EOPTS, 1, e->u.eo.cast_all = 2);
+    BAD(EV_EOPTS, 1, e->u.eo.cast_all = 3);
     BAD(EV_EOPTS, 1, e->u.eo.cast_assign = -1);
     BAD(EV_EOPTS, 1, e->u.eo.cast_imports = 2);
     /* EV_FX: an effect number the game has, references to an enemy slot or FX_*, finite floats; bursts bounded */

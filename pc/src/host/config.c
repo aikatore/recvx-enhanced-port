@@ -5,6 +5,7 @@
 #include "tps.h"
 #include "menu_mouse.h"
 #include "enemies.h"
+#include "cast.h"
 #include "bindings.h"
 #include "modern.h"
 #include "../net/rdv_proto.h"
@@ -95,7 +96,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "enemy_variety", &g_enemy_opts.variety, 0, 1 },    /* 0 Mild, 1 Wild */
     { "enemy_random_events", &g_enemy_opts.events, 0, 1 },
     { "cast_random", &g_enemy_opts.cast, 0, 3 },         /* cutscene cast (docs/ACTORS.md "Cutscene cast"): 0/1 (an older 2, Enemies, is off; 3, Both, on: config_load) */
-    { "cast_models", &g_enemy_opts.cast_all, 0, 1 },     /* characters: 0 cutscene models, 1 all models */
+    { "cast_models", &g_enemy_opts.cast_all, 0, 2 },     /* characters: 0 cutscene models, 1 all models, 2 custom (cast_custom_off lines) */
     { "cast_assign", &g_enemy_opts.cast_assign, 0, 1 },  /* 0 fixed per character, 1 random per cutscene */
     { "cast_imports", &g_enemy_opts.cast_imports, 0, 1 },
     { "subtitles", &g_subtitles, 0, 1 },                  /* cutscene subtitles in the language (lang.h) */
@@ -177,12 +178,20 @@ void config_load(void)
         else if (sscanf(line, " biorand_cli_digest = %71s", g_biorand_cli_digest) == 1) continue;   /* the installed BioRand CLI (biorand_dl.h) */
         else if (sscanf(line, " biorand_seed = %71s", g_biorand_seed) == 1) continue;   /* the BioRand generator's options (biorand_opts.h), checked when used */
         else if (sscanf(line, " biorand_appear = %d", &g_biorand_appear) == 1) { g_biorand_appear = g_biorand_appear != 0; continue; }   /* "Randomize Played as" (biorand_opts.h) */
+        else if (!strncmp(line, "cast_custom_off =", 17)) continue;   /* (below, once the imports are listed) */
         else if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, val) == 2 && bind_ini_line(k, trim(val))) continue;
         else if (sscanf(line, " %63[a-z_0-9] = %d", k, &v) == 2)
             for (size_t i = 0; i < SDL_arraysize(keys); i++)
                 if (!strcmp(k, keys[i].key) && v >= keys[i].lo && v <= keys[i].hi) *keys[i].val = v;
-    fclose(f);
     import_registry_load();   /* the imported player models: their chr values exist from here */
+    rewind(f);   /* the cutscene cast's "Custom": a line per model not checked, by its key (cast.h; an unknown one is ignored) */
+    while (fgets(line, sizeof(line), f))
+        if (!strncmp(line, "cast_custom_off =", 17)) {
+            char* v = line + 17 + strspn(line + 17, " ");
+            v[strcspn(v, "\r\n")] = 0;
+            cast_off_key(trim(v));
+        }
+    fclose(f);
     /* a file from before Combined (no fixed_cam_version line): Modern, the default then and always
        written, becomes Combined; Classic, never the default since Modern, stays */
     if (!combined_seen && g_modern_on == 1) g_modern_on = MODERN_COMBINED;
@@ -214,6 +223,8 @@ static void default_name(void)
         if (!(SDL_isalnum((unsigned char)*d) || strchr(" -_.!?'()+", *d))) *d = '_';
 }
 
+static void off_line(const char* key, void* f) { fprintf((FILE*)f, "cast_custom_off = %s\n", key); }
+
 static int write_ini(FILE* f, void* ud)
 {
     (void)ud;
@@ -236,6 +247,7 @@ static int write_ini(FILE* f, void* ud)
     if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);
     if (g_biorand_seed[0]) fprintf(f, "biorand_seed = %s\n", g_biorand_seed);
     if (g_biorand_appear) fprintf(f, "biorand_appear = 1\n");   /* (like biorand_seed: only once set, in the --dev screen) */
+    cast_off_write(off_line, f);
     bind_ini_write(f);
     return 0;
 }
