@@ -642,15 +642,13 @@ static void coop_window(void)
         char addr[80];
         ImGui::SeparatorText("Internet");
         ImGui::Text("Local address: %s", pm.local_ip[0] ? coop_shown(pm.local_ip) : "?");
-        ImGui::Text("Public address: %s", pm.public_ip[0] ? coop_shown(pm.public_ip) : pm.state == PM_BUSY ? "looking..." : "unknown");
-        if (pm.state == PM_FAILED) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.3f, 1.0f));
-        if (pm.msg[0]) ImGui::TextWrapped("%s", coop_shown(pm.msg));
-        if (pm.state == PM_FAILED) ImGui::PopStyleColor();
         if (pm.public_ip[0]) snprintf(addr, sizeof(addr), "%s:%d#%s", pm.public_ip, pm.public_port, cs.code);
         else snprintf(addr, sizeof(addr), "%s:%d#%s", pm.local_ip, c->port, cs.code);
         if (ImGui::Button(pm.public_ip[0] ? "Copy Join Address" : "Copy Local Address")) SDL_SetClipboardText(addr);
         ImGui::SameLine();
         ImGui::TextDisabled("%s", coop_shown(addr));
+        if (!pm.public_ip[0] && pm.state != PM_BUSY && !cs.room[0] && cs.state != COOP_CONNECTED)   /* (the router's status: the log only) */
+            ImGui::TextDisabled("If your partner can't connect, use a co-op server (Automatic).");
     }
     if (cs.at_title)
         ImGui::TextDisabled("Host: start or load a game from the title screen.\n"

@@ -1583,12 +1583,13 @@ static void draw_info(void)
     }
     portmap_status(&pm);
     if (lb.mode || !(pm.local_ip[0] || pm.msg[0])) return;
-    snprintf(line, sizeof(line), "LAN %s:%d   PUBLIC %s", pm.local_ip[0] ? pm.local_ip : "?", g_coop.port,
-             pm.public_ip[0] ? pm.public_ip : pm.state == 1 ? "looking..." : "unknown");
-    if (pm.public_ip[0]) snprintf(line + strlen(line), sizeof(line) - strlen(line), ":%d", pm.public_port);
+    /* the address COPY JOIN ADDRESS gives (the router's port mapping runs as before; its status is only in the log) */
+    if (pm.public_ip[0]) snprintf(line, sizeof(line), "ADDRESS %s:%d", pm.public_ip, pm.public_port);
+    else snprintf(line, sizeof(line), "ADDRESS %s:%d", pm.local_ip[0] ? pm.local_ip : "?", g_coop.port);
     if (g_coop.code[0]) snprintf(line + strlen(line), sizeof(line) - strlen(line), "   CODE %.4s-%.4s", g_coop.code, g_coop.code + 4);
     text(24, y, coop_shown(line), 0.52f, col); y += 16;
-    if (pm.msg[0] && y < 470) text_wrap(24, y, 592, coop_shown(pm.msg), 0.48f, pm.state == 3 ? 0xFFFFC060 : 0xFFA0A0A0, y < 455 ? 2 : 1);   /* UPnP */
+    if (!pm.public_ip[0] && pm.state != PM_BUSY && g_coop.state != COOP_CONNECTED && y < 470)   /* no internet address: direct joins likely fail */
+        text(24, y, "If your partner cannot connect, set CONNECT to Via server.", 0.48f, 0xFFA0A0A0);
 }
 
 /* our model and, at the title with us, the partner's, with their names */
