@@ -24,6 +24,8 @@
   palace main hall.
 - **Co-op security camera**: in the training facility only the player using the camera sees its view;
   neither of you ends up past the code door.
+- **"Cannot reserve game memory" at start-up**: happens less often, and when another program blocks
+  the game's memory, the message now names it.
 
 ## 0.6.10 (2026-10-25)
 
