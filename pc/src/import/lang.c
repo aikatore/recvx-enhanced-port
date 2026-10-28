@@ -109,7 +109,14 @@ static void mes_write(const Mes* m, unsigned char* out)
         o += 2 * m->len[i];
     }
 }
-static int visible(const uint16_t* t) { for (; *t != 0xFFFF; t++) if (*t < 0xFE00) return 1; return 0; }
+static int visible(const uint16_t* t)   /* a glyph or an item name (0xFF02's operand is a wait) */
+{
+    for (; *t != 0xFFFF; t++) {
+        if (*t < 0xFE00 || *t == 0xFF03) return 1;
+        if (*t == 0xFF02 && t[1] != 0xFFFF) t++;
+    }
+    return 0;
+}
 static const uint16_t empty_mes[1] = { 0xFFFF };
 
 /* SYSMES.ALD: u32 n, the item names' table (n bytes), u32, the system messages' table */
@@ -243,7 +250,7 @@ static int rooms(FILE* f, const char* dir, const char* rdx, const char* lname, i
         uint32_t hed, mp, mn, end;
         long xn;
         Mes* m;
-        snprintf(pg->phase, sizeof(pg->phase), "%s: room messages", lname);
+        snprintf(pg->phase, sizeof(pg->phase), tr("%s: room messages"), lname);
         pg->done++;
         if (!a[i].size) continue;
         if (a[i].size > (64u << 20) || !(pk = realloc(pk, a[i].size)) || !imp_read_at(f, a[i].off, pk, a[i].size)) { ok = 0; break; }
@@ -305,7 +312,7 @@ static int one_lang(FILE* f, const LangSource* s, const LangDisc* ld, const char
     SDL_CreateDirectory(dir);
     snprintf(txt, sizeof(txt), "%s/lang.txt", dir);
     remove(txt);   /* (the folder is complete only once lang.txt is written again) */
-    snprintf(pg->phase, sizeof(pg->phase), "%s: messages", lname);
+    snprintf(pg->phase, sizeof(pg->phase), tr("%s: messages"), lname);
     snprintf(path, sizeof(path), "%s/SYSMES%d.ALD", ld->dir, ld->digit);
     if (!exe_files(exe, nexe, ld->exe, fl, hl)) { host_log("lang: %s: the file tables are not in %s\n", lname, s->exe); return 0; }
     if (!(d = read_file(f, path, 1u << 20, &n))) { host_log("lang: %s: %s missing\n", lname, path); return 0; }
@@ -313,7 +320,7 @@ static int one_lang(FILE* f, const LangSource* s, const LangDisc* ld, const char
     free(d);
     if (!ok) { host_log("lang: %s: %s has an unknown layout\n", lname, path); return 0; }
     pg->done++;
-    snprintf(pg->phase, sizeof(pg->phase), "%s: pictures", lname);
+    snprintf(pg->phase, sizeof(pg->phase), tr("%s: pictures"), lname);
     {   /* the font and the effect pictures (SYSTEM?.AFS/1), then the archives' pictures with writing */
         static const char* const arch[][2] = { { "SYSTEM", "SYSTEM.AFS" }, { "ADV", "ADV.AFS" }, { "MRY", "MRY.AFS" }, { "ITEM1", "ITEM1.AFS" }, { "ITEM2", "ITEM2.AFS" } };
         for (int i = 0; i < 5 && ok; i++) {
@@ -345,9 +352,9 @@ int lang_extract(int src, const char* iso, const char* outdir)
     static Ald us;
     for (size_t i = 0; i < sizeof(lang_discs) / sizeof(lang_discs[0]); i++) if (lang_discs[i].src == src) s = &lang_discs[i];
     if (!s) return -1;
-    if (!(f = pc_fopen(iso, "rb"))) { snprintf(pg->phase, sizeof(pg->phase), "Cannot open the disc image: %s", iso); return -1; }
+    if (!(f = pc_fopen(iso, "rb"))) { snprintf(pg->phase, sizeof(pg->phase), tr("Cannot open the disc image: %s"), iso); return -1; }
     if (!imp_iso_find(f, "SYSTEM.CNF", &cnf_off, &ncnf) || !imp_read_at(f, cnf_off, cnf, ncnf < 127 ? ncnf : 127) || !strstr(cnf, s->exe)) {
-        snprintf(pg->phase, sizeof(pg->phase), "Use a European Resident Evil Code: Veronica X disc (%s).", import_sources[src].serial);
+        snprintf(pg->phase, sizeof(pg->phase), tr("Use a European Resident Evil Code: Veronica X disc (%s)."), import_sources[src].serial);
         fclose(f);
         return -1;
     }
@@ -356,7 +363,7 @@ int lang_extract(int src, const char* iso, const char* outdir)
     usd = uf ? read_file(uf, "SYSMES.ALD", 1u << 20, &nus) : NULL;
     if (uf) fclose(uf);
     if (!exe || !(nw = exe_widths(exe, nexe, w)) || !usd || !ald_read(usd, nus, &us)) {
-        snprintf(pg->phase, sizeof(pg->phase), "%s", !usd || !us.sys.n ? "The US disc image could not be read." : "Required game data not found. Check the selected disc image.");
+        snprintf(pg->phase, sizeof(pg->phase), "%s", !usd || !us.sys.n ? tr("The US disc image could not be read.") : tr("Required game data not found. Check the selected disc image."));
         free(exe); free(usd); fclose(f);
         return -1;
     }
@@ -366,6 +373,6 @@ int lang_extract(int src, const char* iso, const char* outdir)
         pg->done = (i + 1) * (1 + 5 + 205);
     }
     free(exe); free(usd); fclose(f);
-    snprintf(pg->phase, sizeof(pg->phase), "%d of %d languages imported.", s->n - fails, s->n);
+    snprintf(pg->phase, sizeof(pg->phase), tr("%d of %d languages imported."), s->n - fails, s->n);
     return fails;
 }

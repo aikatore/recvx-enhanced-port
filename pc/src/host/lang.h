@@ -20,8 +20,9 @@ const char* lang_dir(int l);          /* its folder, NULL for English */
 int  lang_font(void);                 /* the language whose font is loaded (the game font's glyphs and widths) */
 int  lang_picture(int adv);           /* ... of the ADV.AFS picture read last (2: the title's menu plates, 4: OPTION's) */
 
-/* our texts in the language of the setting (the English text when there is none) */
+/* our texts in the language of the setting (the English text when there is none); tr_init sorts the table (start) */
 const char* tr(const char* en);
+void tr_init(void);
 /* UTF-8 text in the game font: the next glyph code of *s (advances it; -1 at the end; 0 a space). Accented
    letters use the European font's codes while it is loaded (lang_font()), else the plain letter. */
 int  pc_glyph_next(const char** s);

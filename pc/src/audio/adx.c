@@ -50,8 +50,12 @@ static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t 
         f = pc_fopen(path, "rb");
     }
     if (!f) { snprintf(path, npath, "%s/%s", dir, name); f = pc_fopen(path, "rb"); src = LF_MODS; }
-    if (!f && (ld = pc_lang_file_dir())) {   /* the language's version of the file (lang.h; docs/LANGUAGES.md) */
-        snprintf(path, npath, "%s/%s", ld, name);
+    if (!f && (ld = pc_lang_file_dir())) {   /* the language's version of the file (lang.h; docs/LANGUAGES.md; its names upper case) */
+        char up[64];
+        int i;
+        for (i = 0; name[i] && i < 63; i++) up[i] = name[i] >= 'a' && name[i] <= 'z' ? name[i] - 32 : name[i];
+        up[i] = 0;
+        snprintf(path, npath, "%s/%s", ld, up);
         f = pc_fopen(path, "rb");
         src = LF_LANG;
     }

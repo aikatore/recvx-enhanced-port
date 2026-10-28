@@ -16,6 +16,7 @@ int ob2_read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int
 void host_log(const char* fmt, ...) { (void)fmt; }
 const unsigned char FontSz[126];                 /* (the decomp's, for import/lang.c; not used here) */
 unsigned int fstbl[24], fsheader[24];
+const char* tr(const char* en) { return en; }   /* (host/tr.c) */
 static uint32_t rd(const unsigned char* p) { uint32_t v; memcpy(&v, p, 4); return v; }
 
 /* an 8-bit 16x16 TIM2 (16-byte header): pixel i has index i, palette entry k is (k, 0, 0, 0x80) */

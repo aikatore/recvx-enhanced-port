@@ -236,7 +236,15 @@ static const unsigned short* mes_at(const unsigned char* t, uint32_t size, uint3
     *len = k + 1;
     return (const unsigned short*)(t + o);
 }
-static int shows(const unsigned short* t) { for (; *t != 0xFFFF; t++) if (*t < 0xFE00) return 1; return 0; }
+/* a message shows something: a glyph or an item name (0xFF02's operand is a wait, not a glyph) */
+static int shows(const unsigned short* t)
+{
+    for (; *t != 0xFFFF; t++) {
+        if (*t < 0xFE00 || *t == 0xFF03) return 1;
+        if (*t == 0xFF02 && t[1] != 0xFFFF) t++;
+    }
+    return 0;
+}
 
 /* the room's table with the language's messages: its message where it has one, a subtitle (the US message shows
    nothing) only with Subtitles on, else the US message */

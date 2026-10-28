@@ -73,6 +73,7 @@ static float adv(int c) { return c ? pc_glyph_w(c) : 11.0f; }   /* the font's sp
 static float text_w(const char* s, float sc)
 {
     float w = 0;
+    s = tr(s);   /* (our texts in the language: drawn and measured the same) */
     for (int c; (c = pc_glyph_next(&s)) >= 0;) w += adv(c) * sc * TRACK;
     return w;
 }
@@ -87,6 +88,7 @@ static void text(float x, float y, const char* s, float sc, unsigned int argb)
     const char* p;
     int pass;
     if (!font_ok) return;
+    s = tr(s);
     bhFontScaleSet(sc, sc, sc);
     for (pass = 0; pass < 2; pass++)
         for (p = s, x = x0; *p;) {
@@ -105,6 +107,7 @@ static int text_wrap(float x, float y, float w, const char* s, float sc, unsigne
 {
     char line[160];
     int n = 0;
+    s = tr(s);
     while (*s && n < max_lines) {
         int len = 0, fit = 0;
         while (s[len] && len < (int)sizeof(line) - 1) {
@@ -688,8 +691,8 @@ static const char* chr_names[] = { "Claire", "Chris", "Steve", "Wesker" };
 static void save_label(char* out, int n, int slot)
 {
     int i = save_at(slot);
-    if (i < 0) { snprintf(out, n, "Save %02d", slot + 1); return; }
-    snprintf(out, n, "Save %02d: %s %d-%02d", slot + 1, chr_names[saves[i].ply_id], saves[i].stg, saves[i].rom);
+    if (i < 0) { snprintf(out, n, tr("Save %02d"), slot + 1); return; }
+    snprintf(out, n, tr("Save %02d: %s %d-%02d"), slot + 1, chr_names[saves[i].ply_id], saves[i].stg, saves[i].rom);
 }
 
 /* the choices as lists: host START WITH: 0..2 new game, 3 + slot; joining ITEMS FROM: saved with the host, new, slot */
@@ -715,9 +718,9 @@ static void start_label(char* out, int n, int v)
 static void items_label(char* out, int n, int v)
 {
     if (v == COOP_ITEMS_HOST)   /* the host says whether it has them once we are in its lobby */
-        snprintf(out, n, "Saved with the host%s", g_coop.state == COOP_OFF || g_coop.host || g_coop.peer_rec < 0 ? ""
+        snprintf(out, n, tr("Saved with the host%s"), g_coop.state == COOP_OFF || g_coop.host || g_coop.peer_rec < 0 ? ""
                  : g_coop.peer_rec == REC_HAVE ? " (available)" : g_coop.peer_rec == REC_OFF ? " (host: off)" : " (none)");
-    else if (v < 0) snprintf(out, n, "New inventory");
+    else if (v < 0) snprintf(out, n, tr("New inventory"));
     else save_label(out, n, v);
 }
 
@@ -1140,7 +1143,7 @@ static int activate(int r)
         const Setting* st = eset(&g_enemy_opts.seed);
         char m[48];
         settings_set(st, (int)((net_ms() * 2654435761u >> 8) % (unsigned)(st->hi + 1)));
-        snprintf(m, sizeof(m), "New seed: %d", g_enemy_opts.seed);
+        snprintf(m, sizeof(m), tr("New seed: %d"), g_enemy_opts.seed);
         say(m);
         CallSystemSe(0, 3);
         return 0;
@@ -1182,7 +1185,7 @@ static int activate(int r)
                 if (asked != g_coop.start) {
                     char m[96];
                     asked = g_coop.start;
-                    snprintf(m, sizeof(m), "%s %s START again to load.", pc_biorand_ask(0), pc_biorand_ask(1));
+                    snprintf(m, sizeof(m), tr("%s %s START again to load."), pc_biorand_ask(0), pc_biorand_ask(1));
                     say(m);
                     CallSystemSe(0, 1);
                     return 0;
@@ -1631,15 +1634,15 @@ static void draw_info(void)
     y += 16 * text_wrap(24, y, 592, g_coop.status[0] ? coop_shown(g_coop.status) : "Not connected", 0.52f, !session_on() && g_coop.status[0] ? 0xFFFFC060 : col, 2);
     if (!hosting()) return;
     if (g_coop.room[0]) {
-        snprintf(line, sizeof(line), "ROOM CODE %.4s-%.4s (via server)", g_coop.room, g_coop.room + 4);
+        snprintf(line, sizeof(line), tr("ROOM CODE %.4s-%.4s (via server)"), g_coop.room, g_coop.room + 4);
         text(24, y, line, 0.52f, 0xFFFFFFFF); y += 16;
     }
     portmap_status(&pm);
     if (lb.mode || !(pm.local_ip[0] || pm.msg[0])) return;
     /* the address COPY JOIN ADDRESS gives (the router's port mapping runs as before; its status is only in the log) */
-    if (pm.public_ip[0]) snprintf(line, sizeof(line), "ADDRESS %s:%d", pm.public_ip, pm.public_port);
-    else snprintf(line, sizeof(line), "ADDRESS %s:%d", pm.local_ip[0] ? pm.local_ip : "?", g_coop.port);
-    if (g_coop.code[0]) snprintf(line + strlen(line), sizeof(line) - strlen(line), "   CODE %.4s-%.4s", g_coop.code, g_coop.code + 4);
+    if (pm.public_ip[0]) snprintf(line, sizeof(line), tr("ADDRESS %s:%d"), pm.public_ip, pm.public_port);
+    else snprintf(line, sizeof(line), tr("ADDRESS %s:%d"), pm.local_ip[0] ? pm.local_ip : "?", g_coop.port);
+    if (g_coop.code[0]) snprintf(line + strlen(line), sizeof(line) - strlen(line), tr("   CODE %.4s-%.4s"), g_coop.code, g_coop.code + 4);
     text(24, y, coop_shown(line), 0.52f, col); y += 16;
     if (!pm.public_ip[0] && pm.state != PM_BUSY && g_coop.state != COOP_CONNECTED && y < 470)   /* no internet address: direct joins likely fail */
         text(24, y, "If your partner cannot connect, set CONNECT to Via server.", 0.48f, 0xFFA0A0A0);
@@ -1680,7 +1683,7 @@ static void draw_previews(void)
     scene_end();
     if (g_coop.state == COOP_CONNECTED && g_coop.peer_in_game) {
         char t[64];
-        snprintf(t, sizeof(t), "%s is playing", g_coop.peer_name[0] ? g_coop.peer_name : "Your partner");
+        snprintf(t, sizeof(t), tr("%s is playing"), g_coop.peer_name[0] ? g_coop.peer_name : "Your partner");
         text_c(232, 210, t, 0.5f, 0xFFFFE0A0);
     } else if (!partner) text_c(232, 210, joining() ? "Waiting for the host" : hosting() ? "Waiting for a partner" : "", 0.5f, 0xFFA0A0A0);
     else if (!g_coop.peer_lobby) text_c(222, 372, "(in the title menu)", 0.45f, 0xFFA0A0A0);

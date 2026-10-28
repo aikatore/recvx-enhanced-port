@@ -362,6 +362,7 @@ int main(int argc, char** argv)
     }
     SDL_strlcpy(g_lang_us_iso, g_config.iso_path, sizeof(g_lang_us_iso));   /* (a language import reads the US text) */
     lang_scan();   /* the installed languages (lang.h) */
+    tr_init();
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);

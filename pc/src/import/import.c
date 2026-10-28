@@ -1,6 +1,7 @@
 /* Imports from other games' discs: the F9 window's extraction thread, its manifest, and the
    converted player models for "You appear as" (import.h; docs/IMPORT_OUTBREAK.md). */
 #include "import.h"
+#include "../host/lang.h"
 #include "../host/actors.h"
 #include "../host/fileio.h"
 #include <SDL3/SDL.h>
@@ -95,7 +96,7 @@ int import_run(int src, int what)
     int n = 0, r;
     ImportProgress* pg = &g_import_progress;
     pg->done = pg->total = pg->failed = 0;
-    snprintf(pg->phase, sizeof(pg->phase), "Reading disc...");
+    snprintf(pg->phase, sizeof(pg->phase), tr("Reading disc..."));
     source_dir(src, dir, sizeof(dir));
     SDL_CreateDirectory(dir);   /* (creates the parents too) */
     if (import_sources[src].cat == IMPORT_CAT_LANGUAGES) {
@@ -113,7 +114,7 @@ int import_run(int src, int what)
         players += items[i].player;
         if (!items[i].ok || items[i].note[0]) host_log("import: %s %s: %s\n", items[i].id, items[i].ok ? "written" : "FAILED", items[i].note);
     }
-    snprintf(pg->phase, sizeof(pg->phase), "Imported %d of %d models; %d playable models.", n - r, n, players);
+    snprintf(pg->phase, sizeof(pg->phase), tr("Imported %d of %d models; %d playable models."), n - r, n, players);
     host_log("import: %s: %d models extracted to %s, %d failed, %d usable as player models\n", import_sources[src].key, n - r, dir, r, players);
     return r;
 }

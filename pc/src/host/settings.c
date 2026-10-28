@@ -146,7 +146,7 @@ void settings_apply_display(void)
         char kind[64];
         SDL_GetWindowPosition(g_window, &x, &y);
         SDL_GetWindowSize(g_window, &w, &h);
-        if (excl) snprintf(kind, sizeof(kind), "exclusive fullscreen %d x %d @ %.2f Hz", m.w, m.h, m.refresh_rate);
+        if (excl) snprintf(kind, sizeof(kind), tr("exclusive fullscreen %d x %d @ %.2f Hz"), m.w, m.h, m.refresh_rate);
         else snprintf(kind, sizeof(kind), "%s", !g_config.fullscreen ? "windowed" : bl ? "borderless window" : "borderless fullscreen");
         host_log("display: %s, window %d,%d %d x %d\n", kind, x, y, w, h);
     }
@@ -211,16 +211,16 @@ static void fsres_set(int v)
 }
 static const char* fsres_name(int v, char* b, int n)
 {
-    if (v == 0) snprintf(b, n, "Desktop");
-    else if (v > 0 && v <= fs_n) snprintf(b, n, "%d x %d, %d Hz", fs_modes[v - 1].w, fs_modes[v - 1].h, fs_modes[v - 1].hz);
-    else snprintf(b, n, "%d x %d, %d Hz", g_config.fullscreen_w, g_config.fullscreen_h, g_config.fullscreen_hz);
+    if (v == 0) snprintf(b, n, tr("Desktop"));
+    else if (v > 0 && v <= fs_n) snprintf(b, n, tr("%d x %d, %d Hz"), fs_modes[v - 1].w, fs_modes[v - 1].h, fs_modes[v - 1].hz);
+    else snprintf(b, n, tr("%d x %d, %d Hz"), g_config.fullscreen_w, g_config.fullscreen_h, g_config.fullscreen_hz);
     return b;
 }
 static int exclusive_on(void) { return g_config.fullscreen && g_config.fullscreen_exclusive; }
 static const char* scale_name(int v, char* b, int n)
 {
     if (v) snprintf(b, n, "%dx (%d x %d)", v, 640 * v, 448 * v);
-    else snprintf(b, n, "Auto (%dx)", (int)gs_wanted_scale());
+    else snprintf(b, n, tr("Auto (%dx)"), (int)gs_wanted_scale());
     return b;
 }
 static const char* tenths(int v, char* b, int n) { snprintf(b, n, "%d.%d", v / 10, v % 10); return b; }
@@ -233,7 +233,7 @@ static int lang_n(void) { int n = 0; for (int l = 0; l < LANG_COUNT; l++) n += l
 static int lang_at(int v) { for (int l = 0; l < LANG_COUNT; l++) if (lang_installed(l) && v-- == 0) return l; return LANG_EN; }
 static int lang_get(void) { int v = 0; for (int l = 0; l < g_lang && l < LANG_COUNT; l++) v += lang_installed(l); return lang_installed(g_lang) ? v : 0; }
 static void lang_set(int v) { g_lang = lang_at(v); }
-static const char* lang_name(int v, char* buf, int n) { (void)buf; (void)n; return lang_names[lang_at(v)]; }
+static const char* lang_name(int v, char* b, int n) { snprintf(b, n, "%s", lang_names[lang_at(v)]); return b; }
 static const char* lang_locked(void)
 {
     if (lang_n() < 2) return "No other language is installed.";
@@ -567,9 +567,9 @@ const char* settings_value(const Setting* s, char* b, int n)
     int v = settings_get(s);
     if (s->flags & SET_ACTION) b[0] = 0;
     else if (s->name) s->name(v, b, n);
-    else if (s->names) snprintf(b, n, "%s", s->names[v - s->lo]);
+    else if (s->names) snprintf(b, n, "%s", tr(s->names[v - s->lo]));
     else if (s->fmt) snprintf(b, n, s->fmt, v);
-    else snprintf(b, n, "%s", v ? "On" : "Off");
+    else snprintf(b, n, "%s", tr(v ? "On" : "Off"));
     return b;
 }
 
@@ -577,7 +577,7 @@ const char* settings_locked(const Setting* s)
 {
     const char* r = s->locked ? s->locked() : NULL;
     if (!r && (s->flags & SET_GAME_ONLY) && !pc_in_game()) r = "Start or load a game first.";
-    return r;
+    return r ? tr(r) : r;
 }
 
 void settings_save_later(void) { __atomic_store_n(&dirty_any, 1, __ATOMIC_RELEASE); }

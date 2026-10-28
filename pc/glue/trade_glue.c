@@ -22,6 +22,7 @@
 #include "../../decomp/include/ps2/veronica/prog/ps2_NaSystem.h"
 #include "../../decomp/include/ps2/veronica/prog/ps2_NaDraw.h"
 #include "../src/host/coop.h"
+#include "../src/host/lang.h"
 #include "../src/host/menu_mouse.h"
 #include <stdio.h>
 #include <string.h>
@@ -247,14 +248,14 @@ static void draw_screen(void)
     /* requests: the partner's (a button: offer it) and ours */
     if (g_trade.want[1] >= 0) {
         float hw;
-        snprintf(b, sizeof(b), "%s requests: %s", g_trade.name, coop_item_name(g_trade.want_w[1]));
+        snprintf(b, sizeof(b), tr("%s requests: %s"), g_trade.name, coop_item_name(g_trade.want_w[1]));
         hw = pc_ui_text_w(b, 0.5f) / 2 + 8;
         pc_ui_rect(320 - hw, WANT_Y - 3, 320 + hw, WANT_Y + 15, 0xC0402000, Z_UI);
         frame(320 - hw, WANT_Y - 3, 320 + hw, WANT_Y + 15, 1, pulse(0xFF9020));
         text_c(320, WANT_Y, b, 0.5f, 0xFFFFB040);
     }
     if (g_trade.want[0] >= 0) {
-        snprintf(b, sizeof(b), "You request: %s", coop_item_name(g_trade.want_w[0]));
+        snprintf(b, sizeof(b), tr("You request: %s"), coop_item_name(g_trade.want_w[0]));
         text_c(320, WANT_Y + 20, b, 0.45f, 0xFFFFB040);
     }
     /* the middle: what goes which way */
@@ -266,10 +267,10 @@ static void draw_screen(void)
     /* the result of the last swap, else why this pair does not swap */
     if (now < g_trade.msg_until) text_c(320, 406, g_trade.msg, 0.55f, 0xFFFFFFFF);
     else if (g_trade.why[0] && (mine || theirs || g_trade.sel[1] < 0)) text_c(320, 406, g_trade.why, 0.55f, 0xFFF0C060);
-    else if (g_trade.ready[0] && !g_trade.ready[1]) { snprintf(b, sizeof(b), "Waiting for %s to confirm", g_trade.name); text_c(320, 406, b, 0.55f, 0xFFC0C0C0); }
+    else if (g_trade.ready[0] && !g_trade.ready[1]) { snprintf(b, sizeof(b), tr("Waiting for %s to confirm"), g_trade.name); text_c(320, 406, b, 0.55f, 0xFFC0C0C0); }
     {
         static const char* const back[] = { "", "withdraw the request", "take back the offer", "decline the request", "leave" };
-        snprintf(b, sizeof(b), "Confirm: offer item, then ready. On %s's side: request item. Cancel: %s", g_trade.name, back[coop_trade_back_what()]);
+        snprintf(b, sizeof(b), tr("Confirm: offer item, then ready. On %s's side: request item. Cancel: %s"), g_trade.name, back[coop_trade_back_what()]);
         text_c(320, 438, b, 0.42f, 0xFFA0A0A0);
     }
 }
@@ -376,7 +377,7 @@ unsigned int trade_pad(unsigned int pad)
     if (left) {
         char b[96];
         float hw = 0;
-        if (g_trade.want[1] >= 0) { snprintf(b, sizeof(b), "%s requests: %s", g_trade.name, coop_item_name(g_trade.want_w[1])); hw = pc_ui_text_w(b, 0.5f) / 2 + 8; }
+        if (g_trade.want[1] >= 0) { snprintf(b, sizeof(b), tr("%s requests: %s"), g_trade.name, coop_item_name(g_trade.want_w[1])); hw = pc_ui_text_w(b, 0.5f) / 2 + 8; }
         if (c >= 0) { coop_trade_cursor(side, c); coop_trade_activate(); }
         else if (in(mx, my, OK_X0, BTN_Y - 4, OK_X1, BTN_Y + 22)) coop_trade_ready();
         else if (in(mx, my, NO_X0, BTN_Y - 4, NO_X1, BTN_Y + 22)) coop_trade_back(0);

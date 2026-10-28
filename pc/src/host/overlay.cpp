@@ -20,6 +20,7 @@ extern "C" {
 #include "settings.h"
 #include "lobby.h"
 #include "../import/import.h"
+#include "lang.h"
 #include <SDL3/SDL.h>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
@@ -110,11 +111,11 @@ static bool settings_imgui(int page, bool all = true)
     for (int i = 0; i < g_settings_n; i++) {
         const Setting* s = &g_settings[i];
         if (s->page != page || !(all || (s->flags & SET_F1)) || (s->shown && !s->shown())) continue;
-        if (s->group && all) ImGui::SeparatorText(s->group);
+        if (s->group && all) ImGui::SeparatorText(tr(s->group));
         const char* lock = settings_locked(s);
         char label[96], val[96];
         int v = settings_get(s), hi = settings_hi(s), st = s->step > 0 ? s->step : 1;
-        SDL_snprintf(label, sizeof label, "%s%s##set%d", s->label, (s->flags & SET_RESTART) ? " (restart needed)" : "", i);
+        SDL_snprintf(label, sizeof label, "%s%s##set%d", tr(s->label), (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", i);
         ImGui::BeginDisabled(lock != nullptr);
         if (s->flags & SET_ACTION) {
             if (ImGui::Button(label)) settings_act(s);
@@ -125,7 +126,7 @@ static bool settings_imgui(int page, bool all = true)
             if (ImGui::BeginCombo(label, settings_value(s, val, sizeof val), ImGuiComboFlags_HeightLarge)) {
                 for (int k = s->lo; k <= hi; k += st) {
                     char nm[96];
-                    if (ImGui::Selectable(s->name ? s->name(k, nm, sizeof nm) : s->names[k - s->lo], k == v)) { settings_set(s, k); changed = true; }
+                    if (ImGui::Selectable(s->name ? s->name(k, nm, sizeof nm) : tr(s->names[k - s->lo]), k == v)) { settings_set(s, k); changed = true; }
                     if (k == v) ImGui::SetItemDefaultFocus();   /* the list opens at the current value (a long one: "You appear as") */
                 }
                 ImGui::EndCombo();
@@ -147,7 +148,7 @@ static bool settings_imgui(int page, bool all = true)
         ImGui::EndDisabled();
         if ((ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) || ((s->flags & SET_CALIB) && ImGui::IsItemActive())) && (s->help || lock)) {
             ImGui::BeginTooltip();
-            ImGui::Text("%s%s%s", lock ? lock : "", lock && s->help ? "\n" : "", s->help ? s->help : "");
+            ImGui::Text("%s%s%s", lock ? lock : "", lock && s->help ? "\n" : "", s->help ? tr(s->help) : "");
             if (s->flags & SET_CALIB) calib_pattern();
             ImGui::EndTooltip();
         }
@@ -172,8 +173,8 @@ static void controls_section(void)
         if (c != -1) {
             if (c != -2) {
                 bind_set(cap_row, dev, cap_slot, c == -3 ? 0 : c);
-                if (bind_swapped()) SDL_snprintf(msg, sizeof msg, "Swapped with %s", bind_swapped());
-                else if (bind_combo(cap_row, dev, cap_slot)) SDL_snprintf(msg, sizeof msg, "Hold Aim and press this button to reload.");
+                if (bind_swapped()) SDL_snprintf(msg, sizeof msg, tr("Swapped with %s"), bind_swapped());
+                else if (bind_combo(cap_row, dev, cap_slot)) SDL_snprintf(msg, sizeof msg, tr("Hold Aim and press this button to reload."));
                 else msg[0] = 0;
                 settings_save_later();
             }
@@ -182,19 +183,19 @@ static void controls_section(void)
     }
     settings_imgui(SP_CONTROLS);   /* input source, which gamepad */
     if (ImGui::BeginTabBar("##dev")) {
-        if (ImGui::BeginTabItem("Keyboard and Mouse")) { if (dev != BIND_KB) cap_row = -1; dev = BIND_KB; ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem("Gamepad")) { if (dev != BIND_PAD) cap_row = -1; dev = BIND_PAD; ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem(tr("Keyboard and Mouse"))) { if (dev != BIND_KB) cap_row = -1; dev = BIND_KB; ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem(tr("Gamepad"))) { if (dev != BIND_PAD) cap_row = -1; dev = BIND_PAD; ImGui::EndTabItem(); }
         ImGui::EndTabBar();
     }
     char pad_name[96];
-    if (dev == BIND_PAD) ImGui::TextDisabled("%s. The left stick also moves your character.\n"
-                                             "Modern third person uses its own bindings below.", bind_pad_desc(pad_name, sizeof pad_name));
-    ImGui::TextDisabled("Click a binding, then press an input. Esc: cancel. Delete or right-click: clear.\n"
-                        "Reload can share a button: hold Aim and press it to reload.");
-    if (dev == BIND_KB) ImGui::TextDisabled("Mouse buttons work on any row, also with the fixed cameras.");
+    if (dev == BIND_PAD) ImGui::TextDisabled(tr("%s. The left stick also moves your character.\n"
+                                             "Modern third person uses its own bindings below."), bind_pad_desc(pad_name, sizeof pad_name));
+    ImGui::TextDisabled(tr("Click a binding, then press an input. Esc: cancel. Delete or right-click: clear.\n"
+                        "Reload can share a button: hold Aim and press it to reload."));
+    if (dev == BIND_KB) ImGui::TextDisabled(tr("Mouse buttons work on any row, also with the fixed cameras."));
     if (msg[0]) ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "%s", msg);
     if (ImGui::BeginTable("##binds", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 2.2f);
+        ImGui::TableSetupColumn(tr("Action"), ImGuiTableColumnFlags_WidthStretch, 2.2f);
         ImGui::TableSetupColumn("1", ImGuiTableColumnFlags_WidthStretch, 1.0f);
         ImGui::TableSetupColumn("2", ImGuiTableColumnFlags_WidthStretch, 1.0f);
         int group = -1;
@@ -205,20 +206,20 @@ static void controls_section(void)
                 group = bind_rows[r].group;
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
-                if (group == BG_GAME) ImGui::SeparatorText("Game Controls (Control Type)");
+                if (group == BG_GAME) ImGui::SeparatorText(tr("Game Controls (Control Type)"));
                 else ImGui::SeparatorText(group == BG_TPS ? (dev ? "Third Person: Modern Gamepad" : "Third Person: Keyboard and Mouse") : "Hotkeys");
-                if (group == BG_GAME) { ImGui::TableSetColumnIndex(1); ImGui::TextDisabled("type %c", 'A' + pc_keytype()); }
+                if (group == BG_GAME) { ImGui::TableSetColumnIndex(1); ImGui::TextDisabled(tr("type %c"), 'A' + pc_keytype()); }
             }
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             int conflict = bind_conflict(r, dev);
             if (conflict) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", bind_row_label(r, label, sizeof label));
             else ImGui::TextUnformatted(bind_row_label(r, label, sizeof label));
-            if (conflict && ImGui::IsItemHovered()) ImGui::SetTooltip("Also bound to: %s", bind_rows[conflict - 1].name);
+            if (conflict && ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Also bound to: %s"), bind_rows[conflict - 1].name);
             for (int k = 0; k < BIND_SLOTS; k++) {
                 ImGui::TableSetColumnIndex(1 + k);
                 char b[96];
-                if (cap_row == r && cap_slot == k) SDL_snprintf(b, sizeof b, "press... %ds##%d_%d", (bind_capture_left_ms() + 999) / 1000, r, k);
+                if (cap_row == r && cap_slot == k) SDL_snprintf(b, sizeof b, tr("press... %ds##%d_%d"), (bind_capture_left_ms() + 999) / 1000, r, k);
                 else SDL_snprintf(b, sizeof b, "%s%s##%d_%d", bind_combo(r, dev, k) ? "Aim + " : "", bind_code_name(dev, bind_get(r, dev, k), nm, sizeof nm), r, k);
                 if (ImGui::Button(b, ImVec2(-FLT_MIN, 0))) { cap_row = r; cap_slot = k; msg[0] = 0; bind_capture_start(dev); }
                 if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { bind_set(r, dev, k, 0); settings_save_later(); }
@@ -227,7 +228,7 @@ static void controls_section(void)
         ImGui::EndTable();
     }
     if (ImGui::Button(dev ? "Reset Gamepad Bindings" : "Reset Keyboard Bindings")) { bind_reset(dev); settings_save_later(); msg[0] = 0; }
-    ImGui::TextDisabled("Also available in OPTION > ENHANCED SETTINGS > CONTROLS.");
+    ImGui::TextDisabled(tr("Also available in OPTION > ENHANCED SETTINGS > CONTROLS."));
 }
 
 static void settings_window(void)
@@ -238,15 +239,17 @@ static void settings_window(void)
 
     ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(460, 0), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Resident Evil Code: Veronica X  -  settings (F1)  -  " RECVX_VERSION, &visible)) { ImGui::End(); return; }
+    char title[160];
+    SDL_snprintf(title, sizeof title, "%s" RECVX_VERSION "###f1", tr("Resident Evil Code: Veronica X  -  settings (F1)  -  "));
+    if (!ImGui::Begin(title, &visible)) { ImGui::End(); return; }
 
-    if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader(tr("Display"), ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= settings_imgui(SP_DISPLAY);
-        ImGui::TextDisabled("Resolution: %d x %d | %.1f FPS", ww, wh, ImGui::GetIO().Framerate);
+        ImGui::TextDisabled(tr("Resolution: %d x %d | %.1f FPS"), ww, wh, ImGui::GetIO().Framerate);
     }
-    if (ImGui::CollapsingHeader("Gameplay", ImGuiTreeNodeFlags_DefaultOpen)) changed |= settings_imgui(SP_GAMEPLAY);
-    if (ImGui::CollapsingHeader("Controls")) controls_section();
-    if (ImGui::CollapsingHeader("Third Person", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader(tr("Gameplay"), ImGuiTreeNodeFlags_DefaultOpen)) changed |= settings_imgui(SP_GAMEPLAY);
+    if (ImGui::CollapsingHeader(tr("Controls"))) controls_section();
+    if (ImGui::CollapsingHeader(tr("Third Person"), ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= settings_imgui(SP_TPS);
         char key[96];
         SDL_snprintf(key, sizeof key, tps_key_wait ? "Press a key (Esc cancels)" : "Camera Key: %s", SDL_GetScancodeName((SDL_Scancode)g_tps.key));
@@ -257,19 +260,19 @@ static void settings_window(void)
                             : "Move forward or back and turn with your movement keys; use the mouse to look.\n"
                               "Change action buttons under Controls; F1 releases the mouse.");
         if (g_tps.pad_modern)
-            ImGui::TextDisabled("Left stick: move and run. Right stick: look and aim.\n"
-                                "Set aiming, action, inventory and camera buttons under Controls.");
+            ImGui::TextDisabled(tr("Left stick: move and run. Right stick: look and aim.\n"
+                                "Set aiming, action, inventory and camera buttons under Controls."));
     }
-    if (ImGui::CollapsingHeader("Audio", ImGuiTreeNodeFlags_DefaultOpen)) changed |= settings_imgui(SP_AUDIO);
-    if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) changed |= settings_imgui(SP_APPEAR);
+    if (ImGui::CollapsingHeader(tr("Audio"), ImGuiTreeNodeFlags_DefaultOpen)) changed |= settings_imgui(SP_AUDIO);
+    if (ImGui::CollapsingHeader(tr("Appearance"), ImGuiTreeNodeFlags_DefaultOpen)) changed |= settings_imgui(SP_APPEAR);
     for (int p = SP_COOP; p <= SP_EXTRAS; p += SP_EXTRAS - SP_COOP)   /* pages with their own windows (F3, F2): the SET_F1 rows */
         if (settings_imgui_any(p) && ImGui::CollapsingHeader(p == SP_COOP ? "Co-op" : "Extras", ImGuiTreeNodeFlags_DefaultOpen))
             changed |= settings_imgui(p, false);
 
-    if (ImGui::CollapsingHeader("Performance")) {
+    if (ImGui::CollapsingHeader(tr("Performance"))) {
         static ProfFrame h[240];
         bool on = prof_enabled != 0;
-        if (ImGui::Checkbox("Measure (small overhead; always on with --profile)", &on)) prof_enabled = on;
+        if (ImGui::Checkbox(tr("Measure (small overhead; always on with --profile)"), &on)) prof_enabled = on;
         int n = prof_history(h, 240);
         if (n > 0) {
             float total[240], avg[PROF_COUNT] = { 0 }, avg_total = 0, worst = 0;
@@ -280,14 +283,14 @@ static void settings_window(void)
                 if (h[i].total > worst) worst = h[i].total;
                 for (int c = 0; c < PROF_COUNT; c++) avg[c] += h[i].ms[c] / m;
             }
-            ImGui::Text("game frame %.2f ms avg, %.2f ms worst (target 33.37 ms = 29.97 Hz)", avg_total, worst);
+            ImGui::Text(tr("game frame %.2f ms avg, %.2f ms worst (target 33.37 ms = 29.97 Hz)"), avg_total, worst);
             ImGui::PlotLines("##ft", total, n, 0, "frame time (ms)", 0.0f, 66.7f, ImVec2(-1, 60));
             for (int c = 0; c < PROF_COUNT; c++) {
-                ImGui::Text("%-8s %6.2f ms", prof_names[c], avg[c]);
+                ImGui::Text(tr("%-8s %6.2f ms"), prof_names[c], avg[c]);
                 ImGui::SameLine(160);
                 ImGui::ProgressBar(avg_total > 0 ? avg[c] / avg_total : 0, ImVec2(-1, 0), "");
             }
-            ImGui::TextDisabled("'wait' is idle time; run with --profile for a CSV.");
+            ImGui::TextDisabled(tr("'wait' is idle time; run with --profile for a CSV."));
         }
     }
     ImGui::End();
@@ -302,14 +305,14 @@ static void teleport_pick(CheatState* c)
     char b[128], e[160];
     int n = tp_count(), k, cur = tp_find(c->tp_stg, c->tp_rom);
     if (n && !raw) {
-        if (ImGui::BeginCombo("Location", tp_stage_name(c->tp_stg), ImGuiComboFlags_HeightLarge)) {
+        if (ImGui::BeginCombo(tr("Location"), tp_stage_name(c->tp_stg), ImGuiComboFlags_HeightLarge)) {
             for (int s = 0; s < 10; s++) {
                 int first = tp_stage_first(s, &k);
                 if (k && ImGui::Selectable(tp_stage_name(s), s == c->tp_stg)) { c->tp_stg = s; c->tp_rom = tp_room(first)->rom; c->tp_pos = 0; }
             }
             ImGui::EndCombo();
         }
-        if (ImGui::BeginCombo("Room", cur >= 0 ? tp_room_name(cur, 1, b, sizeof b) : "-", ImGuiComboFlags_HeightLarge)) {
+        if (ImGui::BeginCombo(tr("Room"), cur >= 0 ? tp_room_name(cur, 1, b, sizeof b) : "-", ImGuiComboFlags_HeightLarge)) {
             if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
             ImGui::SetNextItemWidth(-1);
             ImGui::InputTextWithHint("##filter", "type to search every location", filter, sizeof filter);
@@ -327,26 +330,26 @@ static void teleport_pick(CheatState* c)
         if (cur >= 0) {
             int m = tp_entries(cur);
             if (c->tp_pos >= m) c->tp_pos = 0;
-            if (ImGui::BeginCombo("Entry", tp_entry_name(cur, c->tp_pos, b, sizeof b), ImGuiComboFlags_HeightLarge)) {
+            if (ImGui::BeginCombo(tr("Entry"), tp_entry_name(cur, c->tp_pos, b, sizeof b), ImGuiComboFlags_HeightLarge)) {
                 for (int p = 0; p < m; p++) {
                     snprintf(e, sizeof e, "%s##%d", tp_entry_name(cur, p, b, sizeof b), p);
                     if (ImGui::Selectable(e, p == c->tp_pos)) c->tp_pos = p;
-                    if (ImGui::IsItemHovered() && tp_entry_sources(cur, p, b, sizeof b)[0]) ImGui::SetTooltip("Doors here from:\n%s", b);
+                    if (ImGui::IsItemHovered() && tp_entry_sources(cur, p, b, sizeof b)[0]) ImGui::SetTooltip(tr("Doors here from:\n%s"), b);
                 }
                 ImGui::EndCombo();
             }
         }
-        ImGui::TextDisabled("A room may not work in every story state.");
+        ImGui::TextDisabled(tr("A room may not work in every story state."));
     } else {
         if (!n) ImGui::TextDisabled(tp_reading() ? "Loading room list..." : "The room list could not be read.");
-        ImGui::TextDisabled("Some destinations may crash the game.");
-        ImGui::InputInt("Stage", &c->tp_stg);
-        ImGui::InputInt("Room", &c->tp_rom);
-        ImGui::InputInt("Position", &c->tp_pos);
+        ImGui::TextDisabled(tr("Some destinations may crash the game."));
+        ImGui::InputInt(tr("Stage"), &c->tp_stg);
+        ImGui::InputInt(tr("Room"), &c->tp_rom);
+        ImGui::InputInt(tr("Position"), &c->tp_pos);
         c->tp_stg = SDL_clamp(c->tp_stg, 0, 9); c->tp_rom = SDL_clamp(c->tp_rom, 0, 99); c->tp_pos = SDL_clamp(c->tp_pos, 0, TP_POS - 1);
     }
-    ImGui::Checkbox("Show Room Numbers", &raw);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stage, room and entry position as numbers (as RECVX_TELEPORT), also rooms not in the list.");
+    ImGui::Checkbox(tr("Show Room Numbers"), &raw);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Stage, room and entry position as numbers (as RECVX_TELEPORT), also rooms not in the list."));
     ImGui::SameLine();
 }
 
@@ -355,34 +358,34 @@ static void cheat_window(void)
     CheatState* c = &g_cheat;
     ImGui::SetNextWindowPos(ImVec2(500, 20), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(420, 0), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Cheats (F2)", &cheats_visible)) { ImGui::End(); return; }
-    ImGui::Text("%s  HP %d   stage %d  room %d  pos %d", c->player ? "Chris" : "Claire", c->hp, c->stg, c->rom, c->pos);
+    if (!ImGui::Begin(tr("Cheats (F2)"), &cheats_visible)) { ImGui::End(); return; }
+    ImGui::Text(tr("%s  HP %d   stage %d  room %d  pos %d"), c->player ? "Chris" : "Claire", c->hp, c->stg, c->rom, c->pos);
     bool b = c->inf_health;
-    if (ImGui::Checkbox("Infinite Health", &b)) c->inf_health = b;
+    if (ImGui::Checkbox(tr("Infinite Health"), &b)) c->inf_health = b;
     ImGui::SameLine();
-    if (ImGui::Button("Heal Now")) __atomic_or_fetch(&c->request, CHEAT_HEAL, __ATOMIC_ACQ_REL);
+    if (ImGui::Button(tr("Heal Now"))) __atomic_or_fetch(&c->request, CHEAT_HEAL, __ATOMIC_ACQ_REL);
     b = c->inf_ammo;
-    if (ImGui::Checkbox("Infinite Ammo", &b)) c->inf_ammo = b;
+    if (ImGui::Checkbox(tr("Infinite Ammo"), &b)) c->inf_ammo = b;
     {
         static const char* modes[] = { "Off", "Walls", "Walls and Flight" };
         int m = c->noclip;
-        if (ImGui::Combo("Pass Through Walls", &m, modes, IM_ARRAYSIZE(modes))) c->noclip = m;
+        if (ImGui::Combo(tr("Pass Through Walls"), &m, modes, IM_ARRAYSIZE(modes))) c->noclip = m;
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Move through walls, objects and enemies; doors still work.\n"
+            ImGui::SetTooltip(tr("Move through walls, objects and enemies; doors still work.\n"
                               "Flight: Page Up/R2 up, F/Page Down/L2 down;\n"
-                              "turn this off to return to the floor below.");
+                              "turn this off to return to the floor below."));
     }
     b = c->unlock;
-    if (ImGui::Checkbox("Unlock With No Key", &b)) c->unlock = b;
+    if (ImGui::Checkbox(tr("Unlock With No Key"), &b)) c->unlock = b;
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Open key locks without carrying the key;\n"
+        ImGui::SetTooltip(tr("Open key locks without carrying the key;\n"
                           "no items are added and story locks stay.\n"
-                          "Supported locks update in the current room.");
+                          "Supported locks update in the current room."));
 
-    ImGui::SeparatorText("Add Item");
+    ImGui::SeparatorText(tr("Add Item"));
     char label[48];
     snprintf(label, sizeof label, "%3d  %s", c->give_id, c->give_id > 0 && c->give_id < CHEAT_ITEMS ? c->names[c->give_id] : "-");
-    if (ImGui::BeginCombo("Item", label, ImGuiComboFlags_HeightLarge)) {
+    if (ImGui::BeginCombo(tr("Item"), label, ImGuiComboFlags_HeightLarge)) {
         for (int id = 1; id < CHEAT_ITEMS; id++) {
             if (!c->names[id][0]) continue;
             snprintf(label, sizeof label, "%3d  %s", id, c->names[id]);
@@ -390,37 +393,37 @@ static void cheat_window(void)
         }
         ImGui::EndCombo();
     }
-    ImGui::InputInt("Quantity", &c->give_count);
+    ImGui::InputInt(tr("Quantity"), &c->give_count);
     c->give_count = SDL_clamp(c->give_count, 1, 999);
-    if (ImGui::Button("Add to Inventory") && c->give_id) __atomic_or_fetch(&c->request, CHEAT_GIVE, __ATOMIC_ACQ_REL);
+    if (ImGui::Button(tr("Add to Inventory")) && c->give_id) __atomic_or_fetch(&c->request, CHEAT_GIVE, __ATOMIC_ACQ_REL);
 
-    ImGui::SeparatorText("Inventory");
+    ImGui::SeparatorText(tr("Inventory"));
     for (int i = 1; i < 2 + c->slots && i < 12; i++) {
         unsigned id = c->inv[i] >> 16 & 0xFF;
         char nm[16];
         if (!id) continue;
-        if (id >= CHEAT_ITEMS || !c->names[id][0]) SDL_snprintf(nm, sizeof nm, "item %u", id);
+        if (id >= CHEAT_ITEMS || !c->names[id][0]) SDL_snprintf(nm, sizeof nm, tr("item %u"), id);
         ImGui::Text("%s %-24s %u", (unsigned)i == c->inv[0] ? "equipped" : "        ", id < CHEAT_ITEMS && c->names[id][0] ? c->names[id] : nm, c->inv[i] & 0xFFFF);
     }
 
-    ImGui::SeparatorText("Spawn Enemy");
+    ImGui::SeparatorText(tr("Spawn Enemy"));
     if (c->spawn_idx < 0 || c->spawn_idx >= spawn_count()) c->spawn_idx = 0;
-    if (ImGui::BeginCombo("Enemy", spawn_name(c->spawn_idx), ImGuiComboFlags_HeightLarge)) {
+    if (ImGui::BeginCombo(tr("Enemy"), spawn_name(c->spawn_idx), ImGuiComboFlags_HeightLarge)) {
         for (int i = 0; i < spawn_count(); i++)
             if (ImGui::Selectable(spawn_name(i), i == c->spawn_idx)) c->spawn_idx = i;
         ImGui::EndCombo();
     }
-    if (ImGui::Button("Spawn Ahead")) __atomic_or_fetch(&c->request, CHEAT_SPAWN, __ATOMIC_ACQ_REL);
+    if (ImGui::Button(tr("Spawn Ahead"))) __atomic_or_fetch(&c->request, CHEAT_SPAWN, __ATOMIC_ACQ_REL);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Spawned enemies disappear when you leave; kills do not count.\n"
+        ImGui::SetTooltip(tr("Spawned enemies disappear when you leave; kills do not count.\n"
                           "Bosses and scripted enemies may fail\n"
-                          "outside their own rooms.");
+                          "outside their own rooms."));
 
-    ImGui::SeparatorText("Teleport");
+    ImGui::SeparatorText(tr("Teleport"));
     teleport_pick(c);
-    if (ImGui::Button("Use Current Room")) { c->tp_stg = c->stg; c->tp_rom = c->rom; c->tp_pos = c->pos; }
+    if (ImGui::Button(tr("Use Current Room"))) { c->tp_stg = c->stg; c->tp_rom = c->rom; c->tp_pos = c->pos; }
     ImGui::SameLine();
-    if (ImGui::Button("Go")) __atomic_or_fetch(&c->request, CHEAT_TELEPORT, __ATOMIC_ACQ_REL);
+    if (ImGui::Button(tr("Go"))) __atomic_or_fetch(&c->request, CHEAT_TELEPORT, __ATOMIC_ACQ_REL);
     if (c->result) ImGui::TextDisabled("%s", c->result);
     ImGui::End();
 }
@@ -430,7 +433,7 @@ static const char* coop_item(unsigned int e, char* buf, size_t n)
 {
     unsigned id = (e >> 16) & 0xFF;
     if (id < CHEAT_ITEMS && g_cheat.names[id][0]) snprintf(buf, n, "%s x%u", g_cheat.names[id], e & 0xFFFF);
-    else snprintf(buf, n, "item %u x%u", id, e & 0xFFFF);
+    else snprintf(buf, n, tr("item %u x%u"), id, e & 0xFFFF);
     return buf;
 }
 
@@ -445,24 +448,24 @@ static void coop_trade(void)
 {
     CoopState* c = &g_coop;
     char b[64];
-    ImGui::SeparatorText("Trade");
+    ImGui::SeparatorText(tr("Trade"));
     if (cs.trade_in) {
-        ImGui::Text("Partner offers: %s", coop_item(cs.trade_in, b, sizeof(b)));
+        ImGui::Text(tr("Partner offers: %s"), coop_item(cs.trade_in, b, sizeof(b)));
         ImGui::BeginDisabled(!cs.trade_near);
-        if (ImGui::Button("Accept")) __atomic_store_n(&c->trade_req, COOP_TRADE_ACCEPT, __ATOMIC_RELEASE);
+        if (ImGui::Button(tr("Accept"))) __atomic_store_n(&c->trade_req, COOP_TRADE_ACCEPT, __ATOMIC_RELEASE);
         ImGui::EndDisabled();
         ImGui::SameLine();
-        if (ImGui::Button("Decline")) __atomic_store_n(&c->trade_req, COOP_TRADE_DECLINE, __ATOMIC_RELEASE);
+        if (ImGui::Button(tr("Decline"))) __atomic_store_n(&c->trade_req, COOP_TRADE_DECLINE, __ATOMIC_RELEASE);
     }
     if (cs.trade_out) {
-        ImGui::Text("Offering: %s (waiting for your partner)", coop_item(cs.trade_out, b, sizeof(b)));
-        if (ImGui::Button("Withdraw Offer")) __atomic_store_n(&c->trade_req, COOP_TRADE_CANCEL, __ATOMIC_RELEASE);
+        ImGui::Text(tr("Offering: %s (waiting for your partner)"), coop_item(cs.trade_out, b, sizeof(b)));
+        if (ImGui::Button(tr("Withdraw Offer"))) __atomic_store_n(&c->trade_req, COOP_TRADE_CANCEL, __ATOMIC_RELEASE);
     } else if (!cs.trade_near) {
-        ImGui::TextDisabled("Stand next to your partner to offer items.");
+        ImGui::TextDisabled(tr("Stand next to your partner to offer items."));
     } else {
         int slots = cs.trade_slots < 8 ? 8 : cs.trade_slots > 10 ? 10 : cs.trade_slots;
         if (c->trade_slot < 2 || c->trade_slot >= 2 + slots || !(cs.trade_inv[c->trade_slot] >> 16)) c->trade_slot = 2;
-        if (ImGui::BeginCombo("Item", (cs.trade_inv[c->trade_slot] >> 16) ? coop_item(cs.trade_inv[c->trade_slot], b, sizeof(b)) : "-")) {
+        if (ImGui::BeginCombo(tr("Item"), (cs.trade_inv[c->trade_slot] >> 16) ? coop_item(cs.trade_inv[c->trade_slot], b, sizeof(b)) : "-")) {
             for (int s = 2; s < 2 + slots; s++) {
                 if (!(cs.trade_inv[s] >> 16)) continue;
                 char lb[80];
@@ -473,9 +476,9 @@ static void coop_trade(void)
         }
         int have = cs.trade_inv[c->trade_slot] & 0xFFFF;
         if (c->trade_count < 1 || c->trade_count > have) c->trade_count = have;
-        if (have > 1) ImGui::SliderInt("Quantity", &c->trade_count, 1, have);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Choose how much ammo or other stackable items to give. Other items are traded whole.");
-        if (ImGui::Button("Offer")) __atomic_store_n(&c->trade_req, COOP_TRADE_OFFER, __ATOMIC_RELEASE);
+        if (have > 1) ImGui::SliderInt(tr("Quantity"), &c->trade_count, 1, have);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Choose how much ammo or other stackable items to give. Other items are traded whole."));
+        if (ImGui::Button(tr("Offer"))) __atomic_store_n(&c->trade_req, COOP_TRADE_OFFER, __ATOMIC_RELEASE);
     }
     if (cs.trade_msg[0]) ImGui::TextDisabled("%s", cs.trade_msg);
 }
@@ -490,26 +493,26 @@ static void coop_window(void)
     static const char* loots[] = { "Shared loot", "Individual loot" };
     ImGui::BeginDisabled(!off);
     static const char* conns[] = { "Automatic", "Direct", "Server Relay" };
-    if (ImGui::Combo("Connection", &c->conn, conns, IM_ARRAYSIZE(conns))) changed = true;
+    if (ImGui::Combo(tr("Connection"), &c->conn, conns, IM_ARRAYSIZE(conns))) changed = true;
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Automatic tries direct first, then server;\n"
+        ImGui::SetTooltip(tr("Automatic tries direct first, then server;\n"
                           "addresses connect directly, and room codes need a co-op server.\n"
                           "Without a server, Automatic works like Direct;\n"
-                          "Server Relay always uses the server.");
+                          "Server Relay always uses the server."));
     /* Hide IP addresses: the address fields as passwords, "Show" reveals them until the window closes */
     static bool show_addr;
     if (!coop_visible || !c->hide_ip) show_addr = false;
     ImGuiInputTextFlags addr_flags = c->hide_ip && !show_addr ? ImGuiInputTextFlags_Password : 0;
     if (c->conn != COOP_CONN_DIRECT) {   /* first how to connect, then only what it needs (as the lobby) */
-        if (ImGui::InputText("Co-op Server", c->server, sizeof(c->server), addr_flags)) changed = true;
+        if (ImGui::InputText(tr("Co-op Server"), c->server, sizeof(c->server), addr_flags)) changed = true;
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("Enter a co-op server address, with an optional port (default: 7141).\n"
-                              "Both players use the same server; leave blank to use no server.");
-        ImGui::InputText("Room Password", c->password, sizeof(c->password), ImGuiInputTextFlags_Password);
+            ImGui::SetTooltip(tr("Enter a co-op server address, with an optional port (default: 7141).\n"
+                              "Both players use the same server; leave blank to use no server."));
+        ImGui::InputText(tr("Room Password"), c->password, sizeof(c->password), ImGuiInputTextFlags_Password);
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("Optional, through the server: the host sets it, the joining player types the same. Not saved.");
+            ImGui::SetTooltip(tr("Optional, through the server: the host sets it, the joining player types the same. Not saved."));
     }
-    if (ImGui::InputInt("Host Port", &c->port)) { c->port = c->port < 1 ? 1 : c->port > 65535 ? 65535 : c->port; changed = true; }
+    if (ImGui::InputInt(tr("Host Port"), &c->port)) { c->port = c->port < 1 ? 1 : c->port > 65535 ? 65535 : c->port; changed = true; }
     bool by_code = coop_join_by_code(c);   /* Via server, or Automatic with a server: a room code (as the lobby's CODE row) */
     if (ImGui::InputText(by_code ? "Room code###join" : "Join address###join", c->join, sizeof(c->join), addr_flags)) changed = true;
     if (ImGui::IsItemHovered())
@@ -521,31 +524,31 @@ static void coop_window(void)
                                       "For a room code, choose Automatic or Server Relay and enter the co-op server.");
     if (c->hide_ip) {   /* also during a session */
         ImGui::EndDisabled();
-        ImGui::Checkbox("Show Addresses", &show_addr);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Hide IP Addresses is on. Select this to reveal the address fields.");
+        ImGui::Checkbox(tr("Show Addresses"), &show_addr);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Hide IP Addresses is on. Select this to reveal the address fields."));
         ImGui::BeginDisabled(!off);
     }
-    if (ImGui::Combo("Loot Sharing (Host)", &c->loot, loots, IM_ARRAYSIZE(loots))) changed = true;
+    if (ImGui::Combo(tr("Loot Sharing (Host)"), &c->loot, loots, IM_ARRAYSIZE(loots))) changed = true;
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Shared divides supplies; Individual gives each player a copy.\n"
+        ImGui::SetTooltip(tr("Shared divides supplies; Individual gives each player a copy.\n"
                           "Keys and story progress go to both;\n"
-                          "the host decides.");
+                          "the host decides."));
     bool important = c->important != 0;
-    if (ImGui::Checkbox("Duplicate Weapons and Ribbons", &important)) { c->important = important; changed = true; }
+    if (ImGui::Checkbox(tr("Duplicate Weapons and Ribbons"), &important)) { c->important = important; changed = true; }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("With Shared loot, give each player their own weapons and ink ribbons.\n"
-                          "The host decides.");
+        ImGui::SetTooltip(tr("With Shared loot, give each player their own weapons and ink ribbons.\n"
+                          "The host decides."));
     bool upnp = c->upnp != 0;
-    if (ImGui::Checkbox("Automatic Port Forwarding", &upnp)) { c->upnp = upnp; changed = true; }
+    if (ImGui::Checkbox(tr("Automatic Port Forwarding"), &upnp)) { c->upnp = upnp; changed = true; }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Ask your router to allow internet connections while you host.\n"
-                          "Port forwarding ends when you stop hosting.");
+        ImGui::SetTooltip(tr("Ask your router to allow internet connections while you host.\n"
+                          "Port forwarding ends when you stop hosting."));
     ImGui::EndDisabled();
     bool remember = c->remember != 0;   /* also during a session */
-    if (ImGui::Checkbox("Remember Partner Items", &remember)) { c->remember = remember; changed = true; }
+    if (ImGui::Checkbox(tr("Remember Partner Items"), &remember)) { c->remember = remember; changed = true; }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Keep a partner's items for their next visit.\n"
-                          "After a crash, their items are restored automatically.");
+        ImGui::SetTooltip(tr("Keep a partner's items for their next visit.\n"
+                          "After a crash, their items are restored automatically."));
     {   /* the joining player's inventory (as the lobby's ITEMS row) */
         static const char* fixed[] = { "Current Inventory", "Saved with the host", "New inventory" };
         char cur[48], lab[48];
@@ -553,13 +556,13 @@ static void coop_window(void)
         auto label = [&](int i, char* b, size_t n) {
             if (i < 0) snprintf(b, n, "%s%s", fixed[i + 3], i == COOP_ITEMS_HOST && cs.state != COOP_OFF && !cs.host && cs.peer_rec >= 0
                                                               ? cs.peer_rec == REC_HAVE ? " (available)" : cs.peer_rec == REC_OFF ? " (host: off)" : " (none)" : "");
-            else snprintf(b, n, "Save %02d", i + 1);
+            else snprintf(b, n, tr("Save %02d"), i + 1);
         };
         label(v, cur, sizeof(cur));
         ImGui::BeginDisabled(cs.state != COOP_OFF && cs.host);
         static LobbySave* saves;   /* listed when the list opens */
         static int saves_n;
-        if (ImGui::BeginCombo("Starting Inventory", cur)) {
+        if (ImGui::BeginCombo(tr("Starting Inventory"), cur)) {
             if (ImGui::IsWindowAppearing()) { free(saves); saves_n = lobby_save_list(&saves); }
             for (int k = 0; k < 3 + saves_n; k++) {
                 int i = k < 3 ? COOP_ITEMS_CURRENT + k : saves[k - 3].slot;
@@ -570,89 +573,89 @@ static void coop_window(void)
         }
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("Choose current items, items saved by the host, or items from a save.\n"
+            ImGui::SetTooltip(tr("Choose current items, items saved by the host, or items from a save.\n"
                               "Unavailable items fall back to a new inventory;\n"
-                              "after a crash, your items are restored automatically.");
+                              "after a crash, your items are restored automatically."));
     }
     bool tfreeze = c->trade_freeze != 0;   /* also during a session */
-    if (ImGui::Checkbox("Pause Enemies During Trades", &tfreeze)) { c->trade_freeze = tfreeze; changed = true; }
+    if (ImGui::Checkbox(tr("Pause Enemies During Trades"), &tfreeze)) { c->trade_freeze = tfreeze; changed = true; }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Pause enemies while both players are on the trade screen.\n"
-                          "The host decides.");
+        ImGui::SetTooltip(tr("Pause enemies while both players are on the trade screen.\n"
+                          "The host decides."));
     bool skipsync = c->skip_sync != 0;   /* also during a session */
-    if (ImGui::Checkbox("Skip Cutscenes Together", &skipsync)) { c->skip_sync = skipsync; changed = true; }
+    if (ImGui::Checkbox(tr("Skip Cutscenes Together"), &skipsync)) { c->skip_sync = skipsync; changed = true; }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Skip shared cutscenes only after both players choose to skip.\n"
-                          "The host decides.");
+        ImGui::SetTooltip(tr("Skip shared cutscenes only after both players choose to skip.\n"
+                          "The host decides."));
     bool noribbon = g_config.no_ink_ribbon != 0;   /* the GAMEPLAY setting; in co-op the host's counts */
-    if (ImGui::Checkbox("Free Typewriter Saves", &noribbon)) { g_config.no_ink_ribbon = noribbon; changed = true; }
+    if (ImGui::Checkbox(tr("Free Typewriter Saves"), &noribbon)) { g_config.no_ink_ribbon = noribbon; changed = true; }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Save at typewriters without using ink ribbons.\n"
-                          "The host decides in co-op.");
-    if (ImGui::InputText("Your Name", c->name, sizeof(c->name), ImGuiInputTextFlags_CallbackCharFilter,
+        ImGui::SetTooltip(tr("Save at typewriters without using ink ribbons.\n"
+                          "The host decides in co-op."));
+    if (ImGui::InputText(tr("Your Name"), c->name, sizeof(c->name), ImGuiInputTextFlags_CallbackCharFilter,
                          [](ImGuiInputTextCallbackData* d) -> int { return !(d->EventChar >= 32 && d->EventChar < 127 && (isalnum(d->EventChar) || strchr(" -_.!?'()+", d->EventChar))); }))
         changed = true;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The name your partner sees overhead and in the lobby.");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("The name your partner sees overhead and in the lobby."));
     bool tagopt = c->nametag != 0;
-    if (ImGui::Checkbox("Partner Name Tag", &tagopt)) { c->nametag = tagopt; changed = true; }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show your partner's name overhead, or at the screen edge when nearby.\nTheir menu and cutscene status stays visible either way.");
+    if (ImGui::Checkbox(tr("Partner Name Tag"), &tagopt)) { c->nametag = tagopt; changed = true; }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Show your partner's name overhead, or at the screen edge when nearby.\nTheir menu and cutscene status stays visible either way."));
     bool follow = c->follow != 0;
     ImGui::BeginDisabled(cs.state != COOP_OFF && cs.host);   /* the joining player's choice: the host's own has no effect */
-    if (ImGui::Checkbox("Follow Host", &follow)) { c->follow = follow; changed = true; }
+    if (ImGui::Checkbox(tr("Follow Host"), &follow)) { c->follow = follow; changed = true; }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Follow the host through doors.\n"
+        ImGui::SetTooltip(tr("Follow the host through doors.\n"
                           "Off lets you explore separately;\n"
                           "joining, retries and character switches\n"
                           "can still reunite you,\n"
-                          "as can long story cutscenes.");
-    if (cs.state == COOP_CONNECTED) ImGui::TextDisabled("Session: %s", loots[cs.loot_now ? 1 : 0]);
+                          "as can long story cutscenes."));
+    if (cs.state == COOP_CONNECTED) ImGui::TextDisabled(tr("Session: %s"), loots[cs.loot_now ? 1 : 0]);
     auto appear = [](void*, int i) -> const char* { return appear_name(appear_at(i)); };
     int pos = appear_pos(c->chr);   /* the list leaves out event doubles (actors.c) */
-    if (ImGui::Combo("Character Model", &pos, appear, nullptr, appear_count(), 20)) { c->chr = appear_at(pos); changed = true; }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Choose your appearance; your partner sees it too.\nModels can change movement and voice;\nAppearance settings control animations and cutscene models.");
+    if (ImGui::Combo(tr("Character Model"), &pos, appear, nullptr, appear_count(), 20)) { c->chr = appear_at(pos); changed = true; }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Choose your appearance; your partner sees it too.\nModels can change movement and voice;\nAppearance settings control animations and cutscene models."));
     if (off) {
         /* at the title the window closes, so the pad drives the game's menu again */
-        if (ImGui::Button("Host")) { __atomic_store_n(&c->request, COOP_REQ_HOST, __ATOMIC_RELEASE); coop_visible = !cs.at_title; }
+        if (ImGui::Button(tr("Host"))) { __atomic_store_n(&c->request, COOP_REQ_HOST, __ATOMIC_RELEASE); coop_visible = !cs.at_title; }
         ImGui::SameLine();
-        if (ImGui::Button("Join")) { __atomic_store_n(&c->request, COOP_REQ_JOIN, __ATOMIC_RELEASE); coop_visible = !cs.at_title; }
+        if (ImGui::Button(tr("Join"))) { __atomic_store_n(&c->request, COOP_REQ_JOIN, __ATOMIC_RELEASE); coop_visible = !cs.at_title; }
     } else {
-        if (ImGui::Button("Disconnect")) __atomic_store_n(&c->request, COOP_REQ_STOP, __ATOMIC_RELEASE);
+        if (ImGui::Button(tr("Disconnect"))) __atomic_store_n(&c->request, COOP_REQ_STOP, __ATOMIC_RELEASE);
         if (cs.host && (cs.state == COOP_CONNECTED || cs.state == COOP_LOST)) {
             ImGui::SameLine();
-            if (ImGui::Button("Remove Partner")) __atomic_store_n(&c->request, COOP_REQ_KICK, __ATOMIC_RELEASE);
+            if (ImGui::Button(tr("Remove Partner"))) __atomic_store_n(&c->request, COOP_REQ_KICK, __ATOMIC_RELEASE);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Remove your partner and reopen their place in the lobby.\n"
-                                  "They can rejoin with the same address or room code.");
+                ImGui::SetTooltip(tr("Remove your partner and reopen their place in the lobby.\n"
+                                  "They can rejoin with the same address or room code."));
         }
     }
     ImGui::TextWrapped("%s", cs.status[0] ? coop_shown(cs.status) : "Not connected");
-    if (cs.state != COOP_OFF && cs.host && cs.code[0]) ImGui::Text("Join code: %.4s-%.4s", cs.code, cs.code + 4);
+    if (cs.state != COOP_OFF && cs.host && cs.code[0]) ImGui::Text(tr("Join code: %.4s-%.4s"), cs.code, cs.code + 4);
     if (cs.state != COOP_OFF && cs.host && cs.room[0]) {
         char room[16];
         snprintf(room, sizeof(room), "%.4s-%.4s", cs.room, cs.room + 4);
-        ImGui::Text("Room code: %s", room);
+        ImGui::Text(tr("Room code: %s"), room);
         ImGui::SameLine();
-        if (ImGui::Button("Copy Room Code")) SDL_SetClipboardText(room);
+        if (ImGui::Button(tr("Copy Room Code"))) SDL_SetClipboardText(room);
     }
     if (cs.state == COOP_CONNECTED && cs.peer_in_game) coop_trade();
     PortmapStatus pm;
     portmap_status(&pm);
     if (pm.local_ip[0] || pm.msg[0]) {   /* hosting */
         char addr[80];
-        ImGui::SeparatorText("Internet");
-        ImGui::Text("Local address: %s", pm.local_ip[0] ? coop_shown(pm.local_ip) : "?");
+        ImGui::SeparatorText(tr("Internet"));
+        ImGui::Text(tr("Local address: %s"), pm.local_ip[0] ? coop_shown(pm.local_ip) : "?");
         if (pm.public_ip[0]) snprintf(addr, sizeof(addr), "%s:%d#%s", pm.public_ip, pm.public_port, cs.code);
         else snprintf(addr, sizeof(addr), "%s:%d#%s", pm.local_ip, c->port, cs.code);
         if (ImGui::Button(pm.public_ip[0] ? "Copy Join Address" : "Copy Local Address")) SDL_SetClipboardText(addr);
         ImGui::SameLine();
         ImGui::TextDisabled("%s", coop_shown(addr));
         if (!pm.public_ip[0] && pm.state != PM_BUSY && !cs.room[0] && cs.state != COOP_CONNECTED)   /* (the router's status: the log only) */
-            ImGui::TextDisabled("If your partner can't connect, use a co-op server (Automatic).");
+            ImGui::TextDisabled(tr("If your partner can't connect, use a co-op server (Automatic)."));
     }
     if (cs.at_title)
-        ImGui::TextDisabled("Host: start or load a game from the title screen.\n"
-                            "Partner: wait at the title screen to join the host's game.");
+        ImGui::TextDisabled(tr("Host: start or load a game from the title screen.\n"
+                            "Partner: wait at the title screen to join the host's game."));
     ImGui::End();
     if (changed) settings_save_later();
 }
@@ -736,7 +739,7 @@ static void import_window(void)
     int running = __atomic_load_n(&pg->running, __ATOMIC_ACQUIRE);
     if (!loaded || (was_running && !running)) {   /* the manifests: at the first opening and after an extraction */
         for (int s = 0; s < IMPORT_SOURCES; s++) n[s] = import_results(s, items[s], 1024, when[s], sizeof(when[s]));
-        if (loaded) import_registry_load();   /* new player models for "You appear as" */
+        if (loaded) { import_registry_load(); lang_scan(); }   /* new player models for "You appear as", new languages */
         loaded = 1;
     }
     was_running = running;
@@ -748,22 +751,39 @@ static void import_window(void)
     }
     ImGui::SetNextWindowPos(ImVec2(60, 60), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(820, 560), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Import (F9)", &import_visible)) { ImGui::End(); return; }
-    ImGui::TextWrapped("Import character models from your own disc image. Imported models appear under Character Model.");
+    if (!ImGui::Begin(tr("Import (F9)"), &import_visible)) { ImGui::End(); return; }
+    ImGui::TextWrapped("%s", tr("Import from your own disc images: character models (Character Model) and languages (Language)."));
     for (int s = 0; s < IMPORT_SOURCES; s++) {
         const ImportSource* src = &import_sources[s];
         char label[128], dir[1100];
         SDL_snprintf(label, sizeof(label), "%s (%s)", src->title, src->serial);
         if (!ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen)) continue;
         ImGui::PushID(s);
-        ImGui::TextWrapped("Disc image: %s", g_import.iso[s][0] ? g_import.iso[s] : "(none chosen)");
+        ImGui::TextWrapped(tr("Disc image: %s"), g_import.iso[s][0] ? g_import.iso[s] : "(none chosen)");
         ImGui::BeginDisabled(running != 0);
-        if (ImGui::Button("Choose Disc Image...")) {
+        if (ImGui::Button(tr("Choose Disc Image..."))) {
             static const SDL_DialogFileFilter filters[] = { { "PS2 disc image (*.iso)", "iso" }, { "All files", "*" } };
             SDL_ShowOpenFileDialog(import_picked, (void*)(intptr_t)s, win, filters, 2, g_import.iso[s][0] ? g_import.iso[s] : NULL, false);
         }
         import_source_dir(s, dir, sizeof(dir));
-        ImGui::TextDisabled("Output: %s", dir);
+        ImGui::TextDisabled(tr("Output: %s"), dir);
+        if (src->cat == IMPORT_CAT_LANGUAGES) {   /* languages (lang.h): every language of the disc */
+            ImGui::BeginDisabled(!g_import.iso[s][0]);
+            if (ImGui::Button(tr("Import Languages"))) import_start(s, 0);
+            ImGui::EndDisabled();
+            ImGui::EndDisabled();
+            if (running || pg->total) {
+                char ov[64];
+                SDL_snprintf(ov, sizeof(ov), "%d / %d", pg->done, pg->total);
+                ImGui::ProgressBar(pg->total ? (float)pg->done / pg->total : 0.0f, ImVec2(-1, 0), ov);
+                ImGui::TextWrapped("%s", pg->phase);
+            }
+            for (int l = 1; l < LANG_COUNT; l++)
+                if (lang_installed(l) && lang_dir(l) && !SDL_strncmp(lang_dir(l), dir, SDL_strlen(dir)))
+                    ImGui::BulletText("%s%s", lang_names[l], lang_has_subtitles(l) ? tr(" (cutscene subtitles)") : "");
+            ImGui::PopID();
+            continue;
+        }
         {   /* (only the groups offered, IMPORT_OFFERED) */
             static const struct { const char* label; int bit; } groups[] = {
                 { "Playable Characters", IMPORT_PLAYERS }, { "Cutscene Models", IMPORT_CUTSCENE }, { "Other Characters", IMPORT_NPCS }, { "Enemies", IMPORT_ENEMIES } };
@@ -777,7 +797,7 @@ static void import_window(void)
             }
         }
         ImGui::BeginDisabled(!g_import.iso[s][0] || !what[s]);
-        if (ImGui::Button("Import Characters")) import_start(s, what[s]);
+        if (ImGui::Button(tr("Import Characters"))) import_start(s, what[s]);
         ImGui::EndDisabled();
         ImGui::EndDisabled();
         if (running || pg->total) {
@@ -792,9 +812,9 @@ static void import_window(void)
             if (x->group < 0 || !(IMPORT_OFFERED & (1 << x->group))) continue;
             ok += x->ok; players += x->player; failed += !x->ok;
         }
-        if (!n[s]) ImGui::TextDisabled("Nothing extracted yet.");
+        if (!n[s]) ImGui::TextDisabled(tr("Nothing extracted yet."));
         else {
-            ImGui::Text("Extracted %s: %d models, %d usable as player models, %d failed", when[s], ok, players, failed);
+            ImGui::Text(tr("Extracted %s: %d models, %d usable as player models, %d failed"), when[s], ok, players, failed);
             static const char* const gname[IMPORT_GROUPS] = { "Playable Characters", "Cutscene Models", "Other Characters", "Enemies" };
             for (int g = 0; g < IMPORT_GROUPS; g++) {
                 if (!(IMPORT_OFFERED & (1 << g))) continue;   /* (an older run's other groups: not listed) */
@@ -802,15 +822,15 @@ static void import_window(void)
                 for (int i = 0; i < n[s]; i++) if (items[s][i].group == g) { gn++; gp += items[s][i].player != 0; }
                 if (!gn) continue;
                 char gl[96];
-                SDL_snprintf(gl, sizeof(gl), "%s: %d, %d player models###g%d", gname[g], gn, gp, g);
+                SDL_snprintf(gl, sizeof(gl), tr("%s: %d, %d player models###g%d"), gname[g], gn, gp, g);
                 if (!ImGui::TreeNodeEx(gl, g == IMPORT_GROUP_PLAYERS ? ImGuiTreeNodeFlags_DefaultOpen : 0)) continue;
                 if (ImGui::BeginTable("##items", 9, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV,
                                       ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 15))) {
                     ImGui::TableSetupScrollFreeze(0, 1);
-                    ImGui::TableSetupColumn("Character"); ImGui::TableSetupColumn("Variant"); ImGui::TableSetupColumn("File");
-                    ImGui::TableSetupColumn("Meshes"); ImGui::TableSetupColumn("Vertices"); ImGui::TableSetupColumn("Triangles");
-                    ImGui::TableSetupColumn("Textures"); ImGui::TableSetupColumn("Player Model");
-                    ImGui::TableSetupColumn("Notes", ImGuiTableColumnFlags_WidthStretch);
+                    ImGui::TableSetupColumn(tr("Character")); ImGui::TableSetupColumn(tr("Variant")); ImGui::TableSetupColumn(tr("File"));
+                    ImGui::TableSetupColumn(tr("Meshes")); ImGui::TableSetupColumn(tr("Vertices")); ImGui::TableSetupColumn(tr("Triangles"));
+                    ImGui::TableSetupColumn(tr("Textures")); ImGui::TableSetupColumn(tr("Player Model"));
+                    ImGui::TableSetupColumn(tr("Notes"), ImGuiTableColumnFlags_WidthStretch);
                     ImGui::TableHeadersRow();
                     for (int i = 0; i < n[s]; i++) {
                         const ImportItem* x = &items[s][i];
@@ -824,8 +844,8 @@ static void import_window(void)
                         ImGui::TableNextColumn(); ImGui::Text("%d", x->tris);
                         ImGui::TableNextColumn(); ImGui::Text("%d", x->textures);
                         ImGui::TableNextColumn();
-                        if (!x->ok) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), "failed");
-                        else if (x->player) ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "yes");
+                        if (!x->ok) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), tr("failed"));
+                        else if (x->player) ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), tr("yes"));
                         else ImGui::TextDisabled(x->female < 0 ? "glTF only" : "no");
                         ImGui::TableNextColumn(); ImGui::TextUnformatted(x->note[0] ? x->note : x->ok ? "glTF + PNG" : "");
                         if (x->note[0] && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", x->note);
@@ -887,7 +907,7 @@ void overlay_render(void)
     if (hint) {
         ImGui::SetNextWindowPos(ImVec2(10, ImGui::GetIO().DisplaySize.y - 10), ImGuiCond_Always, ImVec2(0, 1));
         ImGui::SetNextWindowBgAlpha(0.4f);
-        ImGui::Begin("##coophint", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs |
+        ImGui::Begin(tr("##coophint"), nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs |
                                             ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
         ImGui::TextUnformatted(hint);
         ImGui::End();
@@ -895,11 +915,11 @@ void overlay_render(void)
     if (g_config.show_fps || ping) {
         ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 10, 10), ImGuiCond_Always, ImVec2(1, 0));
         ImGui::SetNextWindowBgAlpha(0.4f);
-        ImGui::Begin("##fps", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs |
+        ImGui::Begin(tr("##fps"), nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs |
                                        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
-        if (g_config.show_fps && ping) ImGui::Text("%.1f fps   ping %d ms", ImGui::GetIO().Framerate, cs.ping_ms);
-        else if (ping) ImGui::Text("ping %d ms", cs.ping_ms);
-        else ImGui::Text("%.1f fps", ImGui::GetIO().Framerate);
+        if (g_config.show_fps && ping) ImGui::Text(tr("%.1f fps   ping %d ms"), ImGui::GetIO().Framerate, cs.ping_ms);
+        else if (ping) ImGui::Text(tr("ping %d ms"), cs.ping_ms);
+        else ImGui::Text(tr("%.1f fps"), ImGui::GetIO().Framerate);
         ImGui::End();
     }
     ImGui::Render();
