@@ -10,8 +10,7 @@
 
 ### Co-op
 
-- **Simpler hosting status**: the lobby and F3 no longer show router port-forwarding details; they
-  show the join address and code, and a short hint when your partner may need a co-op server.
+- **Clearer co-op texts**: some wording and information in the lobby and F3 was cleaned up.
 
 ### Fixes
 
