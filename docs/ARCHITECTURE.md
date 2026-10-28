@@ -42,7 +42,7 @@ settings menus) hook into the game through small glue functions.
 | `pc/src/input/` | DualShock 2 emulation (`pad.c`), bindings, third-person input, mouse in menus |
 | `pc/src/host/` | entry point (`host.c`), render loop, settings table and `recvx.ini`, native save files (`savestore.c`), F1/F2/F3/F9 overlay (Dear ImGui), logging, profilers, model catalogue |
 | `pc/src/net/` | co-op UDP, packet formats, port mapping, rendezvous client and protocol |
-| `pc/src/import/` | F9 imports from other games' discs (glTF export, `.cvxm` player models): [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md) |
+| `pc/src/import/` | F9 imports from other games' discs (glTF export, `.cvxm` player models): [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md); languages from the European disc (`lang.c`): [LANGUAGES.md](LANGUAGES.md) |
 | `pc/server/` | `recvx-server` and the `recvx-client` test tool |
 | `pc/tests/` | ctest programs |
 | `pc/tools/` | code generators (`asm2c.py`, `vsm2inc.py`), room and map tools, test and comparison scripts |
@@ -1088,7 +1088,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_MODS=dir` | mods folder (default `./mods`) |
 | `SDL_VIDEO_DRIVER=offscreen` | headless run |
 | `RECVX_SHOW_OVERLAY=1` / `=2` / `=3` / `=4` | open the F1 overlay / the cheats window (F2) / the co-op window / the import window (F9) at start |
-| `RECVX_IMPORT=outbreak2`, `RECVX_IMPORT_ISO`, `RECVX_IMPORT_WHAT` | headless import, then exit ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)) |
+| `RECVX_IMPORT=outbreak2` / `=sles50306`, `RECVX_IMPORT_ISO`, `RECVX_IMPORT_WHAT` | headless import, then exit ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md), [LANGUAGES.md](LANGUAGES.md)) |
 | `RECVX_EXIT_FRAME=n` | exit at presented frame n |
 | `RECVX_TEST_CRASH=stack\|null[:n]` | crash the game thread at frame hand-off n (default 100) with a stack overflow or a null write (the crash report) |
 | `RECVX_WATCHDOG=sec` | Linux: print a backtrace after sec seconds and exit |

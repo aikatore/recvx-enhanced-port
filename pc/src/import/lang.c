@@ -152,19 +152,24 @@ static int sysmes_rebuild(const Ald* us, const Ald* l, const unsigned* fl, const
     return 1;
 }
 
-static int sysmes_write(const char* dir, const Ald* l, const Mes* sys)
+/* the language's SYSMES.ALD (l: n bytes) in the US order (us: nus bytes), malloc'd (*n bytes); its file tables (fl, hl)
+   moved to the appended pages in hl_out; NULL: a layout this does not know (import.h) */
+unsigned char* lang_sysmes(const unsigned char* us, uint32_t nus, const unsigned char* l, uint32_t* n,
+                           const unsigned* fl, const unsigned* hl, unsigned* hl_out)
 {
-    uint32_t ni = mes_bytes(&l->items), ns = mes_bytes(sys), n = 8 + ni + ns;
-    unsigned char* b = calloc(1, n);
-    int ok;
-    if (!b) return 0;
-    memcpy(b, &ni, 4);
-    mes_write(&l->items, b + 4);
-    memcpy(b + 4 + ni, &ns, 4);
-    mes_write(sys, b + 8 + ni);
-    ok = put(dir, "SYSMES.ALD", b, n);
-    free(b);
-    return ok;
+    static Ald a, b;
+    static Mes sys;
+    uint32_t ni, ns;
+    unsigned char* o;
+    if (!ald_read(us, nus, &a) || !ald_read(l, *n, &b) || !sysmes_rebuild(&a, &b, fl, hl, &sys, hl_out)) return NULL;
+    ni = mes_bytes(&b.items); ns = mes_bytes(&sys);
+    if (!(o = calloc(1, 8 + ni + ns))) return NULL;
+    memcpy(o, &ni, 4);
+    mes_write(&b.items, o + 4);
+    memcpy(o + 4 + ni, &ns, 4);
+    mes_write(&sys, o + 8 + ni);
+    *n = 8 + ni + ns;
+    return o;
 }
 
 /* ---------------------------------------------------------------- the executable's tables */
@@ -298,10 +303,8 @@ static int write_txt(FILE* o, void* ud)
 }
 
 static int one_lang(FILE* f, const LangSource* s, const LangDisc* ld, const char* outdir, const char* iso,
-                    const Ald* us, const unsigned char* exe, uint32_t nexe, const unsigned char* w, int nw)
+                    const unsigned char* us, uint32_t nus, const unsigned char* exe, uint32_t nexe, const unsigned char* w, int nw)
 {
-    static Mes sysout;
-    static Ald l;
     char dir[1100], path[64], txt[1200];
     const char* lname = lang_names[ld->lang];
     unsigned fl[24], hl[24], hl2[24];
@@ -316,7 +319,11 @@ static int one_lang(FILE* f, const LangSource* s, const LangDisc* ld, const char
     snprintf(path, sizeof(path), "%s/SYSMES%d.ALD", ld->dir, ld->digit);
     if (!exe_files(exe, nexe, ld->exe, fl, hl)) { host_log("lang: %s: the file tables are not in %s\n", lname, s->exe); return 0; }
     if (!(d = read_file(f, path, 1u << 20, &n))) { host_log("lang: %s: %s missing\n", lname, path); return 0; }
-    ok = ald_read(d, n, &l) && sysmes_rebuild(us, &l, fl, hl, &sysout, hl2) && sysmes_write(dir, &l, &sysout);
+    {
+        unsigned char* b = lang_sysmes(us, nus, d, &n, fl, hl, hl2);
+        ok = b && put(dir, "SYSMES.ALD", b, n);
+        free(b);
+    }
     free(d);
     if (!ok) { host_log("lang: %s: %s has an unknown layout\n", lname, path); return 0; }
     pg->done++;
@@ -369,7 +376,7 @@ int lang_extract(int src, const char* iso, const char* outdir)
     }
     pg->total = s->n * (1 + 5 + 205);
     for (int i = 0; i < s->n; i++) {
-        if (!one_lang(f, s, &s->langs[i], outdir, iso, &us, exe, nexe, w, nw)) fails++;
+        if (!one_lang(f, s, &s->langs[i], outdir, iso, usd, nus, exe, nexe, w, nw)) fails++;
         pg->done = (i + 1) * (1 + 5 + 205);
     }
     free(exe); free(usd); fclose(f);

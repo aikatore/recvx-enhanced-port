@@ -78,6 +78,10 @@ extern volatile int g_import_reload;
 int ob2_group(const char* id);   /* IMPORT_GROUP_* of a disc file name, -1: not a character model */
 int ob2_extract(const char* iso, const char* outdir, int what, ImportItem* items, int max, int* n);
 int lang_extract(int src, const char* iso, const char* outdir);   /* languages: how many failed, -1 the disc is unusable */
+/* lang.c: a language's SYSMES.ALD (l, *n bytes) in the US order (us, nus bytes; fstbl / fsheader the US file tables), malloc'd
+   (*n bytes); its file tables fl, hl moved to its pages appended after the US messages in hl_out; NULL: an unknown layout */
+unsigned char* lang_sysmes(const unsigned char* us, uint32_t nus, const unsigned char* l, uint32_t* n,
+                           const unsigned* fl, const unsigned* hl, unsigned* hl_out);
 
 /* disc reading (ob2.c): a file of the ISO 9660 image (`path` with '/' for folders, any case); bytes at an offset;
    the files of an AFS archive at `base` (malloc'd; names from its name table or "#i"; an entry outside: size 0) */
