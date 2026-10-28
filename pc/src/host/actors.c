@@ -28,7 +28,7 @@ const ActorModel actor_models[] = {
     { "Alfred Ashford (event model)", 7030, 2, 44, 0, MA },
     { "Alexia Ashford", 9150, 2, 95, 0, FE },
     { "Rodrigo Juan Raval", 0, 1, 98, 0, MA },
-    { "Hazmat Suit Man", 3130, 2, 99, 0, MA },
+    { "Man in a Hazmat Suit", 3130, 2, 99, 0, MA },
     { "Alexia (First Form)", 5820, 1, 12, 0, FE },
     /* creatures: humanoids moved by the player's motions (a man's), the others playing their own idle */
     { "Nosferatu", 5800, 0, 15, 0, MA },
