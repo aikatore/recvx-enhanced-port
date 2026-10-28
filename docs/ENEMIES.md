@@ -187,7 +187,7 @@ Mixing types the PS2 never mixed can still show odd behaviour (a Hunter may leap
   and hides dead records; records without a `DieCk` respawn. Kill bits above 511 would not hide
   (retail uses up to 357). "All dead" checks (`DieEventCk`): rooms 3210, 4012, 5550..5710.
 * **Difficulty** (`sys->gm_mode`: 0 normal, 1 easy, 2 very easy, 3 Battle Game; set by the title's
-  difficulty menu, setting "Difficulty select", or the co-op lobby's START): very easy doubles the
+  difficulty menu, setting "Difficulty Select", or the co-op lobby's START): very easy doubles the
   player's HP (320) and takes enemy HP from the second row of the type's table; easy and very easy
   change ammo pickups (`item.c getbulletmax`); easy keeps the enemies' normal HP (type 21 aside).
   Counts, placement and speed do not depend on it.
@@ -242,7 +242,7 @@ skin cutter `njplus.c npCutSkin` is an empty function. The head stayed on the fa
 blood (checked: each look spawned in the lift hall and given the head hit, `RECVX_HEADSHOT`;
 frame-identical between the room's own zombies and other looks).
 
-**On the PC** ("Head blow-offs", GAMEPLAY, `head_blowoff`, on by default): a zombie whose
+**On the PC** ("Zombie Decapitation", GAMEPLAY, `head_blowoff`, on by default): a zombie whose
 `exp0 + 0x78` is -1 is drawn without its head (`MdlPut.c bhPutModel` -> `variant_glue.c
 pc_zombie_head`): while it is drawn, the rotation part of the matrices of head node 11 and the nodes
 below it is zeroed, so the skin's vertices the head bone carries meet at the head joint and the
@@ -259,7 +259,7 @@ to the guest as an `EV_FX` linked to the zombie's slot, and `coop_glue.c apply_f
 guest's flag from it, so the partner sees the head go too. A guest that enters the room later sees
 the body with its head.
 
-**Third person, "Precise hits"** ([THIRDPERSON.md](THIRDPERSON.md#precise-hits)): a shot tested
+**Third person, "Precise Shots"** ([THIRDPERSON.md](THIRDPERSON.md#precise-hits)): a shot tested
 against the zombie's body bursts the head only when that hit is on the head (joint 11); earlier head
 damage, the magnum's near hit on joints 1 and 8..10 and the shotgun aimed up no longer do.
 
@@ -286,11 +286,11 @@ items given after a scripted kill, enemies on the entry position or in a door's 
 
 ## Enemy spawner (F2)
 
-F2 -> "Spawn enemy" (also the EXTRAS page): "Enemy" picks one of 58 entries (the "You appear as"
+F2 -> "Spawn Enemy" (also the EXTRAS page): "Enemy" picks one of 58 entries (the "Character Model"
 catalogue entries with ids up to 30, plus Gulp Worm, Alexia 2 and 3, Alexia's baby, tentacle,
 both knights, ceiling trap, Nosferatu's core, Alfred, the ants, the baby spider, the exploding
 prop), then the custom enemies, marked "[C] " ("Enemy variants": the built-in ones, then those of
-`mods/enemies.ini`); "Spawn in front of me" puts it 3 m in front of the player, facing it. Code:
+`mods/enemies.ini`); "Spawn Ahead" puts it 3 m in front of the player, facing it. Code:
 `pc/glue/spawn_glue.c`.
 
 Steps, as the room loader does it for a record:
@@ -411,7 +411,7 @@ arms, motions, attacks and sounds, spawned as an ordinary enemy, with the Tyrant
   (30 took 600), 15 shotgun shells, 5 grenade rounds (10 hits); Tyrant 1 there: 30, 21, 7. He walks,
   charges and swings as in the chase; with no shots he hits a standing player about every 4 s.
 * **Hits on the player** are his own (busy flag set, released at the end): checked with Claire, Chris
-  played, and "You appear as" Chris's file and Monster Steve: each heavy blow 19 steps knocked
+  played, and "Character Model" Chris's file and Monster Steve: each heavy blow 19 steps knocked
   down, each close swipe 70 steps in his grab, then back in control.
 * Randomizer: weight 1 in Wild, never in Mild, heavy (below). Slots: 3 (him and his two arms).
 
@@ -441,8 +441,8 @@ name is shown as "[C] Name" in F2 and logged by the randomizer); `;` and `#` sta
 ```ini
 [Brute zombie]
 id = 100                 ; required, 100..999, unique: co-op and the randomizer use it
-base = Zombie: soldier   ; required: an F2 entry's name, or type[.model version] (1.2)
-model = Nosferatu        ; a "You appear as" model drawn instead (humanoids; none = the base's)
+base = Zombie: Soldier   ; required: an F2 entry's name, or type[.model version] (1.2)
+model = Nosferatu        ; a "Character Model" model drawn instead (humanoids; none = the base's)
 attach = 3:9, 4:13       ; sub-model:node of that model drawn on its nodes (up to 4)
 hp = 2                   ; times the base's hit points (0.05..50)
 armour = 1               ; damage taken: weapon damage x armour / hp
@@ -508,13 +508,13 @@ count for both. Code: `pc/glue/enemyopt_glue.c`, one decomp hook at the end of
 
 | Setting (page) | ini key | Values | Test aid |
 |---|---|---|---|
-| "Extra enemies" (GAMEPLAY) | `enemy_extra` | 0 = Off, 1..3 = "Up to N per room" | `RECVX_ENEMY_EXTRA` |
-| "Rearranged enemies" (GAMEPLAY) | `enemy_place` | 0/1 | `RECVX_ENEMY_PLACE` |
-| "Enemy randomizer" (GAMEPLAY) | `enemy_random` | 0/1 | `RECVX_ENEMY_RANDOM` |
-| "Enemy seed" (GAMEPLAY) | `enemy_seed` | seed for placements and randomizer | `RECVX_ENEMY_SEED` |
-| "Randomizer variety" (GAMEPLAY) | `enemy_variety` | 0 = Mild, **1 = Wild** | `RECVX_ENEMY_VARIETY` |
-| "Randomize event enemies" (GAMEPLAY) | `enemy_random_events` | 0/**1** | `RECVX_ENEMY_EVENTS` |
-| "Randomize cutscene cast" and its page (GAMEPLAY, CUTSCENE CAST) | `cast_random`, `cast_models`, `cast_assign`, `cast_imports` | the story characters drawn as other models in cutscenes, visual only (no enemy is touched): [ACTORS.md](ACTORS.md) "Cutscene cast" | `RECVX_CAST` |
+| "Extra Enemies" (GAMEPLAY) | `enemy_extra` | 0 = Off, 1..3 = "Up to N" | `RECVX_ENEMY_EXTRA` |
+| "Rearranged Enemies" (GAMEPLAY) | `enemy_place` | 0/1 | `RECVX_ENEMY_PLACE` |
+| "Enemy Randomizer" (GAMEPLAY) | `enemy_random` | 0/1 | `RECVX_ENEMY_RANDOM` |
+| "Enemy Seed" (GAMEPLAY) | `enemy_seed` | seed for placements and randomizer | `RECVX_ENEMY_SEED` |
+| "Randomizer Variety" (GAMEPLAY) | `enemy_variety` | 0 = Mild, **1 = Wild** | `RECVX_ENEMY_VARIETY` |
+| "Randomize Event Enemies" (GAMEPLAY) | `enemy_random_events` | 0/**1** | `RECVX_ENEMY_EVENTS` |
+| "Randomize Cutscene Cast" and its page (GAMEPLAY, CUTSCENE CAST) | `cast_random`, `cast_models`, `cast_assign`, `cast_imports` | the story characters drawn as other models in cutscenes, visual only (no enemy is touched): [ACTORS.md](ACTORS.md) "Cutscene cast" | `RECVX_CAST` |
 
 Every option first reads the room script once per load (`scan_script`) and marks records that an
 event drives (`LoadWork`, motion pauses, links, positioning, zombie/face/look/render ops), that the
@@ -556,8 +556,8 @@ the record's own slot during the load.
 | Record | Becomes | Why |
 |---|---|---|
 | free (no script use but its kill bit) | another kind | nothing in the script depends on its type |
-| shown or hidden by the script only (`InitModelSet`, "later-activated", ambushes that just appear) | another kind, with "Randomize event enemies" | the script only switches it on and off; it starts in its AI |
-| event-driven (`LoadWork`, motion pauses, links, positioning, zombie/face/render/look ops, `EneSeOn`) or HP read/set by the script | **another look of its own type**, with "Randomize event enemies" | the event plays the type's motion numbers and room motions on its skeleton, sets its AI modes (`SubCtr` 143/146/147), tests `id == 1` and its HP. All zombie looks share an 18-node first sub-model, Hunter and Sweeper a 28-node one, so the scene still fits; types with one look (Cerberus, Bandersnatch, Black Widow, bat, Spotter, moth, albinoids, anatomist) stay |
+| shown or hidden by the script only (`InitModelSet`, "later-activated", ambushes that just appear) | another kind, with "Randomize Event Enemies" | the script only switches it on and off; it starts in its AI |
+| event-driven (`LoadWork`, motion pauses, links, positioning, zombie/face/render/look ops, `EneSeOn`) or HP read/set by the script | **another look of its own type**, with "Randomize Event Enemies" | the event plays the type's motion numbers and room motions on its skeleton, sets its AI modes (`SubCtr` 143/146/147), tests `id == 1` and its HP. All zombie looks share an 18-node first sub-model, Hunter and Sweeper a 28-node one, so the scene still fits; types with one look (Cerberus, Bandersnatch, Black Widow, bat, Spotter, moth, albinoids, anatomist) stay |
 | bosses and everything in their rooms (ids 2, 12..17, 19, 23, 24, 29, 30, 53..55: Gulp Worm, Alexia, Nosferatu, Alfred, Monster Steve, Tyrant fights, Giant Black Widow, tentacles, knights) | kept: the whole room | the scripts wait for the boss's death or drive it |
 | NPCs (ids >= 31), props (0), fish, albinoids, ants, moths, ceiling trap, scripted object | kept | water/wall/set-piece types, or no AI of their own |
 | a record without a floor (`flr_no < 0`) | kept | hangs somewhere for an event |
@@ -635,7 +635,7 @@ event-driven records (other looks of one type) or single-look event types.
 
 #### Event enemies per room
 
-What "Randomize event enemies" does with each room's event-driven and script-shown records of the
+What "Randomize Event Enemies" does with each room's event-driven and script-shown records of the
 roaming types (generated from the script walk; records not listed are free, or not enemies of these
 types). *Another kind*: the script only shows or hides them. *Another look*: an event drives them
 (the scene keeps its type). *Kept*: event-driven with no other look of their type, or a boss arena.

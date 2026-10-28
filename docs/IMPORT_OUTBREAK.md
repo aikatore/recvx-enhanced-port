@@ -4,7 +4,7 @@ Nothing from any disc is in the repository: the importer reads the user's own im
 writes what it extracts to the user's mods folder (`mods/import/outbreak2/`, or `import_dir`).
 
 Goal: take the character models of *Resident Evil Outbreak File #2* (US, SLUS-20984) and use them
-as player models in this port ("You appear as", [ACTORS.md](ACTORS.md#you-appear-as)); later
+as player models in this port ("Character Model", [ACTORS.md](ACTORS.md#you-appear-as)); later
 voices and the social-call ("ad-lib") animations for co-op. The F9 window (only with the `--dev` launch option) runs the extraction and
 lists what was extracted; it is built so other games can be added as further sources.
 
@@ -14,7 +14,7 @@ lists what was extracted; it is built so other games can be added as further sou
 |---|---|
 | 1. Format research | done: disc layout, archives, compression, model and texture format ("Disc format") |
 | 2. Extractor (C, `pc/src/import/`) | done: every character model on the disc (537: 30 playable, 40 cutscene / high detail, 276 NPCs, 191 enemies) to glTF + PNG |
-| 3. Conversion to CVX player models | done for every model on the human skeleton (324: all 30 playable, 39 of 40 cutscene / high detail, 238 of 276 NPCs, 17 enemies): `.cvxm`, listed in "You appear as", skinned every frame, retargeted from the player's motions; checked in game (walk, aim, grabs, third person, cutscenes) |
+| 3. Conversion to CVX player models | done for every model on the human skeleton (324: all 30 playable, 39 of 40 cutscene / high detail, 238 of 276 NPCs, 17 enemies): `.cvxm`, listed in "Character Model", skinned every frame, retargeted from the player's motions; checked in game (walk, aim, grabs, third person, cutscenes) |
 | 4. F9 window | done: disc image, what to extract (four groups), progress, results grouped (playable, cutscene / high detail, NPCs, enemies) from the manifest (also after a restart) |
 | 5. Notes for later (voices, ad-libs, animations) | first findings ("Notes for later") |
 | 6. Verification | headless extraction, glTF/`.cvxm` checks and previews, in-game shots, ctest (`import`, `appear`), Linux and Windows builds, layout check |
@@ -28,7 +28,7 @@ lists what was extracted; it is built so other games can be added as further sou
 | 14. Grip (round 4) | retuned: the support hand hung low and its fingers reached far past the grip; now right under the gun hand on the centre line, for all 8 characters ("Posture") |
 | 15. Lobby list (round 4) | main's MODEL page lists all imports, grouped with headers; scroll bar click; checked with 384 entries ("F9 window") |
 | 16. Weapon hands (round 5) | the weapons' hand pieces (Claire's / Chris's) hidden on imported models; their own hands hold the gun ("Posture") |
-| 17. Groups offered (round 6) | for now only the playable characters and the NPCs: F9 offers, extracts and lists only those; "You appear as" leaves out the other groups of an older manifest (`IMPORT_OFFERED`) |
+| 17. Groups offered (round 6) | for now only the playable characters and the NPCs: F9 offers, extracts and lists only those; "Character Model" leaves out the other groups of an older manifest (`IMPORT_OFFERED`) |
 | 18. Left arm in idle and holds (round 6) | fixed: men's left arm pulled in across the thigh in idle, and the support hand pulled under the gun hand in long-gun holds ("Posture") |
 
 Resume notes: build with `cmake --build build`; headless run:
@@ -58,7 +58,7 @@ previews were rendered offline from such dumps (exploration scripts outside the 
 4. Co-op: the partner sees the played character instead of an imported model (the pose's `chr`
    has no room for it and the partner may not have the file); a "model hash" in the pose and a
    fallback would allow it.
-5. NPC names and sexes are not known (listed as "NPC <file>", moving with a man's motions).
+5. NPC names and sexes are not known (listed as "Character <file>", moving with a man's motions).
 6. Voices and ad-lib motions (below).
 
 ## Disc format
@@ -153,13 +153,13 @@ threads on NBD textures, and the [Outbreak decomp](https://github.com/GalaxyNost
 
 | File | Role |
 |---|---|
-| `import.h`, `import.c` | the sources table, extraction thread and progress, manifest, the registry for "You appear as" |
+| `import.h`, `import.c` | the sources table, extraction thread and progress, manifest, the registry for "Character Model" |
 | `ob2.c` | Outbreak File #2: ISO 9660 root lookup, AFS, SLD, NBD reading into an `ImpModel` |
 | `impmodel.h`, `impmodel.c` | glTF 2.0 binary writer (skeleton, skin, PNG textures), TIM2 decoding, the `.cvxm` converter |
 
 What is read: all character models are in `romdata_usa.afs` (`ob2_group`): `P*` the playable
 characters (30), `EP*` their cutscene versions and `HP*` the high-detail ones (40, named after the
-cast: "Cutscene, costume n", "High detail"), `N*` / `HN*` NPCs (276, by file name), `E*` / `HE*`
+cast: "Cutscene Costume n", "High Detail"), `N*` / `HN*` NPCs (276, by file name), `E*` / `HE*`
 enemies (191). The scenario archives `rNNN.afs` hold rooms (`r*.nbd`), objects and effects only:
 no character models (checked: every `.nbd` in them is a room, an object or an effect).
 
@@ -179,8 +179,8 @@ output, a few seconds; everything (537 models): 490 MB, about a minute.
 
 Converted: every whole body on the human skeleton (clavicles on the chest, shoulders below them,
 the head on the neck), and the people on skeletons of their own (`N08`'s 24 nodes, `HN_70`'s 74;
-they convert by the body groups as well). Not converted (glTF only, "glTF only: not a whole body on
-the human skeleton (n nodes)" in the manifest): 174 enemies (zombies of the 23-node skeleton,
+they convert by the body groups as well). Not converted (glTF only, "Exported only: incompatible body
+structure (n parts)." in the manifest): 174 enemies (zombies of the 23-node skeleton,
 dogs, creatures; `HE01_10` and `HE01_56`, severed body parts on the human skeleton: a model has to
 be at least a metre tall), and 39 hair and face parts of the high-detail models (`HN*_N`,
 `HP03_N`; an earlier version converted 29 of them into floating hair). The 17 enemies on the human
@@ -192,7 +192,7 @@ Settings (recvx.ini): `import_outbreak2_iso` (the disc image), `import_dir` (def
 
 ## Conversion
 
-A player model of this port is a Ninja chunk model whose skeleton the "You appear as" retargeting
+A player model of this port is a Ninja chunk model whose skeleton the "Character Model" retargeting
 can map ([ACTORS.md](ACTORS.md#retargeting)). `imp_write_cvxm` (impmodel.c) builds one:
 
 * **Skeleton**: the nodes of the lower and upper body groups that bend (offset not zero) are
@@ -384,24 +384,25 @@ close; it cannot form vowels.
 
 ## F9 window
 
-`overlay.cpp import_window`, hotkey row "Import window" (F9, `B_IMPORT`; F9 was free). A section
+`overlay.cpp import_window`, hotkey row "Import Window" (F9, `B_IMPORT`; F9 was free). A section
 per source: the disc image (file selector, saved as `import_outbreak2_iso`), the output folder,
-checkboxes (the groups offered: playable characters and NPCs), "Extract characters" (a
+checkboxes (the groups offered: Playable Characters and Other Characters), "Import Characters" (a
 thread; progress bar with the model being read), then the manifest per group (collapsible, with
 counts; the playable characters open) as a table (character, variant, file, meshes, vertices,
 triangles, textures, player model yes/no/failed, notes). After an extraction the new player
-models are added to "You appear as" at once (up to 2048 imports, `ACTOR_IMPORT_MAX`, a log line
+models are added to "Character Model" at once (up to 2048 imports, `ACTOR_IMPORT_MAX`, a log line
 when more do not fit; an import is sent to the co-op partner as the played character, the lobby's
 model byte too). The list only grows while the game runs: a model already listed keeps its place
 (extracting it again replaces its file, written to a temporary file and renamed, so a model being
 loaded is never half written), new ones are added at the end, and entries are never rewritten or
 freed, so the game thread reads them without a lock (`actors.h`). A restart lists them by group again.
 
-The lobby's MODEL page (main's scrollable list of "You appear as") lists the imports after Code:
+The lobby's MODEL page (main's scrollable list of "Character Model") lists the imports after Code:
 Veronica's own models, by group (`import_registry_load` registers them group by group; the
 manifest is in disc order). A group's first row (and the page's top row) carries the group's name
-on the right with a line above it (`actors.c appear_group`: CVX characters, CVX story cast, CVX
-enemies, CVX cutscene, Outbreak playable, Outbreak cutscene, Outbreak NPCs, Outbreak enemies). 384
+on the right with a line above it (`actors.c appear_group`: Code: Veronica Characters, Code: Veronica Cast, Code: Veronica
+Enemies, Code: Veronica Cutscenes, Outbreak Characters, Outbreak Cutscenes, Outbreak Supporting Cast,
+Outbreak Enemies). 384
 entries with all groups extracted: L1/R1 and Page Up/Down a page, Home/End, the wheel 3 rows a
 notch, and a click on the scroll bar jumps to that part of the list. The preview loads the entry
 under the cursor once it has stayed 8 frames (main's delay); checked with 43 imports loaded one after
@@ -423,7 +424,7 @@ the other while paging (all loaded, none refused).
   parts: a Sony SCEI HD bank (`SCEIVers`, `SCEIHead`, `SCEIVagi` 20 samples, `SCEISmpl`,
   `SCEISset`, `SCEIProg`), its BD (PS-ADPCM, ~90 KB = ~7 s), and two tables. Short vocal sounds per
   character: pain, death, effort, likely the ad-lib shouts. The port's sound driver already plays
-  PS-ADPCM programs (`snd_iop.c` extra banks, as the CORE voice banks of "You appear as"), so a
+  PS-ADPCM programs (`snd_iop.c` extra banks, as the CORE voice banks of "Character Model"), so a
   converter to its bank format would let an imported character speak with its own voice.
 
 ### Social calls ("ad-libs") and animations
@@ -447,9 +448,9 @@ the other while paging (all loaded, none refused).
   in range, weights summing to 1, inverse bind matrices against the node tree; previews of the rest
   pose and a skinned test pose (arms lowered) look right; the `.cvxm` read the way the game reads
   it renders the same.
-* In game (headless, frame dumps): Kevin, Jim and Alyssa as "You appear as": walking, the
+* In game (headless, frame dumps): Kevin, Jim and Alyssa as "Character Model": walking, the
   handgun aimed, zombie grabs, third person from behind and (orbit) the front; the cutscene double
-  loads the same model (textures shared). F9: the "Extract characters" button clicked in a run
+  loads the same model (textures shared). F9: the "Import Characters" button clicked in a run
   with an empty mods folder (progress, then the table); F3 shows the imported model chosen in
   recvx.ini. Screenshots stay in the job directory (game content, not committed).
 * ctest 21/21 (`import` new, `appear` extended), Linux and Windows (mingw) builds,

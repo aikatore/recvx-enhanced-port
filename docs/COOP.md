@@ -43,22 +43,22 @@ drawn in the game's own style; your model turns in a 3D preview on the left. It 
 
 | Row | Meaning |
 |---|---|
-| **CONNECT** | *Direct (P2P)*: the partner connects straight to the host's address. *Via server*: a co-op server puts you together by a room code. |
+| **CONNECT** | *Direct*: the partner connects straight to the host's address. *Via server*: a co-op server puts you together by a room code. |
 | **HOST A GAME** / **JOIN A GAME** | Go to step 2 for that role. |
 | **BACK** | Back to the title menu; this closes the session. |
 
-**Step 2: only what that choice needs.** A heading names the step (e.g. "HOST A GAME - DIRECT (P2P)").
+**Step 2: only what that choice needs.** A heading names the step (e.g. "HOST A GAME - DIRECT").
 
 | Role, connection | Rows |
 |---|---|
-| Host, Direct | **PORT**, NAME, MODEL, **START**, **GAME RULES**, **OPEN THE LOBBY**; once open: **START THE GAME**, **COPY JOIN ADDRESS**, **CLOSE THE LOBBY**, **REMOVE STUCK PLAYER** (with a partner) |
-| Host, Via server | **SERVER**, **PASSWORD** (optional), **RELAY**, NAME, MODEL, START, GAME RULES, OPEN THE LOBBY; once open: **COPY ROOM CODE** ("ROOM CODE: WAITING FOR THE SERVER" until it arrives) |
-| Join, Direct | **ADDRESS** (`ip:port#CODE`), NAME, MODEL, **ITEMS**, **FOLLOW**, **JOIN** / **LEAVE**; once connected: **THE HOST'S RULES** |
+| Host, Direct | **PORT**, NAME, MODEL, **START**, **GAME RULES**, **OPEN THE LOBBY**; once open: **START THE GAME**, **COPY JOIN ADDRESS**, **CLOSE THE LOBBY**, **REMOVE PARTNER** (with a partner) |
+| Host, Via server | **SERVER**, **PASSWORD** (optional), **RELAY**, NAME, MODEL, START, GAME RULES, OPEN THE LOBBY; once open: **COPY ROOM CODE** ("WAITING FOR ROOM CODE" until it arrives) |
+| Join, Direct | **ADDRESS** (`ip:port#CODE`), NAME, MODEL, **ITEMS**, **FOLLOW**, **JOIN** / **LEAVE**; once connected: **HOST RULES** |
 | Join, Via server | **SERVER**, **CODE** (the room code), **PASSWORD**, **RELAY**, NAME, MODEL, ITEMS, FOLLOW, JOIN / LEAVE |
 
 * **NAME**: what your partner sees above your head and in the lobby. Up to 15 characters: letters,
   digits, space and `-_.!?'()+`. Default: your login name.
-* **MODEL** ("You appear as", see "You appear as"): shows your model's name and opens a page with
+* **MODEL** ("Character Model", see "You appear as"): shows your model's name and opens a page with
   the list of all models, in the order and with the names of the other menus. The list scrolls to
   your current model (gold, with an arrow); the 3D preview shows the one under the cursor, and a bar
   at the right shows where you are in the list. Up/down move (past the end to **BACK**), left/right,
@@ -67,25 +67,25 @@ drawn in the game's own style; your model turns in a 3D preview on the left. It 
   click) returns without changing it.
 * **START** (host): a new game (normal, easy, very easy) or one of your saves
   ("Save nn: character stage-room"; nn is the save's number, or the memory card slot with the
-  Memory card save system, [USER_GUIDE.md](USER_GUIDE.md#saves)).
+  Memory Card save system, [USER_GUIDE.md](USER_GUIDE.md#saves)).
 * **ITEMS** (joiner): what you bring, see "Saved partner inventories".
 * **FOLLOW** (joiner): see "Follow host".
-* **RELAY**: *Only if needed* (Automatic) or *Always* (Via server), see "Connection modes".
+* **RELAY**: *Only if needed* (Automatic) or *Always* (Server Relay), see "Connection modes".
 
 **Step 3: GAME RULES** (host): **BIORAND** (On / Off with the seed, only when the host has a BioRand pack,
-see "BioRand"), **LOOT** (Shared (one pickup) / Individual (each their own)),
-**IMPORTANT ITEMS** (For both / Shared; only with shared loot, see "Loot modes"), **FREEZE ON TRADE**, **CUTSCENE SKIP** (Together /
-Each alone, see "Cutscenes"), **INK RIBBONS** (Needed / Not needed, see "Saving without ink
+see "BioRand"), **LOOT** (Shared / Individual),
+**GEAR** (For both / Shared; only with shared loot, see "Loot modes"), **TRADING**, **CUTSCENE SKIP** (Together /
+Separately, see "Cutscenes"), **INK RIBBONS** (Needed / Not needed, see "Saving without ink
 ribbons"), **GAME OVER** (Each player / Both, see "Game over"), and two entries that open a page
 of their own (an arrow after them; RANDOMIZER also shows On or Off):
 
 | Entry | Its page |
 |---|---|
-| **RANDOMIZER** | The enemy options: **RANDOMIZER**, **VARIETY** (Wild / Mild) and **EVENT ENEMIES** (both shown only with the randomizer on), **SEED**, **NEW RANDOM SEED**, then **EXTRA ENEMIES**, **REARRANGED**, and **CUTSCENE CAST** (it shows On or Off), which opens a page of its own: **RANDOMIZE CAST** (On / Off), **CHARACTER MODELS** (Cutscene models / All models) and **ASSIGNMENT** (Fixed per character / Random per cutscene; both while on), and **IMPORTED MODELS** (On / Off; while on, shown only to a player who has imported models). BACK returns to the RANDOMIZER page. See [ACTORS.md](ACTORS.md) "Cutscene cast". |
-| **EXTRA EVENTS** | Rules for single events: **QUICK START** (On / Off, see "Quick start"; hidden and off while BioRand is on), **METAL DETECTOR** (Skipped / As original, see "Metal detector"). |
+| **RANDOMIZER** | The enemy options: **RANDOMIZER**, **VARIETY** (Wild / Mild) and **EVENT ENEMIES** (both shown only with the randomizer on), **SEED**, **RANDOM SEED**, then **EXTRA ENEMIES**, **LAYOUT**, and **CUTSCENE CAST** (it shows On or Off), which opens a page of its own: **RANDOMIZE CAST** (On / Off), **MODELS** (Cutscene Models / All Models) and **ASSIGN** (Per Character / Per Cutscene; both while on), and **IMPORTED MODELS** (On / Off; while on, shown only to a player who has imported models). BACK returns to the RANDOMIZER page. See [ACTORS.md](ACTORS.md) "Cutscene cast". |
+| **EXTRA EVENTS** | Rules for single events: **QUICK START** (On / Off, see "Quick start"; hidden and off while BioRand is on), **METAL DETECTOR** (Skipped / Original, see "Metal detector"). |
 
 Confirm or a click opens a page; BACK (or cancel, or a right click) returns to GAME RULES on its
-entry. The joiner sees the host's GAME OVER rule and both pages read-only (THE HOST'S RULES) once
+entry. The joiner sees the host's GAME OVER rule and both pages read-only (HOST RULES) once
 connected; they follow the host's changes as it makes them.
 
 Both players then see each other in the lobby, with model, name and what the other chose. The
@@ -103,8 +103,8 @@ closes the session: hosting stops, the port and its router mapping are freed, an
 "The host closed the lobby" (or "<name> left"). Only starting the game keeps the session open. A
 lobby opened from F3 during a session starts on step 2 of its role.
 
-A port another program (or another copy of the game) holds is refused: "Port 7140 is already in use
-- choose another port" (or "... cannot be used (reserved or blocked by the system) ..."); change
+A port another program (or another copy of the game) holds is refused: "Port 7140 is in use. Choose
+another." (or "Port 7140 is unavailable. Choose another."); change
 PORT and open the lobby again.
 
 ### Join codes and passwords
@@ -113,22 +113,22 @@ PORT and open the lobby again.
   without 0/O/1/I, e.g. `K7QM-3XRA`), shown in the lobby's info lines and in F3. **COPY JOIN
   ADDRESS** puts `ip:port#CODE` on the clipboard. The joiner types that whole string; case, `-`
   and spaces in the code do not matter, and a space may replace `#`. Without the right code the
-  host does not answer: "The host did not accept the join code" / "The address needs the host's
-  join code". After each wrong code the host waits a little longer before it answers that address
-  again (up to a minute); the code itself never goes over the network.
+  host does not answer: "The host did not accept the join code" / "Join code missing. Ask the
+  host to use Copy Join Address." After each wrong code the host waits a little longer before it
+  answers that address again (up to a minute); the code itself never goes over the network.
 * **Room code** (Via server): the server gives the session a code `XXXX-XXXX`; the joiner enters
   it in **CODE**.
 * **Password** (Via server, optional): set by the host before opening; the joiner needs the same.
   It is never saved. A password typed for a room that has none is refused ("This room has no
-  password, but you entered one (clear PASSWORD to join it)").
+  password. Clear PASSWORD to join.").
 
 ## The F3 window
 
 F3 opens the co-op window at the title and in game: the lobby's settings in compact form
-(Connection first; Co-op server and Room password only when not Direct; **Items when joining** adds
-*My current game*), the buttons **Host**, **Join**, **Disconnect** and **Remove stuck player**
-(host), the status (ping, the partner's room), the join or room code with **Copy join address** /
-**Copy room code**, and the F3 trade (see "Trading from the F3 window").
+(Connection first; Co-op Server and Room Password only when not Direct; **Starting Inventory** adds
+*Current Inventory*), the buttons **Host**, **Join**, **Disconnect** and **Remove Partner**
+(host), the status (ping, the partner's room), the join or room code with **Copy Join Address** /
+**Copy Room Code**, and the F3 trade (see "Trading from the F3 window").
 
 Hosting from F3 at the title and then choosing New Game or Load Game works too: a partner waiting
 at the title is pulled into that game.
@@ -150,14 +150,14 @@ at the title is pulled into that game.
 | Mode (`coop_conn`) | What it does |
 |---|---|
 | **Automatic** (0, default; lobby RELAY *Only if needed*) | With a server set: tries a direct path first (UDP hole punching, about 2 s), then the server's relay; a direct path found later is taken over without reconnecting. Without a server: exactly Direct. |
-| **Direct (P2P)** (1) | Address and join code only; never contacts a server. |
-| **Via server** (2; RELAY *Always*) | Always through the relay: predictable, slower. |
+| **Direct** (1) | Address and join code only; never contacts a server. |
+| **Server Relay** (2; RELAY *Always*) | Always through the relay: predictable, slower. |
 
 Hosting with a server still accepts direct joins (`ip:port#CODE`). An address typed in the
 joiner's CODE / ADDRESS row is always joined directly. The first partner to arrive gets the session.
 
-The status line says how you are connected: through a server *connected directly*, *connected
-directly (LAN)* or *connected via the relay* (the detour adds to the ping); a join by address shows
+The status line says how you are connected: through a server *Connected directly*, *Connected
+directly (local network)* or *Connected via server relay* (the detour adds to the ping); a join by address shows
 the address. Every session is *encrypted*, a direct one too (protocol 28).
 
 ## Playing over the internet
@@ -166,17 +166,21 @@ Only the host must be reachable: the joiner's game sends first, and the host ans
 came from. On the same LAN nothing is needed (join the host's LAN address). Over the internet, in
 this order:
 
-1. **Automatic port mapping (UPnP / NAT-PMP).** With **Open port automatically (UPnP)** on (the
+1. **Automatic port mapping (UPnP / NAT-PMP).** With **Automatic Port Forwarding** on (the
    default, `coop_upnp`), the host's game asks the router to forward UDP `coop_port` to this PC
    while hosting (2 h lease, renewed while hosting, removed when the session ends and on exit).
-   F3 then shows the LAN address, the public address, the result and the join code; **Copy join
-   address** gives `PUBLICIP:PORT#CODE`. The router must allow UPnP or NAT-PMP (some, e.g.
-   FRITZ!Box, need "Permit independent port sharing" per device). A router that only allows
-   permanent mappings is not used (a crash would leave the port open for good); F3 then says to
-   forward by hand. Discovery runs on a background thread and never blocks the game; nothing of
-   this runs unless you host.
+   The lobby then shows `ADDRESS ip:port   CODE XXXX-XXXX`: the address **COPY JOIN ADDRESS** gives
+   (`PUBLICIP:PORT#CODE` once the router mapped the port, else the local one). F3 shows the
+   **Local address** and the join code; its **Copy Join Address** / **Copy Local Address** button
+   copies the same. The mapping's result goes only to the log. Without a public address and
+   partner, the lobby hints "If your partner cannot connect, set CONNECT to Via server.", F3 "If
+   your partner can't connect, use a co-op server (Automatic)." The router must allow UPnP or
+   NAT-PMP (some, e.g. FRITZ!Box, need "Permit independent port sharing" per device). A router
+   that only allows permanent mappings is not used (a crash would leave the port open for good);
+   the log then says to forward by hand. Discovery runs on a background thread and never blocks
+   the game; nothing of this runs unless you host.
 2. **Manual port forwarding**: in the router, forward **UDP** 7140 (external and internal) to the
-   host PC's LAN address (shown in F3; give the PC a fixed address / DHCP reservation). The partner
+   host PC's LAN address (F3's Local address; give the PC a fixed address / DHCP reservation). The partner
    joins `your-public-ip:7140#CODE`.
 3. **Firewall** on the host PC, allow incoming UDP 7140:
    * Windows: allow the game when Windows Defender Firewall asks (tick *Private* and *Public* if
@@ -184,7 +188,7 @@ this order:
      `netsh advfirewall firewall add rule name="RE CVX co-op" dir=in action=allow protocol=UDP localport=7140`
    * Linux firewalld: `sudo firewall-cmd --add-port=7140/udp --permanent && sudo firewall-cmd --reload`;
      ufw: `sudo ufw allow 7140/udp`.
-4. **CGNAT / double NAT.** If F3 says the router's internet address is not public (100.64-100.127,
+4. **CGNAT / double NAT.** If the log says the router's internet address is not public (100.64-100.127,
    10., 172.16-31., 192.168.), or it differs from what "what is my IP" sites show, the provider (or
    a second router) shares one public address: no port forwarding can make you reachable. Ask the
    provider for a public IPv4 address, use a co-op server, or use a VPN overlay.
@@ -207,21 +211,22 @@ enter its address.
 
 1. Both: lobby **CONNECT** *Via server*, HOST A GAME or JOIN A GAME, **SERVER** the server's
    address (`host` or `host:port`). Without a server address, opening or joining is refused
-   ("Enter the co-op server's address first"). Or F3 / F1 / OPTION > ENHANCED SETTINGS > CO-OP.
+   ("Enter the co-op server address first."). Or F3 / F1 / OPTION > ENHANCED SETTINGS > CO-OP.
 2. Host: **OPEN THE LOBBY**. The room code appears in the info lines and F3 (`ROOM CODE XXXX-XXXX`);
-   copy it with COPY ROOM CODE / Copy room code. Optional PASSWORD before opening.
+   copy it with COPY ROOM CODE / Copy Room Code. Optional PASSWORD before opening.
 3. Joiner: **CODE** the room code (case and dash do not matter), the PASSWORD if one is set, **JOIN**.
 
-Messages: "Room not found (check the code)", "This room needs a password (PASSWORD)", "Wrong
-password", "The room is full", "Too many attempts: wait a minute", "The co-op server ... does not
-answer (UDP 7141 blocked, or no server there?)" (the host keeps hosting directly then), "Cannot find
-the co-op server ..." (name lookup, at most 5 s, never stalls the game), "The host does not encrypt".
+Messages: "Room not found. Check the code.", "Enter the room password in PASSWORD.", "Wrong
+password", "The room is full", "Too many attempts. Wait a minute.", "No reply from co-op server
+... Check port 7141 and your connection." (the host keeps hosting directly then), "Cannot find
+co-op server ..." (name lookup, at most 5 s, never stalls the game), "Host connection is not
+encrypted. Ask the host to update the game."
 
 * Through the server everything the games exchange is **encrypted end to end**; each game decides
   this itself and refuses a partner that would not encrypt. A room password also keeps out an
   operator who would tamper with the introduction (details in [SERVER.md](SERVER.md)).
 * If the server restarts or forgets the room while you host, the game opens a new room by itself
-  and shows the new code ("the co-op server lost the room (restarted?): opening a new one"); a
+  and shows the new code ("Server lost your room. Opening a new one..."); a
   direct session goes on, a relayed one ends.
 * The server frees a vanished joiner's place after `member_timeout` (default 10 s); see also
   "Rejoin after a crash".
@@ -231,8 +236,7 @@ the co-op server ..." (name lookup, at most 5 s, never stalls the game), "The ho
 
 ### Follow host
 
-The joining player's choice (lobby FOLLOW, F3, F1 / ENHANCED SETTINGS CO-OP "Follow host (joining
-player)", ini `coop_follow`, default on; the host's value has no effect). It can change at any time.
+The joining player's choice (lobby FOLLOW, F3, F1 / ENHANCED SETTINGS CO-OP "Follow Host", ini `coop_follow`, default on; the host's value has no effect). It can change at any time.
 
 * **On**: you go through every door the host takes.
 * **Off**: you stay where you are and may explore other rooms. You are moved to the host only when
@@ -289,12 +293,12 @@ A cutscene runs in each player's own game: the triggering player's, and the part
 the same room (it replays the world event, see "The shared world"). The skip button (the game's
 own, by default **Backspace** / **Back**: SELECT) skips it to its end, where the scene puts the player.
 
-With **Co-op: synchronized cutscene skip** (lobby CUTSCENE SKIP *Together*, F3, ENHANCED SETTINGS CO-OP
-"Synchronized cutscene skip (host)"; ini `coop_skip_sync`, default on; the host's choice counts)
+With **Skip Cutscenes Together** (lobby CUTSCENE SKIP *Together*, F3, ENHANCED SETTINGS CO-OP
+"Skip Cutscenes Together"; ini `coop_skip_sync`, default on; the host's choice counts)
 a cutscene both of you are watching in the same room is skipped only when **both** pressed skip:
 
 * The first to press does not skip yet: "Waiting for <partner> to skip..." at the top of the
-  screen. The partner hears a chime and reads "<name> wants to skip - press <skip button> to skip".
+  screen. The partner hears a chime and reads "<name> wants to skip. Press <skip button> to skip."
 * When the second presses, the host skips its scene and tells the joiner's game, which skips at
   once: both scenes end together, and each script puts its player where the scene leaves it (the
   same place on both screens). Without it, the one who skipped alone was already walking around
@@ -304,13 +308,13 @@ a cutscene both of you are watching in the same room is skipped only when **both
   hold anything up: the button skips at once, as in single player. If the partner's scene ends
   while you wait, yours is skipped then.
 
-*Each alone* (`coop_skip_sync = 0`): the button skips your own scene at once, as before.
+*Separately* (`coop_skip_sync = 0`): the button skips your own scene at once, as before.
 
 ### Game over
 
 What happens when one of you dies is the host's rule **GAME OVER** (lobby GAME RULES, F1 / ENHANCED
-SETTINGS CO-OP "Game over (host)"; ini `coop_gameover`, 0 *Each player* (default), 1 *Both*). It can
-change during a session; the joiner sees it under THE HOST'S RULES. The game's Retry (YES on "Retry?")
+SETTINGS CO-OP "Game Over Rule"; ini `coop_gameover`, 0 *Each Player* (default), 1 *Both*). It can
+change during a session; the joiner sees it under HOST RULES. The game's Retry (YES on "Retry?")
 starts again from its **continue point**: the room scripts set it as you enter a room, saving sets it, and
 a new or loaded game starts with one. **For playing the story together, *Both* is the better choice**: the
 two of you always stay at the same point.
@@ -353,30 +357,29 @@ partner plays on.
 ### Name tags
 
 The partner's name floats above its head while it is in your room and in view; out of view (behind
-the camera or another angle) a marker at the screen edge points at it. Option "Show the partner's
-name above its head" (F3; F1 / ENHANCED SETTINGS CO-OP "Partner's name tag"; ini `coop_nametag`, default
-on). The tag scales with the window height and follows the head in enhanced (interpolated) mode.
+the camera or another angle) a marker at the screen edge points at it. Option "Partner Name Tag"
+(F3, F1 / ENHANCED SETTINGS CO-OP; ini `coop_nametag`, default on). The tag scales with the window height and follows the head in enhanced (interpolated) mode.
 
 ### Ping display
 
-**Show ping** (F1 / ENHANCED SETTINGS CO-OP; ini `show_ping`, default on): while connected, "ping N ms"
+**Show Ping** (F1 / ENHANCED SETTINGS CO-OP; ini `show_ping`, default on): while connected, "ping N ms"
 next to the frame-rate counter (alone when the counter is off). F3 and the lobby status line show
 it too. The ping is the real network round trip (receive timestamps), not rounded to game frames.
 
 ### Hiding IP addresses (streaming)
 
-**Hide IP addresses** (F1 / ENHANCED SETTINGS CO-OP; ini `hide_ip`, default off) is for streams and
+**Hide IP Addresses** (F1 / ENHANCED SETTINGS CO-OP; ini `hide_ip`, default off) is for streams and
 screenshots. With it on, no IP address shows on screen, yours or the partner's:
 
-* The lobby's status and info lines and F3 (status, "This PC (LAN)", "Public address", the UPnP
-  message, the join address next to **Copy join address**) show each address as
+* The lobby's status and info lines (ADDRESS) and F3 (status, "Local address", the join address
+  next to **Copy Join Address**) show each address as
   `xxx.xxx.xxx.xxx`. Ports, the join code and the room code stay visible, e.g.
   `xxx.xxx.xxx.xxx:7140#ABCDEFGH`. A host name typed as the join address or co-op server is
   masked the same way.
-* The address fields (lobby ADDRESS / CODE and SERVER, F3 Join address / Room code and Co-op server)
-  show stars, also while you type or paste. In F3, **Show the address fields** reveals them until
+* The address fields (lobby ADDRESS / CODE and SERVER, F3 Join address / Room code and Co-op Server)
+  show stars, also while you type or paste. In F3, **Show Addresses** reveals them until
   the window closes; in the lobby turn the option off to see them.
-* Only the display changes: **COPY JOIN ADDRESS** / **Copy join address** put the real address on the
+* Only the display changes: **COPY JOIN ADDRESS** / **Copy Join Address** put the real address on the
   clipboard, and joining uses what you typed.
 
 `recvx.log` (and the console) still contain the addresses, for troubleshooting: do not show the
@@ -392,20 +395,19 @@ voice of the model it appears as. A partner holding the lighter lights the room 
 
 ### Loot modes
 
-The host's choice (lobby LOOT, F3 "Loot (host)", F1 CO-OP "Loot (host)", ini `coop_loot`; set
+The host's choice (lobby LOOT, F3 "Loot Sharing (Host)", F1 CO-OP "Loot Sharing", ini `coop_loot`; set
 before the session):
 
 | Mode | Pickups | Item box |
 |---|---|---|
-| **Shared** (0, default; lobby *Shared (one pickup)*) | One pool: each item lies there once. Whoever takes it has it, the spot is gone for both and the partner gets nothing, so the two of you split the ammo, herbs and other supplies (hand them over on the trade screen). Exceptions: key items and the lighter go to both; weapons and ink ribbons with "Important items for both" (below). | One box for both. |
-| **Individual** (1; lobby *Individual (each their own)*) | Each player finds and takes their own copy. | Each has their own box. |
+| **Shared** (0, default) | One pool: each item lies there once. Whoever takes it has it, the spot is gone for both and the partner gets nothing, so the two of you split the ammo, herbs and other supplies (hand them over on the trade screen). Exceptions: key items and the lighter go to both; weapons and ink ribbons with "Duplicate Weapons and Ribbons" (below). | One box for both. |
+| **Individual** (1) | Each player finds and takes their own copy. | Each has their own box. |
 
 Key items and story progress are shared in both modes. A key used up in a lock (the game removes
 it) is removed from the partner's inventory too.
 
-**Important items for both** (shared loot only; lobby IMPORTANT ITEMS *For both* / *Shared*, F3
-"Shared loot: important items for both (host)", ENHANCED SETTINGS CO-OP "Important items for both
-(host)"; ini `coop_important`, default on; locked during a session): **weapons** (the guns,
+**Duplicate Weapons and Ribbons** (shared loot only; lobby GEAR *For both* / *Shared*, F3 and
+ENHANCED SETTINGS CO-OP "Duplicate Weapons and Ribbons"; ini `coop_important`, default on; locked during a session): **weapons** (the guns,
 launchers, bow gun, the combat knife when it lies somewhere) and **ink ribbons** lie there for each
 player, as with individual loot: taking one does not give the partner a copy and does not take the
 partner's; it stays lying in the partner's game until the partner takes it. Off (*Shared*), they are
@@ -428,29 +430,29 @@ What goes where:
 A partner with a full inventory leaves its copy of a key item lying in its room (it takes it later
 like any pickup). If both of you take the same item at about the same moment, exactly one keeps it: the one whose
 pickup reached the other first, and the host when both happened within one round trip. The other
-one's copy leaves its inventory again as soon as it is back in control ("the partner took <item>
-first"). Each player's inventory is its own in every mode, so saves, saved partner
+one's copy leaves its inventory again as soon as it is back in control ("Your partner took <item>
+first."). Each player's inventory is its own in every mode, so saves, saved partner
 inventories, room changes and rejoins keep exactly what each player took.
 
 ### Items when joining
 
-You join with your own inventory, never the host's. The joiner's choice (lobby ITEMS, F3 "Items
-when joining", ini `coop_items`):
+You join with your own inventory, never the host's. The joiner's choice (lobby ITEMS, F3 "Starting
+Inventory", ini `coop_items`):
 
 | Choice | Value | You get |
 |---|---|---|
 | *Saved with the host* (default) | -2 | What the host kept for you from your last visit; none: a new inventory, or, when you join again from the game you played in the host's session (the connection was lost, the host's game crashed, you left), the items you have now. In the host's lobby the row says "(available)", "(none)" or "(host: off)". |
 | *New inventory* | -1 | The new-game inventory of the session's game mode. |
 | A save | 0.. | The items of that save: save number - 1 (native save files), or memory card slot 0..14. |
-| *My current game* (F3 only) | -3 | Joining from your own running game keeps its items. |
+| *Current Inventory* (F3 only) | -3 | Joining from your own running game keeps its items. |
 
 ### Shared item box
 
 With shared loot both players use one item box. Both may use a box at the same time; if both take
-the same entry, the host decides and the joiner's copy leaves its inventory again ("the partner
-took ... first"). If both put items into the last free places at once, the host's go in and the
+the same entry, the host decides and the joiner's copy leaves its inventory again ("Your partner
+took ... first."). If both put items into the last free places at once, the host's go in and the
 joiner's item comes back: into its inventory, or, with that full too, onto the floor where the
-joiner stands ("... lies at your feet"). It lies there as the partner's event items do, only for
+joiner stands ("Inventory and item box full. Placed ... at your feet."). It lies there as the partner's event items do, only for
 that player, kept with its game (saves too) until taken, and taking it gives back exactly that item
 (its rounds, its ammunition kind). No item is lost either way. Saves keep the box as the player's
 own game has it.
@@ -475,8 +477,8 @@ with it, kept across disconnects) until taken. Nothing is given twice: a partner
 or already holds the item (not for stackable items), gets nothing.
 
 An item that is the triggering player's alone: nothing goes on the partner's floor; with shared
-loot a partner who watched the event and got one too gives it back at once ("... from the partner's
-event is the partner's").
+loot a partner who watched the event and got one too gives it back at once ("... belongs to your partner
+(shared loot).").
 
 ### BioRand
 
@@ -487,7 +489,7 @@ On, both play the host's pack:
 * The partner needs the same pack: generated with the same seed and options (BioRand's seed string),
   so the same room files. The host sends its pack's seed string and its BioRand CLI's checksum
   (`EV_BRSEED`). A partner without the pack, or with another one, at the title (the lobby or the title menu)
-  is asked on the BIORAND screen: "The host plays BioRand seed N. Generate it now into mods/biorand? ..."
+  is asked on the BIORAND screen: "Generate the host's BioRand seed N? ..."
   (the memory note and the free space as GENERATE's). **Yes** generates the host's string as GENERATE does
   ([BIORAND_INGAME.md](BIORAND_INGAME.md) "S5b"): without a BioRand CLI it asks to download it first; when
   its CLI's checksum is not the host's it warns that the pack may differ and offers the newest CLI (No
@@ -498,11 +500,11 @@ On, both play the host's pack:
   "BioRand: asked to generate" or "BioRand: generating..." under the partner's model.
 * Without that (in a game, without `--dev`, a host that sent no seed string, or after generating) a partner
   without the pack, or with another one, is refused when it joins (or when the host turns BIORAND on) with
-  "The host plays BioRand seed N; generate the same seed (or ask the host to turn BioRand off)" ("... seed N
-  with other options or another BioRand version; ..." when its seed number is the host's); the host's status
-  says "... left: its BioRand pack is not this one".
+  "Generate the host's BioRand seed N, or ask them to turn BioRand off." ("BioRand seed N differs. Match the
+  host's options and BioRand version, ..." when its seed number is the host's); the host's status
+  says "... left: BioRand games do not match.".
 * The partner's game follows the host's choice for the session whatever its own setting (its own setting is
-  back after the session); THE HOST'S RULES shows BIORAND while it is on.
+  back after the session); HOST RULES shows BIORAND while it is on.
 * QUICK START is off and hidden (the pack has its own start inventory). A partner without a game of its own
   starts with the pack's start inventory, as the host's new game did (room 0/0's block, run by the game's own
   item actions on its inventory).
@@ -510,12 +512,12 @@ On, both play the host's pack:
   (`coop_item_taken`), the partner's event items shown in a room (`grant_slot`, `grant_model`).
 * Loading a save from the lobby's START made with another BioRand state asks first (START again loads it).
 
-Rifle ammo stacks for both while BioRand is on. Off, the game is the normal one for both, packs or not.
+Stack Rifle Ammo is on for both while BioRand is on. Off, the game is the normal one for both, packs or not.
 
 ### Quick start
 
-The host's rule **QUICK START** (lobby GAME RULES, EXTRA EVENTS; F1 / ENHANCED SETTINGS CO-OP "Quick start
-(host)"; ini `coop_quick_start`, 0 *Off* (default), 1 *On*) skips two chores at the start of a new game. With it
+The host's rule **QUICK START** (lobby GAME RULES, EXTRA EVENTS; F1 / ENHANCED SETTINGS CO-OP "Quick
+Start"; ini `coop_quick_start`, 0 *Off* (default), 1 *On*) skips two chores at the start of a new game. With it
 on, a new co-op game starts for both of you with:
 
 * the **manual** already read: it is not in your bag, and it stays readable under FILE, as after reading it;
@@ -523,20 +525,20 @@ on, a new co-op game starts for both of you with:
 * the knife's table in the first room empty: its spot counts as taken.
 
 Each player gets their own knife. Who sees the table empty follows the loot mode as for any weapon: with
-"Important items for both" (the default) each player's own spot, otherwise the one spot taken for both.
+"Duplicate Weapons and Ribbons" (the default) each player's own spot, otherwise the one spot taken for both.
 
 It applies to new-game inventories only: the host's new game (the lobby's START with a new game, or a new game
 while hosting), and a partner joining with a new inventory (ITEMS *New inventory*, or *Saved with the host* when
 the host keeps none for it). Loading a save, continuing and joining with saved items change nothing. The joiner
-sees the rule under THE HOST'S RULES. Default off: the game starts as the original does unless the host asks for it.
+sees the rule under HOST RULES. Default off: the game starts as the original does unless the host asks for it.
 Outside a session the rule plays no part.
 
 ### Metal detector
 
 The prison's metal detector room (where you have to put metal items in a security box before
 walking through) is the host's rule **METAL DETECTOR** (lobby GAME RULES, EXTRA EVENTS; F1 / ENHANCED SETTINGS
-CO-OP "Metal detector (host)"; ini `coop_skip_detector`, 1 *Skipped* (default), 0 *As original*). It
-can change during a session; the joiner sees it under THE HOST'S RULES.
+CO-OP "Metal Detector"; ini `coop_skip_detector`, 1 *Skipped* (default), 0 *Original*). It
+can change during a session; the joiner sees it under HOST RULES.
 
 **Skipped**: both of you walk through with your weapons, the lighter and everything else. The
 detector never goes off (no "!" stop, no alarm, the shutters stay open), and the two security
@@ -549,12 +551,12 @@ playing alone before joining) opens as usual until you have taken everything out
 too. Nothing is moved for you, so nothing can get lost. An alarm that already went off (a save made
 with the shutters down) is released at its switch, as in the original.
 
-**As original**: as in single player. Outside a session the rule plays no part.
+**Original**: as in single player. Outside a session the rule plays no part.
 
 ### Saving without ink ribbons
 
-**No ink ribbons needed** (lobby INK RIBBONS *Not needed*, F3 "No ink ribbons needed (host)",
-F1 / ENHANCED SETTINGS GAMEPLAY "No ink ribbons needed"; ini `no_ink_ribbon`, default off): a typewriter
+**Free Typewriter Saves** (lobby INK RIBBONS *Not needed*, F3 and
+F1 / ENHANCED SETTINGS GAMEPLAY "Free Typewriter Saves"; ini `no_ink_ribbon`, default off): a typewriter
 offers to save without an ink ribbon ("Use an ink ribbon? Yes" opens the save screen) and saving
 uses none up; ribbons you carry stay. In single player it is your own setting; in co-op the host's
 counts for both players.
@@ -562,7 +564,7 @@ counts for both players.
 ## Trade screen
 
 Standing next to your partner (same room, within about 3 m, both free: no menu, event, door or
-grab), press **Trade request (co-op)**: **T** on the keyboard, **left stick click** on the gamepad
+grab), press **Trade (Co-op)**: **T** on the keyboard, **left stick click** on the gamepad
 (rebindable; ini `key_trade` / `pad_trade`). The partner hears a chime and reads "<you> wants to
 trade - press T / Left stick press" at the top of the screen and in your name tag. When it presses
 its key, the trade screen opens for both. A request ends when you press again, walk apart, after
@@ -578,23 +580,23 @@ its key, the trade screen opens for both. A request ends when you press again, w
 * **Request**: confirm a cell on the partner's side to ask for that item; again withdraws it. The
   partner sees the cell marked (WANTED) and "<you> requests: Handgun Bullets"; a click on that line
   offers it. A request moves nothing by itself.
-* **Swap**: when both are ready on the same pair the items swap: "Traded your X for the Y", "Gave
-  the X", "Got the Y". A stack goes whole and joins a stack of the same kind. The screen stays open.
+* **Swap**: when both are ready on the same pair the items swap: "Traded X for Y.", "Gave
+  X.", "Received Y.". A stack goes whole and joins a stack of the same kind. The screen stays open.
 * **Cancel** steps back one thing at a time (your request, your offer, the partner's request:
   declined) and then leaves. **LEAVE**, walking apart or losing the partner closes it for both,
   nothing changed.
 
 Rules: a **two-slot item** (rocket launcher, rifles, Gold Lugers, sub machine guns) needs two free
-cells on the receiving side after its own item left ("No room for the Assault Rifle: it needs two
-free slots"). An **equipped weapon** cannot be traded ("Your Handgun is equipped: unequip it in the
-inventory first"). Key items trade like any item. The **lighter** lives in its own slot and is not
+cells on the receiving side after its own item left ("No room for Assault Rifle. Free two
+inventory spaces."). An **equipped weapon** cannot be traded ("Unequip your Handgun in the
+inventory first."). Key items trade like any item. The **lighter** lives in its own slot and is not
 offered.
 
-While you are in the screen you stand still and the partner treats you as busy. With **Freeze
-enemies while trading (host)** (lobby FREEZE ON TRADE, F3, F1 CO-OP; ini `coop_trade_freeze`,
+While you are in the screen you stand still and the partner treats you as busy. With **Pause
+Enemies During Trades** (lobby TRADING, F3, F1 CO-OP; ini `coop_trade_freeze`,
 default on) the room's enemies stand still while both screens are open; effects already flying keep
-flying. A trade cannot start while either player is held by an enemy ("Not now: both of you must be
-free").
+flying. A trade cannot start while either player is held by an enemy ("Finish menus, scenes or enemy
+grabs before trading. Both players must be free.").
 
 Input: as in the inventory (d-pad/stick or keys move, confirm, cancel; the status button / Tab in
 third person jumps to the other side). Mouse: hover moves the cursor, a click on one of your cells
@@ -608,7 +610,7 @@ when the session ends.
 
 F3's Trade section still works: choose an item (not the equipped weapon or a two-slot item) and a
 count (stacks can be split), **Offer**; the partner sees **Accept** / **Decline**. The item is held
-while the offer is open and comes back if it is declined or taken back (**Take back**).
+while the offer is open and comes back if it is declined or taken back (**Withdraw Offer**).
 
 ## Saved partner inventories
 
@@ -626,7 +628,7 @@ status) per player, with its saves:
 * Joining with *Saved with the host*: "Restored your saved items from the host"; none: "No saved
   items at the host - starting with a new inventory". A new inventory or a save chosen explicitly
   wins over the record and becomes the new record. With shared loot the item box stays the host's.
-* Setting **Remember partner inventories (host)** (F1 / ENHANCED SETTINGS CO-OP, F3; ini `coop_remember`,
+* Setting **Remember Partner Items** (F1 / ENHANCED SETTINGS CO-OP, F3; ini `coop_remember`,
   default on). Off: "The host keeps no saved items - ...".
 * Trust: the records are the host's data on the host's disk; the joiner trusts its host (as it
   must anyway). Someone who knows your player id and the host's join code could claim your saved
@@ -646,11 +648,11 @@ is that save's again. If that save has none of yours (saved before you joined), 
 have ("No saved items at the host - you keep your current items"); before, you started again with the
 new-game inventory of the character (in Chris's part his starting items).
 
-## Remove stuck player
+## Remove partner
 
-Host: lobby **REMOVE STUCK PLAYER** or F3 **Remove stuck player** (while a partner is connected or
+Host: lobby **REMOVE PARTNER** or F3 **Remove Partner** (while a partner is connected or
 not responding). It ends the session with that partner and frees its place; a partner still there
-reads "The host removed you from the session (join again to come back)". Through a server the room
+reads "The host removed you. You can join again.". Through a server the room
 and its code stay. The same code works again at once.
 
 ## Leaving and disconnecting
@@ -662,17 +664,17 @@ Every way out ends the session on both sides; hosting or joining again works at 
 | Leaving the lobby (BACK from step 1, cancel, right click; not START THE GAME) | session stopped | "The host closed the lobby" / "<name> left" |
 | LEAVE, CLOSE THE LOBBY, F3 Disconnect | session stopped | as below |
 | Quitting, closing the window | goodbye sent at exit | as below |
-| Back at the title from a game of this session (game over "No", OPTION's RETURN TO TITLE) | "Back at the title: the co-op session ended" | as below; with GAME OVER *Both*, a joiner at or heading for the shared game over goes to the title too |
+| Back at the title from a game of this session (game over "No", OPTION's RETURN TO TITLE) | "Returned to title. Co-op session ended." | as below; with GAME OVER *Both*, a joiner at or heading for the shared game over goes to the title too |
 | Goodbye from the host | | joiner: "The host closed the lobby" / "The host left the game"; in game it plays on alone |
-| Goodbye from the joiner | | host: "<name> left - hosting on UDP port ..., waiting for a partner"; in game it plays on alone |
-| Crash, network gone | | after 3 s "not responding"; after 15 s joiner: "Lost the connection to the host", host: back to waiting ("The partner timed out") |
+| Goodbye from the joiner | | host: "<name> left - Hosting on port 7140. Waiting for a partner."; in game it plays on alone |
+| Crash, network gone | | after 3 s "... is not responding"; after 15 s joiner: "Lost the connection to the host", host: back to waiting ("The partner timed out") |
 
 Grabs, trades and held items of a partner that leaves are resolved: a zombie the joiner was being
 grabbed by is released on the host, an unanswered trade item returns to its owner.
 
 ## Enemy options in co-op
 
-The host's enemy options (EXTRA ENEMIES, REARRANGED, RANDOMIZER, VARIETY, EVENT ENEMIES, SEED, and the
+The host's enemy options (EXTRA ENEMIES, LAYOUT, RANDOMIZER, VARIETY, EVENT ENEMIES, SEED, and the
 CUTSCENE CAST page; F1 / ENHANCED SETTINGS GAMEPLAY, lobby GAME RULES, RANDOMIZER) count for both: both
 players see the same cutscene cast, picked from the host's seed (the joiner's own cast settings do not
 count while it is joined). The joiner's lobby shows them (read-only) before the game
@@ -681,11 +683,11 @@ appear in the joiner's game in the same slots. Details: [ENEMIES.md](ENEMIES.md)
 
 ## You appear as
 
-"You appear as" (lobby MODEL, F3, F1 / ENHANCED SETTINGS APPEARANCE; ini `coop_char`) chooses your model: the
-character you play, the character you play in its cutscene model ("As played (cutscene)": sent to
+"Character Model" (lobby MODEL, F3, F1 / ENHANCED SETTINGS APPEARANCE; ini `coop_char`) chooses your model: the
+character you play, the character you play in its cutscene model ("Current Character (Cutscene)": sent to
 the partner as that cutscene model, no protocol change), Claire, Chris, Steve, Wesker, Claire's second
 costume, or a story-cast, creature or zombie model. Your partner sees you as that model, and so do you (also in single player). The
-partner's voice follows its model. Both players need the same build. "Swapped model in cutscenes"
+partner's voice follows its model. Both players need the same build. "Custom Cutscene Model"
 (`appear_in_cutscenes`) counts for your own screen: off, your cutscenes (also one replayed from
 the partner's event) show the real Claire or Chris. Models, voices and cutscene behaviour:
 [ACTORS.md](ACTORS.md).
@@ -698,38 +700,38 @@ Two copies of the game side by side, one hosting, one joining over localhost:
    `recvx --save-dir save1 game.iso` and `recvx --save-dir save2 game.iso`.
 2. One hosts (MULTIPLAYER or F3, port e.g. 7140; or `--coop-host 7140`), the other joins
    `127.0.0.1:7140#CODE` with the host's join code (or `--coop-join 127.0.0.1:7140#CODE`).
-3. Per window, F1 > Controls > **Input source** (ini `input_source`): e.g. window 1 *Keyboard/mouse
-   only*, window 2 *Gamepad only*; or both *Gamepad only* with **Gamepad** (`input_pad`) 1 and 2.
-   *Gamepad only* keeps working while another window has focus; keyboard/mouse plays in the window
+3. Per window, F1 > Controls > **Input Devices** (ini `input_source`): e.g. window 1 *Keyboard and
+   Mouse*, window 2 *Gamepad Only*; or both *Gamepad Only* with **Gamepad** (`input_pad`) 1 and 2.
+   *Gamepad Only* keeps working while another window has focus; keyboard/mouse plays in the window
    you last clicked. Drag each window to its monitor (F11 fullscreen works per window).
 
 More on input sources: [USER_GUIDE.md](USER_GUIDE.md).
 
 ## Settings
 
-CO-OP page of OPTION > ENHANCED SETTINGS and F1 (plus F3 and the lobby). Settings marked "host" count
-only on the host; "locked" ones cannot change during a session.
+CO-OP page of OPTION > ENHANCED SETTINGS and F1 (plus F3 and the lobby). Settings marked "host"
+(under HOST RULES) count only on the host; "locked" ones cannot change during a session.
 
 | Label | ini key | Values (default) |
 |---|---|---|
-| You appear as (APPEARANCE page) | `coop_char` | model index (0: as played; 4095: as played, cutscene model) |
-| Partner's name tag | `coop_nametag` | 0/1 (1) |
-| Show ping | `show_ping` | 0/1 (1) |
-| Hide IP addresses | `hide_ip` | 0/1 (0); see "Hiding IP addresses" |
-| Follow host (joining player) | `coop_follow` | 0/1 (1) |
-| Loot (host), locked | `coop_loot` | 0 Shared, 1 Individual (0) |
-| Important items for both (host), locked | `coop_important` | 0/1 (1); shared loot only |
-| Synchronized cutscene skip (host) | `coop_skip_sync` | 0/1 (1) |
-| Game over (host) | `coop_gameover` | 0 Each player, 1 Both (0); see "Game over" |
-| Metal detector (host) | `coop_skip_detector` | 0 As original, 1 Skipped (1); see "Metal detector" |
-| Quick start (host) | `coop_quick_start` | 0/1 (0); see "Quick start" |
-| Freeze enemies while trading (host) | `coop_trade_freeze` | 0/1 (1) |
-| Remember partner inventories (host) | `coop_remember` | 0/1 (1) |
-| Connection, locked | `coop_conn` | 0 Automatic, 1 Direct (P2P), 2 Via server (0) |
-| Host port, locked | `coop_port` | 1..65535 (7140) |
-| Open port (UPnP), locked | `coop_upnp` | 0/1 (1) |
-| No ink ribbons needed (GAMEPLAY page; co-op: host) | `no_ink_ribbon` | 0/1 (0) |
-| Extra enemies (GAMEPLAY page; co-op: host) | `enemy_extra` | 0..3 (0); see [ENEMIES.md](ENEMIES.md) |
+| Character Model (APPEARANCE page) | `coop_char` | model index (0: Current Character; 4095: Current Character (Cutscene)) |
+| Partner Name Tag | `coop_nametag` | 0/1 (1) |
+| Show Ping | `show_ping` | 0/1 (1) |
+| Hide IP Addresses | `hide_ip` | 0/1 (0); see "Hiding IP addresses" |
+| Follow Host (joining player) | `coop_follow` | 0/1 (1) |
+| Loot Sharing (host), locked | `coop_loot` | 0 Shared, 1 Individual (0) |
+| Duplicate Weapons and Ribbons (host), locked | `coop_important` | 0/1 (1); shared loot only |
+| Skip Cutscenes Together (host) | `coop_skip_sync` | 0/1 (1) |
+| Game Over Rule (host) | `coop_gameover` | 0 Each Player, 1 Both (0); see "Game over" |
+| Metal Detector (host) | `coop_skip_detector` | 0 Original, 1 Skipped (1); see "Metal detector" |
+| Quick Start (host) | `coop_quick_start` | 0/1 (0); see "Quick start" |
+| Pause Enemies During Trades (host) | `coop_trade_freeze` | 0/1 (1) |
+| Remember Partner Items (host) | `coop_remember` | 0/1 (1) |
+| Connection, locked | `coop_conn` | 0 Automatic, 1 Direct, 2 Server Relay (0) |
+| Host Port, locked | `coop_port` | 1..65535 (7140) |
+| Automatic Port Forwarding, locked | `coop_upnp` | 0/1 (1) |
+| Free Typewriter Saves (GAMEPLAY page; co-op: host) | `no_ink_ribbon` | 0/1 (0) |
+| Extra Enemies (GAMEPLAY page; co-op: host) | `enemy_extra` | 0..3 (0); see [ENEMIES.md](ENEMIES.md) |
 
 Kept in `recvx.ini` without a menu row of their own: `coop_join` (last address or room code),
 `coop_server`, `coop_name`, `coop_items` (-3.., a save as in the ITEMS table), `coop_start` (0..2
@@ -790,7 +792,7 @@ Co-op uses a **context swap** in glue code instead of touching those references:
 `plp`, `sys->ply_id`, the player model and motion buffers and `freemem`, then calls the stock
 functions for player 2. The partner (`ply2`) has static buffers in the game's address window and is
 loaded with the stock loaders (`bhReadPlayerData`, `bhReadWeaponData`) from its own part file, so
-its motion numbers always index the set they came from; a different mesh ("You appear as") is
+its motion numbers always index the set they came from; a different mesh ("Character Model") is
 loaded over it.
 
 ### Netcode model
@@ -815,7 +817,7 @@ is a motion of its own and arrives with the motion number; third-person free aim
 motion and bends spine and chest (`tps_calc_model`, [THIRDPERSON.md](THIRDPERSON.md#free-aim-pose)), so
 the sender puts that bend's pitch (`tps_aim_pitch`) into `Pose.pflg`'s spare bits (6 bits, about 2
 degrees a step) and the receiver eases towards it (half the way per frame) and bends the partner's model
-the same way (`tps_bend` after its `bhCalcModel`, and on its gender-matched copy and "You appear as"
+the same way (`tps_bend` after its `bhCalcModel`, and on its gender-matched copy and "Character Model"
 model through `actor_source`): arms, head, both weapons and the muzzle flash follow. Hair (Claire) and Wesker's piece get
 private object work. The partner's lighter gets the arm IK, its own flame and room light slot 3 (a
 slot no game code uses), so both can hold one. Footsteps and shots play from flags in the pose; the
@@ -1015,7 +1017,7 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   * Giving back (`give_back`) waits until that player is in control (not in a menu or the status
     screen) and takes out the amount a pickup of that item adds (`getbulletmax`); "the partner took
     <item> first". Key items are not given back (both get them anyway).
-* **Important items for both** (shared loot, `OPT_IMPORTANT`): the kinds in `important_kinds[]`
+* **Duplicate Weapons and Ribbons** (shared loot, `OPT_IMPORTANT`): the kinds in `important_kinds[]`
   (`coop_glue.c`: weapons, `itemdata[].type & 0x1`; ink ribbons, item 31). `bhItmCk` reports each pickup
   (`coop_item_taken`: its `it_flg` bit and trigger); one of those kinds marks the bit in
   `sys->itm[256..271]` ("important spots", save-region words no game code uses: the item boxes end at
@@ -1209,7 +1211,7 @@ interpolated with the in-between frames; it snaps on camera cuts and in vanilla 
 ## Protocol 30
 
 `COOP_VERSION` is **30**; both players need builds with the same version (a mismatch is reported,
-e.g. "the host runs co-op protocol 29, we 30: both need the same build"). The co-op server does not
+e.g. "The host uses co-op compatibility version 29; yours is 30. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
 tag, `EV_OWN`; 17 trade requests; 18 voices; 19 the game rules `OPT_IMPORTANT`, `OPT_NO_RIBBON`,
@@ -1218,7 +1220,7 @@ shared loot as one pool (`EV_PICKUP` gives the partner only items for both; `und
 aim height in `EV_ENE_HIT`, unknown flag and option bits refused; 20 `EV_EOPTS` carries the
 randomizer's variety and event-enemy setting (the randomizer's choices changed, so builds of 19 would
 make other enemies from the same seed); 21 `COOP_HIT_PRECISE` in `EV_ENE_HIT` (third person
-"Precise hits", [THIRDPERSON.md](THIRDPERSON.md#precise-hits)); 22 the game rules `OPT_GAMEOVER_BOTH`
+"Precise Shots", [THIRDPERSON.md](THIRDPERSON.md#precise-hits)); 22 the game rules `OPT_GAMEOVER_BOTH`
 and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid` (see "Game over",
 "Metal detector"); 23 the game rule `OPT_QUICK_START` (see "Quick start"; it takes the last free bit of
 `Pose.opts`, so a further rule needs a field of its own); 24 enemy slots 0..254 (`COOP_ENE_SLOTS`, the PC's
@@ -1268,7 +1270,7 @@ game state), `PF_EXT` 16 (a `PoseExt` follows), `PF_CINE` 32 (in a cutscene its 
 skip now), `PF_SKIP` 64 (pressed skip in it: waits for the partner), `PF_GAME_OVER` 128 (our game over
 runs; every bit of `flags` is in use).
 
-**Synchronized cutscene skip** (`OPT_SKIP_SYNC`): the skip button reaches the game as pad bit
+**Skip Cutscenes Together** (`OPT_SKIP_SYNC`): the skip button reaches the game as pad bit
 `0x10000` (`pad.c bhSetPad`; `system.c bhSysCallGame` sets `cb_flg 0x10000000`, which the room
 script's skip branch tests). `coop_skip_pad` (called from `trade_pad`) withholds it while the partner's
 pose says `PF_CINE` in our room, and notes the press (`PF_SKIP` in our pose from then on). The host,
@@ -1304,7 +1306,7 @@ enemy's (`mode[0]` 0) to one whose own Init ran.
 
 | Type | Id | Direction | Payload |
 |---|---|---|---|
-| `EV_ENE_HIT` | 1 | either | Our shot hit a puppet: joints, damage, hit bits, hit point/direction, weapon; `flg` also carries the shooter's aim height (`at_flg & 0xE` << 8, with `COOP_HIT_AIM`) and `COOP_HIT_PRECISE` when the shooter's "Precise hits" judged it (a zombie's head then bursts only from a head hit) |
+| `EV_ENE_HIT` | 1 | either | Our shot hit a puppet: joints, damage, hit bits, hit point/direction, weapon; `flg` also carries the shooter's aim height (`at_flg & 0xE` << 8, with `COOP_HIT_AIM`) and `COOP_HIT_PRECISE` when the shooter's "Precise Shots" judged it (a zombie's head then bursts only from a head hit) |
 | `EV_PLY_HIT` | 2 | host | A host enemy hit the partner's stand-in: hp delta, flag bits, modes, direction |
 | `EV_BLOB` | 3 | host | Game state chunk (save region; `pad` 1: its items are the joiner's saved ones; 2: the host's Retry of a shared game over, with the joiner's items of that continue point) |
 | `EV_FLAGS` | 4 | either | 1..6 changed flag words: set and cleared bits, base event id |
@@ -1496,7 +1498,7 @@ the session's code. A takeover needs a non-zero tag that matches.
 * Items held in escrow live in memory until the session ends; closing the game while one is held
   loses it with the unsaved state.
 * Through a server, a relayed session ends if the server restarts.
-* Important items for both: a pickup is known as one only when it happens in a session with the
+* Duplicate Weapons and Ribbons: a pickup is known as one only when it happens in a session with the
   rule on. A weapon the host took while playing alone (or before this build) is gone for a joining
   partner too; one a guest took in its own game before joining can be taken again.
 * Synchronized skip: the skip waits for the partner's pose (one way trip) and, when the joiner asked
@@ -1520,7 +1522,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_DROP="from:to,..."` | Send nothing in those frames; `RECVX_COOP_DROP_EVENTS` holds back only the events. |
 | `RECVX_COOP_LOSS=pct` | Drop that share of our datagrams at random. |
 | `RECVX_COOP_REJOIN="frame,..."` | Join again (new session). |
-| `RECVX_COOP_KICK=n` | Host: "Remove stuck player" at frame n. |
+| `RECVX_COOP_KICK=n` | Host: "Remove Partner" at frame n. |
 | `RECVX_COOP_BYE_GRABBED=n` | Joiner: Disconnect n frames into a zombie grab it runs. |
 | `RECVX_COOP_KILL="hostframe:slot,..."` | A lethal hit on our enemy in that slot. |
 | `RECVX_COOP_WARP="hostframe:x:z,..."` | Both players to x/z at that host frame. |

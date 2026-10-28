@@ -14,7 +14,7 @@ a puzzle with mouse support free it until you are back in control).
 
 | Key | Action |
 |---|---|
-| W / S | walk forward / back (back + Shift = quick turn, as in the original); with "Game auto-aim" also aim up / down while the weapon is raised, as the original's up / down |
+| W / S | walk forward / back (back + Shift = quick turn, as in the original); with "Aim Assist" also aim up / down while the weapon is raised, as the original's up / down |
 | A / D | turn |
 | Shift | run; in the scope ([Scope](#scope)): zoom in while held |
 | mouse | X turns the character, Y looks up/down |
@@ -37,21 +37,21 @@ toggle key can be rebound in F1 -> Controls or OPTION -> ENHANCED SETTINGS -> CO
 
 ### Mouse/keyboard camera (A/B)
 
-Setting "Mouse/keyboard camera" (THIRD PERSON page, ini `tps_free_camera`):
+Setting "Mouse Camera Style" (THIRD PERSON page, ini `tps_free_camera`):
 
-* **B (behind character)**, the default: the camera stays behind the character and the mouse
+* **Behind Character** (B), the default: the camera stays behind the character and the mouse
   turns it (the table above).
-* **A (free)**: the mouse orbits the camera around the character (pitch within +-60 degrees,
+* **Free Camera** (A): the mouse orbits the camera around the character (pitch within +-60 degrees,
   walls as in B) without turning it. W/A/S/D walk towards that direction on screen
   (diagonals too) and the character turns to it smoothly (0.3 of the angle per game frame);
   Shift runs. Aiming turns the character to the camera direction (free aim: at once, through
-  the crosshair as in B; with "Game auto-aim": towards the camera unless the game locks on);
+  the crosshair as in B; with "Aim Assist": towards the camera unless the game locks on);
   after aiming the camera stays where it looked. The quick-turn key does the game's quick
   turn (S + Shift runs towards the camera). Arrow keys (and the gamepad with Classic gamepad
   controls) keep tank controls; while they steer, the camera follows behind as in B.
 
 Doors, events and cutscenes put the camera behind the character again in both. A/B are this
-option's own letters, not the game's KEY CONFIG types.
+document's short names for the two values, not the game's KEY CONFIG types.
 
 ### Scope
 
@@ -65,7 +65,7 @@ from the same point along the same angles, so it goes where the scope's centre i
 * **Mouse** (`tps_player` -> `scope_look`, after the mode handler): X turns `ay`, Y pitches `wax`
   (invert Y as set), straight in game units with the part below one unit kept for the next frame,
   so it turns smoothly rather than in the stick's steps. Speed: the aiming sensitivity (X / Y
-  times "Aiming sensitivity") scaled by the field of view shown against "Field of view aiming"
+  times "Aiming Sensitivity") scaled by the field of view shown against "Aiming Field of View"
   (`cam.pers`): the scope's 65 degrees turn as third-person aiming does, zoomed in (20 degrees)
   about a third as fast, and in between while the zoom moves. `wax` is clamped as the game clamps
   it. During a shot's recoil (`mode3` 3, a second) the game sets `wax` to its base `ct3` plus the
@@ -83,7 +83,7 @@ from the same point along the same angles, so it goes where the scope's centre i
   and an input held through that change counts for neither set until let go (`bindings.c
   pad_row_reads`): the held LT was no aim any more and the scope closed as it opened. The right
   stick turns the scope as the mouse does (`scope_look`: `stick_yaw` / `stick_pitch` from
-  `pad_sticks`, with the stick speed, invert Y and "Stick aiming speed", scaled by the zoom); the
+  `pad_sticks`, with the stick speed, invert Y and "Stick Aiming Speed", scaled by the zoom); the
   left stick and d-pad up / left / right still turn it the game's way. The right stick click
   (`pad_tps_recenter`, which has nothing to recenter there) switches the zoom on and off: the
   stick that aims holds no button well, and LB, the game's zoom (L1), is the quick knife here. The
@@ -91,22 +91,22 @@ from the same point along the same angles, so it goes where the scope's centre i
 * **Gamepad, Classic**: the game's own scope controls (R1 aims, the left stick and d-pad turn it, L1
   zooms), and the right stick turns it as in Modern.
 * **Widescreen**: the view through the scope is hor+ as the normal view, and its tint fills the
-  width as the DISPLAY setting "Screen effects" says (Original keeps it 4:3, Off leaves it out);
+  width as the DISPLAY setting "Screen Effects" says (Original keeps it 4:3, Off leaves it out);
   the reticle stays round in the middle, where the shots go.
 * With the fixed cameras the scope keeps the original controls: the mouse is captured only in
   third person, and the fixed cameras have no mouse aim or fire.
-* [Precise hits](#precise-hits): the sniper rifle's shot is tested along the scope's centre against
+* [Precise Shots](#precise-hits): the sniper rifle's shot is tested along the scope's centre against
   the enemies' joint volumes (the game's own test was nearly that, 0.1 units wide); the linear
   launcher's beam is a projectile and unchanged.
 
 ### Gamepad
 
-Setting "Gamepad controls" (THIRD PERSON page, ini `tps_pad_controls`): **Modern (twin-stick)**,
+Setting "Gamepad Controls" (THIRD PERSON page, ini `tps_pad_controls`): **Modern**,
 the default, or Classic (the gamepad as a DualShock 2 through the game rows: tank controls, the
 camera behind, no camera stick). The game's own turn while aiming cannot move free aim's crosshair
 (the shot follows it), so in Classic the right stick, which no key type uses (the game reads only
 the left stick), aims while the weapon is raised, at the stick aiming speed as in Modern; with
-"Game auto-aim" Classic keeps the game's lock-on. In both schemes, while aiming freely, the left
+"Aim Assist" Classic keeps the game's lock-on. In both schemes, while aiming freely, the left
 stick and the d-pad also move the crosshair (left / right turn it, up / down raise and lower it, as
 they turn and tilt the original aim); in the scope the game turns by them itself and only the right
 stick is added. Modern, as the RE2/RE4 remakes (button map:
@@ -122,11 +122,11 @@ stick is added. Modern, as the RE2/RE4 remakes (button map:
   camera behind; the right stick click eases it there (pitch back to the start).
 * **Aim (LT)**: free aim as the mouse's (the same crosshair ray, shot, pose and aim height): the
   character turns to the camera direction at once, the right stick moves the view (aim speed,
-  default 50% of the camera speed). With "Game auto-aim" on the gamepad keeps free aim with a
+  default 50% of the camera speed). With "Aim Assist" on the gamepad keeps free aim with a
   gentle assist (`modern_assist`): with the middle of the enemy nearest the crosshair within 6
   degrees and no wall in between, the stick turns at half speed, and while it moves (not away
   from the enemy) the view drifts a tenth of the way to it. A still stick never moves the aim.
-* **Quick turn**: its button (d-pad down), or pulling the stick back (more than 100 degrees from the
+* **Quick Turn**: its button (d-pad down), or pulling the stick back (more than 100 degrees from the
   facing) and pressing run within 3 frames (the turn on the spot waits that long for it): the
   game's quick turn. Either swings the camera behind the character as it turns. The stick keeps
   the camera it was given in (`modern_hold`, as over the fixed cameras' cuts) until it turns by
@@ -153,7 +153,7 @@ stick is added. Modern, as the RE2/RE4 remakes (button map:
   Hits, grabs and weapon loads keep `pad_play` (a held trigger stays held).
 * **Mixed devices**: `pad_cam` is the device used last (any gamepad button or stick past a third:
   the gamepad; mouse motion, a key or a mouse button: keyboard/mouse). With the gamepad the camera
-  orbits freely and the left stick walks; with the mouse, camera A or B as set. "Game auto-aim"
+  orbits freely and the left stick walks; with the mouse, camera A or B as set. "Aim Assist"
   means the lock-on with the mouse and the assist with the gamepad.
 
 Hooks: `tps_pad` (`pad_sticks`: device, right stick as `stick_yaw`/`stick_pitch`, left stick into
@@ -170,28 +170,28 @@ unit (the character is about 17 units tall).
 
 | Setting | ini key | Default |
 |---|---|---|
-| Over-the-shoulder camera | `tps` | 0 |
-| Field of view (horizontal over the 4:3 picture; widescreen adds to the sides) | `tps_fov` | 75 |
-| Field of view aiming | `tps_aim_fov` | 65 |
-| Camera distance | `tps_distance` | 140 |
-| Camera distance aiming | `tps_aim_distance` | 100 |
-| Camera height | `tps_height` | 165 |
-| Shoulder offset | `tps_shoulder` | 35 |
-| Left shoulder | `tps_left_shoulder` | 0 |
-| Mouse sensitivity X / Y (percent; 100 = 0.12 degrees per mouse count) | `tps_sens_x`, `tps_sens_y` | 100 |
-| Aiming sensitivity (percent of the above) | `tps_aim_sens` | 70 |
-| Invert Y | `tps_invert_y` | 0 |
+| Over-the-shoulder Camera | `tps` | 0 |
+| Field Of View (horizontal over the 4:3 picture; widescreen adds to the sides) | `tps_fov` | 75 |
+| Aiming Field of View | `tps_aim_fov` | 65 |
+| Camera Distance | `tps_distance` | 140 |
+| Aiming Camera Distance | `tps_aim_distance` | 100 |
+| Camera Height | `tps_height` | 165 |
+| Shoulder Offset | `tps_shoulder` | 35 |
+| Left Shoulder | `tps_left_shoulder` | 0 |
+| Horizontal / Vertical Mouse Sensitivity (percent; 100 = 0.12 degrees per mouse count) | `tps_sens_x`, `tps_sens_y` | 100 |
+| Aiming Sensitivity (percent of the above) | `tps_aim_sens` | 70 |
+| Invert Mouse Y | `tps_invert_y` | 0 |
 | Crosshair | `tps_crosshair` | 1 |
-| Game auto-aim (0 = free aim) | `tps_auto_aim` | 0 |
-| Precise hits ([Precise hits](#precise-hits)) | `tps_precise_hits` | 1 |
-| Mouse/keyboard camera (0 = B, 1 = A) | `tps_free_camera` | 0 |
-| Gamepad controls (0 = Classic, 1 = Modern) | `tps_pad_controls` | 1 |
-| Stick camera speed X / Y (percent; 100 = 180 / 120 degrees a second) | `tps_pad_sens_x`, `tps_pad_sens_y` | 100 |
-| Stick aiming speed (percent of the above) | `tps_pad_aim_sens` | 50 |
-| Stick invert Y | `tps_pad_invert_y` | 0 |
-| Left / right stick dead zone (percent) | `tps_pad_dead_move`, `tps_pad_dead_look` | 20, 15 |
-| Light and fog (1 = smooth, 0 = per cut) | `tps_atmos` | 1 |
-| Toggle key (SDL scancode) | `tps_key` | 62 (F5) |
+| Aim Assist (0 = free aim) | `tps_auto_aim` | 0 |
+| Precise Shots ([Precise Shots](#precise-hits)) | `tps_precise_hits` | 1 |
+| Mouse Camera Style (0 = Behind Character, 1 = Free Camera) | `tps_free_camera` | 0 |
+| Gamepad Controls (0 = Classic, 1 = Modern) | `tps_pad_controls` | 1 |
+| Horizontal / Vertical Camera Speed (percent; 100 = 180 / 120 degrees a second) | `tps_pad_sens_x`, `tps_pad_sens_y` | 100 |
+| Stick Aiming Speed (percent of the above) | `tps_pad_aim_sens` | 50 |
+| Invert Stick Y | `tps_pad_invert_y` | 0 |
+| Movement / Camera Dead Zone (percent) | `tps_pad_dead_move`, `tps_pad_dead_look` | 20, 15 |
+| Lighting and Fog (1 = Smooth, 0 = Original) | `tps_atmos` | 1 |
+| Camera Key (SDL scancode) | `tps_key` | 62 (F5) |
 
 ### Test aids
 
@@ -199,8 +199,8 @@ unit (the character is about 17 units tall).
 |---|---|
 | `RECVX_TPS_MOUSE="frame:dx:dy,..."` | moves the mouse dx/dy counts per game frame from that presented frame on |
 | `RECVX_VPAD="frame:input+input,..."` | a virtual gamepad ([ARCHITECTURE.md](ARCHITECTURE.md)): sticks as `leftx=0.5+lefty=-1` (up is negative), triggers `+lefttrigger`; a trigger after another input needs its own `+` (`+lefttrigger++righttrigger`) |
-| `RECVX_TPS_TRACE=1` | logs the gamepad per frame ("tps: pad": the sticks past their dead zones, the walk direction, facing, camera, quick turn, the enemy nearest the crosshair) and its aim assist ("tps: assist"), the free aim per frame, each shot's direction and wall hit against the crosshair target ("SHOT"), the drawn weapon's barrel with "You appear as", the camera ("tps: cam A\|B": yaw, pitch, the player's position, the model's root, the point followed and the eye), the aim height given to the game, the scope per frame ("tps: scope": `ay`, `wax`, the field of view, the turn of the mouse and right stick in game units, the enemy nearest the centre in degrees, the enemies' health), each shot of a dual weapon ("tps: DUAL R\|L": the arms' yaws aimed and shown, the enemy under the crosshair and the other arm's, the aim height, each enemy's health, degrees off the facing and distance), each gun hit ("tps: HIT": weapon, enemy, joint, damage, precise or the game's test, the enemy's state), each precise test that met a body ("tps: PRECISE": joint, volume, along which ray), a zombie's head burst ("tps: HEAD BURST"); `=2` also keeps the camera on the enemy the game locked on to (dual weapons: the nearest of their lock-on), also in the scope, and logs per shot how far the crosshair passed from that enemy's body ("tps: SHOT at enemy") |
-| `RECVX_TPS_AIM_AT=f`, `=cN`, `...:side:up` | with `RECVX_TPS_TRACE=2`, where on that enemy: `f` along its hit capsule (0 = `c1`, for a zombie the head, 1 = `c2`, its legs; default 0.5), `cN` the middle of volume N of its joint table ([Precise hits](#precise-hits); a zombie: `c0` hips to chest, `c4` the head); `:side:up` adds that many units beside it (right of the view, negative left) and above |
+| `RECVX_TPS_TRACE=1` | logs the gamepad per frame ("tps: pad": the sticks past their dead zones, the walk direction, facing, camera, quick turn, the enemy nearest the crosshair) and its aim assist ("tps: assist"), the free aim per frame, each shot's direction and wall hit against the crosshair target ("SHOT"), the drawn weapon's barrel with "Character Model", the camera ("tps: cam A\|B": yaw, pitch, the player's position, the model's root, the point followed and the eye), the aim height given to the game, the scope per frame ("tps: scope": `ay`, `wax`, the field of view, the turn of the mouse and right stick in game units, the enemy nearest the centre in degrees, the enemies' health), each shot of a dual weapon ("tps: DUAL R\|L": the arms' yaws aimed and shown, the enemy under the crosshair and the other arm's, the aim height, each enemy's health, degrees off the facing and distance), each gun hit ("tps: HIT": weapon, enemy, joint, damage, precise or the game's test, the enemy's state), each precise test that met a body ("tps: PRECISE": joint, volume, along which ray), a zombie's head burst ("tps: HEAD BURST"); `=2` also keeps the camera on the enemy the game locked on to (dual weapons: the nearest of their lock-on), also in the scope, and logs per shot how far the crosshair passed from that enemy's body ("tps: SHOT at enemy") |
+| `RECVX_TPS_AIM_AT=f`, `=cN`, `...:side:up` | with `RECVX_TPS_TRACE=2`, where on that enemy: `f` along its hit capsule (0 = `c1`, for a zombie the head, 1 = `c2`, its legs; default 0.5), `cN` the middle of volume N of its joint table ([Precise Shots](#precise-hits); a zombie: `c0` hips to chest, `c4` the head); `:side:up` adds that many units beside it (right of the view, negative left) and above |
 | `RECVX_TPS_ORBIT=degrees` | turns only the view about the player (side views; aim unchanged, camera ignores walls) |
 | `RECVX_ATMOS_TRACE=1` | logs each game frame's cut, the game's fog, lights and filter, the player's view depth from the view drawn and from the cut camera, and the fog shown with our camera (range in view depth) and what "smooth" shows |
 | `RECVX_EFF_TRACE=1` | logs effects spawned and queued |
@@ -296,7 +296,7 @@ unit (the character is about 17 units tall).
 * Camera collision never feeds back into the aim: the crosshair ray starts at the wall-free
   shoulder point, and the camera position depends only on the player's position.
 * Mouse: SDL relative mode while third person is on, the window has focus and no overlay window
-  is open, unless a screen with mouse support has it ("Mouse in menus", `menu_mouse.c`
+  is open, unless a screen with mouse support has it ("Mouse In Menus", `menu_mouse.c`
   `menu_mouse_cursor`). That screen flag never outlasts play: the game thread publishes each frame
   whether the player has control (`g_menu_mouse.play`: `pc_in_play`, not the co-op trade screen),
   and in play the mouse is the camera's whatever a screen left behind. A message's choices count
@@ -329,7 +329,7 @@ all 205 rooms, camera version 0, from `pc/tools/rdx.py`):
 
 Room ambient and lights 0..3 (muzzle flash, lighter, ...) do not change per cut.
 
-**Smooth** (default; ini `tps_atmos` 1; 0 = per cut). `tps_atmos` (`game.c` after
+**Smooth** (default; ini `tps_atmos` 1; 0 = Original, per cut). `tps_atmos` (`game.c` after
 `bhControlLight`) and `tps_filter` (`bhEffFil`) take the game's per-cut values as the target:
 
 * A change in a frame where the cut changed (`cam.ncut`/`camver`) fades; any other change
@@ -415,7 +415,7 @@ shows the cut's flag (`eff110`) and whether the distortion is drawn (`drawn`).
 * **Shots on walls** (`aim_at_crosshair`): enemies are aimed from the enemy-test origin (11 units
   up); when the crosshair target is a wall, the aim starts at the muzzle, so wall hits land on the
   crosshair.
-* **"You appear as" another model** ([ACTORS.md](ACTORS.md) "You appear as"): the weapon is drawn
+* **Another model as "Character Model"** ([ACTORS.md](ACTORS.md) "You appear as"): the weapon is drawn
   in the model's hand, so the bend's pitch is taken from there (`actor_aim_offset`: drawn minus
   real hand, in the frame of the real chest). The shot stays the real skeleton's
   (`actor_hands_back`). With the retargeting ([ACTORS.md](ACTORS.md) "Retargeting") the pitch is
@@ -457,7 +457,7 @@ zombies were thrown away.
   stops) puts it back to straight, so the weapon modes keep the straight motions and the shot
   (`bhCheckGunAtari` copies `at_flg`) keeps the straight test; an enemy that cleared `at_flg`
   meanwhile (grabs) is left alone.
-* With "Game auto-aim" the game's own aim height plays: W / S press the up/down bits as the
+* With "Aim Assist" the game's own aim height plays: W / S press the up/down bits as the
   d-pad does (`0x21` / `0x42`).
 
 ### Dual weapons
@@ -487,8 +487,8 @@ Free aim now sets them every tick (`dual_aim`, after `aim_at_crosshair`; not whi
   and kept within 45 degrees; the arms ease there a third of the way per tick (`count` 3).
 * Shots therefore go where each arm points; the pitch, bend and aim height are the crosshair
   target's as for single weapons, so lying zombies are hit the same way. The fixed cameras and
-  "Game auto-aim" with the mouse keep the game's own dual targeting.
-* With [Precise hits](#precise-hits) the other arm takes that enemy only if its own shot, turned to it,
+  "Aim Assist" with the mouse keep the game's own dual targeting.
+* With [Precise Shots](#precise-hits) the other arm takes that enemy only if its own shot, turned to it,
   would hit it (`dual_aim`, `pc_dual_take`): the ray `CheckGunHit` casts, from that arm's muzzle at
   chest height along `Rx(wax) Ry(ay + its yaw)`, must enter the enemy's joint volumes before any other
   enemy's and before a wall. A second enemy beside that ray (other height or distance than the
@@ -497,7 +497,7 @@ Free aim now sets them every tick (`dual_aim`, after `aim_at_crosshair`; not whi
   turned arm along its own ray (`pc_precise_hit`: the shot's yaw `way` is the turned arm's).
   Measured (two zombies spawned in 3/0, SMG and Gold Lugers): 15 degrees apart the other arm turned
   23 times and hit the second zombie 26 times along its own ray; with the second zombie at a lower
-  pitch, never; beyond 45 degrees, never. Off: as before Precise hits (pose and health traces
+  pitch, never; beyond 45 degrees, never. Off: as before Precise Shots (pose and health traces
   identical to that build). The fixed cameras run none of this: dual-weapon runs with one and two
   zombies are frame- and health-identical to v0.6.0.
 * Co-op: each arm's hits reach the partner as any hit (`EV_ENE_HIT` per enemy hit, with the aim
@@ -506,7 +506,7 @@ Free aim now sets them every tick (`dual_aim`, after `aim_at_crosshair`; not whi
 
 ## Precise hits
 
-Setting "Precise hits" (THIRD PERSON page, ini `tps_precise_hits`, on by default). Off, and with the
+Setting "Precise Shots" (THIRD PERSON page, ini `tps_precise_hits`, on by default). Off, and with the
 fixed cameras, the game's test as before (frames identical to the build without it).
 
 **How the game hits** (`weapon.c bhCheckGunAtari`, measured with `RECVX_TPS_TRACE=2` at a zombie
@@ -523,7 +523,7 @@ sniper rifle and the bow gun (`WpnTab flg 0x8`) test the enemy's joint capsules 
 
 **On** (`tps_glue.c pc_precise_hits`, `pc_precise_hit`, `pc_ray_capsule` in `pc_rules.h`), for the
 player's hitscan shots (`WpnTab flg 0x10000000`, not the projectiles `0x20000000`) with our camera
-and free aim (not "Game auto-aim" with the mouse: its lock-on needs the wide test), and in the scope:
+and free aim (not "Aim Assist" with the mouse: its lock-on needs the wide test), and in the scope:
 
 * **The ray**: the crosshair's (from the shoulder point along the view, to the first wall; cast by
   `aim_at_crosshair` the tick before, which turned `ay` / `wax` to it), as seen. The game's ray starts
@@ -583,7 +583,7 @@ it does not, with the guest's option off it does as before).
 * Aim poses: free aim bends the straight pose up to 60 degrees of pitch. No laser sight.
 * The crosshair goes down to 60 degrees: from the shoulder (16.5 units up) it meets the floor
   about 9.5 units ahead, so a crawling zombie nearer than that cannot be put under it (the shot
-  goes at the floor behind it; with "Precise hits" off the game's wide hit test may still reach it).
+  goes at the floor behind it; with "Precise Shots" off the game's wide hit test may still reach it).
 * Co-op: enemies judge a hit with the aim height of the player they are after; the partner's
   stand-in carries none, so every hit counts on an enemy after the partner.
 * Near walls: a wall closer than 40 units on the crosshair ray counts as 40 units away for the

@@ -82,8 +82,8 @@ conversion. None are included; use a pack you have.
 example `mods/textures/1_addon/` and `mods/textures/2_base/`. When two packs replace the same
 texture, the one in the folder that comes first by name wins, so `1_...` overrides `2_...`.
 
-Settings (F1 or ENHANCED SETTINGS, DISPLAY): **HD textures** turns packs on or off, **HD
-textures: UI** also uses redesigned menus, title and inventory (on), **HD textures: font** uses
+Settings (F1 or ENHANCED SETTINGS, DISPLAY): **HD Textures** turns packs on or off, **HD
+Menus** also uses redesigned menus, title and inventory (on), **HD Font** uses
 the pack's font (off). A pack in another folder: `hd_textures_dir = <path>` in `recvx.ini` or
 `--hd-textures <path>`. Details: [docs/USER_GUIDE.md](docs/USER_GUIDE.md#hd-texture-packs).
 

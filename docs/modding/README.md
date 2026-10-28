@@ -150,7 +150,7 @@ all work. Cancel or a right click goes back to the title.
   against GitHub's SHA-256 checksum. A damaged one is not installed.
 - It is placed next to the game's program, as `biorand-cli.exe` (Linux: `biorand-cli`) with its
   licence `biorand-cli.LICENSE`. The game's folder must be writable.
-- **CHECK FOR A NEW BIORAND CLI** (SEED page) asks GitHub for a newer nightly and offers it.
+- **CHECK FOR UPDATES** (SEED page) asks GitHub for a newer nightly and offers it.
 - The CLI needs 64-bit Windows 10 (1803 or later) or 11, or 64-bit Linux with glibc 2.34 or later
   (Ubuntu 22.04, SteamOS 3). On Linux the download also needs `curl` (or `wget`) and `tar`.
 
@@ -159,11 +159,11 @@ on the page row, or with L1/R1 (Q/W on the keyboard).
 
 | page | what |
 |---|---|
-| SEED | the seed number; RANDOM SEED; COPY / PASTE SEED STRING; **GENERATE**; CHECK FOR A NEW BIORAND CLI. Below: the seed string |
-| DOORS | Randomize Doors, segments, segment size, cutscene rooms; the estimated completion time |
+| SEED | the seed number; RANDOM SEED; COPY / PASTE SEED STRING; **GENERATE**; CHECK FOR UPDATES. Below: the seed string |
+| DOORS | Randomize Doors, segments, segment size, cutscene rooms; the estimated play time |
 | ITEMS | Randomize Items, routes, hidden key items, the custom item pool, the random starting inventory, the weapons; the item distribution |
 | ENEMIES | Randomize Enemies, placements, difficulty, the enemy ratios; the enemy distribution |
-| PORT EXTRAS | the port's own options (not in the seed string): **Randomize Played as**, which picks who you appear as for each seed; the cutscene cast |
+| EXTRA OPTIONS | the port's own options (not in the seed string): **Randomize Character Model**, which picks your Character Model for each seed; the cutscene cast |
 
 - A greyed row says why in the help strip (for example "Randomize Doors sets this.").
 - Every change is saved at once as the **seed string** (recvx.ini `biorand_seed`). The string
@@ -198,7 +198,7 @@ allows 60 such requests per hour from one address. Generating works offline.
 1. In BioRand choose Code: Veronica, the PC version, your `.iso` as game data and this game's
    folder (with `recvx.exe` and `mods`) as the PC folder. Generate.
 2. On NEW GAME's difficulty screen, the row **BIORAND ON / OFF** switches it.
-   Without Difficulty select, use **BioRand** (GAMEPLAY) at the title.
+   Without Difficulty Select, use **BioRand** (GAMEPLAY) at the title.
 
 ### Playing
 

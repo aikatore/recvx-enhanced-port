@@ -19,14 +19,14 @@ so someone in your group has to run one (below) and both players enter its addre
 
 | where | setting |
 |---|---|
-| Lobby (co-op screen) | mode **VIA SERVER** / **DIRECT (P2P)**, row **SERVER**, **PASSWORD**, **RELAY** (*Only if needed* / *Always*), **COPY ROOM CODE** |
-| F3 window | **Connection**, **Co-op server**, **Room code** / **Join address** |
-| ENHANCED SETTINGS > CO-OP (F1) | **Connection** (Automatic, Direct, Via server) |
-| recvx.ini | `coop_conn` (0 Automatic, 1 Direct, 2 Via server), `coop_server` (`host` or `host:port`; empty = no server) |
+| Lobby (co-op screen) | mode **VIA SERVER** / **DIRECT**, row **SERVER**, **PASSWORD**, **RELAY** (*Only if needed* / *Always*), **COPY ROOM CODE** |
+| F3 window | **Connection**, **Co-op Server**, **Room code** / **Join address** |
+| ENHANCED SETTINGS > CO-OP (F1) | **Connection** (Automatic, Direct, Server Relay) |
+| recvx.ini | `coop_conn` (0 Automatic, 1 Direct, 2 Server Relay), `coop_server` (`host` or `host:port`; empty = no server) |
 | command line | `--coop-server ADDR`, `--coop-conn auto\|direct\|server`, `--coop-pw PASSWORD`, `--coop-join ROOMCODE` |
 
 The port 7141 is implied when the address has none. The password is never saved. With
-**Automatic** the games punch a direct path and use the relay only if that fails; **Via server**
+**Automatic** the games punch a direct path and use the relay only if that fails; **Server Relay**
 always relays. How to host and join step by step: [COOP.md](COOP.md).
 
 ## Building
@@ -107,7 +107,7 @@ docker kill -s HUP recvx-server         # reload
 
 `recvx-client SERVER host` opens a room and prints its code; on another machine
 `recvx-client SERVER join CODE` joins it and prints the path (direct, LAN, relay) and the round
-trip. Options: `--pw P`, `--relay` (Via server), `--no-punch` (forces the relay fallback),
+trip. Options: `--pw P`, `--relay` (Server Relay), `--no-punch` (forces the relay fallback),
 `--loss PCT`, `--secs N`, `--size BYTES`, `--dgrams N` (load), `--plain` (no encryption).
 
 ## Configuration
@@ -234,7 +234,7 @@ A health check is a HELLO round trip (or `recvx-client 127.0.0.1 status` on the 
    confirms the path. Flagged punches are never answered.
 4. **Relay fallback.** No path after 2 s: RELAY frames through the server. Punching continues
    every 500 ms for 10 s; a confirmation then switches to direct without a reconnect. Later
-   punches are ignored. **Via server** never punches.
+   punches are ignored. **Server Relay** never punches.
 5. **Close.** CLOSE from the host, or `room_timeout` without its keepalive; the joiner's place
    frees after `member_timeout`.
 
@@ -262,7 +262,7 @@ thread (long load, debugger) does not count as a lost room.
   non-zero tag replaces the stale member at once (its game crashed): new token, epoch, INTROs and
   keys. Otherwise: "The room is full". The password check comes first; a tag is useless in
   another room.
-- **KICK** ("Remove stuck player"): only from the host's address with its token, only for the
+- **KICK** ("Remove Partner"): only from the host's address with its token, only for the
   member sequence it names. The server frees the place and keeps the room and code; the host drops
   the old keys at once.
 - **member_timeout** (10 s): a joiner without keepalive or authenticated relay traffic leaves; with
@@ -305,8 +305,8 @@ No datagram on any path exceeds 1200 bytes. Addresses are family u8 (4 or 6; 0 n
 | KICK 13 | host -> s | room id, host token, member sequence; answered like a KEEPALIVE |
 
 ERROR codes (`RDV_E_*`): 1 VERSION, 2 NO_ROOM ("Room not found"), 3 NEED_PW (carries the salt;
-a joiner with a password retries with a proof), 4 BAD_PW, 5 FULL, 6 RATE ("Too many attempts:
-wait a minute"), 7 COOKIE (stale: the client restarts with HELLO), 8 SERVER_FULL ("full or busy":
+a joiner with a password retries with a proof), 4 BAD_PW, 5 FULL, 6 RATE ("Too many attempts.
+Wait a minute."), 7 COOKIE (stale: the client restarts with HELLO), 8 SERVER_FULL ("full or busy":
 no free room, address table full, no randomness), 9 TOO_MANY (`rooms_per_ip`).
 
 **Datagram budget.** A game datagram to a server partner is at most 1200 - 52 bytes: the RELAY
@@ -430,7 +430,7 @@ Test aids in the game (environment variables):
 
 | variable | effect |
 |---|---|
-| `RECVX_COOP_FORCE_RELAY=1` | always relay (like Via server) |
+| `RECVX_COOP_FORCE_RELAY=1` | always relay (like Server Relay) |
 | `RECVX_COOP_NO_PUNCH=1` | no punching: exercises the relay fallback |
 | `RECVX_COOP_PUNCH_MS=N` | punching time before the relay fallback (default 2000) |
 | `RECVX_COOP_STATS=1` | every 300 frames: the path, datagrams, bytes and framing overhead |
