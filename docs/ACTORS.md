@@ -803,7 +803,7 @@ with where the cast records are.
 |---|---|
 | *Cutscene Models* | the cutscene models with a face mask: Steve (catalogue 3), Wesker (5), Alfred (8), Alexia (12), Rodrigo (13) |
 | *All Models* | the five player files (`ACTOR_PART + n`) and every listed humanoid catalogue model (`anim` not `ANIM_IDLE`, not a hidden twin): the cast, Alexia's first form, Nosferatu, the Tyrant, Monster Steve, the Hunters, the Bandersnatch, the anatomist, and **the zombies as one entry** (`CAST_ZOMBIES`): a character that draws it gets one of the 27 zombie looks, from (seed, scene, character) (`cast_zombie_look`: Per Character, the same look everywhere; Per Cutscene, per room). As 27 entries they were more than half of the pool, and most characters became zombies. Not "Alfred Ashford (Wounded)" (a special state). No other family is large: each player character has two or three looks (its player files and its cutscene model), Hunter and Sweeper two; the event models and Tyrant 2 are hidden twins already |
-| *Custom* | the *All Models* entries the player checked ("Custom" below) |
+| *Custom* | the *All Models* entries and Claire's and Chris's looks the player checked ("Custom" below) |
 | with imported models | the imported models after them (playable characters and NPCs, `IMPORT_OFFERED`: people with jaw and lid bones, [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md) "Faces", so they count as cutscene models: their jaw follows the record's mask, `imp_face`) |
 
 ### Custom
@@ -830,12 +830,13 @@ CUTSCENE CAST page (CHOOSE MODELS, "12 of 16", opens it as step 8) and the BIORA
 
 ### The picks
 
-Never in a pool: Claire's and Chris's looks (their cutscene models 0 and 1, their player files, Claire's
+Never in a pool but *Custom*'s: Claire's and Chris's looks (their cutscene models 0 and 1, their player files, Claire's
 second costume). They are the characters the story is played as, whose look "Character Model" decides; on
 someone else they read as the player character (Steve at the end of Claire's part, 6100, just before the
 switch to Chris, was drawn as Chris's cutscene model: it looked as if Chris's part began with a random
 Chris instead of the chosen model). Claire and Chris themselves are still cast when they appear as the
-other, non-played character.
+other, non-played character. *Custom* lists these looks too (after the *All Models* entries, checked like
+any new entry): a player who checks them wants them.
 
 `cast_model(seed, scene, character, ...)`: all seven characters are assigned at once from a Fisher-Yates
 shuffle of the pool by xorshift32 seeded with (seed, scene): each character in turn takes the first model

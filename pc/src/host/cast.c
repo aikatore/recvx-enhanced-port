@@ -41,24 +41,31 @@ int cast_zombie_look(unsigned seed, unsigned scene, int c)
     return -1;
 }
 
-/* Claire's and Chris's looks (their cutscene models, their player files, Claire's second costume) are never picked: they
+/* Claire's and Chris's looks (their cutscene models, their player files, Claire's second costume) are not in the pools (only "Custom" lists them): they
    are the characters the story is played as, whose look "You appear as" decides. Picked for someone else they read as
    the player character: Steve at the end of Claire's part (6100, just before the switch to Chris) shown as Chris's
    cutscene model looked like Chris's part starting with a random Chris instead of the chosen model. */
 static int protagonist(int m) { return m == cine[0] || m == cine[1] || m == ACTOR_PART + 0 || m == ACTOR_PART + 1 || m == ACTOR_PART + 4; }
 
 /* "All models" without the imports: every humanoid look the menus list, the player files too; not the wounded Alfred
-   (a special state) */
-static int builtins(int* out)
+   (a special state). "Custom" (custom 1) lists Claire's and Chris's looks too, after these: there a player who checks
+   them wants them */
+static int builtins_of(int* out, int custom)
 {
     int n = 0, i;
     for (i = 0; i < 5; i++) if (!protagonist(ACTOR_PART + i)) out[n++] = ACTOR_PART + i;
     for (i = 0; i < ACTOR_MODELS; i++)
         if (actor_models[i].anim != ANIM_IDLE && appear_canon(COOP_CHR_ACTOR + i) == COOP_CHR_ACTOR + i && i != 10 && i != 14 && !zombie(i) && !protagonist(i)) out[n++] = i;   /* (14 the man in the hazmat suit: no moving mouth) */
     out[n++] = CAST_ZOMBIES;   /* the zombie looks: one entry (cast_model picks the look) */
+    if (custom) {
+        for (i = 0; i < 5; i++) if (protagonist(ACTOR_PART + i)) out[n++] = ACTOR_PART + i;
+        for (i = 0; i < ACTOR_MODELS; i++)
+            if (protagonist(i) && actor_models[i].anim != ANIM_IDLE && appear_canon(COOP_CHR_ACTOR + i) == COOP_CHR_ACTOR + i) out[n++] = i;
+    }
     return n;
 }
-#define BUILTIN_MAX (5 + ACTOR_MODELS + 1)
+static int builtins(int* out) { return builtins_of(out, 1); }   /* (the "Custom" list's: its positions) */
+#define BUILTIN_MAX (5 + ACTOR_MODELS + 1)   /* (with "Custom"'s: each look once) */
 
 int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
 {
@@ -66,7 +73,7 @@ int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
     if (!all) {
         for (i = 0; i < CAST_CHARACTERS && n < max; i++) if (!protagonist(cine[i])) out[n++] = cine[i];
     } else
-        for (i = 0, k = builtins(b); i < k && n < max; i++) out[n++] = b[i];
+        for (i = 0, k = builtins_of(b, all == 2); i < k && n < max; i++) out[n++] = b[i];
     for (i = 0; i < imports_n(imports) && n < max; i++) out[n++] = ACTOR_MODELS + i;
     if (all == 2) {   /* "Custom": the checked ones (the positions are "All models"'s) */
         for (i = k = 0; i < n; i++) if (!cast_off_at(off, i)) out[k++] = out[i];
