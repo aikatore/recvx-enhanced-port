@@ -1,10 +1,11 @@
 /* ENHANCED SETTINGS in the game's OPTION menu (docs/ARCHITECTURE.md "Settings"): an eighth item on
- * the option screen, right of EXIT, set in the screen's own lettering, opens pages of the port's settings drawn
+ * the option screen, in DEFAULT's place, set in the screen's own lettering, opens pages of the port's settings drawn
  * like the co-op lobby (the game's font, the option screen's background and title, its cursor
  * sounds). Game thread, from adv.c (Adv_GameOptionScreen and DisplayOptionPlate*): option
  * level 4 is ours. Values come from the shared settings table (pc/src/host/settings.c) and the
  * control bindings (pc/src/input/bindings.c), the same ones the F1 overlay edits. In a game a
- * ninth item, RETURN TO TITLE right of DEFAULT, asks first and then returns to the title.
+ * ninth item, RETURN TO TITLE in EXIT's place, asks first and then returns to the title. EXIT is at
+ * the bottom right.
  */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
@@ -12,6 +13,7 @@
 #include "../../decomp/include/ps2/veronica/prog/padman.h"
 #include "../../decomp/include/ps2/veronica/prog/sdfunc.h"
 #include "../../decomp/include/ps2/veronica/prog/ps2_NaDraw.h"
+#include "../../decomp/include/ps2/veronica/prog/vibman.h"
 #include "../src/host/settings.h"
 #include "../src/host/bindings.h"
 #include "../src/host/menu_mouse.h"
@@ -61,15 +63,18 @@ void pc_options_frame(void) { g_menu_mouse.active = 1; options_up = 1; }
 int pc_options_up(void) { int r = options_up; options_up = 0; return r; }
 void pc_tex_keep_original(int texno);   /* texture_glue.c: our entries are cut from the option textures */
 
-/* ---------------------------------------------------------------- level 0: ENHANCED SETTINGS, RETURN TO TITLE
-   ENHANCED SETTINGS: on EXIT's row, at the right, like STEREO / MONO and ON / OFF: left/right move
-   between EXIT and it (adv.c DisplayOptionPlateLevel0), up goes to the row above, down wraps to the
-   top as from EXIT. RETURN TO TITLE (in a game only): on DEFAULT's row above it, the same way; it
-   asks first (below). Both set in the row labels' own letters (texture 0: AUDIO SETUP at v 0, KEY
-   CONFIG 32, SCREEN SETUP 64, DEFAULT 160, EXIT 192, SETUP 224, ON / OFF 320; the only H is in the
-   narrower key config caption CHANGE AIM at 256, drawn wider). u = left edge, w = width (measured
-   from the texture), dw = drawn width. */
+/* ---------------------------------------------------------------- level 0: ENHANCED SETTINGS, RETURN TO TITLE, EXIT
+   The rows (OptionDef index), 32 px apart from y 160, the labels at x 32, the values right-aligned at ROW_RIGHT:
+     AUDIO SETUP (0) .. VIBRATION (4)
+     ENHANCED SETTINGS (7)           DEFAULT's place (DEFAULT, 5, is not offered)
+     RETURN TO TITLE (8)    EXIT (6)  EXIT's place (in a game only; at the title empty); EXIT at the bottom right
+   RETURN TO TITLE asks first (below). ENHANCED SETTINGS and RETURN TO TITLE are set in the row labels'
+   own letters (texture 0: AUDIO SETUP at v 0, KEY CONFIG 32, SCREEN SETUP 64, DEFAULT 160, EXIT 192,
+   SETUP 224, ON / OFF 320; the only H is in the narrower key config caption CHANGE AIM at 256, drawn
+   wider), EXIT is its own label cut to the word.
+   u = left edge, w = width (measured from the texture), dw = drawn width. */
 #define ROW_RIGHT 584.0f
+#define ROW_W 288.0f                  /* a label's width (the texture's rows) */
 typedef struct { short u, v, w, dw; } Glyph;
 #define G_A { 0, 0, 18, 18 }          /* AUDIO */
 #define G_O { 71, 0, 19, 19 }
@@ -92,32 +97,51 @@ static const Glyph w_enhanced[] = { G_E, G_N, G_H, G_A, G_N, G_C, G_E, G_D, G_SP
 static const Glyph w_title[] = { G_R, G_E, G_T, G_U, G_R, G_N, G_SP, G_T, G_O, G_SP, G_T, G_I, G_T, G_L, G_E };
 static const Glyph w_yes[] = { G_Y, G_E, G_S };
 static const Glyph w_no[] = { { 65, 320, 19, 19 }, { 44, 320, 19, 19 } };   /* ON's letters, as ON / OFF */
+static const Glyph w_exit[] = { { 0, 192, 68, 68 } };
 
-static float word_w(const Glyph* g, int n)
+/* sx: the letters' width (not the gaps) scaled */
+static float word_w(const Glyph* g, int n, float sx)
 {
     float w = 0;
-    for (int i = 0; i < n; i++) w += g[i].dw + 1;
+    for (int i = 0; i < n; i++) w += g[i].dw * sx + 1;
     return w;
 }
 
-static void word(const Glyph* g, int n, float x, float y, unsigned int col, float z)
+static void word(const Glyph* g, int n, float x, float y, unsigned int col, float z, float sx)
 {
     QUAD* q = &Qtex[15];
     pc_tex_keep_original(0);
     for (int i = 0; i < n; i++) {
         if (g[i].u >= 0) {
-            SetQuadPos(x, y, g[i].dw, 32.0f, q);
+            SetQuadPos(x, y, g[i].dw * sx, 32.0f, q);
             SetQuadUv2(g[i].u, g[i].v, g[i].w, 32.0f, 0, q);
             AdvEasyDrawTexture(0, col, q, z, 1);
         }
-        x += g[i].dw + 1;
+        x += g[i].dw * sx + 1;
     }
 }
 
 static unsigned int pulse(void) { return ((unsigned int)AdvWork.FlushCount2 + 255) << 24 | 0xFFFFFF; }
 static unsigned int row_col(int i) { return OptionDef[i].SelectFlag ? pulse() : 0x7FAFAFAF; }   /* as the other rows */
-static float row8_x(void) { return ROW_RIGHT - word_w(w_enhanced, N_OF(w_enhanced)); }   /* right-aligned with the values */
-static float row9_x(void) { return ROW_RIGHT - word_w(w_title, N_OF(w_title)); }
+/* ENHANCED SETTINGS is 13 px wider than a label: its letters a little narrower, so it ends where the labels do */
+static float enh_sx(void) { return (ROW_W - N_OF(w_enhanced)) / (word_w(w_enhanced, N_OF(w_enhanced), 1) - N_OF(w_enhanced)); }
+static float exit_x(void) { return ROW_RIGHT - word_w(w_exit, 1, 1); }   /* right-aligned with the values */
+
+/* the cursor's next row from idx (adv.c DisplayOptionPlateLevel0; dir 0 up, 1 down, 2 left, 3 right; vib:
+   VIBRATION can be chosen): up/down along the labels, wrapping, EXIT the last at the title; in a game left/right
+   between RETURN TO TITLE and EXIT, and from EXIT up to ENHANCED SETTINGS, down to the top */
+int pc_options_move(int idx, int dir, int vib)
+{
+    static const int col[] = { 0, 1, 2, 3, 4, 7, 8 };
+    int game = pc_in_game(), n = N_OF(col), k;
+    if (dir >= 2) return game && idx == (dir == 3 ? 8 : 6) ? 14 - idx : idx;
+    if (game && idx == 6) return dir ? 0 : 7;
+    if (idx == 6) idx = 8;   /* at the title EXIT ends the list */
+    for (k = 0; k < n && col[k] != idx; k++) ;
+    if (k == n) k = 5;   /* (DEFAULT: as ENHANCED SETTINGS) */
+    do k = (k + (dir ? 1 : n - 1)) % n; while (col[k] == 4 && !vib);
+    return col[k] == 8 && !game ? 6 : col[k];
+}
 
 /* ---------------------------------------------------------------- the question box
    RETURN TO TITLE's question (below) and the BioRand screen's questions, messages and progress
@@ -132,8 +156,8 @@ static float row9_x(void) { return ROW_RIGHT - word_w(w_title, N_OF(w_title)); }
 #define DLG_BTN_SC 0.95f
 static float dlg_btn_w(const char* b, int glyphs)
 {
-    if (glyphs && !strcmp(b, "YES")) return word_w(w_yes, 3);
-    if (glyphs && !strcmp(b, "NO")) return word_w(w_no, 2);
+    if (glyphs && !strcmp(b, "YES")) return word_w(w_yes, 3, 1);
+    if (glyphs && !strcmp(b, "NO")) return word_w(w_no, 2, 1);
     return pc_ui_text_w(b, DLG_BTN_SC);
 }
 static float dlg_btn_x(int i, const char* b0, const char* b1, int glyphs)
@@ -197,8 +221,8 @@ void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, f
         const char* b = i ? b1 : b0;
         float x = dlg_btn_x(i, b0, b1, glyphs);
         unsigned int col = i == sel ? pulse() : 0x7FAFAFAF;
-        if (glyphs && !strcmp(b, "YES")) word(w_yes, 3, x, y1 - 48, col, 0.3f);
-        else if (glyphs && !strcmp(b, "NO")) word(w_no, 2, x, y1 - 48, col, 0.3f);
+        if (glyphs && !strcmp(b, "YES")) word(w_yes, 3, x, y1 - 48, col, 0.3f, 1);
+        else if (glyphs && !strcmp(b, "NO")) word(w_no, 2, x, y1 - 48, col, 0.3f, 1);
         else pc_ui_text(x, y1 - 44, b, DLG_BTN_SC, col);
     }
     if (l1) pc_ui_text(320 - pc_ui_text_w(l1, 0.7f) / 2, y0 + 22, l1, 0.7f, 0xFFFFFFFF);
@@ -245,8 +269,9 @@ static void quit_draw(void)
 /* DisplayOptionPlateLevel0, with the other rows: drawn as they are (dim, or pulsing when selected) */
 void pc_options_rows0(void)
 {
-    word(w_enhanced, N_OF(w_enhanced), row8_x(), 352.0f, row_col(7), 0.05f);
-    if (pc_in_game()) word(w_title, N_OF(w_title), row9_x(), 320.0f, row_col(8), 0.05f);
+    word(w_enhanced, N_OF(w_enhanced), 32.0f, 320.0f, row_col(7), 0.05f, enh_sx());
+    if (pc_in_game()) word(w_title, N_OF(w_title), 32.0f, 352.0f, row_col(8), 0.05f, 1);
+    word(w_exit, 1, exit_x(), 352.0f, row_col(6), 0.05f, 1);
     if (quit.open) quit_draw();
 }
 
@@ -267,9 +292,10 @@ void pc_options_mouse0(int port)
     menu_mouse_take(&mt);
     if (mt.x >= 32 && mt.x < 608 && mt.y >= 160 && mt.y < 384) {   /* rows 32 px apart, their values on the right */
         hit = (int)(mt.y - 160) / 32;
-        if (hit == 6 && mt.x >= row8_x() - 4) hit = 7;   /* EXIT's row: ENHANCED SETTINGS on the right */
-        else if (hit == 5 && mt.x >= row9_x() - 4 && pc_in_game()) hit = 8;   /* DEFAULT's row: RETURN TO TITLE */
+        if (hit == 5) hit = mt.x < 320 ? 7 : -1;   /* ENHANCED SETTINGS */
+        else if (hit == 6) hit = mt.x >= exit_x() - 4 ? 6 : mt.x < 320 && pc_in_game() ? 8 : -1;   /* RETURN TO TITLE, EXIT */
         else if (mt.x >= 320 && hit != 0 && hit != 4 && hit != 1) hit = -1;
+        if (hit == 4 && !CheckVibrationUnit(port * 6 + 2)) hit = -1;   /* VIBRATION without a vibration unit: not selectable */
     }
     if (hit >= 0 && (mt.moved || mt.left) && hit != ap->OptIndex) { ap->OptIndex = hit; CallSystemSe(0, 2); }
     if (mt.left && hit >= 0) {

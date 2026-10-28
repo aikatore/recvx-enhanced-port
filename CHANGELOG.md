@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Menus
+
+- **OPTION layout**: ENHANCED SETTINGS is now below VIBRATION, in place of DEFAULT (no longer
+  offered), and in a game RETURN TO TITLE is the bottom row; EXIT is always at the bottom right.
+
 ### Co-op
 
 - **Simpler hosting status**: the lobby and F3 no longer show router port-forwarding details; they

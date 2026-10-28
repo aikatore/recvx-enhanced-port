@@ -679,10 +679,14 @@ in `pc/src/host/config.c`.
 
 ENHANCED SETTINGS is option level 4 of the game's OPTION screen (`pc/glue/options_glue.c`; hooks in
 `adv.c`: `OptionDef[9]`, `DisplayOptionPlate` and the fades treat it like KEY CONFIG). Its entry
-sits right of EXIT, lettered from the option texture's own glyphs: left/right move between EXIT
-and it, up from it goes to the row above, down wraps to the top as from EXIT (`DisplayOptionPlateLevel0`,
-`pc_options_mouse0` for the mouse). In a game (`tk_flg & 0x80`) a ninth item, RETURN TO TITLE,
-sits right of DEFAULT above it, lettered the same way. Confirming it opens a YES / NO question
+takes DEFAULT's place below VIBRATION (DEFAULT, `ResetOptionMenuParam(2)`, is not offered), lettered
+from the option texture's own glyphs, a little narrower to fit a label's 288 px. In a game
+(`tk_flg & 0x80`) a ninth item, RETURN TO TITLE, takes EXIT's place, lettered the same way; EXIT
+(its texture piece cut to the word) sits at the bottom right, right-aligned with the values, at the
+title too, where the bottom row's left stays empty (EXIT and ENHANCED SETTINGS stay where they are
+in a game). Up/down go along the labels and wrap; at the title EXIT is the last; in a game left/right
+go between RETURN TO TITLE and EXIT, and from EXIT up goes to ENHANCED SETTINGS, down to the top
+(`options_glue.c pc_options_move`, `pc_options_mouse0` for the mouse). Confirming RETURN TO TITLE opens a YES / NO question
 over the screen (`pc_options_quit`, NO preselected, cancel = NO); YES leaves the option screen as
 EXIT does (system data saved if changed), then `system.c bhSysCallOption` resumes the game as
 usual and returns to the title as the soft reset does (`PlayStopMovieEx`, `RequestAllStopSoundEx`,
