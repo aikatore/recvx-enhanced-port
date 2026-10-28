@@ -7,6 +7,11 @@
 - **Simpler hosting status**: the lobby and F3 no longer show router port-forwarding details; they
   show the join address and code, and a short hint when your partner may need a co-op server.
 
+### Fixes
+
+- **Grenade launcher aim with another Character Model**: in third person the grenade launcher no longer
+  points up while aiming with another model; it points at the crosshair.
+
 ## 0.6.10 (2026-10-25)
 
 ### Gameplay

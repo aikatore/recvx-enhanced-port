@@ -421,7 +421,11 @@ shows the cut's flag (`eff110`) and whether the distortion is drawn (`drawn`).
   (`actor_hands_back`). With the retargeting ([ACTORS.md](ACTORS.md) "Retargeting") the pitch is
   then solved on the weapon as it will be drawn (`actor_aim_hand`: the drawn hand's position and
   rotation in the frame of the real chest, which the bend turns): up to four steps of bend, measure
-  the barrel's pitch against the line from its muzzle to the crosshair target, correct. The bend
+  the barrel's pitch against the line from its muzzle to the crosshair target, correct. The barrel
+  runs from the muzzle (`wp_fps1`) on to `wp_fps2` where that point lies beyond it (the grenade
+  launcher's, 45 degrees off the hand's x axis), else along the hand's x axis (the other weapons:
+  their second point is the muzzle again, on that axis, unset or the rocket launcher's back end).
+  Measured on the x axis, the grenade launcher was held 44 degrees up with any model. The bend
   swings a hand far from the chest (a tall model's) off the line the unbent pose measured; the drawn
   barrel now stays within about 0.35 degrees of the target (before: up to 1.5 degrees on a far wall,
   11 on a near ceiling). The camera's height, shoulder offset and distance scale with the model's

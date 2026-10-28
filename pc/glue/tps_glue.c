@@ -1504,7 +1504,10 @@ void tps_calc_model(void)
     {   /* "You appear as" another model (the retargeting): the weapon is drawn in the model's hand, which
            the bend swings about the chest as well, farther the taller the model, and in a gender-matched
            pose the hand turns the weapon as that motion does. The pitch is solved on the weapon as it will
-           be drawn: its barrel (the hand's x axis from the muzzle) through the crosshair target.
+           be drawn: its barrel through the crosshair target. The barrel runs from the muzzle (wp_fps1) on to
+           wp_fps2 where that point lies beyond it, else along the hand's x axis: the grenade launcher's runs at
+           45 degrees to that axis (both its points on the barrel), and solved on the x axis it was held 44
+           degrees up (the other weapons' second point is the muzzle, on the x axis or unset).
            actor_aim_hand is the hand as drawn last tick, in the frame of the chest now, so it is solved
            only while the aim pose stands still (weapon raised, mode2 65, no motion blend) and not for the
            knife (no barrel). Raising, shots, recoil and slashes keep the last correction, which is eased:
@@ -1515,13 +1518,20 @@ void tps_calc_model(void)
         still = plp->mode2 == 65 && !plp->hokan_count && !(WpnTab[plp->wpnr_no].flg & 0x40000000) ? still + 1 : 0;
         steady = still >= 2;
         if (!actor_aim_hand(plp, h)) { aim_corr = 0; return; }   /* no model: the hand's pitch */
+        const NJS_POINT3 *f = &WpnTab[plp->wpnr_no].wp_fps1, *f2 = &WpnTab[plp->wpnr_no].wp_fps2;
+        float ax[3] = { f2->x - f->x, f2->y - f->y, f2->z - f->z }, l = sqrtf(ax[0] * ax[0] + ax[1] * ax[1] + ax[2] * ax[2]);
+        if (l < 0.01f || ax[0] * f->x + ax[1] * f->y + ax[2] * f->z <= 0) ax[0] = 1, ax[1] = ax[2] = 0;   /* no second point
+            beyond the muzzle (the same, unset, or behind it: the rocket launcher's back end): the x axis */
+        else for (int j = 0; j < 3; j++) ax[j] /= l;
         for (it = 0; steady && it < 4 && (it == 0 || actor_aim_hand(plp, h)); it++) {
-            const NJS_POINT3* f = &WpnTab[plp->wpnr_no].wp_fps1;
-            float m[3], e, sg;
-            for (int j = 0; j < 3; j++) m[j] = f->x * h[j] + f->y * h[4 + j] + f->z * h[8 + j] + h[12 + j];
+            float m[3], b[3], e, sg;
+            for (int j = 0; j < 3; j++) {
+                m[j] = f->x * h[j] + f->y * h[4 + j] + f->z * h[8 + j] + h[12 + j];
+                b[j] = ax[0] * h[j] + ax[1] * h[4 + j] + ax[2] * h[8 + j];
+            }
             dx = aim_t.x - m[0]; dz = aim_t.z - m[2];
-            sg = dx * h[0] + (aim_t.y - m[1]) * h[1] + dz * h[2] < 0 ? -1.0f : 1.0f;   /* (the barrel's way along the axis) */
-            e = atan2f(aim_t.y - m[1], sqrtf(dx * dx + dz * dz)) - atan2f(sg * h[1], sqrtf(h[0] * h[0] + h[2] * h[2]));
+            sg = dx * b[0] + (aim_t.y - m[1]) * b[1] + dz * b[2] < 0 ? -1.0f : 1.0f;   /* (the barrel's way along the axis) */
+            e = atan2f(aim_t.y - m[1], sqrtf(dx * dx + dz * dz)) - atan2f(sg * b[1], sqrtf(b[0] * b[0] + b[2] * b[2]));
             if (fabsf(e) < 0.002f) break;
             if (fabsf(e) >= pe) { t = pt; break; }   /* not converging (a target a few units from the muzzle: each step
                 moves the muzzle as much as the line; the solve swung to 50 degrees and the upper body jumped
