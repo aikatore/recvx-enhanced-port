@@ -2953,6 +2953,19 @@ static int individual(void) { return is_host ? g_coop.loot : peer_opts >= 0 && (
 static int key_item(int id) { return id > 0 && id < 156 && (itemdata[id].type & 0x40); }
 static int item_word(int w) { return w >= IT_FLG && w < IT_FLG + 32; }
 
+/* World flags that hold one player's state, not the world's: each game keeps its own (left out of EV_FLAGS both
+   ways and out of the compared hash). The Command room's security monitor (3/12) shows the bio-experiment room
+   through its camera by taking the player into that room (3/14), hidden, with ev_flg 218 set; the camera's zoom
+   sets 65, 66 or 72 for the script there; back in 3/12 a block on 218 (with the room flag the monitor set clear)
+   ends the view and clears 218. Shared, the partner's 3/12 ran that block as soon as 218 came: it cleared 218
+   for both, and the player looking through the camera stood in the bio-experiment room in person, past its code
+   door. */
+static unsigned int own_bits(int w)
+{
+    return w == 2 ? 0x40000000u | 0x20000000u | 0x00800000u   /* ev_flg 65, 66, 72: what the camera zoomed in on */
+         : w == 6 ? 0x20u : 0;                                /* ev_flg 218: looking through the camera */
+}
+
 /* The host's game rules of protocol 19 (Pose.opts) as this session has them: the host's settings; the guest
    follows the host's last pose (OPT_IMPORTANT, OPT_SKIP_SYNC) */
 static int rule(int opt)
@@ -3157,6 +3170,8 @@ static void diff_flags(void)
         if (!have_peer || (ind && item_word(w))) continue;
         if (own && item_word(w) && !((set | clr) & ~imp_spots(w))) continue;   /* only our own important item spots changed */
         if (own && item_word(w)) { set &= ~imp_spots(w); clr &= ~imp_spots(w); }
+        if (!((set | clr) & ~own_bits(w))) continue;   /* only a player's own state changed */
+        set &= ~own_bits(w); clr &= ~own_bits(w);
         e.u.fl.word[e.u.fl.n] = w; e.u.fl.set[e.u.fl.n] = set; e.u.fl.clr[e.u.fl.n] = clr;
         if (++e.u.fl.n == 6) { queue_event(&e); e.u.fl.n = 0; }
     }
@@ -3300,6 +3315,7 @@ static int apply_session_event(const Event* e)
                 fprintf(stderr, "coop: ed_flg word %d set %08x clr %08x (the partner's, as sent %08x %08x)\n", w - 64, c.u.fl.set[j], c.u.fl.clr[j], e->u.fl.set[j], e->u.fl.clr[j]);
             if (is_host && item_word(w) && individual()) continue;   /* individual loot: the guest's item words are its own */
             if (item_word(w) && own_copies()) { c.u.fl.set[j] &= ~imp_spots(w); c.u.fl.clr[j] &= ~imp_spots(w); }   /* ours (important items) */
+            c.u.fl.set[j] &= ~own_bits(w); c.u.fl.clr[j] &= ~own_bits(w);   /* our own state (a camera view) */
             if (w >= IT_FLG && w < IT_FLG + 16 && !individual() && (c.u.fl.set[j] & f[w] & ~last[w])) {   /* we took that spot too, not sent yet */
                 int item = sys->sb_id == 130 ? 35 : sys->sb_id;
                 if (is_host) raced[w - IT_FLG] |= c.u.fl.set[j] & f[w] & ~last[w];
@@ -3371,13 +3387,19 @@ static int apply_session_event(const Event* e)
    on each room change of the host with "Follow host" on, and always on a regroup */
 static void follow(void)
 {
+    static int view;   /* the host looks through the Command room's camera (own_bits): it is not in 3/14 in person */
     int room;
     if (!have_rx || !(rx.flags & PF_IN_GAME)) return;
     room = rx_room();
     if (rx.regroup != seen_regroup) { seen_regroup = rx.regroup; follow_pending = 2; }
-    if (room != host_room) { host_room = room; if (!follow_pending) follow_pending = 1; }
-    if (follow_pending == 1 && !g_coop.follow) follow_pending = 0;   /* "Follow host" off (also when switched off meanwhile) */
-    if (!follow_pending) return;
+    if (room != host_room) {   /* 3/12 to 3/14 directly: only the monitor's camera (3/14's door leads to 3/13) */
+        view = (host_room & 0xFFFF) == (3 * 256 + 12) && (room & 0xFFFF) == (3 * 256 + 14);
+        host_room = room;
+        if (!follow_pending) follow_pending = 1;
+        if (view) host_log("coop: the host looks through the camera of 3/12: not followed\n");
+    }
+    if (follow_pending == 1 && (!g_coop.follow || view)) follow_pending = 0;   /* "Follow host" off (also when switched off meanwhile) */
+    if (!follow_pending || view) return;   /* a regroup waits until the host is back */
     if (partner_here()) { follow_pending = 0; return; }
     if (!tx_in_game || (sys->gm_flg & 0x9) || (sys->cb_flg & 0x1)) return;   /* as the door trigger */
     if (plp->mode0 == 4 || plp->mode0 == 6) return;   /* not out of a grab */
@@ -3401,13 +3423,15 @@ static void follow(void)
 #define STORY_CINE 450                  /* game frames: 15 s */
 static void regroup_check(void)
 {
-    static int cine_was, cng_was = -1, pid_was = -1;
+    static int cine_was, cng_was = -1, pid_was = -1, cine_view;
     static unsigned int cine_at;
     int cine = (sys->cb_flg & 0x4) != 0;   /* cinema: bhCineSet */
     if (sys->tk_flg & 0x20) { cng_was = pid_was = -1; cine_was = cine; cine_at = frame_no; }   /* a game (re)start sends a blob anyway */
-    if (cine && !cine_was) cine_at = frame_no;
+    if (cine && !cine_was) { cine_at = frame_no; cine_view = 0; }
+    if (cine && (flag_block()[6] & own_bits(6))) cine_view = 1;   /* looking through the 3/12 camera (own_bits) */
     if (!cine && cine_was) {
-        if (frame_no - cine_at >= STORY_CINE) { regroups++; host_log("coop: regroup (a cutscene of %u s ended)\n", (frame_no - cine_at) / 30); }
+        if (cine_view) host_log("coop: the camera view ended after %u s: no regroup\n", (frame_no - cine_at) / 30);
+        else if (frame_no - cine_at >= STORY_CINE) { regroups++; host_log("coop: regroup (a cutscene of %u s ended)\n", (frame_no - cine_at) / 30); }
         else host_log("coop: a cutscene of %u s ended: no regroup (shorter than a story scene)\n", (frame_no - cine_at) / 30);
     }
     if (cng_was >= 0 && sys->cng_pid != cng_was) { regroups++; host_log("coop: regroup (character switch %d)\n", sys->cng_pid); }
@@ -6564,7 +6588,7 @@ static void world_trace(void)
         const unsigned int* f = flag_block();
         unsigned int h = 0;
         for (i = 0; i < NFLAG; i++)
-            if (!item_word(i)) h = h * 31 + (f[i] & ~latch_bits(i));   /* a loop's gate is each game's own */
+            if (!item_word(i)) h = h * 31 + (f[i] & ~(latch_bits(i) | own_bits(i)));   /* a loop's gate and the camera's flags are each game's own */
         fprintf(stderr, "coop: world flags %08x at frame %u in %d/%d\n", h, frame_no, sys->stg_no, sys->rom_no);
         fprintf(stderr, "coop: objects at frame %u:", frame_no);   /* their placement (a door, a bridge) */
         for (i = 4; i < obj_count(); i++) fprintf(stderr, " %d:%.0f,%.0f,%.0f", i, sys->obwp[i].px, sys->obwp[i].py, sys->obwp[i].pz);
