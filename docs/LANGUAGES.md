@@ -136,8 +136,9 @@ About 100 places test the language (layouts of the file screen, map, computer te
 option plates). The port keeps the US layout; text that is longer in a language may sit closer to the edges.
 The title's menu words are in the title picture (`ADV.AFS/2`, texture 2: one plate per word); the port's own
 title rows (EXTRA, MULTIPLAYER, BIORAND, IMPORT) are cut letter by letter from the US plates
-(`lobby_glue.c plate_word`). Only EXTRA's letters (from EXTREAM) are at the same place in every European
-picture; with another language the other rows are drawn in the game's font.
+(`lobby_glue.c plate_word`). The European pictures have other words on their plates, so the US letters are not
+where those cuts expect them (only EXTREAM's, which EXTRA uses, are at the same place in every picture); the port
+keeps the US plates' texture for our words (below).
 
 ## How the port uses it
 
@@ -172,10 +173,15 @@ The European English is not installed: its text is the US text, and it has no su
 - Font: `message.c bhGetFontSize` and the direct `FontSz` reads (`adv.c` AdvEasyDispMessage,
   AutoSaveLoadEasyDispMessage; `system.c`) take the language font's widths while it is loaded (`pc_font_width`).
 - The European title picture: its copyright is one block (`DisplayTitleBg` skips the US second block), the French
-  PRESS START has two rows (`DisplayPressStartPlate`); our title rows MULTIPLAYER, BIORAND and IMPORT, and in OPTION
-  ENHANCED SETTINGS, RETURN TO TITLE, EXIT and the dialogs' YES / NO, are drawn in the game font (translated) when the
-  picture is not the US one (their letters are cut from the US plates); EXTRA keeps its plate letters (EXTREAM is
-  on every European picture).
+  PRESS START has two rows (`DisplayPressStartPlate`). Our own plate words stay English, in the US plates' letters,
+  in every language: the title rows MULTIPLAYER, EXTRA, BIORAND and IMPORT, and in OPTION ENHANCED SETTINGS, RETURN
+  TO TITLE, EXIT and the question's YES / NO (the game's own plates are the language's). With another language's
+  picture loaded (`lang_picture`), `lang_us_plates` reads resource 2 of the disc's `ADV.AFS/2` or `/4` (the title's
+  texture 1, OPTION's texture 0; past the mods and language folders) into a static buffer (257 KB, the larger of the
+  two; reread when the screen changes) and makes it the current texture list for the letters: a one-texture
+  `NJS_TEXLIST` whose `NJS_TEXMEMLIST` points at that TIM2, drawn as any loaded texture (`Ps2TexLoad`), outside the
+  texture heap (`njLoadTexture` would find the language's texture: every copy has the same global index). It is
+  marked to stay original with an HD pack (`pc_tex_keep_original`), as the US plates are.
 - **Language** (GAMEPLAY > GENERAL, F1 and ENHANCED SETTINGS): English and the installed languages in their own
   names; locked "No other language is installed." or, in a game, "Change it on the title screen." It applies from
   the next screen: leaving OPTION reloads the title in the new language (checked), a game start reads the system
@@ -201,7 +207,7 @@ MS Gothic, Yu Gothic / Segoe UI, Arial; Linux: Noto Sans CJK / DejaVu Sans), els
 **Address window** (docs/ARCHITECTURE.md "Data model and memory"): the imported data (`ROOMS.MES`, the merged
 tables) and the importer's tables are on the heap; the F9 window's lists too (a second source would have doubled
 their static array). What the work adds to the executable is about 350 KB, most of it the five languages' strings
-of `tr_table.inc`; the window keeps about 3 MB free (`_end` 0x3FD12908).
+of `tr_table.inc`; the US plates' buffer is 257 KB more; the window keeps about 2.6 MB free (`_end` 0x3FD5D608).
 
 **Layout**: the European font is monospaced (16 units for most letters, the US font 10..24), so translated text is
 wider; the translations were kept short (labels at most about 15% longer, sentences 30%) and the long ones
@@ -214,11 +220,15 @@ abbreviated (e.g. German ERW. EINSTELLUNGEN). Rows that still do not fit are sca
   IMPORT, OK, DELETE IMPORTED LANGUAGES, YES): 3 languages, 202 rooms each, 468-471 subtitles; the US disc as the
   image: refused. A second import gives the same files byte for byte.
 - Per language (French, German, Spanish; `ingame.sh`, `scene.sh`, `menus.sh`, `overlays.sh`): title menu (the
-  European picture, MULTIPLAYER in the font), OPTION (European plates, ENHANCED SETTINGS in the font), every ENHANCED
+  European picture), OPTION (European plates), every ENHANCED
   SETTINGS page, the lobby (MULTIPLAYER, HOST A GAME), EXTRA > IMPORT, BIORAND, F1 / F2 / F3 / F9; in a new game the
   opening's subtitles, the cell's message, the inventory (its pictures and item names), the inventory's help
   texts, the map, the FILE page and the manual's pages (German: the remapped pages), Rodrigo's scene with Subtitles
   On (subtitles) and Off (none). English with the languages installed: unchanged (no subtitles, the US font).
+- Our plate words (job folder `platewords/`, `plates.sh`, `hd.sh`): in French, German, Spanish and English the title
+  (--dev; MULTIPLAYER selected and not, the EXTRA submenu with BIORAND and IMPORT), OPTION at the title (ENHANCED
+  SETTINGS, EXIT) and in a game (RETURN TO TITLE, its YES / NO) show the US plates' English words; the same with the
+  HD pack and `hd_textures_ui` (English and German).
 - Switching at the title: GAMEPLAY > Language in ENHANCED SETTINGS, back to the title: the title in the new language.
 - `pc/tools/layout_check.sh` main build vs this build (English): identical. ctest all passed (`import` checks the
   system messages' rebuild on a synthetic layout).

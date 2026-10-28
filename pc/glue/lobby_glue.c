@@ -180,32 +180,22 @@ static const struct { const Letter* l; int n; } plate_words[] = {
     { mp_letters, 11 }, { br_letters, 7 }, { ex_letters, 5 }, { im_letters, 6 },
 };
 
-static void title_font(void);
+/* (every language's picture: our words in English, from the US plates; the pictures are all the same size) */
 static void plate_word(int word, float cx, float y, unsigned int col, unsigned int shadow, float scale)
 {
     const Letter* l = plate_words[word].l;
-    int i, n = plate_words[word].n;
+    int i, n = plate_words[word].n, tex = lang_us_plates(2) ? 0 : 1;
     float w = 0, x;
     QUAD q;
-    if (word != W_EX && lang_picture(2) != LANG_EN) {   /* another language's title picture: other letters on its plates (EXTREAM's stay) */
-        static const char* const words[] = { "MULTIPLAYER", "BIORAND", "EXTRA", "IMPORT" };
-        const char* t = tr(words[word]);
-        unsigned int rgb = 0;
-        for (i = 0; i < 24; i += 8) { unsigned int c = (col >> i & 0xFF) * 2; rgb |= (c > 255 ? 255 : c) << i; }   /* (the plates' 0x80 is full) */
-        (void)shadow;
-        title_font();
-        text(cx - text_w(t, 1.15f * scale) / 2, y + 3 * scale, t, 1.15f * scale, (col & 0xFF000000) | rgb);
-        AdvEasySetTextureList(0);   /* the title's textures again (the font set its own) */
-        return;
-    }
     for (i = 0; i < n; i++) w += (l[i].w + 1) * scale;
     x = cx - w / 2;
     for (i = 0; i < n; i++) {
         SetQuadPos(x, y, l[i].w * scale, 33.0f * scale, &q);
         SetQuadUv2(l[i].u, l[i].v, l[i].w, 33.0f, 1, &q);
-        AdvEasyDrawTextureS(1, col, &q, 0.5f, 1, shadow);
+        AdvEasyDrawTextureS(tex, col, &q, 0.5f, 1, shadow);
         x += (l[i].w + 1) * scale;
     }
+    if (!tex) AdvEasySetTextureList(0);   /* the title's textures again */
 }
 static void mp_word(float cx, float y, unsigned int col, unsigned int shadow, float scale) { plate_word(W_MP, cx, y, col, shadow, scale); }
 void pc_title_word_br(float cx, float y, unsigned int col, unsigned int shadow) { plate_word(W_BR, cx, y, col, shadow, 1.0f); }   /* biorand_menu.c */

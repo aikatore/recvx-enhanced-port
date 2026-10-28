@@ -19,6 +19,10 @@ int  lang_has_subtitles(int l);       /* its rooms have cutscene subtitles */
 const char* lang_dir(int l);          /* its folder, NULL for English */
 int  lang_font(void);                 /* the language whose font is loaded (the game font's glyphs and widths) */
 int  lang_picture(int adv);           /* ... of the ADV.AFS picture read last (2: the title's menu plates, 4: OPTION's) */
+/* our words (MULTIPLAYER, ENHANCED SETTINGS, YES, ...) are the US plates' letters in every language: with another
+   language's picture adv loaded, its US plates (the title's texture 1, OPTION's texture 0) become the current
+   texture list, as texture 0, and 1 is returned (then AdvEasySetTextureList(0) again); 0: the screen's list stays */
+int  lang_us_plates(int adv);
 
 /* our texts in the language of the setting (the English text when there is none); tr_init sorts the table (start) */
 const char* tr(const char* en);

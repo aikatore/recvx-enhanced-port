@@ -196,6 +196,64 @@ void pc_glyphs_utf8(const unsigned short* g, char* out, int n)
     out[k] = 0;
 }
 
+/* ---------------------------------------------------------------- the US plates (lang.h lang_us_plates)
+   Resource 2 of the disc's ADV.AFS/<adv> (TIM2, the title's texture 1 or OPTION's texture 0), read past the mods
+   and language folders, as a one-texture list of our own: drawn as a loaded texture is (Ps2TexLoad takes its
+   TIM2 from pSurface), outside the texture heap, so nothing releases it. The global index of every language's
+   copy is the same, so njLoadTexture would hand back the language's. */
+int adx_afs_locate(int ptid, int fid, uint32_t* lsn, uint32_t* size);
+int cdvd_read_sectors(uint32_t lsn, uint32_t count, void* dst);
+int Ps2CheckTextureAlpha(void* pp);
+void pc_tex_keep_original(int texno);
+extern int PatId[4];
+extern unsigned int Ps2_current_texbreak;
+static unsigned char us_tim[257 << 10] __attribute__((aligned(64)));   /* the larger one: OPTION's, 1024x512 4-bit, 262528 bytes */
+static NJS_TEXMEMLIST us_mem;
+static NJS_TEXNAME us_name;
+static NJS_TEXLIST us_list = { &us_name, 1 };
+static int us_adv = -1;   /* the picture us_tim holds (-1 none, -2 the disc's cannot be read) */
+
+/* bytes [off, off + n) of the disc file at sector lsn */
+static int disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n)
+{
+    unsigned char sec[2048];
+    for (uint32_t k; n; dst = (char*)dst + k, off += k, n -= k) {
+        k = 2048 - off % 2048 < n ? 2048 - off % 2048 : n;
+        if (!cdvd_read_sectors(lsn + off / 2048, 1, sec)) return 0;
+        memcpy(dst, sec + off % 2048, k);
+    }
+    return 1;
+}
+
+int lang_us_plates(int adv)
+{
+    if (lang_picture(adv) == LANG_EN || us_adv == -2) return 0;
+    if (us_adv != adv) {
+        TIM2_PICTUREHEADER_EX* t = (TIM2_PICTUREHEADER_EX*)us_tim;
+        uint32_t lsn, size, res[3], lp[2], at, n = 0;
+        us_adv = -2;
+        if (!adx_afs_locate(PatId[3], adv, &lsn, &size) || !disc_read(lsn, 0, res, 12) || res[2] > size - 8 ||
+            !disc_read(lsn, res[2], lp, 8) || (at = res[2] + lp[1]) < res[2] || at > size - 0xD0 ||
+            !disc_read(lsn, at, us_tim, 0xD0) || memcmp(t->FileId, "TIM2", 4) ||
+            (n = t->TotalSize + 128) > sizeof(us_tim) || n > size - at || !disc_read(lsn, at, us_tim, n)) {
+            host_log("lang: the disc's ADV.AFS/%d cannot be read (%u bytes): our words in the language's plates\n", adv, n);
+            return 0;
+        }
+        t->PictFormat = 0;   /* as SetPvrInfo and Ps2TextureMalloc */
+        us_mem.tspparambuffer = Ps2CheckTextureAlpha(us_tim);
+        us_mem.texinfo.texsurface.pSurface = (Uint32*)us_tim;
+        us_mem.texinfo.texsurface.nWidth = t->ImageWidth;
+        us_mem.texinfo.texsurface.nHeight = t->ImageHeight;
+        us_name.texaddr = (Uint32)(uintptr_t)&us_mem;
+        Ps2_current_texbreak = 1;   /* (the upload cache goes by address) */
+        us_adv = adv;
+    }
+    njSetTexture(&us_list);
+    njSetTextureNum(0);
+    pc_tex_keep_original(0);   /* the letters as measured, also with an HD pack (texture_glue.c) */
+    return 1;
+}
+
 /* ---------------------------------------------------------------- room messages */
 static struct { int lang; unsigned char* d; uint32_t n; } rooms_mes = { -1 };
 static unsigned char* buf[2];   /* the merged tables: the room's, and the one before (a message may still show) */
