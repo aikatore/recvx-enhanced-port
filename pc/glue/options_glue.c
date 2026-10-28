@@ -119,17 +119,100 @@ static unsigned int row_col(int i) { return OptionDef[i].SelectFlag ? pulse() : 
 static float row8_x(void) { return ROW_RIGHT - word_w(w_enhanced, N_OF(w_enhanced)); }   /* right-aligned with the values */
 static float row9_x(void) { return ROW_RIGHT - word_w(w_title, N_OF(w_title)); }
 
+/* ---------------------------------------------------------------- the question box
+   RETURN TO TITLE's question (below) and the BioRand screen's questions, messages and progress
+   (biorand_menu.c) share this look: a dark box in the option screen's window frame, DLG_X0..DLG_X1 and
+   y0..y1; the question (l1) in white, the detail under it (l2: centred lines, at most `lines`) in col2;
+   the answers on a row 48 above the bottom, b0 left of the middle and b1 right of it (b1 NULL: b0 alone,
+   centred), the chosen one (sel) pulsing as the option rows, the other dim. glyphs: YES and NO in the
+   option screen's own letters (its texture list current), else every answer in the font (the title).
+   z: the box, its frame just in front (z + 0.01). */
+#define DLG_X0 112.0f
+#define DLG_X1 528.0f
+#define DLG_BTN_SC 0.95f
+static float dlg_btn_w(const char* b, int glyphs)
+{
+    if (glyphs && !strcmp(b, "YES")) return word_w(w_yes, 3);
+    if (glyphs && !strcmp(b, "NO")) return word_w(w_no, 2);
+    return pc_ui_text_w(b, DLG_BTN_SC);
+}
+static float dlg_btn_x(int i, const char* b0, const char* b1, int glyphs)
+{
+    if (!b1) return 320 - dlg_btn_w(b0, glyphs) / 2;
+    return i ? 320 + 56 : 320 - 56 - dlg_btn_w(b0, glyphs);
+}
+
+/* the answer at game pixel (x, y) of a box ending at y1: 0 b0, 1 b1, -1 none */
+int pc_ui_dialog_hit(float y1, const char* b0, const char* b1, int glyphs, float x, float y)
+{
+    int hit = -1;
+    if (y >= y1 - 52 && y < y1 - 12)
+        for (int i = 0; i < (b1 ? 2 : 1); i++) {
+            float bx = dlg_btn_x(i, b0, b1, glyphs);
+            if (x >= bx - 12 && x < bx + dlg_btn_w(i ? b1 : b0, glyphs) + 12) hit = i;
+        }
+    return hit;
+}
+
+/* l2: the words that fit in w per line (as pc_ui_text_wrap), each line centred; the lines (draw 0: only counted) */
+static int text_wrap_c(int draw, float y, float w, const char* s, float sc, unsigned int argb, int max_lines)
+{
+    char line[160];
+    int n;
+    for (n = 0; *s && n < max_lines; n++) {
+        int len = 0, fit = 0;
+        while (s[len] && len < (int)sizeof(line) - 1) {
+            memcpy(line, s, len + 1); line[len + 1] = 0;
+            if (pc_ui_text_w(line, sc) > w) break;
+            len++;
+            if (!s[len] || s[len] == ' ') fit = len;
+        }
+        if (!s[len]) fit = len;
+        if (!fit) fit = len ? len : 1;
+        memcpy(line, s, fit); line[fit] = 0;
+        if (draw) pc_ui_text(320 - pc_ui_text_w(line, sc) / 2, y + n * 28 * sc * 1.05f, line, sc, argb);
+        s += fit;
+        while (*s == ' ') s++;
+    }
+    return n;
+}
+
+/* a box for these texts, centred on the screen: l1, l2's lines (at most `lines`), `extra` (a bar) and the answers
+   (RETURN TO TITLE's proportions) */
+void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, float extra, float* y0, float* y1)
+{
+    int n = l2 ? text_wrap_c(0, 0, DLG_X1 - DLG_X0 - 40, l2, sc2, 0, lines) : 0;
+    float h = (l1 ? 54 : 22) + n * 28 * sc2 * 1.05f + extra + 64;
+    *y0 = (float)(int)(240 - h / 2);
+    *y1 = *y0 + (float)(int)(h + 0.5f);
+}
+
+void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, float sc2, unsigned int col2, int lines,
+                  const char* b0, const char* b1, int sel, int glyphs)
+{
+    NJS_POINT3 tl = { DLG_X0, y0, z + 0.01f }, br = { DLG_X1, y1, z + 0.01f };
+    pc_ui_rect(DLG_X0, y0, DLG_X1, y1, 0xE0000000, z);
+    AdvEasyDrawWindow(&tl, &br, 0xFFAFAFAF, 0x3F5F5F5F);
+    for (int i = 0; i < (b1 ? 2 : 1); i++) {
+        const char* b = i ? b1 : b0;
+        float x = dlg_btn_x(i, b0, b1, glyphs);
+        unsigned int col = i == sel ? pulse() : 0x7FAFAFAF;
+        if (glyphs && !strcmp(b, "YES")) word(w_yes, 3, x, y1 - 48, col, 0.3f);
+        else if (glyphs && !strcmp(b, "NO")) word(w_no, 2, x, y1 - 48, col, 0.3f);
+        else pc_ui_text(x, y1 - 44, b, DLG_BTN_SC, col);
+    }
+    if (l1) pc_ui_text(320 - pc_ui_text_w(l1, 0.7f) / 2, y0 + 22, l1, 0.7f, 0xFFFFFFFF);
+    if (l2) text_wrap_c(1, l1 ? y0 + 54 : y0 + 22, DLG_X1 - DLG_X0 - 40, l2, sc2, col2, lines);
+    AdvEasySetTextureList(0);   /* the screen's textures again (the font set its own) */
+}
+
 /* RETURN TO TITLE's question, over the option screen in the game's window: NO preselected; left/right
    (or hover) choose, confirm or a click answers, cancel or a right click is NO. YES leaves the option
    screen as EXIT does (system data saved if changed); system.c bhSysCallOption then returns to the
    title as the soft reset does, and co-op ends the session there (coop_glue.c, "back at the title"). */
 static struct { int open, yes, go; } quit;
-#define Q_X0 112.0f
-#define Q_X1 528.0f
 #define Q_Y0 180.0f
 #define Q_Y1 316.0f
-#define Q_YN_Y 268.0f
-static float q_x(int yes) { return yes ? 320 - 56 - word_w(w_yes, 3) : 320 + 56; }
 
 void pc_options_quit_open(void) { quit.open = 1; quit.yes = 0; }
 int pc_options_quit_title(void) { int go = quit.go; quit.go = 0; return go; }
@@ -137,12 +220,11 @@ int pc_options_quit_title(void) { int go = quit.go; quit.go = 0; return go; }
 int pc_options_quit(int port)
 {
     unsigned int press = Pad[port].press;
-    int hit = -1;
+    int hit;
     if (!quit.open) return 0;
     menu_mouse_take(&mt);
-    if (mt.y >= Q_YN_Y - 4 && mt.y < Q_YN_Y + 36)
-        for (int k = 0; k < 2; k++)
-            if (mt.x >= q_x(k) - 12 && mt.x < q_x(k) + word_w(k ? w_yes : w_no, k ? 3 : 2) + 12) hit = k;
+    hit = pc_ui_dialog_hit(Q_Y1, "YES", "NO", 1, mt.x, mt.y);
+    if (hit >= 0) hit = !hit;   /* (quit.yes: 1 YES, the left one) */
     if (hit >= 0 && (mt.moved || mt.left) && hit != quit.yes) { quit.yes = hit; CallSystemSe(0, 2); }
     if (press & (P_LEFT | P_RIGHT)) { quit.yes ^= 1; CallSystemSe(0, 2); }
     else if ((mt.left && hit >= 0) || (press & (ok_button() | P_START))) {
@@ -155,17 +237,9 @@ int pc_options_quit(int port)
 
 static void quit_draw(void)
 {
-    NJS_POINT3 tl = { Q_X0, Q_Y0, 0.2f }, br = { Q_X1, Q_Y1, 0.2f };
-    const char* l1 = "Return to the title screen?";
-    const char* l2 = coop_on ? "Unsaved progress will be lost. The co-op session ends." : "Unsaved progress will be lost.";
-    float sc2 = coop_on ? 0.5f : 0.6f;
-    pc_ui_rect(Q_X0, Q_Y0, Q_X1, Q_Y1, 0xE0000000, 0.19f);
-    AdvEasyDrawWindow(&tl, &br, 0xFFAFAFAF, 0x3F5F5F5F);
-    word(w_yes, 3, q_x(1), Q_YN_Y, quit.yes ? pulse() : 0x7FAFAFAF, 0.3f);
-    word(w_no, 2, q_x(0), Q_YN_Y, quit.yes ? 0x7FAFAFAF : pulse(), 0.3f);
-    pc_ui_text(320 - pc_ui_text_w(l1, 0.7f) / 2, Q_Y0 + 22, l1, 0.7f, 0xFFFFFFFF);
-    pc_ui_text(320 - pc_ui_text_w(l2, sc2) / 2, Q_Y0 + 54, l2, sc2, 0xFFC0C0C0);
-    AdvEasySetTextureList(0);   /* the option screen's textures again (the font set its own) */
+    pc_ui_dialog(Q_Y0, Q_Y1, 0.19f, "Return to the title screen?",
+                 coop_on ? "Unsaved progress will be lost. The co-op session ends." : "Unsaved progress will be lost.",
+                 coop_on ? 0.5f : 0.6f, 0xFFC0C0C0, 1, "YES", "NO", !quit.yes, 1);
 }
 
 /* DisplayOptionPlateLevel0, with the other rows: drawn as they are (dim, or pulsing when selected) */

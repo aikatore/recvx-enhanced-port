@@ -1,7 +1,8 @@
 /* The BIORAND screen (docs/BIORAND_INGAME.md, S3 and S4b): the title menu's BIORAND row (--dev, lobby_glue.c
  * pc_title_menu_init) opens it as Adv_BioCvTitle mode 30, as MULTIPLAYER opens the lobby. Drawn as the
- * lobby and ENHANCED SETTINGS, with their helpers (pc_ui_*). States:
- *   BS_MENU    the generator's pages SEED, DOORS, ITEMS, ENEMIES, PORT EXTRAS: BioRand's options
+ * lobby and ENHANCED SETTINGS, with their helpers (pc_ui_*); its dialogs as RETURN TO TITLE's question
+ * (options_glue.c pc_ui_dialog). States:
+ *   BS_MENU    the generator's pages SEED, DOORS, ITEMS, ENEMIES, EXTRA OPTIONS: BioRand's options
  *              (biorand_opts.h; each change re-encodes the seed string into recvx.ini biorand_seed),
  *              the doors estimate, the item and enemy distribution bars, the seed string's copy / paste
  *   BS_ASK     a Yes/No question over it (A_DOWNLOAD with no CLI: No leaves; A_CHECK; A_NEWER; A_GEN)
@@ -39,6 +40,10 @@ float pc_ui_text_w(const char* s, float sc);
 int  pc_ui_text_wrap(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines);
 void pc_ui_rect(float x0, float y0, float x1, float y1, unsigned int argb, float z);
 void pc_title_word_br(float cx, float y, unsigned int col, unsigned int shadow);
+void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, float sc2, unsigned int col2, int lines,
+                  const char* b0, const char* b1, int sel, int glyphs);   /* options_glue.c */
+int pc_ui_dialog_hit(float y1, const char* b0, const char* b1, int glyphs, float x, float y);
+void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, float extra, float* y0, float* y1);
 int pc_in_game(void);   /* options_glue.c */
 
 enum { BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };
@@ -60,10 +65,9 @@ typedef struct { int kind, idx; } Row;
 #define Z_RULE 0.02f
 #define Z_STRIP 0.025f
 #define Z_ROW 0.3f
-#define Z_BOX 0.31f
+#define Z_BOX 0.303f      /* a dialog (options_glue.c pc_ui_dialog): its frame + 0.01 */
 #define Z_BAR 0.32f
 #define Z_FILL 0.33f
-#define Z_BTN 0.34f
 #define Z_CARET 0.35f
 #define Z_DFRAME 0.355f
 #define Z_SLICE 0.36f       /* + ID_DZ per slice id (up to 6) */
@@ -92,13 +96,10 @@ typedef struct { int kind, idx; } Row;
 #define SL_X1 528.0f
 #define BAR_X0 48.0f        /* a distribution bar */
 #define BAR_X1 592.0f
-#define BTN_SC 0.62f
-#define BOX_X0 100.0f
-#define BOX_X1 540.0f
-#define BOX_Y0 150.0f
-#define BOX_Y1 330.0f
-#define BTN_Y 290.0f
-#define BTN_W 100.0f
+#define BOX_X0 112.0f       /* a dialog: RETURN TO TITLE's box (options_glue.c pc_ui_dialog) */
+#define BOX_X1 528.0f
+#define WORK_TEXT 34.0f     /* the progress: room for two lines of its text */
+#define WORK_BAR 30.0f      /* and the bar with its numbers */
 
 static struct {
     int open, state, ask, row, sel;     /* row: rows[]; sel: BS_ASK 0 Yes 1 No */
@@ -560,6 +561,16 @@ static int click(int i, float x)
     return 0;
 }
 
+/* the dialog's texts and box (the box as tall as its text; the progress one fixed, its text changes) */
+static const char* ask_msg(void) { return bm.ask == A_GEN || bm.ask == A_HOST ? gen_text() : ask_text[bm.ask]; }
+static const char* result_head(void) { return bm.err ? "BIORAND - ERROR" : "BIORAND"; }
+static void dlg_box(float* y0, float* y1)
+{
+    if (bm.state == BS_ASK) pc_ui_dialog_place(NULL, ask_msg(), 0.55f, 5, 0, y0, y1);
+    else if (bm.state == BS_RESULT) pc_ui_dialog_place(result_head(), bm.msg, 0.55f, 4, 0, y0, y1);
+    else pc_ui_dialog_place("", NULL, 0.55f, 0, WORK_TEXT + WORK_BAR, y0, y1);
+}
+
 /* 1 leave */
 static int input(void)
 {
@@ -568,6 +579,7 @@ static int input(void)
     unsigned int ok = AdvGetOkButton() | BTN_START, cancel = AdvGetCancelButton();
     MouseTake* m = &bm.mt;
     int hit;
+    float y0, y1;
     menu_mouse_take(m);
     if (press || rept || m->left || m->right || m->moved || m->wheel || bm.state == BS_WORK || g_lobby_io.head != g_lobby_io.tail)
         StopAdvScreenSaver(0);   /* (a download is no idle screen) */
@@ -593,11 +605,9 @@ static int input(void)
         else if (press & ok) return activate(&rows[bm.row]);
         return 0;
     }
-    hit = -1;
-    for (int i = 0; i < (bm.state == BS_ASK ? 2 : 1); i++) {   /* the dialog's buttons */
-        float x = bm.state == BS_ASK ? 320.0f + (i ? 20.0f : -20.0f - BTN_W) : 320.0f - BTN_W / 2;
-        if (m->x >= x && m->x < x + BTN_W && m->y >= BTN_Y - 4 && m->y < BTN_Y + 22) hit = i;
-    }
+    dlg_box(&y0, &y1);
+    hit = bm.state == BS_ASK ? pc_ui_dialog_hit(y1, "YES", "NO", 0, m->x, m->y)   /* the dialog's buttons */
+                             : pc_ui_dialog_hit(y1, bm.state == BS_RESULT ? "OK" : "CANCEL", NULL, 0, m->x, m->y);
     if (bm.state == BS_ASK) {
         if (hit >= 0 && (m->moved || m->left) && hit != bm.sel) { bm.sel = hit; CallSystemSe(0, 2); }
         if (m->left && hit >= 0) return choose(!bm.sel);
@@ -849,20 +859,6 @@ static void draw_page(void)
     pc_ui_text_wrap(24, 390, 592, t, 0.5f, col, 5);
 }
 
-static void box(void)
-{
-    pc_ui_rect(BOX_X0, BOX_Y0, BOX_X1, BOX_Y1, 0xF0181820, Z_BOX);
-}
-
-static float btn_x(int i) { return bm.state == BS_ASK ? 320.0f + (i ? 20.0f : -20.0f - BTN_W) : 320.0f - BTN_W / 2; }
-
-static void button(int i, const char* s, int sel)
-{
-    float x = btn_x(i);
-    if (sel) pc_ui_rect(x, BTN_Y - 4, x + BTN_W, BTN_Y + 22, 0x50FFFFFF, Z_BTN);
-    pc_ui_text(x + (BTN_W - pc_ui_text_w(s, BTN_SC)) / 2, BTN_Y, s, BTN_SC, sel ? 0xFFFFFFFF : 0xFFB0B0B0);
-}
-
 static void draw_work(void)
 {
     static const char* const stage[] = { "", "Checking for BioRand updates...", "Downloading BioRand...",
@@ -870,42 +866,35 @@ static void draw_work(void)
     BrdlStatus s;
     char line[64];
     float f = 0;
+    float y0, y1;
     biorand_cli_status(&s);
-    box();
+    dlg_box(&y0, &y1);
+    line[0] = 0;
     if (bm.gen) {
         const char* m = s.msg;
-        float x;
+        char head[48];
         if (m[0] == '[' && strstr(m, "] ")) m = strstr(m, "] ") + 2;   /* ("[P1] Randomizing doors": the player's part) */
-        snprintf(line, sizeof(line), "BIORAND - GENERATING SEED %d", bm.gen_seed);
-        pc_ui_text(BOX_X0 + 20, BOX_Y0 + 16, line, 0.5f, 0xFFFFE080);
-        pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 48, BOX_X1 - BOX_X0 - 40, bm.cancelling ? "Cancelling..." : m[0] ? m : "Starting BioRand...", 0.55f, 0xFFFFFFFF, 2);
+        snprintf(head, sizeof(head), "BIORAND - GENERATING SEED %d", bm.gen_seed);
+        pc_ui_dialog(y0, y1, Z_BOX, head, bm.cancelling ? "Cancelling..." : m[0] ? m : "Starting BioRand...", 0.55f, 0xFFC0C0C0, 2,
+                     "CANCEL", NULL, 0, 0);
         f = s.pct / 100.0f;
-        x = BOX_X0 + 20 + (BOX_X1 - BOX_X0 - 40) * f;
-        if (f > 0) pc_ui_rect(BOX_X0 + 20, 228.5f, x, 244.5f, 0xFFFFE080, Z_FILL);
-        if (f < 1) pc_ui_rect(x, 228.5f, BOX_X1 - 20, 244.5f, 0xFF303038, Z_BAR);
         snprintf(line, sizeof(line), "%d%%", s.pct);
-        pc_ui_text(BOX_X1 - 20 - pc_ui_text_w(line, 0.5f), 252, line, 0.5f, 0xFFC8C8C8);
-        button(0, "CANCEL", 1);
-        return;
-    }
-    pc_ui_text(BOX_X0 + 20, BOX_Y0 + 16, bm.install ? "BIORAND - DOWNLOAD" : "BIORAND - CHECK FOR UPDATES", 0.5f, 0xFFFFE080);
-    pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 48, BOX_X1 - BOX_X0 - 40, bm.cancelling ? "Cancelling..." : s.state < BRDL_INSTALLED ? stage[s.state] : "",
-                    0.55f, 0xFFFFFFFF, 2);
-    if (bm.install) {
+    } else {
+        pc_ui_dialog(y0, y1, Z_BOX, bm.install ? "BIORAND - DOWNLOAD" : "BIORAND - CHECK FOR UPDATES",
+                     bm.cancelling ? "Cancelling..." : s.state < BRDL_INSTALLED ? stage[s.state] : "", 0.55f, 0xFFC0C0C0, 2, "CANCEL", NULL, 0, 0);
+        if (!bm.install) return;
         if (s.state >= BRDL_VERIFY) f = 1;
         else if (s.total > 0) f = s.done >= s.total ? 1.0f : (float)s.done / s.total;
-        {   /* the done part and the rest side by side; at half pixels: the renderer's rows of a long flat quad's
-                       two triangles can differ by one (a step in an opaque bar), at most the last row this way */
-            float x = BOX_X0 + 20 + (BOX_X1 - BOX_X0 - 40) * f;
-            if (f > 0) pc_ui_rect(BOX_X0 + 20, 228.5f, x, 244.5f, 0xFFFFE080, Z_FILL);
-            if (f < 1) pc_ui_rect(x, 228.5f, BOX_X1 - 20, 244.5f, 0xFF303038, Z_BAR);
-        }
-        if (s.total > 0) {
-            snprintf(line, sizeof(line), "%.1f / %.1f MB", s.done / 1048576.0, s.total / 1048576.0);
-            pc_ui_text(BOX_X1 - 20 - pc_ui_text_w(line, 0.5f), 252, line, 0.5f, 0xFFC8C8C8);
-        }
+        if (s.total > 0) snprintf(line, sizeof(line), "%.1f / %.1f MB", s.done / 1048576.0, s.total / 1048576.0);
     }
-    button(0, "CANCEL", 1);
+    {   /* the done part and the rest side by side; at half pixels: the renderer's rows of a long flat quad's
+           two triangles can differ by one (a step in an opaque bar), at most the last row this way */
+        float x = BOX_X0 + 20 + (BOX_X1 - BOX_X0 - 40) * f;
+        float yb = y0 + 54 + WORK_TEXT + 2.5f;
+        if (f > 0) pc_ui_rect(BOX_X0 + 20, yb, x, yb + 12, 0xFFFFE080, Z_FILL);
+        if (f < 1) pc_ui_rect(x, yb, BOX_X1 - 20, yb + 12, 0xFF303038, Z_BAR);
+        pc_ui_text(BOX_X1 - 20 - pc_ui_text_w(line, 0.5f), yb + 15.5f, line, 0.5f, 0xFFC8C8C8);
+    }
 }
 
 void pc_biorand_menu_close(void)
@@ -963,17 +952,12 @@ int pc_biorand_menu(void)
     pc_title_word_br(320.0f, 16.0f, 0xFFFFFFFF, 192);
     pc_ui_rect(0, 384, 640, 480, 0x60000000, Z_STRIP);
     draw_page();
-    if (bm.state == BS_ASK) {
-        box();
-        pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 20, BOX_X1 - BOX_X0 - 40, bm.ask == A_GEN || bm.ask == A_HOST ? gen_text() : ask_text[bm.ask], 0.55f, 0xFFFFFFFF, 5);
-        button(0, "YES", bm.sel == 0);
-        button(1, "NO", bm.sel == 1);
-    } else if (bm.state == BS_WORK) draw_work();
-    else if (bm.state == BS_RESULT) {
-        box();
-        pc_ui_text(BOX_X0 + 20, BOX_Y0 + 16, bm.gen || bm.host ? (bm.err ? "BIORAND - ERROR" : "BIORAND") : bm.err ? "BIORAND - ERROR" : "BIORAND", 0.5f, 0xFFFFE080);
-        pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 48, BOX_X1 - BOX_X0 - 40, bm.msg, 0.55f, bm.err ? 0xFFFFC060 : 0xFFFFFFFF, 4);
-        button(0, "OK", 1);
+    if (bm.state == BS_WORK) draw_work();
+    else if (bm.state != BS_MENU) {   /* as RETURN TO TITLE's question */
+        float y0, y1;
+        dlg_box(&y0, &y1);
+        if (bm.state == BS_ASK) pc_ui_dialog(y0, y1, Z_BOX, NULL, ask_msg(), 0.55f, 0xFFFFFFFF, 5, "YES", "NO", bm.sel, 0);
+        else pc_ui_dialog(y0, y1, Z_BOX, result_head(), bm.msg, 0.55f, bm.err ? 0xFFFFC060 : 0xFFC0C0C0, 4, "OK", NULL, 0, 0);
     }
     AdvEasySetTextureList(0);   /* the title's texture list again (the font set its own) */
     if (r) pc_biorand_menu_close();
