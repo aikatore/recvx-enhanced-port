@@ -13,6 +13,7 @@ TpsConfig g_tps = { .key = SDL_SCANCODE_F5 };
 SDL_Window* g_window;
 uint64_t gs_frame_count(void) { return 0; }
 void host_log(const char* fmt, ...) { (void)fmt; }
+const char* tr(const char* en) { return en; }   /* (host/tr.c) */
 int pc_keytype_mask(int v) { return v == 4 ? 1 << B_R1 : -1; }   /* aim on R1, as in every key type */
 static int playing = 1;
 int reload_combo_ok(void) { return playing; }

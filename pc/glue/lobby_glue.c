@@ -807,14 +807,16 @@ static void title_version(void)
     title_font();
     st = update_newest(newest, sizeof(newest));
     val[0] = update_installed();
-    val[1] = st == UPD_KNOWN ? newest : st == UPD_OFF ? "off" : st == UPD_CHECKING ? "..." : "unknown";
+    val[1] = st == UPD_KNOWN ? newest : st == UPD_OFF ? tr("off") : st == UPD_CHECKING ? "..." : tr("unknown");
     col[0] = st == UPD_KNOWN && upd_newer(newest, val[0]) ? 0xE04040 : 0x60D060;
     col[1] = st == UPD_KNOWN ? 0x60D060 : 0xA0A0A0;
-    lw = text_w(label[0], VER_SC) + text_w("  ", VER_SC);   /* the longer label, then the versions' column */
+    lw = text_w(label[0], VER_SC);   /* the longer label (in another language either), then the versions' column */
+    if (text_w(label[1], VER_SC) > lw) lw = text_w(label[1], VER_SC);
+    lw += text_w("  ", VER_SC);
     w0 = ver_text(0, 0, val[0], VER_SC, 0, 0);
     w1 = ver_text(0, 0, val[1], VER_SC, 0, 0);
     {   /* the column as wide as the widest it can show ("unknown"), so the block never moves when the answer comes */
-        float wu = ver_text(0, 0, "unknown", VER_SC, 0, 0), wm = w0 > w1 ? w0 : w1;
+        float wu = ver_text(0, 0, tr("unknown"), VER_SC, 0, 0), wm = w0 > w1 ? w0 : w1;
         x = 632 - lw - (wm > wu ? wm : wu);
     }
     for (i = 0; i < 2; i++) {
@@ -1271,7 +1273,7 @@ static const char* heading(void)
     if (lb.step == 7) return lb.role ? "HOST RULES - CUTSCENE CAST" : "GAME RULES - CUTSCENE CAST";
     if (lb.step > 3) return lb.step == 4 ? (lb.role ? "HOST RULES - RANDOMIZER" : "GAME RULES - RANDOMIZER")
                                          : (lb.role ? "HOST RULES - EXTRA EVENTS" : "GAME RULES - EXTRA EVENTS");
-    snprintf(h, sizeof(h), "%s - %s", lb.role ? "JOIN A GAME" : "HOST A GAME", lb.mode ? "VIA SERVER" : "DIRECT");
+    snprintf(h, sizeof(h), "%s - %s", tr(lb.role ? "JOIN A GAME" : "HOST A GAME"), tr(lb.mode ? "VIA SERVER" : "DIRECT"));
     return h;
 }
 

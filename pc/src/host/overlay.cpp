@@ -207,7 +207,7 @@ static void controls_section(void)
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
                 if (group == BG_GAME) ImGui::SeparatorText(tr("Game Controls (Control Type)"));
-                else ImGui::SeparatorText(group == BG_TPS ? (dev ? "Third Person: Modern Gamepad" : "Third Person: Keyboard and Mouse") : "Hotkeys");
+                else ImGui::SeparatorText(tr(group == BG_TPS ? (dev ? "Third Person: Modern Gamepad" : "Third Person: Keyboard and Mouse") : "Hotkeys"));
                 if (group == BG_GAME) { ImGui::TableSetColumnIndex(1); ImGui::TextDisabled(tr("type %c"), 'A' + pc_keytype()); }
             }
             ImGui::TableNextRow();
@@ -227,7 +227,7 @@ static void controls_section(void)
         }
         ImGui::EndTable();
     }
-    if (ImGui::Button(dev ? "Reset Gamepad Bindings" : "Reset Keyboard Bindings")) { bind_reset(dev); settings_save_later(); msg[0] = 0; }
+    if (ImGui::Button(tr(dev ? "Reset Gamepad Bindings" : "Reset Keyboard Bindings"))) { bind_reset(dev); settings_save_later(); msg[0] = 0; }
     ImGui::TextDisabled(tr("Also available in OPTION > ENHANCED SETTINGS > CONTROLS."));
 }
 
@@ -266,7 +266,7 @@ static void settings_window(void)
     if (ImGui::CollapsingHeader(tr("Audio"), ImGuiTreeNodeFlags_DefaultOpen)) changed |= settings_imgui(SP_AUDIO);
     if (ImGui::CollapsingHeader(tr("Appearance"), ImGuiTreeNodeFlags_DefaultOpen)) changed |= settings_imgui(SP_APPEAR);
     for (int p = SP_COOP; p <= SP_EXTRAS; p += SP_EXTRAS - SP_COOP)   /* pages with their own windows (F3, F2): the SET_F1 rows */
-        if (settings_imgui_any(p) && ImGui::CollapsingHeader(p == SP_COOP ? "Co-op" : "Extras", ImGuiTreeNodeFlags_DefaultOpen))
+        if (settings_imgui_any(p) && ImGui::CollapsingHeader(tr(p == SP_COOP ? "Co-op" : "Extras"), ImGuiTreeNodeFlags_DefaultOpen))
             changed |= settings_imgui(p, false);
 
     if (ImGui::CollapsingHeader(tr("Performance"))) {
@@ -341,7 +341,7 @@ static void teleport_pick(CheatState* c)
         }
         ImGui::TextDisabled(tr("A room may not work in every story state."));
     } else {
-        if (!n) ImGui::TextDisabled(tp_reading() ? "Loading room list..." : "The room list could not be read.");
+        if (!n) ImGui::TextDisabled("%s", tr(tp_reading() ? "Loading room list..." : "The room list could not be read."));
         ImGui::TextDisabled(tr("Some destinations may crash the game."));
         ImGui::InputInt(tr("Stage"), &c->tp_stg);
         ImGui::InputInt(tr("Room"), &c->tp_rom);
@@ -369,7 +369,7 @@ static void cheat_window(void)
     {
         static const char* modes[] = { "Off", "Walls", "Walls and Flight" };
         int m = c->noclip;
-        if (ImGui::Combo(tr("Pass Through Walls"), &m, modes, IM_ARRAYSIZE(modes))) c->noclip = m;
+        if (ImGui::Combo(tr("Pass Through Walls"), &m, [](void* d, int i) -> const char* { return tr(((const char* const*)d)[i]); }, (void*)modes, IM_ARRAYSIZE(modes))) c->noclip = m;
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip(tr("Move through walls, objects and enemies; doors still work.\n"
                               "Flight: Page Up/R2 up, F/Page Down/L2 down;\n"
@@ -489,11 +489,12 @@ static void coop_window(void)
     bool off = cs.state == COOP_OFF, changed = false;
     ImGui::SetNextWindowPos(ImVec2(940, 20), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(420, 0), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin(cs.at_title ? "Co-op lobby (F3)###coop" : "Co-op (F3)###coop", &coop_visible)) { ImGui::End(); return; }
+    if (!ImGui::Begin(tr(cs.at_title ? "Co-op lobby (F3)###coop" : "Co-op (F3)###coop"), &coop_visible)) { ImGui::End(); return; }
+    auto tr_item = [](void* d, int i) -> const char* { return tr(((const char* const*)d)[i]); };   /* a list's names in the language */
     static const char* loots[] = { "Shared loot", "Individual loot" };
     ImGui::BeginDisabled(!off);
     static const char* conns[] = { "Automatic", "Direct", "Server Relay" };
-    if (ImGui::Combo(tr("Connection"), &c->conn, conns, IM_ARRAYSIZE(conns))) changed = true;
+    if (ImGui::Combo(tr("Connection"), &c->conn, tr_item, (void*)conns, IM_ARRAYSIZE(conns))) changed = true;
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip(tr("Automatic tries direct first, then server;\n"
                           "addresses connect directly, and room codes need a co-op server.\n"
@@ -514,21 +515,21 @@ static void coop_window(void)
     }
     if (ImGui::InputInt(tr("Host Port"), &c->port)) { c->port = c->port < 1 ? 1 : c->port > 65535 ? 65535 : c->port; changed = true; }
     bool by_code = coop_join_by_code(c);   /* Via server, or Automatic with a server: a room code (as the lobby's CODE row) */
-    if (ImGui::InputText(by_code ? "Room code###join" : "Join address###join", c->join, sizeof(c->join), addr_flags)) changed = true;
+    if (ImGui::InputText(tr(by_code ? "Room code###join" : "Join address###join"), c->join, sizeof(c->join), addr_flags)) changed = true;
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip(c->conn == COOP_CONN_SERVER ? "Enter the host's room code (XXXX-XXXX); case and dash do not matter.\n"
+        ImGui::SetTooltip("%s", tr(c->conn == COOP_CONN_SERVER ? "Enter the host's room code (XXXX-XXXX); case and dash do not matter.\n"
                                                         "Use the co-op server entered above."
                           : by_code ? "Enter the host's room code to join through the server above.\n"
                                       "A copied join address still connects directly."
                                     : "Paste the host's address from Copy Join Address.\n"
-                                      "For a room code, choose Automatic or Server Relay and enter the co-op server.");
+                                      "For a room code, choose Automatic or Server Relay and enter the co-op server."));
     if (c->hide_ip) {   /* also during a session */
         ImGui::EndDisabled();
         ImGui::Checkbox(tr("Show Addresses"), &show_addr);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Hide IP Addresses is on. Select this to reveal the address fields."));
         ImGui::BeginDisabled(!off);
     }
-    if (ImGui::Combo(tr("Loot Sharing (Host)"), &c->loot, loots, IM_ARRAYSIZE(loots))) changed = true;
+    if (ImGui::Combo(tr("Loot Sharing (Host)"), &c->loot, tr_item, (void*)loots, IM_ARRAYSIZE(loots))) changed = true;
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip(tr("Shared divides supplies; Individual gives each player a copy.\n"
                           "Keys and story progress go to both;\n"
@@ -554,8 +555,8 @@ static void coop_window(void)
         char cur[48], lab[48];
         int v = c->items;
         auto label = [&](int i, char* b, size_t n) {
-            if (i < 0) snprintf(b, n, "%s%s", fixed[i + 3], i == COOP_ITEMS_HOST && cs.state != COOP_OFF && !cs.host && cs.peer_rec >= 0
-                                                              ? cs.peer_rec == REC_HAVE ? " (available)" : cs.peer_rec == REC_OFF ? " (host: off)" : " (none)" : "");
+            if (i < 0) snprintf(b, n, "%s%s", tr(fixed[i + 3]), i == COOP_ITEMS_HOST && cs.state != COOP_OFF && !cs.host && cs.peer_rec >= 0
+                                                              ? tr(cs.peer_rec == REC_HAVE ? " (available)" : cs.peer_rec == REC_OFF ? " (host: off)" : " (none)") : "");
             else snprintf(b, n, tr("Save %02d"), i + 1);
         };
         label(v, cur, sizeof(cur));
@@ -609,8 +610,8 @@ static void coop_window(void)
                           "joining, retries and character switches\n"
                           "can still reunite you,\n"
                           "as can long story cutscenes."));
-    if (cs.state == COOP_CONNECTED) ImGui::TextDisabled(tr("Session: %s"), loots[cs.loot_now ? 1 : 0]);
-    auto appear = [](void*, int i) -> const char* { return appear_name(appear_at(i)); };
+    if (cs.state == COOP_CONNECTED) ImGui::TextDisabled(tr("Session: %s"), tr(loots[cs.loot_now ? 1 : 0]));
+    auto appear = [](void*, int i) -> const char* { return tr(appear_name(appear_at(i))); };
     int pos = appear_pos(c->chr);   /* the list leaves out event doubles (actors.c) */
     if (ImGui::Combo(tr("Character Model"), &pos, appear, nullptr, appear_count(), 20)) { c->chr = appear_at(pos); changed = true; }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Choose your appearance; your partner sees it too.\nModels can change movement and voice;\nAppearance settings control animations and cutscene models."));
@@ -629,7 +630,7 @@ static void coop_window(void)
                                   "They can rejoin with the same address or room code."));
         }
     }
-    ImGui::TextWrapped("%s", cs.status[0] ? coop_shown(cs.status) : "Not connected");
+    ImGui::TextWrapped("%s", cs.status[0] ? coop_shown(cs.status) : tr("Not connected"));
     if (cs.state != COOP_OFF && cs.host && cs.code[0]) ImGui::Text(tr("Join code: %.4s-%.4s"), cs.code, cs.code + 4);
     if (cs.state != COOP_OFF && cs.host && cs.room[0]) {
         char room[16];
@@ -647,7 +648,7 @@ static void coop_window(void)
         ImGui::Text(tr("Local address: %s"), pm.local_ip[0] ? coop_shown(pm.local_ip) : "?");
         if (pm.public_ip[0]) snprintf(addr, sizeof(addr), "%s:%d#%s", pm.public_ip, pm.public_port, cs.code);
         else snprintf(addr, sizeof(addr), "%s:%d#%s", pm.local_ip, c->port, cs.code);
-        if (ImGui::Button(pm.public_ip[0] ? "Copy Join Address" : "Copy Local Address")) SDL_SetClipboardText(addr);
+        if (ImGui::Button(tr(pm.public_ip[0] ? "Copy Join Address" : "Copy Local Address"))) SDL_SetClipboardText(addr);
         ImGui::SameLine();
         ImGui::TextDisabled("%s", coop_shown(addr));
         if (!pm.public_ip[0] && pm.state != PM_BUSY && !cs.room[0] && cs.state != COOP_CONNECTED)   /* (the router's status: the log only) */
@@ -675,8 +676,8 @@ static void name_tag(void)
     float x = x0 + (0.5f + (tag_x - 320.0f) / (640.0f * hs)) * vw;
     float y = y0 + tag_y / 480.0f * vh;
     bool behind = tag_flags == STREAM_PT_BEHIND;
-    const char* name = g_coop.nametag ? (cs.peer_name[0] ? cs.peer_name : "Partner") : nullptr;
-    const char* busy = cs.trade_hint[0] ? cs.trade_hint : cs.busy_kind > 0 && cs.busy_kind < 5 ? what[cs.busy_kind] : nullptr;   /* it asks us to trade / is busy */
+    const char* name = g_coop.nametag ? (cs.peer_name[0] ? cs.peer_name : tr("Partner")) : nullptr;
+    const char* busy = cs.trade_hint[0] ? cs.trade_hint : cs.busy_kind > 0 && cs.busy_kind < 5 ? tr(what[cs.busy_kind]) : nullptr;   /* it asks us to trade / is busy */
     ImFont* font = ImGui::GetFont();
     float fs = ImGui::GetFontSize() * 1.25f, bs = ImGui::GetFontSize();
     ImDrawList* dl = ImGui::GetForegroundDrawList();
@@ -759,7 +760,7 @@ static void import_window(void)
         SDL_snprintf(label, sizeof(label), "%s (%s)", src->title, src->serial);
         if (!ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen)) continue;
         ImGui::PushID(s);
-        ImGui::TextWrapped(tr("Disc image: %s"), g_import.iso[s][0] ? g_import.iso[s] : "(none chosen)");
+        ImGui::TextWrapped(tr("Disc image: %s"), g_import.iso[s][0] ? g_import.iso[s] : tr("(none chosen)"));
         ImGui::BeginDisabled(running != 0);
         if (ImGui::Button(tr("Choose Disc Image..."))) {
             static const SDL_DialogFileFilter filters[] = { { "PS2 disc image (*.iso)", "iso" }, { "All files", "*" } };
@@ -792,7 +793,7 @@ static void import_window(void)
             for (const auto& g : groups) {
                 if (!(IMPORT_OFFERED & g.bit)) continue;
                 if (!first) ImGui::SameLine();
-                ImGui::CheckboxFlags(g.label, &what[s], g.bit);
+                ImGui::CheckboxFlags(tr(g.label), &what[s], g.bit);
                 first = 0;
             }
         }
@@ -822,7 +823,7 @@ static void import_window(void)
                 for (int i = 0; i < n[s]; i++) if (items[s][i].group == g) { gn++; gp += items[s][i].player != 0; }
                 if (!gn) continue;
                 char gl[96];
-                SDL_snprintf(gl, sizeof(gl), tr("%s: %d, %d player models###g%d"), gname[g], gn, gp, g);
+                SDL_snprintf(gl, sizeof(gl), tr("%s: %d, %d player models###g%d"), tr(gname[g]), gn, gp, g);
                 if (!ImGui::TreeNodeEx(gl, g == IMPORT_GROUP_PLAYERS ? ImGuiTreeNodeFlags_DefaultOpen : 0)) continue;
                 if (ImGui::BeginTable("##items", 9, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV,
                                       ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 15))) {
@@ -860,9 +861,34 @@ static void import_window(void)
     ImGui::End();
 }
 
+/* our texts in other languages (lang.h): the default font has ASCII and Latin-1 (French, German, Spanish); the
+   letters of Japanese and Russian come from a font of the system, merged in once such a language is chosen
+   (none found: they stay missing) */
+static void lang_fonts(void)
+{
+    static const char* const ja[] = { "C:/Windows/Fonts/meiryo.ttc", "C:/Windows/Fonts/msgothic.ttc", "C:/Windows/Fonts/YuGothM.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc", NULL };
+    static const char* const ru[] = { "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf", NULL };
+    static bool done[LANG_COUNT];
+    int l = lang_installed(g_lang) ? g_lang : LANG_EN;
+    if ((l != LANG_JA && l != LANG_RU) || done[l]) return;
+    done[l] = true;
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.Fonts->Fonts.empty()) io.Fonts->AddFontDefault();
+    for (const char* const* p = l == LANG_JA ? ja : ru; *p; p++) {
+        ImFontConfig c;
+        c.MergeMode = true;
+        if (SDL_GetPathInfo(*p, NULL) && io.Fonts->AddFontFromFileTTF(*p, 13.0f, &c)) { host_log("overlay: the letters of %s from %s\n", lang_codes[l], *p); return; }
+    }
+    host_log("overlay: no font of the system has the letters of %s\n", lang_codes[l]);
+}
+
 void overlay_render(void)
 {
     if (!ready) return;
+    lang_fonts();
     coop_status_get(&cs);
     bool windows = visible || cheats_visible || coop_visible || import_visible;
     pad_set_game_input_enabled(!windows);

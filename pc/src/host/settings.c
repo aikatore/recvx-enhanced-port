@@ -248,7 +248,7 @@ static const char* rifle_locked(void) { return biorand_active() ? "Required by B
 /* "You appear as": positions in the menus' list (actors.c, without event doubles) */
 static int chr_get(void) { int o = pc_biorand_appear(); return appear_pos(o >= 0 ? o : g_coop.chr); }   /* (BioRand's pick of this game shown) */
 static void chr_set(int v) { g_coop.chr = appear_at(v); pc_biorand_appear_drop(); }
-static const char* chr_name(int v, char* b, int n) { snprintf(b, n, "%s", appear_name(appear_at(v))); return b; }
+static const char* chr_name(int v, char* b, int n) { snprintf(b, n, "%s", tr(appear_name(appear_at(v)))); return b; }
 /* saves: the memory card's copied into the native folder (as the first native start does) */
 static void import_card(void)
 {
@@ -568,7 +568,7 @@ const char* settings_value(const Setting* s, char* b, int n)
     if (s->flags & SET_ACTION) b[0] = 0;
     else if (s->name) s->name(v, b, n);
     else if (s->names) snprintf(b, n, "%s", tr(s->names[v - s->lo]));
-    else if (s->fmt) snprintf(b, n, s->fmt, v);
+    else if (s->fmt) snprintf(b, n, tr(s->fmt), v);
     else snprintf(b, n, "%s", tr(v ? "On" : "Off"));
     return b;
 }

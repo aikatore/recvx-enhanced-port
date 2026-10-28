@@ -2,6 +2,7 @@
    English text (tr_table.inc: French, German, Spanish, Japanese, Russian; UTF-8). A text without a row, or a
    language without a column (""), stays English. ImGui labels keep their "##id" (looked up without it). */
 #include "lang.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -29,6 +30,22 @@ static const TrRow* find(const char* en, size_t n)
     return NULL;
 }
 
+/* test aid: RECVX_TR_MISSES=file collects the texts asked for that have no row (once each; with a language set) */
+static void miss(const char* en)
+{
+    static const char* path;
+    static int checked;
+    static unsigned seen[4096];
+    unsigned h = 2166136261u;
+    FILE* f;
+    if (!checked++) path = getenv("RECVX_TR_MISSES");
+    if (!path) return;
+    for (const char* p = en; *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
+    if (seen[h & 4095] == h) return;
+    seen[h & 4095] = h;
+    if ((f = fopen(path, "a"))) { fprintf(f, "%s\n", en); fclose(f); }
+}
+
 const char* tr(const char* en)
 {
     static char buf[8][512];
@@ -39,6 +56,7 @@ const char* tr(const char* en)
     if (!l || !en || !*en) return en;
     id = strstr(en, "##");
     r = find(en, id ? (size_t)(id - en) : strlen(en));
+    if (!r) miss(en);
     if (!r || !r->t[l - 1] || !*r->t[l - 1]) return en;
     if (!id) return r->t[l - 1];
     {   /* the translation with the label's id ("Language##set3"); a few kept, for the labels of one frame */
