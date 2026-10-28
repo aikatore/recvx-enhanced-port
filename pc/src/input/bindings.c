@@ -806,7 +806,7 @@ int bind_event(const void* e)
    RECVX_VPAD="<frame>:<input>+<input>,...": a virtual SDL gamepad (RECVX_VPAD_TYPE xbox, ps5 or
    generic; default xbox) holding gamepad inputs in the ini spelling (south, dpup, +lefttrigger),
    or an axis at a value from -1 to 1 (leftx=0.5, lefty=-1: the left stick half right, all up);
-   "unplug" disconnects it, "plug" connects it again (hotplug tests). */
+   "unplug" disconnects it, "plug" connects it again (hotplug tests); RECVX_VPAD_RUMBLE=0: it has no motors. */
 static void push_key(int sc, int down)
 {
     SDL_Event e;
@@ -888,7 +888,7 @@ static SDL_Joystick* vpad_plug(void)
     d.nbuttons = SDL_GAMEPAD_BUTTON_MISC1;   /* the standard ones */
     d.button_mask = (1u << SDL_GAMEPAD_BUTTON_MISC1) - 1;
     d.axis_mask = (1u << SDL_GAMEPAD_AXIS_COUNT) - 1;
-    d.Rumble = vpad_rumble;
+    if (!SDL_getenv("RECVX_VPAD_RUMBLE") || SDL_atoi(SDL_getenv("RECVX_VPAD_RUMBLE"))) d.Rumble = vpad_rumble;
     if (t && !strcmp(t, "ps5")) { d.vendor_id = 0x054c; d.product_id = 0x0ce6; d.name = "Virtual DualSense"; }
     else if (t && !strcmp(t, "generic")) d.name = "Virtual gamepad";
     else { d.vendor_id = 0x045e; d.product_id = 0x02ea; d.name = "Virtual Xbox One"; }
