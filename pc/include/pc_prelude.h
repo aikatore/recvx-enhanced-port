@@ -250,7 +250,8 @@ void  pc_adv_in_game(void);                      /* co-op: the guest is in a gam
 /* ENHANCED SETTINGS in the OPTION menu (pc/glue/options_glue.c): option level 4 */
 void  pc_options_frame(void);                    /* Adv_GameOptionScreen, every frame */
 void  pc_options_close(void);                    /* Adv_GameOptionScreen ends */
-void  pc_options_rows0(void);                    /* DisplayOptionPlateLevel0: ENHANCED SETTINGS, RETURN TO TITLE, its question */
+void  pc_options_rows0(void);                    /* DisplayOptionPlateLevel0: ENHANCED SETTINGS, RETURN TO TITLE, EXIT, the question */
+int   pc_options_move(int idx, int dir, int vib);/* DisplayOptionPlateLevel0: the cursor's next row (dir 0 up, 1 down, 2 left, 3 right) */
 int   pc_options_quit(int port);                 /* DisplayOptionPlateLevel0: RETURN TO TITLE's question (0 not up, 1 up, -1 YES) */
 void  pc_options_quit_open(void);                /* DisplayOptionPlateLevel0: RETURN TO TITLE confirmed: ask */
 int   pc_options_quit_title(void);               /* bhSysCallOption: YES was chosen (once) */

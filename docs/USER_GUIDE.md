@@ -202,8 +202,8 @@ pad only to the focused window: turn Steam Input off for the game.
 
 Two menus change the same values:
 
-- **OPTION -> ENHANCED SETTINGS**: in the game's OPTION screen (title, or Select in game), select
-  EXIT and press right. Q / W or LB / RB switch pages; left / right change a value. The bottom lines
+- **OPTION -> ENHANCED SETTINGS**: in the game's OPTION screen (title, or Select in game), the row
+  below VIBRATION. Q / W or LB / RB switch pages; left / right change a value. The bottom lines
   explain the selected setting; "(restart needed)" means after a restart.
 - **F1**: the same as an overlay, plus a Performance section.
 
@@ -373,7 +373,7 @@ File format: ARCHITECTURE.md, "Save system".
 
 ### Back to the title and skipping the ending
 
-- In a game, OPTION has **RETURN TO TITLE**: select DEFAULT and press right. It asks first. Unsaved
+- In a game, OPTION has **RETURN TO TITLE**: the bottom row, left of EXIT. It asks first. Unsaved
   progress is lost; in co-op the partner plays on.
 - Any button skips the ending movie, another the credits. Results, unlocks and rank stay the same.
 
