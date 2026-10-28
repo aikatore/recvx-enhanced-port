@@ -318,6 +318,7 @@ static int SDLCALL game_thread(void* ud)
 int main(int argc, char** argv)
 {
     setvbuf(stdout, NULL, _IONBF, 0); /* the game's printf diagnostics */
+    ps2_memory_init();   /* first: a DLL loaded later (WinHTTP's, the GPU driver's) moves aside, one loaded before can't */
     argv = pc_utf8_argv(argc, argv);   /* paths are UTF-8 everywhere (fileio.h) */
     { char* cwd = SDL_GetCurrentDirectory(); if (cwd) { SDL_strlcpy(start_dir, cwd, sizeof(start_dir)); SDL_free(cwd); } }
     parse_args(argc, argv);
@@ -342,7 +343,6 @@ int main(int argc, char** argv)
         exit(import_run(src, what) == 0 ? 0 : 1);
     }
     update_start();   /* the newest version for the title, on a thread of its own (net/update.h) */
-    ps2_memory_init();
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD))
         host_fatal("Cannot start the game: %s", SDL_GetError());
