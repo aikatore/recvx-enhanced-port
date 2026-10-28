@@ -46,7 +46,7 @@ enum { BS_MENU, BS_ASK, BS_WORK, BS_RESULT };
 enum { A_DOWNLOAD, A_CHECK, A_NEWER, A_GEN, A_HOST, A_DIGEST };
 /* the pages; DOORS..ENEMIES show biorand_opt[]'s groups BOG_DOORS..BOG_ENEMIES (the same numbers) */
 enum { PG_SEED, PG_DOORS, PG_ITEMS, PG_ENEMIES, PG_PORT, PG_N };
-static const char* const page_names[PG_N] = { "SEED", "DOORS", "ITEMS", "ENEMIES", "PORT EXTRAS" };
+static const char* const page_names[PG_N] = { "SEED", "DOORS", "ITEMS", "ENEMIES", "EXTRA OPTIONS" };
 /* row kinds: K_OPT a biorand_opt[] row, K_SET a settings table row (the cutscene cast) */
 enum { K_PAGE, K_OPT, K_RANDOM, K_COPY, K_PASTE, K_GEN, K_CHECK, K_APPEAR, K_SET, K_BACK };
 typedef struct { int kind, idx; } Row;
@@ -124,13 +124,12 @@ static Row rows[MAX_ROWS];
 static int nrows;
 
 static const char* const ask_text[] = {
-    "BioRand is not installed. Download the BioRand CLI (nightly) from GitHub? About 7 MB. It is checked against GitHub's checksum.",
-    "Check GitHub for a new BioRand CLI?",
-    "A newer BioRand CLI is available. Download it? About 7 MB. It is checked against GitHub's checksum.",
+    "BioRand is not installed. Download it from GitHub? About 7 MB; the download will be verified.",
+    "Check GitHub for a BioRand update?",
+    "A BioRand update is available. Download it? About 7 MB; the download will be verified.",
     NULL,   /* A_GEN: gen_text() */
     NULL,   /* A_HOST: gen_text() */
-    "Your BioRand CLI is not the host's build, so your pack may differ from the host's. Download the newest BioRand CLI first? "
-    "(The host should have the newest too.) No generates with yours.",
+    "Your BioRand version differs from the host's. Download the latest version first? The host should update too. No uses your installed version.",
 };
 
 static void ask(int a) { bm.state = BS_ASK; bm.ask = a; bm.sel = 1; }   /* No first */
@@ -161,11 +160,10 @@ static const char* gen_text(void)
     static char t[400];
     char f[40] = "";
     char h[64];
-    if (bm.free_mb >= 0) snprintf(f, sizeof(f), " Free space: %.1f GB.", bm.free_mb / 1024.0);
-    if (bm.host) snprintf(h, sizeof(h), "The host plays BioRand seed %d. Generate it now", bm.o.Seed);   /* (A_HOST) */
+    if (bm.free_mb >= 0) snprintf(f, sizeof(f), " Free disk space: %.1f GB.", bm.free_mb / 1024.0);
+    if (bm.host) snprintf(h, sizeof(h), "Generate the host's BioRand seed %d", bm.o.Seed);   /* (A_HOST) */
     else snprintf(h, sizeof(h), "Generate BioRand seed %d", bm.o.Seed);
-    snprintf(t, sizeof(t), "%s into mods/biorand? It replaces the pack there. BioRand may use several GB of memory "
-             "(about 6 GB) for a short time.%s", h, f);
+    snprintf(t, sizeof(t), "%s? This replaces your generated game and may briefly use about 6 GB of memory.%s", h, f);
     return t;
 }
 
@@ -180,7 +178,7 @@ static void gen_start(void)
         bm.state = BS_WORK;
         if (bm.host) coop_biorand_reply(1);   /* (the host's lobby shows it) */
         host_log("biorand menu: generating %s%s\n", bm.str, bm.host ? " (the co-op host's)" : "");
-    } else result(r < 0 ? "Cannot write BioRand's settings.json into the save folder." : "The last download is still ending. Try again in a moment.", 1);
+    } else result(r < 0 ? "Cannot save BioRand settings. Check that your save folder is writable." : "Download is finishing. Try again shortly.", 1);
 }
 
 /* the generation's end: the pack looked at again; done, BioRand on. The host's seed: back to the lobby (1), which
@@ -197,11 +195,11 @@ static int gen_end(const BrdlStatus* s)
     if (s->state == BRDL_GENERATED) {
         biorand_enable();
         host_log("biorand menu: generated %s; the pack says seed %d; BioRand on\n", bm.str, biorand_seed());
-        snprintf(m, sizeof(m), "BioRand seed %d generated. BIORAND is on: start a NEW GAME.%s%s", bm.gen_seed,
-                 s->warn[0] ? " BioRand warned: " : "", s->warn);
+        snprintf(m, sizeof(m), "BioRand seed %d is ready. BioRand is on; start a NEW GAME.%s%s", bm.gen_seed,
+                 s->warn[0] ? " Warning: " : "", s->warn);
         result(m, 0);
     } else if (s->state == BRDL_ERROR) result(s->error, 1);
-    else { to_menu(); say("Generating cancelled.", 0); }
+    else { to_menu(); say("Generation cancelled.", 0); }
     return 0;
 }
 
@@ -232,7 +230,7 @@ static void work(int install)
     bm.cancelling = 0;
     if ((install ? biorand_cli_install() : biorand_cli_check_update())) { bm.state = BS_WORK; return; }
     biorand_cli_status(&s);
-    result(s.state == BRDL_ERROR ? s.error : "The last download is still ending. Try again in a moment.", 1);
+    result(s.state == BRDL_ERROR ? s.error : "Download is finishing. Try again shortly.", 1);
 }
 
 /* BS_WORK: the thread's end */
@@ -247,9 +245,9 @@ static int work_end(void)
     case BRDL_INSTALLED:
         bm.have = 1;
         if (bm.host) return host_next();
-        result("The BioRand CLI is installed.", 0);
+        result("BioRand installed.", 0);
         break;
-    case BRDL_CURRENT: result("You have the newest BioRand CLI.", 0); break;
+    case BRDL_CURRENT: result("BioRand is up to date.", 0); break;
     case BRDL_NEWER: ask(A_NEWER); break;
     case BRDL_ERROR: result(s.error, 1); break;
     default: return to_menu();   /* cancelled */
@@ -326,12 +324,12 @@ static const char* row_why(const Row* r)
     static char why[96];
     switch (r->kind) {
     case K_GEN:
-        if (!bm.have) return "The BioRand CLI is not installed.";
-        if (!biorand_iso_known()) return "The game's disc image is not known.";
-        if (pc_in_game()) return "Only at the title menu.";
-        if (coop_biorand() >= 0 && !bm.host) return "Not as a guest in a co-op session.";   /* (the host's own seed: S5b) */
+        if (!bm.have) return "Install BioRand first.";
+        if (!biorand_iso_known()) return "Start the game with a disc image first.";
+        if (pc_in_game()) return "Only at the title screen.";
+        if (coop_biorand() >= 0 && !bm.host) return "Only the co-op host can generate here.";   /* (the host's own seed: S5b) */
         if (bm.free_mb >= 0 && bm.free_mb < BRDL_GEN_FREE_MB) {
-            snprintf(why, sizeof(why), "Needs about %d GB free in the mods folder; it has %.1f GB.", BRDL_GEN_FREE_MB / 1024, bm.free_mb / 1024.0);
+            snprintf(why, sizeof(why), "Needs about %d GB of disk space. Available: %.1f GB.", BRDL_GEN_FREE_MB / 1024, bm.free_mb / 1024.0);
             return why;
         }
         return NULL;
@@ -341,7 +339,7 @@ static const char* row_why(const Row* r)
         if (l) return l;
         if (biorand_opt_active(&bm.o, r->idx)) return NULL;
         for (int p = biorand_opt_find(biorand_opt[r->idx].parent); p >= 0; p = biorand_opt_find(biorand_opt[p].parent))
-            if (!biorand_opt_get(&bm.o, p)) { snprintf(why, sizeof(why), "Needs \"%s\" on.", biorand_opt[p].label); break; }
+            if (!biorand_opt_get(&bm.o, p)) { snprintf(why, sizeof(why), "Turn on \"%s\" first.", biorand_opt[p].label); break; }
         return why;
     }
     }
@@ -474,7 +472,7 @@ static void copy_string(void)
     char m[192];
     snprintf(g_lobby_io.clip, sizeof(g_lobby_io.clip), "%s", bm.str);
     g_lobby_io.clip_req = 1;   /* lobby_io.c sets the clipboard */
-    snprintf(m, sizeof(m), "Copied to the clipboard: %s", bm.str);
+    snprintf(m, sizeof(m), "Seed string copied: %s", bm.str);
     say(m, 0);
     host_log("biorand menu: copied %s\n", bm.str);
     CallSystemSe(0, 3);
@@ -490,7 +488,7 @@ static void paste_end(const char* text)
     biorand_opts_rules(&t);
     bm.o = t;
     saved("paste", t.Seed);
-    snprintf(m, sizeof(m), "Pasted: seed %d and its options.", t.Seed);
+    snprintf(m, sizeof(m), "Seed %d and options pasted.", t.Seed);
     say(m, 0);
     CallSystemSe(0, 3);
 }
@@ -667,7 +665,7 @@ static void draw_row(int i)
     float y = i ? row_y(i) : PAGE_Y;
     unsigned int col = !live ? (sel ? 0xFF909090 : 0xFF686868) : sel ? 0xFFFFFFFF : 0xFFB0B0B0;
     static const char* const names[] = { "", "", "RANDOM SEED", "COPY SEED STRING", "PASTE SEED STRING", "GENERATE",
-                                         "CHECK FOR A NEW BIORAND CLI", "Randomize Played as", "", "BACK" };
+                                         "CHECK FOR UPDATES", "Randomize Character Model", "", "BACK" };
     char v[96];
     if (sel) pc_ui_rect(ROW_X - 8, y - 3, 600, y + ROW_H - 4, bm.edit ? 0x60406080 : 0x50FFFFFF, Z_ROW);
     switch (r->kind) {
@@ -749,10 +747,10 @@ static void draw_info(void)
     case PG_SEED:
         pc_ui_text(ROW_X - 4, y, "SEED STRING", SMALL_SC, 0xFFFFE080);
         text_fit(ROW_X - 4, y + 18, bm.str, 0.62f, BAR_X1 - ROW_X + 4, 0xFFFFFFFF);
-        pc_ui_text(ROW_X - 4, y + 44, "It holds the seed and every option: the same string gives the same game.", SMALL_SC, 0xFF909090);
+        pc_ui_text(ROW_X - 4, y + 44, "Share this string to generate the same seed and BioRand options.", SMALL_SC, 0xFF909090);
         return;
     case PG_DOORS:
-        pc_ui_text(ROW_X - 4, y, "ESTIMATED COMPLETION TIME", SMALL_SC, 0xFFFFE080);
+        pc_ui_text(ROW_X - 4, y, "ESTIMATED PLAY TIME", SMALL_SC, 0xFFFFE080);
         biorand_doors_estimate(&bm.o, t, sizeof(t));
         if (t[0]) pc_ui_text(ROW_X - 4, y + 18, t, ROW_SC, 0xFFFFFFFF);
         else note = "Doors are not randomized.";
@@ -770,7 +768,7 @@ static void draw_info(void)
         int n, id[6] = { 0 };
         pc_ui_text(ROW_X - 4, y, "ENEMY DISTRIBUTION", SMALL_SC, 0xFFFFE080);
         if (!bm.o.RandomEnemies) note = "Enemies are not randomized.";
-        else if (!(n = biorand_enemy_dist(&bm.o, s))) note = "Every enemy is at None.";
+        else if (!(n = biorand_enemy_dist(&bm.o, s))) note = "All enemy types are set to None.";
         else {
             for (int i = 0, e = 0; i < biorand_opt_n; i++)   /* each enemy's own depth: its place among the ratio rows */
                 if (biorand_opt[i].type == BO_RATIO && biorand_opt[i].group == BOG_ENEMIES) {
@@ -782,7 +780,7 @@ static void draw_info(void)
         }
         break;
     }
-    case PG_PORT: note = "The port's own options: they are not part of the seed string."; break;
+    case PG_PORT: note = "These extra options are saved separately from the seed string."; break;
     }
     if (note) pc_ui_text(ROW_X - 4, y + 18, note, ROW_SC, 0xFFA0A0A0);
 }
@@ -793,31 +791,31 @@ static void help_text(char* t, int n, unsigned int* col)
     const char* why = row_why(r);
     char k[48];
     *col = 0xFFA0D0FF;
-    if (bm.edit) { snprintf(t, n, "Type the seed number (0 to %d); Enter takes it, Esc cancels. Gamepad: up/down change the digit, left/right move.", BIORAND_SEED_MAX); return; }
+    if (bm.edit) { snprintf(t, n, "Type seed 0 to %d. Enter: confirm; Esc: cancel; gamepad: up/down edits, left/right moves.", BIORAND_SEED_MAX); return; }
     if (bm.say_t > 0) { snprintf(t, n, "%s", bm.say); *col = bm.say_err ? 0xFFFFC060 : 0xFFFFE080; return; }
     switch (r->kind) {
     case K_PAGE:
-        snprintf(t, n, "Left/right or %s change the page, up/down choose an option. Every change goes into the seed string and is saved at once.", page_keys(k, sizeof(k)));
+        snprintf(t, n, "Left/right or %s: change page; up/down: choose an option. Changes save automatically.", page_keys(k, sizeof(k)));
         return;
     case K_OPT: {
         const BioOpt* d = &biorand_opt[r->idx];
-        const char* h = d->help ? d->help : "A weapon of the random starting inventory: None, Random, or a Sidearm, Primary or Powerful one.";
-        snprintf(t, n, "%s%s%s%s", why ? why : "", why ? " " : "", h, r->idx == bm.seed_i ? " Confirm: type it. Left/right: one up or down." : "");
+        const char* h = d->help ? d->help : "Choose a starting weapon type: None, Random, Sidearm, Primary or Powerful.";
+        snprintf(t, n, "%s%s%s%s", why ? why : "", why ? " " : "", h, r->idx == bm.seed_i ? " Confirm: enter a seed. Left/right: adjust." : "");
         for (char* p = t; *p; p++) if (*p == '\n') *p = ' ';
         if (why) *col = 0xFFFFC060;
         return;
     }
-    case K_RANDOM: snprintf(t, n, "A new random seed number. The other options stay."); return;
-    case K_COPY: snprintf(t, n, "Copies the seed string to the clipboard. It holds the seed and every option, so others can generate the same game."); return;
-    case K_PASTE: snprintf(t, n, "Takes a seed string from the clipboard (from BioRand's own program or from a friend): its seed and every option."); return;
+    case K_RANDOM: snprintf(t, n, "Choose a random seed number. Keep the other options."); return;
+    case K_COPY: snprintf(t, n, "Copy the seed string to share the seed and BioRand options."); return;
+    case K_PASTE: snprintf(t, n, "Paste a seed string to use its seed and BioRand options."); return;
     case K_GEN:
-        snprintf(t, n, "%s%sGenerates the randomized game from the seed string into mods/biorand (about 1.4 GB) with the BioRand CLI, and turns BioRand on.",
+        snprintf(t, n, "%s%sGenerate and enable your BioRand game. Uses about 1.4 GB of disk space.",
                  why ? why : "", why ? " " : "");
         if (why) *col = 0xFFFFC060;
         return;
-    case K_CHECK: snprintf(t, n, "Asks GitHub whether a newer BioRand CLI (the nightly of biorand/classic) is out, and offers to download it."); return;
+    case K_CHECK: snprintf(t, n, "Check GitHub for the latest BioRand generator and offer to download it."); return;
     case K_APPEAR:
-        snprintf(t, n, "On: each generated seed also picks who you appear as (\"You appear as\"), the same for the same seed. Not part of the seed string.");
+        snprintf(t, n, "Choose a character model for each generated seed. Saved separately from the seed string.");
         return;
     case K_SET: {
         const Setting* s = &g_settings[r->idx];
@@ -867,8 +865,8 @@ static void button(int i, const char* s, int sel)
 
 static void draw_work(void)
 {
-    static const char* const stage[] = { "", "Looking up the newest BioRand CLI on GitHub...", "Downloading the BioRand CLI...",
-                                         "Checking the download (SHA-256)...", "Installing..." };
+    static const char* const stage[] = { "", "Checking for BioRand updates...", "Downloading BioRand...",
+                                         "Verifying download...", "Installing..." };
     BrdlStatus s;
     char line[64];
     float f = 0;
@@ -880,7 +878,7 @@ static void draw_work(void)
         if (m[0] == '[' && strstr(m, "] ")) m = strstr(m, "] ") + 2;   /* ("[P1] Randomizing doors": the player's part) */
         snprintf(line, sizeof(line), "BIORAND - GENERATING SEED %d", bm.gen_seed);
         pc_ui_text(BOX_X0 + 20, BOX_Y0 + 16, line, 0.5f, 0xFFFFE080);
-        pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 48, BOX_X1 - BOX_X0 - 40, bm.cancelling ? "Cancelling..." : m[0] ? m : "Starting the BioRand CLI...", 0.55f, 0xFFFFFFFF, 2);
+        pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 48, BOX_X1 - BOX_X0 - 40, bm.cancelling ? "Cancelling..." : m[0] ? m : "Starting BioRand...", 0.55f, 0xFFFFFFFF, 2);
         f = s.pct / 100.0f;
         x = BOX_X0 + 20 + (BOX_X1 - BOX_X0 - 40) * f;
         if (f > 0) pc_ui_rect(BOX_X0 + 20, 228.5f, x, 244.5f, 0xFFFFE080, Z_FILL);
@@ -890,7 +888,7 @@ static void draw_work(void)
         button(0, "CANCEL", 1);
         return;
     }
-    pc_ui_text(BOX_X0 + 20, BOX_Y0 + 16, bm.install ? "BIORAND CLI - DOWNLOAD" : "BIORAND CLI - CHECK FOR AN UPDATE", 0.5f, 0xFFFFE080);
+    pc_ui_text(BOX_X0 + 20, BOX_Y0 + 16, bm.install ? "BIORAND - DOWNLOAD" : "BIORAND - CHECK FOR UPDATES", 0.5f, 0xFFFFE080);
     pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 48, BOX_X1 - BOX_X0 - 40, bm.cancelling ? "Cancelling..." : s.state < BRDL_INSTALLED ? stage[s.state] : "",
                     0.55f, 0xFFFFFFFF, 2);
     if (bm.install) {
@@ -973,7 +971,7 @@ int pc_biorand_menu(void)
     } else if (bm.state == BS_WORK) draw_work();
     else if (bm.state == BS_RESULT) {
         box();
-        pc_ui_text(BOX_X0 + 20, BOX_Y0 + 16, bm.gen || bm.host ? (bm.err ? "BIORAND - ERROR" : "BIORAND") : bm.err ? "BIORAND CLI - ERROR" : "BIORAND CLI", 0.5f, 0xFFFFE080);
+        pc_ui_text(BOX_X0 + 20, BOX_Y0 + 16, bm.gen || bm.host ? (bm.err ? "BIORAND - ERROR" : "BIORAND") : bm.err ? "BIORAND - ERROR" : "BIORAND", 0.5f, 0xFFFFE080);
         pc_ui_text_wrap(BOX_X0 + 20, BOX_Y0 + 48, BOX_X1 - BOX_X0 - 40, bm.msg, 0.55f, bm.err ? 0xFFFFC060 : 0xFFFFFFFF, 4);
         button(0, "OK", 1);
     }

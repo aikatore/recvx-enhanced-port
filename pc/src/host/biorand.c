@@ -104,9 +104,9 @@ int biorand_active(void)
 /* the setting changes at the title only: a game running has its room files */
 const char* biorand_locked(void)
 {
-    if (!br.pack) return "No BioRand pack: generate one with BioRand into this game's folder (mods/biorand).";
-    if (pc_in_game()) return "Only at the title menu.";
-    if (coop_biorand() >= 0) return "In co-op the host's choice counts.";
+    if (!br.pack) return "Generate a BioRand game first.";
+    if (pc_in_game()) return "Only at the title screen.";
+    if (coop_biorand() >= 0) return "The co-op host decides.";
     return NULL;
 }
 

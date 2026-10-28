@@ -278,7 +278,7 @@ static int install(const char* real)
     CHECK(biorand_cli_install() && wait_end() == BRDL_ERROR);
     biorand_cli_status(&s);
     printf("mismatch: '%s'\n", s.error);
-    CHECK(strstr(s.error, "SHA-256") && entries(game) == 2 && !strcmp(g_biorand_cli_digest, dig) && saves == 1);
+    CHECK(strstr(s.error, "verification failed") && entries(game) == 2 && !strcmp(g_biorand_cli_digest, dig) && saves == 1);
 
     /* the size GitHub lists differs */
     release(LINUX, arc, (int)len - 1, dig);

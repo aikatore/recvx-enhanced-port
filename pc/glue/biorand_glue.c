@@ -63,14 +63,14 @@ int pc_biorand_save_differs(const void* save)
     words(now);
     if (w[0] == now[0] && w[1] == now[1]) return 0;
     seed = (int)(w[0] & 0xFFFFF);
-    if (!w[0]) snprintf(ask[0], sizeof(ask[0]), "This save was made without BioRand;");
-    else if (seed == 0xFFFFF) snprintf(ask[0], sizeof(ask[0]), "This save was made with another BioRand pack;");
-    else snprintf(ask[0], sizeof(ask[0]), "This save was made with BioRand seed %d;", seed);
+    if (!w[0]) snprintf(ask[0], sizeof(ask[0]), "Save: BioRand off.");
+    else if (seed == 0xFFFFF) snprintf(ask[0], sizeof(ask[0]), "Save: different BioRand game.");
+    else snprintf(ask[0], sizeof(ask[0]), "Save: BioRand seed %d.", seed);
     if (!now[0]) snprintf(ask[1], sizeof(ask[1]), "BioRand is off.");
-    else if (w[0] && seed == cur) snprintf(ask[1], sizeof(ask[1]), "the BioRand folder has other options of it.");
-    else if (cur >= 0) snprintf(ask[1], sizeof(ask[1]), "the BioRand folder has seed %d.", cur);
-    else snprintf(ask[1], sizeof(ask[1]), "the BioRand folder has another pack.");
-    snprintf(ask[2], sizeof(ask[2]), "Items and doors will not match. Load it?");
+    else if (w[0] && seed == cur) snprintf(ask[1], sizeof(ask[1]), "Current game: different options.");
+    else if (cur >= 0) snprintf(ask[1], sizeof(ask[1]), "Current game: seed %d.", cur);
+    else snprintf(ask[1], sizeof(ask[1]), "Current game differs.");
+    snprintf(ask[2], sizeof(ask[2]), "Items and doors will differ. Load anyway?");
     host_log("biorand: %s %s %s\n", ask[0], ask[1], ask[2]);
     return 1;
 }

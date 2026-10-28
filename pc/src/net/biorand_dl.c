@@ -185,14 +185,14 @@ static int fetch(const char* url, const char* file, Sint64 max, int api)
     Sint64 total = 0;
     char buf[16384];
     int ok = 0;
-    if (!MultiByteToWideChar(CP_UTF8, 0, url, -1, w, 1024)) return fail("the URL is too long");
+    if (!MultiByteToWideChar(CP_UTF8, 0, url, -1, w, 1024)) return fail("Download address is too long.");
     memset(&uc, 0, sizeof(uc));
     uc.dwStructSize = sizeof(uc);
     uc.lpszHostName = host; uc.dwHostNameLength = 256;
     uc.dwUrlPathLength = (DWORD)-1;   /* a pointer into w: the path with its query, to the end */
-    if (!WinHttpCrackUrl(w, 0, 0, &uc) || uc.nScheme != INTERNET_SCHEME_HTTPS) return fail("cannot use the URL %s", url);
+    if (!WinHttpCrackUrl(w, 0, 0, &uc) || uc.nScheme != INTERNET_SCHEME_HTTPS) return fail("Cannot download from %s.", url);
     if (!(s = WinHttpOpen(L"" UA, 4 /* WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, 8.1+ */, NULL, NULL, 0)) &&
-        !(s = WinHttpOpen(L"" UA, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0))) return fail("WinHTTP is not available (%lu)", GetLastError());
+        !(s = WinHttpOpen(L"" UA, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0))) return fail("Download service unavailable (error %lu).", GetLastError());
     if (!WinHttpSetOption(s, WINHTTP_OPTION_SECURE_PROTOCOLS, &proto, sizeof(proto))) {
         proto = 0x800;   /* Windows before TLS 1.3 */
         WinHttpSetOption(s, WINHTTP_OPTION_SECURE_PROTOCOLS, &proto, sizeof(proto));
@@ -202,23 +202,23 @@ static int fetch(const char* url, const char* file, Sint64 max, int api)
         !(r = WinHttpOpenRequest(c, L"GET", uc.lpszUrlPath, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)) ||
         !WinHttpSendRequest(r, api ? L"Accept: application/vnd.github+json" : WINHTTP_NO_ADDITIONAL_HEADERS, (DWORD)-1, NULL, 0, 0, 0) ||
         !WinHttpReceiveResponse(r, NULL)) {
-        fail("no connection to GitHub (WinHTTP error %lu)", GetLastError());
+        fail("Cannot connect to GitHub (error %lu).", GetLastError());
         goto out;
     }
     WinHttpQueryHeaders(r, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, NULL, &status, &len, NULL);
-    if (status != 200 && !api) { fail("GitHub answered HTTP %lu", status); goto out; }   /* the API's error body is read: its message */
-    if (!(f = SDL_IOFromFile(file, "wb"))) { fail("cannot write %s", file); goto out; }
+    if (status != 200 && !api) { fail("GitHub returned error %lu. Try again later.", status); goto out; }   /* the API's error body is read: its message */
+    if (!(f = SDL_IOFromFile(file, "wb"))) { fail("Cannot write %s. Check disk space and folder access.", file); goto out; }
     for (;;) {
         if (cancelled()) { fail("cancelled"); goto out; }
-        if (!WinHttpReadData(r, buf, sizeof(buf), &got)) { fail("the download broke off (WinHTTP error %lu)", GetLastError()); goto out; }
+        if (!WinHttpReadData(r, buf, sizeof(buf), &got)) { fail("Download interrupted (error %lu). Try again.", GetLastError()); goto out; }
         if (!got) break;
-        if ((total += got) > max) { fail("the file is larger than expected"); goto out; }
-        if (SDL_WriteIO(f, buf, got) != got) { fail("cannot write %s (disk full?)", file); goto out; }
+        if ((total += got) > max) { fail("Download is larger than expected. Try updating BioRand again later."); goto out; }
+        if (SDL_WriteIO(f, buf, got) != got) { fail("Cannot write %s. Check free disk space.", file); goto out; }
         SDL_SetAtomicInt(&st_done, (int)total);
     }
     ok = 1;
 out:
-    if (f && !SDL_CloseIO(f) && ok) ok = fail("cannot write %s", file);
+    if (f && !SDL_CloseIO(f) && ok) ok = fail("Cannot finish writing %s.", file);
     if (r) WinHttpCloseHandle(r);
     if (c) WinHttpCloseHandle(c);
     WinHttpCloseHandle(s);
@@ -240,12 +240,12 @@ static int fetch(const char* url, const char* file, Sint64 max, int api)
         switch (r) {
         case -1: break;   /* no curl */
         case -2: return fail("cancelled");
-        case -3: case 63: return fail("the file is larger than expected");
-        case 6: return fail("cannot find GitHub's server (no internet connection?)");
-        case 7: return fail("cannot connect to GitHub");
-        case 22: return fail("GitHub answered with an error (HTTP 4xx/5xx)");
-        case 28: return fail("the connection timed out");
-        case 35: case 60: return fail("the secure connection failed (TLS or certificate)");
+        case -3: case 63: return fail("Download is larger than expected. Try updating BioRand again later.");
+        case 6: return fail("Cannot find GitHub. Check your internet connection.");
+        case 7: return fail("Cannot connect to GitHub. Try again later.");
+        case 22: return fail("GitHub returned an error. Try again later.");
+        case 28: return fail("Connection timed out. Try again.");
+        case 35: case 60: return fail("Secure connection failed. Check your connection and system clock.");
         default: return fail("curl failed (exit code %d)", r);
         }
     }
@@ -260,11 +260,11 @@ static int fetch(const char* url, const char* file, Sint64 max, int api)
         switch (r) {
         case -1: return fail("cannot download: install curl or wget");
         case -2: return fail("cancelled");
-        case -3: return fail("the file is larger than expected");
-        case 4: return fail("cannot connect to GitHub (no internet connection?)");
-        case 5: return fail("the secure connection failed (TLS or certificate)");
-        case 8: return fail("GitHub answered with an error (HTTP 4xx/5xx)");
-        default: return fail("wget failed (exit code %d)", r);
+        case -3: return fail("Download is larger than expected. Try updating BioRand again later.");
+        case 4: return fail("Cannot connect to GitHub. Check your internet connection.");
+        case 5: return fail("Secure connection failed. Check your connection and system clock.");
+        case 8: return fail("GitHub returned an error. Try again later.");
+        default: return fail("Download failed (error %d). Try again.", r);
         }
     }
 }
@@ -310,9 +310,9 @@ static int extract(const char* tmp)
     const char* args[] = { "tar", "-xzf", BRDL_ASSET, "-C", "x", NULL };
     r = run(args, tmp, NULL, 0);
 #endif
-    if (r == -1) return fail("cannot start tar to unpack the archive");
+    if (r == -1) return fail("Cannot start archive extraction. Check that tar is installed.");
     if (r == -2) return fail("cancelled");
-    if (r) return fail("tar could not unpack the archive (exit code %d)", r);
+    if (r) return fail("Cannot unpack the download (error %d). Try downloading again.", r);
     return 1;
 }
 
@@ -343,14 +343,14 @@ static int job(void)
     int r;
     if (!api) api = BRDL_API_URL;
     allow_file = !strncmp(api, "file:///", 8);
-    if (!brdl_url_ok(api, allow_file)) return fail("not an allowed URL: %s", api);
-    if (!base[0] && !set_base()) return fail("cannot find the game's folder");
+    if (!brdl_url_ok(api, allow_file)) return fail("Download address is not allowed: %s.", api);
+    if (!base[0] && !set_base()) return fail("Cannot find the game folder.");
     SDL_snprintf(tmp, sizeof(tmp), "%sbiorand-dl", base);
     SDL_snprintf(json, sizeof(json), "%s/release.json", tmp);
     SDL_snprintf(arc, sizeof(arc), "%s/" BRDL_ASSET, tmp);
     SDL_snprintf(x, sizeof(x), "%s/x", tmp);
     rm_tree(tmp, 0);   /* a left-over from a killed run */
-    if (!SDL_CreateDirectory(x)) return fail("cannot create %s (is the game's folder writable?)", x);
+    if (!SDL_CreateDirectory(x)) return fail("Cannot create %s. Check folder access.", x);
 
     /* 1. the release */
     if (!fetch(api, json, API_MAX, 1)) return 0;
@@ -362,9 +362,9 @@ static int job(void)
     case BRJ_MESSAGE:
         if (!strncmp(msg, "API rate limit exceeded", 23)) return fail("GitHub allows 60 requests per hour; try again later");
         return fail("GitHub: %s", msg);
-    case BRJ_NO_ASSET: return fail("the nightly release has no " BRDL_ASSET);
-    case BRJ_MALFORMED: return fail("GitHub's answer is not a release");
-    default: return fail("the release lists " BRDL_ASSET " with an invalid %s", r == BRJ_BAD_SIZE ? "size" : r == BRJ_BAD_DIGEST ? "digest" : "URL");
+    case BRJ_NO_ASSET: return fail("The BioRand download is unavailable for this platform. Try again later.");
+    case BRJ_MALFORMED: return fail("GitHub returned invalid update information. Try again later.");
+    default: return fail("Invalid BioRand download information (%s). Try again later.", r == BRJ_BAD_SIZE ? "size" : r == BRJ_BAD_DIGEST ? "digest" : "URL");
     }
     host_log("biorand-cli: nightly %s, %d bytes, %s\n", BRDL_ASSET, a.size, a.digest);
     if (!job_install) return biorand_cli_present() && !strcmp(a.digest, g_biorand_cli_digest) ? BRDL_CURRENT : BRDL_NEWER;
@@ -373,23 +373,23 @@ static int job(void)
     SDL_SetAtomicInt(&st_total, a.size);
     SDL_SetAtomicInt(&st_state, BRDL_DOWNLOAD);
     if (!fetch(a.url, arc, a.size, 0)) return 0;
-    if (!SDL_GetPathInfo(arc, &info) || info.size != (Uint64)a.size) return fail("the download is incomplete");
+    if (!SDL_GetPathInfo(arc, &info) || info.size != (Uint64)a.size) return fail("Download incomplete. Try again.");
     SDL_SetAtomicInt(&st_done, a.size);   /* (a fast download ends before run() looks at its size) */
 
     /* 3. its digest */
     SDL_SetAtomicInt(&st_state, BRDL_VERIFY);
-    if (!sha256_file(arc, hex)) return fail(cancelled() ? "cancelled" : "cannot read the download");
+    if (!sha256_file(arc, hex)) return fail(cancelled() ? "cancelled" : "Cannot read the download. Try downloading again.");
     if (strcmp(hex, a.digest + 7)) {
         SDL_RemovePath(arc);
         host_log("biorand-cli: SHA-256 %s, expected %s\n", hex, a.digest + 7);
-        return fail("the download is damaged (its SHA-256 differs from GitHub's); nothing was installed");
+        return fail("Download verification failed. Nothing was installed. Try again.");
     }
 
     /* 4. unpacked */
     SDL_SetAtomicInt(&st_state, BRDL_EXTRACT);
     if (!extract(tmp)) return 0;
     SDL_snprintf(src, sizeof(src), "%s/" BRDL_EXE, x);
-    if (!is_file(src)) return fail("the archive holds no " BRDL_EXE);
+    if (!is_file(src)) return fail("The download is missing the BioRand program. Try downloading again.");
 
     /* 5. installed: the licence first, the program last (its presence means installed) */
     SDL_snprintf(src, sizeof(src), "%s/LICENSE", x);
@@ -397,7 +397,7 @@ static int job(void)
     if (!is_file(src) || !move_file(src, dst)) host_log("biorand-cli: no LICENSE in the archive\n");
     SDL_snprintf(src, sizeof(src), "%s/" BRDL_EXE, x);
     if (cancelled()) return fail("cancelled");
-    if (!move_file(src, biorand_cli_exe())) return fail("cannot replace %s (is it running?)", biorand_cli_exe());
+    if (!move_file(src, biorand_cli_exe())) return fail("Cannot replace %s. Close any running copy and try again.", biorand_cli_exe());
 #ifndef _WIN32
     chmod(biorand_cli_exe(), 0755);
 #endif
@@ -469,9 +469,9 @@ static int gen(void)
     SDL_snprintf(out, sizeof(out), "%s/biorand", gen_mods);
     SDL_snprintf(tmp, sizeof(tmp), "%s/biorand-temp", gen_mods);
     gen_clean(gen_mods);
-    if (!exe || !biorand_cli_present()) return fail("the BioRand CLI is not installed");
-    if (!SDL_CreateDirectory(tmp)) return fail("cannot create %s", tmp);
-    if (!(env = SDL_CreateEnvironment(true))) return fail("cannot start the BioRand CLI (%s)", SDL_GetError());
+    if (!exe || !biorand_cli_present()) return fail("Install BioRand first.");
+    if (!SDL_CreateDirectory(tmp)) return fail("Cannot create %s. Check folder access and disk space.", tmp);
+    if (!(env = SDL_CreateEnvironment(true))) return fail("Cannot start BioRand: %s", SDL_GetError());
     SDL_SetEnvironmentVariable(env, "BIORAND_CONFIG", gen_cfg, true);
     SDL_SetEnvironmentVariable(env, "TMPDIR", tmp, true);   /* its scratch (2.4 GB) next to the pack, not in a RAM /tmp */
     SDL_SetEnvironmentVariable(env, "TMP", tmp, true);      /* (Windows: GetTempPath) */
@@ -479,7 +479,7 @@ static int gen(void)
     host_log("biorand-cli: %s -s %s -i \"%s\" -o \"%s\" -f (BIORAND_CONFIG %s)\n", exe, gen_seed, gen_iso, out, gen_cfg);
     pr = spawn(args, env, 1, NULL);
     SDL_DestroyEnvironment(env);
-    if (!pr) { fail("cannot start the BioRand CLI (%s)", SDL_GetError()); gen_clean(gen_mods); return 0; }
+    if (!pr) { fail("Cannot start BioRand: %s", SDL_GetError()); gen_clean(gen_mods); return 0; }
     io = SDL_GetProcessOutput(pr);
     while (!eof || !ended) {
         char buf[1024];
@@ -515,8 +515,8 @@ static int gen(void)
     if (code == -2) return fail("cancelled");
     if (strstr(line, "eed version")) return fail("%s Update the game or use an older BioRand CLI.", line);
     if (code == 2 && line[0]) return fail("%s", line);
-    if (code == 3) return fail("BioRand failed: %s", line[0] ? line : "no reason given");
-    return fail("BioRand ended with exit code %d%s%s", code, line[0] ? ": " : "", line);
+    if (code == 3) return fail("BioRand failed: %s", line[0] ? line : "No details available.");
+    return fail("BioRand stopped (error %d)%s%s", code, line[0] ? ": " : "", line);
 }
 
 static int SDLCALL worker(void* ud)
@@ -551,7 +551,7 @@ static int start(int install)
     SDL_UnlockSpinlock(&st_lock);
     SDL_SetAtomicInt(&st_state, job_gen ? BRDL_GENERATE : BRDL_API);
     if ((t = SDL_CreateThread(worker, "biorand-dl", NULL))) { SDL_DetachThread(t); return 1; }   /* detached: exit does not wait */
-    fail("cannot start a thread");
+    fail("Cannot start the download. Try restarting the game.");
     SDL_SetAtomicInt(&st_state, BRDL_ERROR);
     SDL_SetAtomicInt(&busy, 0);
     return 0;
