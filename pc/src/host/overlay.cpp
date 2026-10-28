@@ -116,13 +116,13 @@ static bool cast_custom_imgui()
     bool changed = false;
     char head[80];
     for (int k = 0; k < n; k++) on += !cast_off_at(cast_off, pos[k]);
-    SDL_snprintf(head, sizeof head, "Custom Models (%d of %d checked)###castcustom", on, n);
+    SDL_snprintf(head, sizeof head, tr("Custom Models (%d of %d checked)###castcustom"), on, n);
     if (!ImGui::TreeNodeEx(head, ImGuiTreeNodeFlags_DefaultOpen)) return false;
-    if (ImGui::Button("Select All")) set = 0;
+    if (ImGui::Button(tr("Select All"))) set = 0;
     ImGui::SameLine();
-    if (ImGui::Button("Deselect All")) set = 1;
+    if (ImGui::Button(tr("Deselect All"))) set = 1;
     if (set >= 0) { for (int k = 0; k < n; k++) cast_off_put(cast_off, pos[k], set); changed = true; }
-    if (!on) { ImGui::SameLine(); ImGui::TextDisabled("None checked: the characters keep their own looks."); }
+    if (!on) { ImGui::SameLine(); ImGui::TextDisabled(tr("None checked: the characters keep their own looks.")); }
     if (ImGui::BeginChild("##castcustom", ImVec2(0, ImGui::GetFrameHeightWithSpacing() * (n < 12 ? n + 1 : 12)), ImGuiChildFlags_Borders)) {
         const char* grp = nullptr;
         for (int k = 0; k < n; k++) {
