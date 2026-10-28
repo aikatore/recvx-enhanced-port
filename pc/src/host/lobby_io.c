@@ -85,6 +85,14 @@ static void scripted(void)
     }
 }
 
+/* the file dialog's answer (SDL may call it on another thread) */
+static void SDLCALL file_picked(void* ud, const char* const* files, int filter)
+{
+    (void)ud; (void)filter;
+    if (files && files[0]) SDL_snprintf(g_lobby_io.file, sizeof(g_lobby_io.file), "%s", files[0]);
+    __atomic_store_n(&g_lobby_io.file_req, files && files[0] ? 3 : 4, __ATOMIC_RELEASE);
+}
+
 void lobby_io_frame(void* window)
 {
     static int started;
@@ -102,6 +110,13 @@ void lobby_io_frame(void* window)
         SDL_snprintf(g_lobby_io.paste, sizeof(g_lobby_io.paste), "%s", t ? t : "");
         SDL_free(t);
         __atomic_store_n(&g_lobby_io.paste_req, 2, __ATOMIC_RELEASE);
+    }
+    if (__atomic_load_n(&g_lobby_io.file_req, __ATOMIC_ACQUIRE) == 1) {   /* a disc image (the IMPORT screen) */
+        static const SDL_DialogFileFilter filters[] = { { "PS2 disc image (*.iso)", "iso" }, { "All files", "*" } };
+        const char* test = SDL_getenv("RECVX_FILE_DIALOG_TEST");   /* test aid: this file is chosen, no dialog */
+        g_lobby_io.file_req = 2;
+        if (test) { const char* f[2] = { test, NULL }; file_picked(NULL, test[0] ? f : NULL, 0); }
+        else SDL_ShowOpenFileDialog(file_picked, NULL, (SDL_Window*)window, filters, 2, g_lobby_io.file[0] ? g_lobby_io.file : NULL, false);
     }
     scripted();
 }

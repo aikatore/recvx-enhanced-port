@@ -103,6 +103,7 @@ static void rm_tree(const char* path, int depth)
     }
     SDL_RemovePath(path);
 }
+int brdl_rm_tree(const char* path) { rm_tree(path, 0); return !SDL_GetPathInfo(path, NULL); }
 
 /* SDL's process: started without a console window on Windows (SDL's background flag: CREATE_NO_WINDOW; on POSIX
    it would detach the child, which then cannot be waited for or killed). out: its stdout and stderr in one pipe.

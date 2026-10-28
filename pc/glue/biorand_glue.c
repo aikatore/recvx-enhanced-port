@@ -44,45 +44,45 @@ static void words(unsigned int* w)
     w[1] = on ? biorand_id() : 0;
 }
 
-/* the game state: the current choice (a new game: coop_glue.c pc_quick_start; a co-op guest's start) */
+/* the game state: this game's (a new game: coop_glue.c pc_quick_start; a co-op guest's start) */
 void pc_biorand_stamp(void)
 {
     if (sys) words(&sys->itm[BR_W]);
 }
 
-/* ps2_LoadScreen.c: the save just read (card bytes from sys->version) was made with another BioRand state: 1, the
-   question's lines */
+/* ps2_LoadScreen.c and the lobby: the save just read (card bytes from sys->version) decides this game's BioRand state
+   (biorand_game): a plain save plays without BioRand, a save of the pack there with it. A BioRand save whose pack is
+   not there (another seed or options, or none): 1, the question's lines; loaded anyway, it plays the pack there, or
+   without BioRand when there is none (pc_biorand_save_accept). */
 static char ask[3][64];
 int pc_biorand_save_differs(const void* save)
 {
-    unsigned int w[2], now[2];
+    unsigned int w[2];
     int seed, cur = biorand_seed();
-    if (!biorand_shown()) return 0;   /* (BioRand only with --dev) */
     memcpy(w, (const char*)save + BR_OFFSET, sizeof(w));
-    if ((w[0] & 0xFF000000u) != BR_ON) w[0] = w[1] = 0;
-    words(now);
-    if (w[0] == now[0] && w[1] == now[1]) return 0;
+    if (!biorand_shown() || (w[0] & 0xFF000000u) != BR_ON) { biorand_game(0); return 0; }   /* (BioRand only with --dev) */
+    if (biorand_pack() && w[1] == biorand_id()) { biorand_game(1); return 0; }
     seed = (int)(w[0] & 0xFFFFF);
-    if (!w[0]) snprintf(ask[0], sizeof(ask[0]), "Save: BioRand off.");
-    else if (seed == 0xFFFFF) snprintf(ask[0], sizeof(ask[0]), "Save: different BioRand game.");
+    if (seed == 0xFFFFF) snprintf(ask[0], sizeof(ask[0]), "Save: different BioRand game.");
     else snprintf(ask[0], sizeof(ask[0]), "Save: BioRand seed %d.", seed);
-    if (!now[0]) snprintf(ask[1], sizeof(ask[1]), "BioRand is off.");
-    else if (w[0] && seed == cur) snprintf(ask[1], sizeof(ask[1]), "Current game: different options.");
-    else if (cur >= 0) snprintf(ask[1], sizeof(ask[1]), "Current game: seed %d.", cur);
-    else snprintf(ask[1], sizeof(ask[1]), "Current game differs.");
-    snprintf(ask[2], sizeof(ask[2]), "Items and doors will differ. Load anyway?");
+    if (!biorand_pack()) snprintf(ask[1], sizeof(ask[1]), "No BioRand game is generated.");
+    else if (seed == cur) snprintf(ask[1], sizeof(ask[1]), "Generated game: different options.");
+    else if (cur >= 0) snprintf(ask[1], sizeof(ask[1]), "Generated game: seed %d.", cur);
+    else snprintf(ask[1], sizeof(ask[1]), "Generated game differs.");
+    snprintf(ask[2], sizeof(ask[2]), biorand_pack() ? "Items and doors will differ. Load anyway?" : "Load it without BioRand?");
     host_log("biorand: %s %s %s\n", ask[0], ask[1], ask[2]);
     return 1;
 }
 
 const char* pc_biorand_ask(int i) { return i >= 0 && i < 3 ? ask[i] : ""; }
 
-/* loaded anyway: the save goes on under the current choice (its next save has it) */
+/* loaded anyway: the save goes on with the pack there, or without BioRand (its next save has it) */
 void pc_biorand_save_accept(void* save)
 {
     unsigned char* d = save;
     unsigned int w[2], sum = 0;
     int i;
+    biorand_game(biorand_pack());
     words(w);
     memcpy(d + BR_OFFSET, w, sizeof(w));
     for (i = 0; i < SAVE_DATA_BYTES - 4; i++) sum += d[i];   /* its byte sum, as savestore_card_valid checks it */

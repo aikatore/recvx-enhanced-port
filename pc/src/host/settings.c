@@ -227,13 +227,6 @@ static const char* tenths(int v, char* b, int n) { snprintf(b, n, "%d.%d", v / 1
    while a SET_CALIB row is chosen: squares on a black and on a white strip, the faint ones at the ends */
 const unsigned char settings_calib[2][CALIB_STEPS] = { { 5, 10, 16, 24, 32 }, { 223, 231, 239, 245, 250 } };
 static void picture_reset(void) { g_config.brightness = 0; g_config.contrast = 100; g_config.gamma = 10; settings_save_later(); }
-static const char* biorand_name(int v, char* b, int n)
-{
-    if (!biorand_pack()) snprintf(b, n, "No Generated Game");
-    else if (v && biorand_seed_text()[0]) snprintf(b, n, "On (%s)", biorand_seed_text());
-    else snprintf(b, n, v ? "On" : "Off");
-    return b;
-}
 static const char* rifle_locked(void) { return biorand_active() ? "Required by BioRand." : NULL; }
 /* "You appear as": positions in the menus' list (actors.c, without event doubles) */
 static int chr_get(void) { int o = pc_biorand_appear(); return appear_pos(o >= 0 ? o : g_coop.chr); }   /* (BioRand's pick of this game shown) */
@@ -402,8 +395,6 @@ const Setting g_settings[] = {
       .help = "Copy memory card saves to separate files. Existing copies are skipped; the card keeps its saves." },
     { SP_GAMEPLAY, "Free Typewriter Saves", V(g_config.no_ink_ribbon), 0, 1, 1,
       .help = "Save at typewriters without using ink ribbons. In co-op, the host decides." },
-    { SP_GAMEPLAY, "BioRand", V(g_config.biorand), 0, 1, 1, .name = biorand_name, .locked = biorand_locked, .shown = biorand_shown, .group = "RANDOMIZER",
-      .help = "Play your generated BioRand game. Change this at the title screen." },
     { SP_GAMEPLAY, "Extra Enemies", V(g_enemy_opts.extra), 0, 3, 1, extras, .help = "Add more of a room's existing enemies from the next room. In co-op, the host decides.", .group = "ENEMIES" },
     { SP_GAMEPLAY, "Rearranged Enemies", V(g_enemy_opts.place), 0, 1, 1, .help = "Move roaming enemies to new starting positions; story and boss enemies stay. Applies next room." },
     { SP_GAMEPLAY, "Enemy Randomizer", V(g_enemy_opts.rand), 0, 1, 1, .help = "Replace enemies with other types that fit the room; bosses stay. Applies next room." },

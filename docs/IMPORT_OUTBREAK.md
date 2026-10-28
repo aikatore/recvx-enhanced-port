@@ -5,8 +5,9 @@ writes what it extracts to the user's mods folder (`mods/import/outbreak2/`, or 
 
 Goal: take the character models of *Resident Evil Outbreak File #2* (US, SLUS-20984) and use them
 as player models in this port ("Character Model", [ACTORS.md](ACTORS.md#you-appear-as)); later
-voices and the social-call ("ad-lib") animations for co-op. The F9 window (only with the `--dev` launch option) runs the extraction and
-lists what was extracted; it is built so other games can be added as further sources.
+voices and the social-call ("ad-lib") animations for co-op. The title menu's EXTRA > IMPORT screen and the F9 window
+(both only with the `--dev` launch option) run the extraction; F9 also lists what was extracted. Both are built so
+other games can be added as further sources.
 
 ## PROGRESS
 
@@ -30,6 +31,7 @@ lists what was extracted; it is built so other games can be added as further sou
 | 16. Weapon hands (round 5) | the weapons' hand pieces (Claire's / Chris's) hidden on imported models; their own hands hold the gun ("Posture") |
 | 17. Groups offered (round 6) | for now only the playable characters and the NPCs: F9 offers, extracts and lists only those; "Character Model" leaves out the other groups of an older manifest (`IMPORT_OFFERED`) |
 | 18. Left arm in idle and holds (round 6) | fixed: men's left arm pulled in across the thigh in idle, and the support hand pulled under the gun hand in long-gun holds ("Posture") |
+| 19. IMPORT screen | the in-game version of F9: title menu EXTRA > IMPORT > CHARACTERS > the game; the groups, the disc image, START IMPORT with progress, the counts, DELETE IMPORTED MODELS ("IMPORT screen") |
 
 Resume notes: build with `cmake --build build`; headless run:
 `RECVX_MODS=<out> RECVX_IMPORT=outbreak2 RECVX_IMPORT_ISO=<image> build/pc/recvx --save-dir <tmp>`
@@ -407,6 +409,43 @@ entries with all groups extracted: L1/R1 and Page Up/Down a page, Home/End, the 
 notch, and a click on the scroll bar jumps to that part of the list. The preview loads the entry
 under the cursor once it has stayed 8 frames (main's delay); checked with 43 imports loaded one after
 the other while paging (all loaded, none refused).
+
+## IMPORT screen
+
+The in-game version of the F9 window (`pc/glue/import_menu.c`), `--dev` only for now: title menu **EXTRA** >
+**IMPORT** (docs/BIORAND_INGAME.md "S7" for EXTRA). Drawn as the BIORAND screen, its boxes the shared dialog
+(`options_glue.c pc_ui_dialog`, RETURN TO TITLE's look). Keyboard, gamepad and mouse; cancel or a right click goes
+one page back, from the first to EXTRA.
+
+| page | rows |
+|---|---|
+| IMPORT FROM OTHER GAMES | the categories (`cats[]`): **CHARACTERS** for now; languages and other content can be added as rows |
+| CHARACTERS | the games (`import_sources[]`): Resident Evil Outbreak File #2 |
+| the game | **Playable Characters** and **NPCs** On/Off (the groups of `IMPORT_OFFERED`; both on at first); **Disc Image** (the file's name; confirm opens the system's file dialog, ini `import_outbreak2_iso`); **START IMPORT**; **DELETE IMPORTED MODELS**; BACK. Below: "Needs a clean US disc image of Resident Evil Outbreak File 2: SLUS-20984." and what is imported ("30 playable characters and 238 NPCs can be played." from the manifest, with its date) |
+
+- **The file dialog** has to be opened by the main thread: the screen sets `g_lobby_io.file_req` (lobby.h), and
+  `lobby_io_frame` calls `SDL_ShowOpenFileDialog` with the game's window; the answer comes back in
+  `g_lobby_io.file`. Test aid: `RECVX_FILE_DIALOG_TEST=<path>` answers it without a dialog.
+- **START IMPORT** runs `import_start` (the F9 thread) and shows its progress in a box: the model being read and a bar
+  with "done / total". It cannot be cancelled. Afterwards a box says how many models can be played (and how many
+  failed), or the importer's error: another disc is refused by its `SYSTEM.CNF` ("Use a US Resident Evil Outbreak
+  File 2 disc (SLUS-20984)."). `ImportProgress.result` holds `import_run`'s result for it.
+- The game's font draws `#` as the biohazard sign, so the screen writes the title as "Resident Evil Outbreak File 2".
+- **New models** are listed at once: the screen sets `g_import_reload`, and the main thread runs
+  `import_registry_load` (host.c, every frame; the registry has one writer). The log says "import: N imported
+  player models listed".
+- **DELETE IMPORTED MODELS** asks (Yes/No, No first), then deletes `<import_dir>/outbreak2/` with the BioRand
+  downloader's link-safe delete (`brdl_rm_tree`: a link inside is removed, never followed). Decided: the list of
+  "Character Model" only grows while the game runs (`actors.h`), so the deleted models stay listed until the game
+  restarts. Choosing one then shows the character you play: its `.cvxm` is missing, and the load is refused as for
+  any unreadable file (`actor_set` remembers the failure). Importing again brings the files back under the same
+  entries. A restart lists only what is there.
+- F9 stays for `--dev`; both use the same thread, one extraction at a time.
+
+Tests (2026-10-28, Linux, headless; job dir `extramenu/imp.sh`): EXTRA > IMPORT > CHARACTERS > the game, the disc
+through the test aid, START IMPORT with both groups: 306 models, 0 failed, "30 playable characters and 238 NPCs can be
+played.", "268 imported player models listed"; DELETE, YES: the folder gone. The CVX disc as the image: the
+`SYSTEM.CNF` error in the box. Screenshots in the worktree's `scratch/extramenu/`.
 
 ## Notes for later
 

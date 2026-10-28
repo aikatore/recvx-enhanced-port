@@ -16,6 +16,7 @@ static struct {
     unsigned int id;
     char text[24];
     char str[BIORAND_SEED_LEN + 1];   /* the log's whole seed string when it is one we can decode, else "" */
+    int game;                         /* this game plays the pack (biorand_game) */
 } br = { .seed = -1 };
 
 static const char* mods_dir(void) { return SDL_getenv("RECVX_MODS") ? SDL_getenv("RECVX_MODS") : "mods"; }
@@ -82,8 +83,8 @@ void biorand_scan(void)
     if (br.seed >= 0) snprintf(br.text, sizeof(br.text), "seed %d", br.seed);
     else br.text[0] = 0;
     br.pack = rooms || log;
-    if (br.pack) host_log("biorand: pack in %s: %d room files, %s (id %08x); BioRand %s\n", dir, rooms, br.seed >= 0 ? br.text : "seed unknown",
-                          br.id, g_config.biorand ? "on" : "off");
+    if (br.pack) host_log("biorand: pack in %s: %d room files, %s (id %08x); the co-op rule BIORAND %s\n", dir, rooms,
+                          br.seed >= 0 ? br.text : "seed unknown", br.id, g_config.biorand ? "on" : "off");
 }
 
 int biorand_pack(void) { return br.pack; }
@@ -92,13 +93,25 @@ unsigned int biorand_id(void) { return br.id; }
 const char* biorand_seed_text(void) { return br.text; }
 const char* biorand_seed_string(void) { return br.str; }
 
-/* our setting; a co-op guest follows the host (coop_biorand: the host's choice, checked against our pack) */
+/* this game's state; a co-op guest follows the host (coop_biorand: the host's choice, checked against our pack) */
 int biorand_active(void)
 {
     int c;
     if (!br.pack) return 0;
     c = coop_biorand();
-    return c >= 0 ? c : g_config.biorand;
+    return c >= 0 ? c : br.game;
+}
+
+void biorand_game(int on)
+{
+    if (br.game != !!on) host_log("biorand: this game %s BioRand\n", on ? "plays" : "does not play");
+    br.game = !!on;
+}
+
+int biorand_next(void)
+{
+    if (pc_in_game() || coop_biorand() >= 0) return biorand_active();
+    return br.pack && (br.game || g_config.biorand);
 }
 
 /* the setting changes at the title only: a game running has its room files */
@@ -131,8 +144,9 @@ static void mods_abs(char* out, int n)
 int biorand_mods_free_mb(void)
 {
     char m[1100];
+    const char* test = SDL_getenv("RECVX_BIORAND_FREE_MB_TEST");   /* test aid: the free space to assume, in MB */
     mods_abs(m, sizeof(m));
-    return biorand_free_mb(m);
+    return test ? SDL_atoi(test) : biorand_free_mb(m);
 }
 
 int biorand_iso_known(void) { return g_config.iso_path[0] != 0; }
@@ -157,12 +171,6 @@ int biorand_generate(const char* seed_string)
     abs_path(test ? test : g_config.iso_path, iso, sizeof(iso));
     mods_abs(mods, sizeof(mods));
     return biorand_cli_generate(seed_string, iso, mods, cfg);
-}
-
-void biorand_enable(void)
-{
-    g_config.biorand = 1;
-    settings_save_later();
 }
 
 int biorand_toggle(void)
