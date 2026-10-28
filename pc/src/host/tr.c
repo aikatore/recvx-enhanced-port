@@ -35,11 +35,11 @@ static void miss(const char* en)
 {
     static const char* path;
     static int checked;
-    static unsigned seen[4096];
+    static unsigned* seen;
     unsigned h = 2166136261u;
     FILE* f;
-    if (!checked++) path = getenv("RECVX_TR_MISSES");
-    if (!path) return;
+    if (!checked++ && (path = getenv("RECVX_TR_MISSES"))) seen = calloc(4096, sizeof(*seen));
+    if (!path || !seen) return;
     for (const char* p = en; *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
     if (seen[h & 4095] == h) return;
     seen[h & 4095] = h;

@@ -157,18 +157,21 @@ static int sysmes_rebuild(const Ald* us, const Ald* l, const unsigned* fl, const
 unsigned char* lang_sysmes(const unsigned char* us, uint32_t nus, const unsigned char* l, uint32_t* n,
                            const unsigned* fl, const unsigned* hl, unsigned* hl_out)
 {
-    static Ald a, b;
-    static Mes sys;
+    Ald *a = malloc(sizeof(Ald)), *b = malloc(sizeof(Ald));   /* (heap: the address window, docs/ARCHITECTURE.md) */
+    Mes* sys = malloc(sizeof(Mes));
     uint32_t ni, ns;
-    unsigned char* o;
-    if (!ald_read(us, nus, &a) || !ald_read(l, *n, &b) || !sysmes_rebuild(&a, &b, fl, hl, &sys, hl_out)) return NULL;
-    ni = mes_bytes(&b.items); ns = mes_bytes(&sys);
-    if (!(o = calloc(1, 8 + ni + ns))) return NULL;
-    memcpy(o, &ni, 4);
-    mes_write(&b.items, o + 4);
-    memcpy(o + 4 + ni, &ns, 4);
-    mes_write(&sys, o + 8 + ni);
-    *n = 8 + ni + ns;
+    unsigned char* o = NULL;
+    if (a && b && sys && ald_read(us, nus, a) && ald_read(l, *n, b) && sysmes_rebuild(a, b, fl, hl, sys, hl_out)) {
+        ni = mes_bytes(&b->items); ns = mes_bytes(sys);
+        if ((o = calloc(1, 8 + ni + ns))) {
+            memcpy(o, &ni, 4);
+            mes_write(&b->items, o + 4);
+            memcpy(o + 4 + ni, &ns, 4);
+            mes_write(sys, o + 8 + ni);
+            *n = 8 + ni + ns;
+        }
+    }
+    free(a); free(b); free(sys);
     return o;
 }
 
@@ -356,7 +359,7 @@ int lang_extract(int src, const char* iso, const char* outdir)
     uint32_t nexe = 0, nus = 0, ncnf;
     int64_t cnf_off;
     int nw, fails = 0;
-    static Ald us;
+    Ald* us = NULL;   /* (heap: the address window) */
     for (size_t i = 0; i < sizeof(lang_discs) / sizeof(lang_discs[0]); i++) if (lang_discs[i].src == src) s = &lang_discs[i];
     if (!s) return -1;
     if (!(f = pc_fopen(iso, "rb"))) { snprintf(pg->phase, sizeof(pg->phase), tr("Cannot open the disc image: %s"), iso); return -1; }
@@ -367,11 +370,12 @@ int lang_extract(int src, const char* iso, const char* outdir)
     }
     exe = read_file(f, s->exe, 32u << 20, &nexe);
     uf = pc_fopen(g_lang_us_iso, "rb");
+    us = malloc(sizeof(Ald));
     usd = uf ? read_file(uf, "SYSMES.ALD", 1u << 20, &nus) : NULL;
     if (uf) fclose(uf);
-    if (!exe || !(nw = exe_widths(exe, nexe, w)) || !usd || !ald_read(usd, nus, &us)) {
-        snprintf(pg->phase, sizeof(pg->phase), "%s", !usd || !us.sys.n ? tr("The US disc image could not be read.") : tr("Required game data not found. Check the selected disc image."));
-        free(exe); free(usd); fclose(f);
+    if (!exe || !(nw = exe_widths(exe, nexe, w)) || !usd || !us || !ald_read(usd, nus, us)) {
+        snprintf(pg->phase, sizeof(pg->phase), "%s", !usd || !us ? tr("The US disc image could not be read.") : tr("Required game data not found. Check the selected disc image."));
+        free(exe); free(usd); free(us); fclose(f);
         return -1;
     }
     pg->total = s->n * (1 + 5 + 205);
@@ -379,7 +383,7 @@ int lang_extract(int src, const char* iso, const char* outdir)
         if (!one_lang(f, s, &s->langs[i], outdir, iso, usd, nus, exe, nexe, w, nw)) fails++;
         pg->done = (i + 1) * (1 + 5 + 205);
     }
-    free(exe); free(usd); fclose(f);
+    free(exe); free(usd); free(us); fclose(f);
     snprintf(pg->phase, sizeof(pg->phase), tr("%d of %d languages imported."), s->n - fails, s->n);
     return fails;
 }

@@ -198,6 +198,11 @@ are in the table, the glyph mapping is to be added then). The overlay (ImGui's d
 Latin-1; for Japanese and Russian it merges a font of the system once such a language is chosen (Windows: Meiryo,
 MS Gothic, Yu Gothic / Segoe UI, Arial; Linux: Noto Sans CJK / DejaVu Sans), else those letters stay missing.
 
+**Address window** (docs/ARCHITECTURE.md "Data model and memory"): the imported data (`ROOMS.MES`, the merged
+tables) and the importer's tables are on the heap; the F9 window's lists too (a second source would have doubled
+their static array). What the work adds to the executable is about 350 KB, most of it the five languages' strings
+of `tr_table.inc`; the window keeps about 3 MB free (`_end` 0x3FD12908).
+
 **Layout**: the European font is monospaced (16 units for most letters, the US font 10..24), so translated text is
 wider; the translations were kept short (labels at most about 15% longer, sentences 30%) and the long ones
 abbreviated (e.g. German ERW. EINSTELLUNGEN). Rows that still do not fit are scaled down by the menus as before

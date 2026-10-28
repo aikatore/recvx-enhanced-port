@@ -733,7 +733,8 @@ static void SDLCALL import_picked(void* ud, const char* const* files, int filter
 
 static void import_window(void)
 {
-    static ImportItem items[IMPORT_SOURCES][1024];
+    static ImportItem (*items)[1024];   /* per source (heap: the address window, docs/ARCHITECTURE.md) */
+    if (!items && !(items = (ImportItem(*)[1024])calloc(IMPORT_SOURCES, sizeof(*items)))) return;
     static int n[IMPORT_SOURCES], loaded, was_running, what[IMPORT_SOURCES] = { IMPORT_PLAYERS };
     static char when[IMPORT_SOURCES][64];
     ImportProgress* pg = &g_import_progress;
