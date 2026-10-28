@@ -277,6 +277,11 @@ loaded in a case it has (before, the load waited for a file that does not exist:
 * One of you at a time: while you use a puzzle, a terminal or anything else you examined (its
   messages, its screen), your partner cannot open the same one and reads "<name> is using this"
   at the top of the screen. It is free again as soon as you are back in control.
+* A lever your partner moved stays moved: the submarine's lever and the airport hangar's bridge switch
+  read "<name> already used this" for you until you leave the room (before, pulling it again at once
+  sent the submarine back or lowered the bridge for both).
+* A card door your partner opened (the Emblem Card and Biohazard Card readers) opens for you too; before,
+  it let you through but still looked closed until you entered the room again.
 * Joining while the host is inside a puzzle: the joiner waits until the host is back in control
   (the game state is sent only then) and starts with the puzzle solved or not, as the host left it.
 
@@ -940,8 +945,23 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   started have ended, then sends every room record that changed (walls, triggers, floors, object
   placement in slots 4..31). The receiver takes the on/off flag and placement; type, attr and
   parameters only as one of its own script's `WalAtariSet2` / `EtcAtariSet2` / `FlrAtariSet2` writes
-  them for that record; never id or floor. Records are synced only after a shared world event.
+  them for that record; never id or floor. Records are synced only after a shared world event. While
+  our replay of the partner's events still runs, its object placements wait until they have ended: put
+  at once, the rest of a relative motion took them past (4/1's bridge, moved in steps, rose 5 m too high).
 * A partner in another room gets the flags only; `scd0` builds the room from them when it enters.
+* **A loop of the room is no world event** (`analyze`, `latch`): a block whose own event, started at the
+  top of its then-part, sets the gate back at its top level is a latch of the room's own ambient motion,
+  not a change of the world. 4/1 case 1 (the airport hangar) starts the motion of objects 5 and 14 by
+  `ev_flg` 249 clear -> set, and the motion's event clears it again 7 s later. As a world event each game
+  sent it every round: a world event window was always open, so the room was never rebuilt from the
+  partner's flags, and each round's records went to the partner, objects the partner's own world event
+  was moving included - the bridge (object 4, `ev_flg` 35) raised by one player was put back where the
+  other's replay had it a moment before (still down), and stayed down there although its walls let the
+  players cross. Such blocks are left out of the world events, and while we are in the room the partner's
+  changes of their gates are not applied (each game runs its own loop; the trace's flag hash leaves them
+  out). In the retail rooms this is 4/1 case 1. A census found 4/4's and 8/4's entry scenes (`ev_flg` 36)
+  alike, but the sweep does not read their events that far and they stay world events as before; the lifts
+  3/22 and 7/01 set their gates back only in nested branches and stay world events.
 * **A scene of our own is not cut short** (`gate_hold`, `coop_scd1`): many world events take two steps
   of the script. One enters a scene (cinema mode) and sets a room flag; a later block, gated by the same
   world flag, ends it (its events, or a "No" branch). The turntable (7/11): the key's event asks "Move the
@@ -966,8 +986,14 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   entry script `scd0` is walked as the interpreter takes it: its blocks' tests (`Ck`, `CmpB`, `CmpW`; a
   block with another test is left alone) choose the parts, and in the blocks that test a noted flag its
   record writes (`WalAtariSet`, `EtcAtariSet`, `FlrAtariSet` and their `...2` forms) run again, as
-  entering would run them. Nothing else of the entry script runs (models, enemies, items, sounds, room
-  flags). The partner does not see the solving player's cutscene (as before: it was not a world event).
+  entering would run them, and so do the placements of the room's objects (an object's `LoadWork`, then
+  `CommonCtr` 7, 8, 9, 11, 12, 13, 47: position, angles, a part's position and angles) and the effects it
+  shows or hides (`EffDispSet`). The walk has a task of its own (`rb_task`), so its `LoadWork` never
+  retargets a running event. Before, a card door (the Emblem Card's shutters 7/20 7/21 3/16 3/17, the
+  Biohazard Card's 3/15: the card's scene runs as the user's own two steps, not as a world event) let the
+  partner through but still looked closed until the room was entered again. Nothing else of the entry script runs (models shown or hidden, enemies, items, sounds,
+  lights, room flags). The partner does not see the solving player's cutscene (as before: it was not a
+  world event); the door or bridge jumps to where the cutscene leaves it.
 * **An entry script that would undo a solution** (`coop_scd0`, `keep_solved`, `event.c bhInitEvent`): 9/31's
   entry script clears `ev_flg` 5 on every entry. The self-destruct terminal's code (VERONICA, `sp_evt.c`)
   sets it, and 9/30 starts the launch when entered with it set; a single player walks from the terminal
@@ -985,6 +1011,15 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   and case does not take that trigger meanwhile ("<name> is using this", top of the screen, 3 s). `st_flg` 4
   is also set every frame our busy flag (`flg & 4`) is: a busy flag left behind kept the trigger "in use"
   for the partner too; the busy flag watchdog (`hold_watch`, "Enemies") frees both.
+* **A lever the partner moved** (`used_mark`, `coop_examine`): the trigger the partner examined last in our
+  room (its `Pose.use`) is locked for us for the rest of our visit of the room (until a room load) when,
+  within 20 s, the partner changes a world flag (its `EV_FLAGS`, or its block replayed here) that our room
+  script tests in that trigger's own block ("<name> already used this", top of the screen, 3 s). The
+  submarine's lever (1/14, 4/5) takes the player who pulls it through a door into the moved submarine,
+  where the toggle of `ev_flg` 19 follows; the partner in the submarine got the flag and the lever's
+  motion, but could pull it again at once, which moved the submarine back for both (and took that player
+  alone to the other dock). The airport hangar's bridge switch (4/1, `ev_flg` 35) toggles the same way. A
+  trigger whose flag closes it anyway (a solved puzzle, a one-way switch) is not changed by this.
 * **A replayed event opens no terminal** (`coop_replayed_event`, `event.c bhEvtComSet`): a world event's
   events run on the partner too, so the office computer's power-on (1/09, gate `ev_flg` 164: movie, then
   `EvtComSet 7`) put the partner into the password screen. An event of the partner's block replayed here
@@ -1475,8 +1510,9 @@ the session's code. A takeover needs a non-zero tag that matches.
 * Some effects are not mirrored: those whose caller sets a matrix or a pointer the record cannot
   name (e.g. Alexia's acid, shell casings) and blood pools.
 * A cutscene the joiner triggers alone plays only for the joiner (its flags reach the host).
-* A puzzle solved by the partner's own steps in our room changes our room's walls and triggers
-  (its entry script's), not its models, lights or effects: those follow when the room is entered again.
+* A puzzle solved by the partner's own steps in our room changes our room's walls, triggers, object
+  placement and effects (its entry script's), not its lights or which models show: those follow when the
+  room is entered again. A door or bridge moved that way jumps to its end position (no animation).
 * One player at a trigger: two presses on the same trigger within one pose's trip (a ping) both
   get in.
 * A room whose entry script writes world flags sets them for both when either enters (the lifts'
