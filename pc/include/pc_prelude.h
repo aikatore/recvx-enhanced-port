@@ -172,6 +172,7 @@ void  pc_quick_start(void);                   /* co-op rule "Quick start" (pc/gl
 int   pc_biorand_save_differs(const void* save);   /* BioRand (pc/glue/biorand_glue.c): ps2_LoadScreen.c, a save made with another pack asks */
 void  pc_biorand_save_accept(void* save);          /* ... loaded anyway */
 void  pc_biorand_load_text(void);                  /* ... the question's lines */
+int   pc_biorand_box_any(void);                /* ... sub1.c ItemBoxChange: Claire may box the Security Card/File and Crystal in a BioRand game */
 int   pc_battle_unlocked(void);               /* host.c: setting "Battle Game unlocked" (event.c bhCk: every Battle Game character) */
 int   pc_difficulty_select(void);             /* host.c: setting "Difficulty select" (adv.c CheckButton: NEW GAME opens the difficulty menu) */
 void  coop_fx_particle(struct BH_PWORK* ewP, int lnk, const void* offP, const void* dirP, unsigned int col, unsigned int dst, int typ, int mk2);   /* effsub3.c bhSetEffParticle(Mk2) */

@@ -50,6 +50,9 @@ void pc_biorand_stamp(void)
     if (sys) words(&sys->itm[BR_W]);
 }
 
+/* sub1.c ItemBoxChange: BioRand places the Security Card/File and Crystal anywhere, so Claire may box them */
+int pc_biorand_box_any(void) { return biorand_active(); }
+
 /* ps2_LoadScreen.c and the lobby: the save just read (card bytes from sys->version) decides this game's BioRand state
    (biorand_game): a plain save plays without BioRand, a save of the pack there with it. A BioRand save whose pack is
    not there (another seed or options, or none): 1, the question's lines; loaded anyway, it plays the pack there, or
