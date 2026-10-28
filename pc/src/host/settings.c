@@ -230,6 +230,7 @@ const unsigned char settings_calib[2][CALIB_STEPS] = { { 5, 10, 16, 24, 32 }, { 
 static void picture_reset(void) { g_config.brightness = 0; g_config.contrast = 100; g_config.gamma = 10; settings_save_later(); }
 /* Language: English and the installed languages (lang.h), in LANG_* order; Subtitles */
 static int lang_n(void) { int n = 0; for (int l = 0; l < LANG_COUNT; l++) n += lang_installed(l); return n; }
+static int lang_any(void) { return lang_n() > 1; }   /* the rows only with an imported language (the import is --dev only for now) */
 static int lang_at(int v) { for (int l = 0; l < LANG_COUNT; l++) if (lang_installed(l) && v-- == 0) return l; return LANG_EN; }
 static int lang_get(void) { int v = 0; for (int l = 0; l < g_lang && l < LANG_COUNT; l++) v += lang_installed(l); return lang_installed(g_lang) ? v : 0; }
 static void lang_set(int v) { g_lang = lang_at(v); }
@@ -388,9 +389,9 @@ const Setting g_settings[] = {
     { SP_DISPLAY, "HD Menus", V(g_config.hd_textures_ui), 0, 1, 1,
       .help = "Allow redesigned menus and artwork from the texture pack. Off keeps replacements faithful to the original." },
 
-    { SP_GAMEPLAY, "Language", NULL, 0, 0, 1, .get = lang_get, .set = lang_set, .name = lang_name, .count = lang_n, .locked = lang_locked, .group = "GENERAL",
+    { SP_GAMEPLAY, "Language", NULL, 0, 0, 1, .get = lang_get, .set = lang_set, .name = lang_name, .count = lang_n, .locked = lang_locked, .shown = lang_any, .group = "GENERAL",
       .help = "The game's text. Applies from the next screen." },
-    { SP_GAMEPLAY, "Subtitles", V(g_subtitles), 0, 1, 1, .locked = subs_locked, .help = "Show subtitles in cutscenes, in the chosen language." },
+    { SP_GAMEPLAY, "Subtitles", V(g_subtitles), 0, 1, 1, .locked = subs_locked, .shown = lang_any, .help = "Show subtitles in cutscenes, in the chosen language." },
     { SP_GAMEPLAY, "Skip Intro", V(g_config.skip_intro), 0, 1, 1, .flags = SET_RESTART, .help = "Go straight to the title screen. Off lets you skip each logo and movie with a button press." },
     { SP_GAMEPLAY, "Check For Updates", V(g_config.update_check), 0, 1, 1, .apply = update_start,
       .help = "Check for a newer game version at startup and show it on the title screen." },

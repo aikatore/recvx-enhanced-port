@@ -418,11 +418,14 @@ static const char* const heads[] = { "", "THIRD PERSON: KEYBOARD AND MOUSE", "HO
 /* every row of the page that is shown now (what F1 shows of a page, this shows too), headings first */
 static void page_rows(void)
 {
-    for (int i = 0; i < g_settings_n && nrows < MAX_ROWS - 3; i++)
-        if (g_settings[i].page == st.page && (!g_settings[i].shown || g_settings[i].shown())) {
-            if (g_settings[i].group) rows[nrows++] = (Row){ K_GROUP, i };
-            rows[nrows++] = (Row){ K_SET, i };
-        }
+    int g = -1;   /* a heading on a hidden row: over the next shown one */
+    for (int i = 0; i < g_settings_n && nrows < MAX_ROWS - 3; i++) {
+        if (g_settings[i].page != st.page) continue;
+        if (g_settings[i].group) g = i;
+        if (g_settings[i].shown && !g_settings[i].shown()) continue;
+        if (g >= 0) rows[nrows++] = (Row){ K_GROUP, g }, g = -1;
+        rows[nrows++] = (Row){ K_SET, i };
+    }
 }
 
 static void build_rows(void)

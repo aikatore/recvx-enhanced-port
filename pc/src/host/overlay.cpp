@@ -144,10 +144,14 @@ static bool cast_custom_imgui()
 static bool settings_imgui(int page, bool all = true)
 {
     bool changed = false;
+    const char* group = nullptr;   /* a heading on a hidden row: over the next shown one */
     for (int i = 0; i < g_settings_n; i++) {
         const Setting* s = &g_settings[i];
-        if (s->page != page || !(all || (s->flags & SET_F1)) || (s->shown && !s->shown())) continue;
-        if (s->group && all) ImGui::SeparatorText(tr(s->group));
+        if (s->page != page || !(all || (s->flags & SET_F1))) continue;
+        if (s->group) group = s->group;
+        if (s->shown && !s->shown()) continue;
+        if (group && all) ImGui::SeparatorText(tr(group));
+        group = nullptr;
         const char* lock = settings_locked(s);
         char label[96], val[96];
         int v = settings_get(s), hi = settings_hi(s), st = s->step > 0 ? s->step : 1;
