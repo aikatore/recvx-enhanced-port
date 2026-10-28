@@ -130,8 +130,8 @@ Run from the repository root. The disc image is taken from `--iso`, `$RECVX_ISO`
 ## Randomizer (BioRand)
 
 For now only with the `--dev` launch option. Without it, all of the following is hidden: the
-BioRand settings, the BIORAND rows of the title menu and of NEW GAME, the BIORAND screen, the
-lobby rule and the co-op offer. `mods/biorand/` is then not read, and nothing goes to GitHub.
+BIORAND row in the title menu's EXTRA, the BIORAND screen, the lobby rule and the co-op offer.
+`mods/biorand/` is then not read, and nothing goes to GitHub.
 
 [BioRand](https://github.com/biorand/classic) randomizes items, the start inventory, enemies and,
 optionally, doors. It reads your disc image and writes a pack for this game into `mods/biorand/`,
@@ -140,8 +140,8 @@ program.
 
 ### In the game: the BIORAND screen
 
-On the title menu, choose **BIORAND** (the last row, after MULTIPLAYER). Keyboard, gamepad and mouse
-all work. Cancel or a right click goes back to the title.
+On the title menu, choose **EXTRA**, then **BIORAND**. Keyboard, gamepad and mouse all work. Cancel
+or a right click goes back to EXTRA.
 
 **The BioRand CLI.** The game uses BioRand's command-line program, the nightly build of
 `biorand/classic`.
@@ -159,7 +159,7 @@ on the page row, or with L1/R1 (Q/W on the keyboard).
 
 | page | what |
 |---|---|
-| SEED | the seed number; RANDOM SEED; COPY / PASTE SEED STRING; **GENERATE**; CHECK FOR UPDATES. Below: the seed string |
+| SEED | the seed number; RANDOM SEED; COPY / PASTE SEED STRING; **GENERATE**; **START**; CHECK FOR UPDATES. Below: the seed string |
 | DOORS | Randomize Doors, segments, segment size, cutscene rooms; the estimated play time |
 | ITEMS | Randomize Items, routes, hidden key items, the custom item pool, the random starting inventory, the weapons; the item distribution |
 | ENEMIES | Randomize Enemies, placements, difficulty, the enemy ratios; the enemy distribution |
@@ -175,11 +175,17 @@ on the page row, or with L1/R1 (Q/W on the keyboard).
 
 - It needs the game's disc image (the one the game runs from) and about 4 GB free in the mods
   folder: the pack takes 1.4 GB, and the CLI's temporary files (`mods/biorand-temp/`) take 2.4 GB
-  while it runs.
+  while it runs. With less than 4 GB free it refuses and says so; with less than 5 GB it warns
+  and asks again.
 - BioRand may use about 6 GB of memory for a short time.
 - It takes a few seconds once the disc image is in the system's file cache. Otherwise the 1.8 GB
   image is read first, which takes longer (from a hard disk, tens of seconds).
-- It replaces `mods/biorand/`. When it is done, BioRand is switched on: start a NEW GAME.
+- It replaces `mods/biorand/`. When it is done, choose **START** to play it.
+
+**START** (SEED page) asks for the difficulty (NORMAL, EASY, VERY EASY, or CANCEL) and starts a new
+game with the generated pack. With **Difficulty Select** off it starts on Normal without asking.
+It needs a generated pack. If the options shown were changed after the last GENERATE, the question
+says so: START plays the generated pack, not the changed options.
 - The CLI's settings file is the game's own, `<save folder>/biorand/settings.json`. The settings of
   BioRand's own program stay untouched.
 
@@ -197,17 +203,19 @@ allows 60 such requests per hour from one address. Generating works offline.
 
 1. In BioRand choose Code: Veronica, the PC version, your `.iso` as game data and this game's
    folder (with `recvx.exe` and `mods`) as the PC folder. Generate.
-2. On NEW GAME's difficulty screen, the row **BIORAND ON / OFF** switches it.
-   Without Difficulty Select, use **BioRand** (GAMEPLAY) at the title.
+2. In the game, EXTRA > BIORAND > **START**.
 
 ### Playing
 
-- BioRand can only be switched at the title. When it is off, the pack is ignored.
+- BioRand belongs to the game you play, not to a setting. Only START begins a BioRand game; NEW
+  GAME (and BATTLE GAME) always starts the original game, with or without a pack.
 - Each generation replaces `mods/biorand/` completely; keep nothing else there.
-- A save remembers its pack. Loading it with BioRand off, another seed, or BioRand on for a normal
-  save asks first.
-- **Co-op**: the host switches BIORAND in GAME RULES. The partner needs the same pack (same seed,
-  options and BioRand build) to join.
+- A save remembers whether it is a BioRand game, and its pack. Loading a normal save plays normally;
+  loading a BioRand save plays BioRand again. If its pack is no longer there (another seed or
+  options, or none), the load asks first; loaded anyway, it plays the pack you have, or without
+  BioRand when there is none.
+- **Co-op**: the host switches BIORAND in GAME RULES; the game it starts from the lobby is then a
+  BioRand game. The partner needs the same pack (same seed, options and BioRand build) to join.
   - The host sends its seed string. A partner whose pack differs is asked at the title or in the
     lobby whether to generate it. If it has no CLI yet, it is asked to download one first. If its CLI
     is not the host's build, it is offered the newest. Once the pack is generated, it joins.

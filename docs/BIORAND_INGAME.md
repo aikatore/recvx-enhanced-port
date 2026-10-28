@@ -3,9 +3,9 @@
 This file plans the in-game BioRand generator (branch `biorand-ui`) and tracks its progress: the developer's and
 state document. The player's usage is in docs/modding/README.md "Randomizer (BioRand)".
 
-**STATUS: All steps done; open: Windows real-machine test list** (in "S6").
+**STATUS: All steps done (S7: START and BioRand per game, 2026-10-28); open: Windows real-machine test list** (in "S6").
 
-The goal: a BIORAND entry on the title menu opens a native generator. It downloads the BioRand CLI
+The goal: a BIORAND entry on the title menu (since S7 in EXTRA) opens a native generator. It downloads the BioRand CLI
 when it is missing, offers BioRand's Code: Veronica options in the game's menu style, and runs the
 CLI into `mods/biorand/`, which the port already loads (`pc/src/host/biorand.c`,
 docs/modding/README.md "Randomizer (BioRand)"). It is `--dev` only, like BioRand now
@@ -892,6 +892,79 @@ frames identical.
 
 **Merge with main:** main was still 8d0dc30, the branch's base, so there was nothing to merge.
 
+### S7: START, BioRand per game, the disk warning, EXTRA (2026-10-28)
+
+The user's requests: NEW GAME always starts the original game; a **START** on the BIORAND screen asks for the
+difficulty and starts a BioRand game; no free-space text, a warning only when space is short; BIORAND moves into a
+new title menu entry **EXTRA** (with BATTLE GAME and IMPORT). This replaces parts of S3 (the title row), S4b (NEW
+GAME's BIORAND row) and S5a (GENERATE turning BioRand on, the free space in its question).
+
+**BioRand is a state of the game, not a setting** (`biorand.c`: `br.game`, `biorand_game()`):
+
+| what | the game's state |
+|---|---|
+| each title menu (`pc_title_menu_init`) | off: NEW GAME and BATTLE GAME are plain games, whatever the pack or ini |
+| START (BIORAND screen) | on, then the new game as the lobby's (`pc_biorand_menu` returns 2; `pc_lobby` passes it to `Adv_BioCvTitle` mode 30's case 2: `TitleCall` 2, `sys->gm_mode` the difficulty) |
+| loading a save (load screen, the lobby's START from a save: `pc_biorand_save_differs`) | the save's words: a plain save off, a save of the pack there on. A BioRand save whose pack is not there asks (load screen message 12, the lobby's line): "Save: BioRand seed N." / "Generated game: seed M." (or "different options", "No BioRand game is generated.") / "Items and doors will differ. Load anyway?" (no pack: "Load it without BioRand?"). Loaded anyway (`pc_biorand_save_accept`): the pack there, or off without one; the words are rewritten. |
+| the co-op host's lobby START THE GAME (new game) | the lobby rule **BIORAND** (ini `biorand`, `biorand_setting()`) |
+| a co-op guest | the host's choice (`coop_biorand()`), as before |
+
+- `biorand_active()` (the loader, the save words, "Randomize Played as", the start kit) returns the game's state.
+- `biorand_next()` is what co-op sends and the lobby shows: in a game `biorand_active()`; at the title the game about
+  to start (START's or a loaded save's state, else the host's lobby rule). It replaced `biorand_active()` in the
+  extension's `br`, `EV_BRSEED`'s sending, the quick-start rule and the lobby's QUICK START row, so the S5b offer
+  still comes in the lobby before the game.
+- The GAMEPLAY row "BioRand" is gone; ini `biorand` is only the lobby rule (ctest `settings` lists it). The
+  difficulty screen is the game's again (`pc_newgame_plates` returns 0, `CursorMax[1]` stays 3). `biorand_enable`
+  is gone: GENERATE no longer turns anything on; its result says "Choose START to play it."
+
+**START** (`K_START`, SEED page after GENERATE, `biorand_menu.c`): greyed without a pack ("Generate a BioRand game
+first.") or as a co-op guest. With "Difficulty select" (`pc_difficulty_select()`) it opens `BS_PICK`: the shared box
+with four answers, NORMAL, EASY, VERY EASY, CANCEL (`options_glue.c pc_ui_dialog_btns` / `_hit`: n answers spread on
+the answer row, smaller when they do not fit). Its heading is the pack's seed; when the pack's seed string
+(`biorand_seed_string()`) is not the menu's, it adds "Your option changes are not generated yet: this plays the
+generated game. GENERATE first to play them." Decided: a pack is enough (it need not match the options shown),
+with that note. Left/right (up/down too) choose, confirm or a click starts, cancel or a right click closes. Without
+"Difficulty select" START starts on Normal at once.
+
+**Free space** (`biorand_menu.c`): the question and the help no longer mention it. On GENERATE's OK (and the co-op
+guest's `host_next`) the mods folder's free space is looked at: below `BRDL_GEN_FREE_MB` (4 GB) an error box "Not
+enough disk space to generate. BioRand needs about 4 GB free in the mods folder while it runs; X GB are free.";
+below `GEN_WARN_MB` (5 GB) a Yes/No warning (`A_DISK`, after GENERATE's own question) "Disk space is low: X GB free
+in the mods folder. BioRand needs about 4 GB while it runs. Generate anyway?"; unknown (-1): nothing. Test aid:
+`RECVX_BIORAND_FREE_MB_TEST=<MB>` (`biorand_mods_free_mb`).
+
+**EXTRA** (`lobby_glue.c`): the title menu is LOAD GAME, NEW GAME, OPTION, EXTRA, MULTIPLAYER. EXTRA
+(ModeCommandId 5, which CheckButton ignores) opens a submenu in level 0 itself, laid out as the difficulty screen
+(the word EXTRA where MODE SELECT is, rows at 304 + 32 i): BIORAND (`--dev`), BATTLE GAME (`ExtraFlag`: a cleared
+game or the setting), IMPORT (`--dev`, docs/IMPORT_OUTBREAK.md "IMPORT screen"). With none of them there is no
+EXTRA row. `pc_title_mouse` runs the submenu before CheckButton reads the pad (its own cursor: CheckButton moves
+`Cursor[0]` off row 0 while there is no save) and takes the keys it used; the switch fades the menu out and in
+(mode 10, then 8). BATTLE GAME does what CheckButton's ModeCommandId 3 does; back from it the title opens in EXTRA
+on its row. BIORAND and IMPORT open mode 30 (`br_screen`, `im_screen`); their back returns to EXTRA. The words
+EXTRA and IMPORT are cut from the plate texture as MULTIPLAYER (EXTRA from the unused EXTREAM plate at v 384).
+
+**Tests (2026-10-28, Linux; job dir `extramenu/`, not committed):**
+
+- `scen2.sh start`: EXTRA > BIORAND > START > NORMAL with seed 123456's pack: "this game plays BioRand", the start
+  inventory Linear Launcher 5, Combat Knife, Lighter, Magnum 6, Magnum Bullets 4, Red Herb, Ink Ribbon (the log's
+  "Randomizing Inventory 0"). `scen.sh gen` before EXTRA: GENERATE with the real nightly CLI (205 rooms), then START.
+- `scen2.sh newgame`: NEW GAME with the pack and ini `biorand = 1`: the original inventory, no pack file served.
+- `scen2.sh nodiff`: "Difficulty select" off: START begins at once (Normal), BioRand.
+- `scen2.sh saveload` / `load`: a BioRand game saved (`RECVX_TEST_SAVE`), back to the title (off), LOAD GAME: "this
+  game plays BioRand" and the pack's RM_0000 served. Without the pack the load screen asks "Save: BioRand seed
+  123456. No BioRand game is generated. Load it without BioRand?". (The test aid's save has a save count of 0, which
+  the load screen lists as NO DATA: `patchsave.py` sets 1.)
+- `co.sh co_on` / `co_off` (ports 47711/47712): the host's lobby rule BIORAND on: its lobby new game plays BioRand,
+  the guest joins with the pack's start kit; off: both plain.
+- `scen2.sh disk` / `nodisk` (4.6 / 2 GB): the warning after GENERATE's question; the error box.
+- `titles.sh`: without `--dev` and Battle Game locked the title frames are byte-identical to main's (42 of 42);
+  the other setups as designed. `pad.sh`: the gamepad (RECVX_VPAD) and the mouse through EXTRA, START's box with the
+  note, cancel back.
+- `layout_check.sh` (main 17268bf against this branch, with the ISO): vanilla 156 and enhanced 311 frames
+  identical. Its script never reaches the title rows that moved (NEW GAME is row 1 in both).
+- Screenshots: the worktree's `scratch/extramenu/`.
+
 #### Windows real-machine test list (open)
 
 Nothing of BioRand has run on Windows yet (no machine or wine here). Use a release-like
@@ -908,7 +981,7 @@ Setup:
 Download and update:
 
 - [ ] Start the game without `--dev`. Expect no BIORAND row, and no `biorand-cli*` files appearing.
-- [ ] Start it with `--dev`. Expect BIORAND to be the last title row, after MULTIPLAYER.
+- [ ] Start it with `--dev`. Expect EXTRA below OPTION, with BIORAND in it.
 - [ ] Open BIORAND and answer YES to the download question. Expect:
   - the bar and "x.x / 7.1 MB", then "The BioRand CLI is installed.";
   - no console window flashing (tar.exe);
@@ -928,7 +1001,6 @@ Download and update:
 Generate:
 
 - [ ] GENERATE (SEED page). Expect:
-  - the question to show the free space;
   - the bar to go to 100 % with BioRand's messages, with no console window;
   - "BioRand seed N generated";
   - `mods\biorand\` to hold 205 `RM_*.RDX`, and its `log_pl0.txt` `Seed:` line to equal the
@@ -943,8 +1015,8 @@ Generate:
   - The log must not show "the exit code is unknown".
 - [ ] CANCEL during a generation. Expect "Generating cancelled.", no `biorand-cli.exe` in Task
       Manager, and the leftovers deleted.
-- [ ] NEW GAME. Expect the start inventory to equal `log_pl0.txt`'s "Randomizing Inventory 0" (with
-      Randomize Played as on, a look picked from the seed).
+- [ ] START, NORMAL. Expect the start inventory to equal `log_pl0.txt`'s "Randomizing Inventory 0" (with
+      Randomize Played as on, a look picked from the seed). NEW GAME from the title: the original one.
 - [ ] Optional: the same from a game folder with Japanese or Cyrillic letters (the ANSI code page
       case of tar.exe).
 
@@ -1021,6 +1093,9 @@ Report any failure with `recvx.log` (the `biorand-cli:` and `biorand menu:` line
   (download, options, generate, NEW GAME's inventory, a co-op join with the seed share); main merged (nothing new).
   `layout_check.sh` (a main build, 8d0dc30, against S6, with the ISO): vanilla 156 and enhanced 311 frames identical.
   ctest: all pass; Linux and mingw build. See "S6".
+- **S7 done** (2026-10-28): BioRand per game (START with the difficulty; NEW GAME always plain; saves keep it; the
+  lobby rule for the lobby's new game), the free-space warning only when space is short, BIORAND in the title
+  menu's new EXTRA. See "S7".
 - **STATUS: All steps done; open: Windows real-machine test list** ("S6", "Windows real-machine test list").
 - The job-dir tools (not committed): S5b's `s5b/` (`co.sh`, `scen.sh`, `mkpack.sh`, `build.sh`); S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
   encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").

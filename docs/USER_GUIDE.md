@@ -51,6 +51,16 @@ the game with different save folders keep separate settings and saves.
 
 They override the saved settings for that run. All options: ARCHITECTURE.md, "Command line".
 
+### Title menu
+
+The title menu has **LOAD GAME**, **NEW GAME**, **OPTION**, **EXTRA** and **MULTIPLAYER**
+([Co-op quick start](#co-op-quick-start)).
+
+- **EXTRA** holds **BATTLE GAME**. It appears once Battle Game is unlocked (a cleared game, or
+  **Battle Game Unlocked** in Gameplay); without it there is no EXTRA row.
+- Choose with up/down and confirm, or point and click. Cancel or a right click goes back to the
+  title menu. Leaving Battle Game returns to EXTRA.
+
 ## Controls
 
 Everything can be rebound ([Rebinding](#rebinding)). The tables show the defaults with the game's
@@ -247,7 +257,7 @@ until the right square on the white strip is.
 | Check For Updates | On | see [Update check](#update-check) |
 | Skip Door Animations | Instant | Off: played. Instant: a short load screen instead. Skippable: any button ends them |
 | Fast Loading | On | room changes without the PS2's disc waits |
-| Battle Game Unlocked | On | Battle Game from the start, all five characters; saves and records unchanged |
+| Battle Game Unlocked | On | Battle Game (title menu, EXTRA) from the start, all five characters; saves and records unchanged |
 | Difficulty Select | On | see [Difficulty select](#difficulty-select) |
 | Quick Knife | On | see [Quick knife](#quick-knife) |
 | Auto-climb Stairs | On | walk into stairs to climb them. Ledges, doors and items still need the button |

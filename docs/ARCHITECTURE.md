@@ -740,7 +740,7 @@ options: [ENEMIES.md](ENEMIES.md#enemy-options); bindings: [Binding ini format](
 | Skip Intro, Check For Updates, Skip Door Animations | `skip_intro`, `update_check`, `skip_doors` (0 Off, 1 Instant, 2 Skippable) |
 | Fast Loading, Battle Game Unlocked, Difficulty Select | `fast_loading`, `battle_unlocked`, `difficulty_select` |
 | Quick Knife, Auto-climb Stairs, Zombie Decapitation, Stack Rifle Ammo | `quick_knife`, `auto_stairs`, `head_blowoff`, `rifle_stack` |
-| BioRand, Save System, Free Typewriter Saves | `biorand`, `save_system` (0 Separate Files, 1 Memory Card), `no_ink_ribbon` |
+| (lobby GAME RULES) BIORAND, Save System, Free Typewriter Saves | `biorand`, `save_system` (0 Separate Files, 1 Memory Card), `no_ink_ribbon` |
 | Input Devices, Gamepad | `input_source` (0 Auto, 1 Keyboard and Mouse, 2 Gamepad Only), `input_pad` (0 Any, 1-4) |
 | Vibration Strength, Mouse In Menus, Fixed Camera Controls | `rumble_strength`, `menu_mouse`, `fixed_cam_controls` (0 Classic, 1 Modern, 2 Combined) |
 | Music And Voice, Sound Effects | `music_volume`, `sfx_volume` |
@@ -894,10 +894,12 @@ where the rows come from and who does the I/O:
 
 **BioRand** (`pc/glue/biorand_glue.c`): two save-region words no game code uses, `sys->itm[288]`
 (`'B' << 24 | seed`, 0xFFFFF unknown; 0 without BioRand) and `[289]` (the pack's id), set at a new game and
-when a co-op guest starts; older builds keep them and their saves have 0. `ExecuteStateLoadScreenLoad`
-(both save systems, after the read) goes to state 35 when they differ from the current choice: the
-question with the game's YES / NO (`pc_biorand_save_differs`); YES writes the current words into the
-read save (and its checksum) and loads it, NO goes back to the list. The lobby's START asks the same.
+when a co-op guest starts; older builds keep them and their saves have 0. BioRand is a state of the game
+(`biorand_game`): a loaded save's words set it (`pc_biorand_save_differs`, both save systems, after the read): a
+plain save plays plain, a save of the pack there with BioRand. A BioRand save whose pack is not there goes to
+state 35, the question with the game's YES / NO; YES plays the pack there (or plain without one), writes its
+words into the read save (and its checksum) and loads it, NO goes back to the list. The lobby's START asks the
+same.
 
 **Sounds**: the native screens keep the card screens' own sound calls (cursor, confirm, cancel,
 the typed-in row's keys and bell after a save); the card-only steps they skip (slot choice, card
@@ -1036,7 +1038,7 @@ called by the game thread.
 | `--skip-intro` | boot straight into the title menu |
 | `--hd-textures DIR` | HD texture pack folder (default `mods/textures`) |
 | `--third-person` | start with the over-the-shoulder camera ([THIRDPERSON.md](THIRDPERSON.md)) |
-| `--dev` | developer tools: the import window (F9, [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)) and its row in the bindings, and BioRand ([modding/README.md](modding/README.md#randomizer-biorand)); without it F9 does nothing, those rows are hidden and `mods/biorand/` is not read |
+| `--dev` | developer tools: the import window (F9, [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)) and its row in the bindings, the title menu's EXTRA > IMPORT screen, and BioRand ([modding/README.md](modding/README.md#randomizer-biorand)); without it F9 does nothing, those rows are hidden and `mods/biorand/` is not read |
 | `--coop-host PORT`, `--coop-join HOST:PORT#CODE` or `ROOM`, `--coop-server ADDR`, `--coop-conn auto\|direct\|server`, `--coop-pw PASSWORD` | online co-op ([COOP.md](COOP.md#command-line)) |
 | `--log[=FILE]` | copy all output to a log file (default `recvx.log`), with a backtrace on a crash |
 | `--profile[=FILE]`, `--profile-samples=FILE` | performance measurements ([Profiling and logging](#profiling-and-logging)) |

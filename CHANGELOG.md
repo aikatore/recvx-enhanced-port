@@ -6,6 +6,7 @@
 
 - **OPTION layout**: ENHANCED SETTINGS is now below VIBRATION, in place of DEFAULT (no longer
   offered), and in a game RETURN TO TITLE is the bottom row; EXIT is always at the bottom right.
+- **Title**: BATTLE GAME moved into the new EXTRA entry below OPTION, so the title menu is tidier.
 
 ### Co-op
 

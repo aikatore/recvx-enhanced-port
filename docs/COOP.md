@@ -36,7 +36,7 @@ Ways to start a session:
 
 ## Lobby
 
-Choose **MULTIPLAYER** in the title menu (below OPTION; keyboard, gamepad or mouse). The lobby is
+Choose **MULTIPLAYER** in the title menu (its last row; keyboard, gamepad or mouse). The lobby is
 drawn in the game's own style; your model turns in a 3D preview on the left. It goes in steps:
 
 **Step 1: how to connect, and host or join.**
@@ -483,8 +483,9 @@ loot a partner who watched the event and got one too gives it back at once ("...
 ### BioRand
 
 With BioRand (only with `--dev`; [modding/README.md](modding/README.md#randomizer-biorand)) the host chooses in GAME RULES, row
-**BIORAND** (the same setting as single player's; shown only when the host has a pack in `mods/biorand`).
-On, both play the host's pack:
+**BIORAND** (the lobby's own rule, ini `biorand`; shown only when the host has a pack in `mods/biorand`): the game
+the host starts from the lobby is then a BioRand game. A game the host plays already (started with the BIORAND
+screen's START, or a loaded BioRand save) counts as it is. On, both play the host's pack:
 
 * The partner needs the same pack: generated with the same seed and options (BioRand's seed string),
   so the same room files. The host sends its pack's seed string and its BioRand CLI's checksum
@@ -494,7 +495,7 @@ On, both play the host's pack:
   ([BIORAND_INGAME.md](BIORAND_INGAME.md) "S5b"): without a BioRand CLI it asks to download it first; when
   its CLI's checksum is not the host's it warns that the pack may differ and offers the newest CLI (No
   generates with its own). It then returns to where it came from and compares the pack again: the same one
-  joins, another one leaves as below. The partner's own BioRand setting and seed string (recvx.ini) stay.
+  joins, another one leaves as below. The partner's own lobby rule and seed string (recvx.ini) stay.
   **No** (or cancel, or an error) leaves. Meanwhile the session stays (both keep sending their poses), the
   partner loads no game state (one sent meanwhile is asked for again afterwards), and the host's lobby shows
   "BioRand: asked to generate" or "BioRand: generating..." under the partner's model.
