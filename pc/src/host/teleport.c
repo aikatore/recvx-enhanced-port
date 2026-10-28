@@ -355,7 +355,7 @@ const char* tp_entry_name(int i, int pos, char* b, int n)
     const Row* r = tp_room(i) ? &rows[i] : NULL;
     char from[96];
     int k = r && pos >= 0 && pos < TP_POS ? r->nsrc[pos] : 0;
-    if (r && !r->r.npos) snprintf(b, n, "Entry %d (none in the room file)", pos);
+    if (r && !r->r.npos) snprintf(b, n, "Entry %d (no arrival points available)", pos);
     else if (!k) snprintf(b, n, "Entry %d", pos);
     else {
         if (r->src[pos][0] == i) snprintf(from, sizeof(from), "this room");

@@ -47,20 +47,20 @@ extern int enemy_room_gen;              /* enemyopt_glue.c: room loads so far */
 
 /* types the appearance catalogue leaves out (room file, record, id, model version) */
 static const ActorModel extra[] = {
-    { "Ant (small)", 9170, 17, 10, 0 },
-    { "Ant (wall)", 9170, 0, 71, 0 },
+    { "Ant (Small)", 9170, 17, 10, 0 },
+    { "Ant (Wall)", 9170, 0, 71, 0 },
     { "Baby Black Widow", 9050, 2, 24, 0 },
     { "Gulp Worm", 3091, 0, 2, 0 },
-    { "Alexia (second form)", 5810, 0, 13, 0 },
-    { "Alexia (third form)", 5810, 1, 14, 0 },
-    { "Alexia's baby", 5810, 2, 30, 0 },
+    { "Alexia (Second Form)", 5810, 0, 13, 0 },
+    { "Alexia (Third Form)", 5810, 1, 14, 0 },
+    { "Alexia's Baby", 5810, 2, 30, 0 },
     { "Tentacle", 9000, 0, 29, 0 },
-    { "Armored knight (sword)", 9280, 3, 54, 0 },
-    { "Armored knight (lance)", 9280, 4, 55, 0 },
-    { "Ceiling trap", 9290, 0, 25, 0 },
-    { "Nosferatu's core", 5800, 1, 53, 0 },
-    { "Alfred Ashford (boss)", 1020, 2, 16, 0 },
-    { "Exploding prop", 80, 5, 0, 0 },
+    { "Armored Knight (Sword)", 9280, 3, 54, 0 },
+    { "Armored Knight (Lance)", 9280, 4, 55, 0 },
+    { "Ceiling Trap", 9290, 0, 25, 0 },
+    { "Nosferatu's Core", 5800, 1, 53, 0 },
+    { "Alfred Ashford (Boss)", 1020, 2, 16, 0 },
+    { "Exploding Prop", 80, 5, 0, 0 },
 };
 #define EXTRA (int)(sizeof(extra) / sizeof(extra[0]))
 
@@ -153,7 +153,7 @@ static int empty_set(const MN_WORK* m)
 static const char* tex_full(int entries, int heap)
 {
     static char m[96];
-    snprintf(m, sizeof(m), "refused: texture memory full (%d entries, %d KB free)", entries, heap >> 10);
+    snprintf(m, sizeof(m), "Not enough texture memory (%d available textures, %d KB free).", entries, heap >> 10);
     return m;
 }
 
@@ -290,11 +290,11 @@ static void unrealize(BH_PWORK* ep)
 const char* spawn_refused(int id)
 {
     if (id == 24 || id == 30)   /* their code reads the parent that spawns them (lkwkp): NULL alone */
-        return id == 24 ? "refused: spawned by a Black Widow (spawn that)" : "refused: spawned by Alexia's third form";
+        return id == 24 ? "Spawn a Black Widow to create this enemy." : "This enemy is created by Alexia's third form.";
     if (id == 16)   /* corrupted memory outside his room in a test (crash in the audio mixer and the weapon loader) */
-        return "refused: Alfred's boss logic needs his room (objects, scripted positions)";
+        return "Alfred can only appear in his boss arena.";
     if (id == 13 || id == 14)   /* the second form reads its partner (exp0 + 112), set up in the final fight: NULL alone */
-        return "refused: Alexia's second and third forms need each other and their arena";
+        return "These Alexia forms need their original boss arena.";
     return NULL;
 }
 
@@ -315,35 +315,35 @@ const char* spawn_at(const ActorModel* am, const SpawnNote* n, int want, int mod
     int k, slot = -1, free_n = 0, j, t, texn = 0, lists, dt, need, tex_free, heap_free, nm = 0, pool0 = pool_n;
     const char* how;
 
-    if (!loading && !ready()) return "not in a room now (door, event or menu)";
+    if (!loading && !ready()) return "Finish the menu, scene or door transition first.";
     if (spawn_refused(am->id)) return spawn_refused(am->id);
     for (k = 0; k < PC_ENE_SLOTS; k++)   /* (helper code: each type's parts run its own, eneset.c pc_call_enemy) */
         if (!(ene[k].flg & 0x1)) { free_n++; if (slot < 0) slot = k; }
     if (want >= 0) {
-        if (want >= PC_ENE_SLOTS || (ene[want].flg & 0x1)) { snprintf(msg, sizeof(msg), "refused: slot %d is taken", want); return msg; }
+        if (want >= PC_ENE_SLOTS || (ene[want].flg & 0x1)) { snprintf(msg, sizeof(msg), "Enemy position %d is already occupied.", want); return msg; }
         slot = want;
     }
     if (free_n < spawn_slots_needed(am->id) + SPAWN_SLOTS_FREE) {
-        snprintf(msg, sizeof(msg), "refused: %d enemy slots free, %s needs %d (and %d stay free)", free_n, am->name, spawn_slots_needed(am->id),
+        snprintf(msg, sizeof(msg), "Not enough enemy capacity: %d free; %s needs %d, with %d reserved.", free_n, am->name, spawn_slots_needed(am->id),
                  SPAWN_SLOTS_FREE);
         return msg;
     }
-    if (!actor_find(am, &a)) return "refused: not found on the disc";
+    if (!actor_find(am, &a)) return "Enemy data not found on the disc.";
     need = 12288 + 64 * 1024 + 256 * 1024 + room_tex_push() + 512 * 1024;   /* MN_WORKs, O_WORKs, the AI's work, the screens' copy, margin */
     if (sys->endp - sys->memp < need) {
-        snprintf(msg, sizeof(msg), "refused: room memory full (%d KB free, %d KB needed)", (int)(sys->endp - sys->memp) >> 10, need >> 10);
+        snprintf(msg, sizeof(msg), "Not enough room memory: %d KB free, %d KB needed.", (int)(sys->endp - sys->memp) >> 10, need >> 10);
         return msg;
     }
     if (POOL_SIZE - pool_n < a.mlen + a.nlen + 128) {
-        snprintf(msg, sizeof(msg), "refused: spawn memory full (%d KB free, %d KB needed)", (POOL_SIZE - pool_n) >> 10, (a.mlen + a.nlen + 128) >> 10);
+        snprintf(msg, sizeof(msg), "Not enough spawn memory: %d KB free, %d KB needed.", (POOL_SIZE - pool_n) >> 10, (a.mlen + a.nlen + 128) >> 10);
         return msg;
     }
     actor_tex_free(&tex_free, &heap_free);
     if (tex_free < tkeep || heap_free < hkeep) return tex_full(tex_free, heap_free);
     for (p = (unsigned char*)a.mdl, j = 0; (dt = *(int*)p) != -1; p += 4 + (dt > 0 ? dt : 0))   /* which sub-models bring a texlist */
         if (dt > 0 && *(int*)(p + 4) != 0x4B53414D && *(int*)(p + 4) != SKIN_MAGIC && j < 16) textured[j++] = *(int*)(p + 4 + 8) != -1;
-    if (!j) return "refused: no model of its own (a controller that drives another record's model)";
-    if (!(mdl = pool_copy(a.mdl, a.mlen))) return "refused: spawn memory full";
+    if (!j) return "This enemy cannot appear on its own.";
+    if (!(mdl = pool_copy(a.mdl, a.mlen))) return "Not enough memory to spawn another enemy.";
 
     memcpy(&rec, a.rec, sizeof(rec));
     rec.type = n->type;
@@ -493,11 +493,11 @@ static const char* spawn(int i, float dist, int* slot_out)
     const EnemyVariant* v = i >= list_n ? variant_at(i - list_n) : NULL;
     SpawnNote n = { 0 };
     const char* r;
-    if (i < 0 || (i >= list_n && !v)) return "no such enemy";
-    if (v && !(am = variant_base(v))) return "refused: its base is not in the spawner list";
+    if (i < 0 || (i >= list_n && !v)) return "Enemy unavailable.";
+    if (v && !(am = variant_base(v))) return "This enemy variant is unavailable.";
     if (!v) am = entry(i);
-    if (!ready()) return "can't spawn now (not in a room, a door or an event)";
-    if (coop_is_guest()) return "co-op: only the host spawns enemies (it runs them)";
+    if (!ready()) return "Finish the current action before spawning an enemy.";
+    if (coop_is_guest()) return "Only the co-op host can spawn enemies.";
     n.room = am->room; n.rec = am->rec; n.id = am->id; n.mdlver = am->mdlver;
     n.variant = v ? v->id : 0;
     /* variant 0, the free-roaming one: others wait for the room's enemy floor areas (Cerberus 1, 2),
@@ -512,7 +512,7 @@ static const char* spawn(int i, float dist, int* slot_out)
     n.ay = (short)((plp->ay + 0x8000) & 0xFFFF);
     n.flr = plp->flr_no;
     if ((r = spawn_add(am, &n, slot_out))) return r;
-    snprintf(msg, sizeof(msg), "spawned %s", v ? v->name : am->name);
+    snprintf(msg, sizeof(msg), "Spawned %s.", v ? v->name : am->name);
     return msg;
 }
 

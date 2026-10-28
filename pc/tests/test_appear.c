@@ -16,7 +16,7 @@ int main(void)
     for (int c = 0; c <= COOP_CHR_MAX; c++) CHECK(appear_canon(appear_canon(c)) == appear_canon(c));
     CHECK(appear_at(0) == 0 && appear_at(1) == COOP_CHR_CINE && appear_at(2) == 1 && appear_at(6) == 5);   /* As played, As played (cutscene), the player files */
     CHECK(appear_pos(COOP_CHR_CINE) == 1 && appear_pos(1) == 2 && appear_step(0, 1) == COOP_CHR_CINE && appear_step(COOP_CHR_CINE, 1) == 1);
-    CHECK(!strcmp(appear_name(COOP_CHR_CINE), "As played (cutscene)") && !strcmp(appear_group(COOP_CHR_CINE), "CVX characters") && appear_voice(COOP_CHR_CINE) < 0);
+    CHECK(!strcmp(appear_name(COOP_CHR_CINE), "Current Character (Cutscene)") && !strcmp(appear_group(COOP_CHR_CINE), "Code: Veronica Characters") && appear_voice(COOP_CHR_CINE) < 0);
     /* "As played (cutscene)" resolved for the character played (Claire, Chris, Steve, Wesker); every stored value keeps its model */
     CHECK(appear_played(COOP_CHR_CINE, 0) == COOP_CHR_ACTOR + 0 && appear_played(COOP_CHR_CINE, 1) == COOP_CHR_ACTOR + 1);
     CHECK(appear_played(COOP_CHR_CINE, 2) == COOP_CHR_ACTOR + 3 && appear_played(COOP_CHR_CINE, 3) == COOP_CHR_ACTOR + 5 && appear_played(COOP_CHR_CINE, 4) == 0);
@@ -63,9 +63,9 @@ int main(void)
     CHECK(appear_step(COOP_CHR_ACTOR + 5, 1) == COOP_CHR_IMPORT && appear_step(COOP_CHR_IMPORT + 1, 1) == 0);
     CHECK(!strcmp(appear_name(COOP_CHR_IMPORT + 1), "Alyssa") && appear_voice(COOP_CHR_IMPORT) == 1 && appear_voice(COOP_CHR_IMPORT + 1) == 0);
     actor_import_group[1] = 2;
-    CHECK(!strcmp(appear_group(1), "CVX characters") && !strcmp(appear_group(COOP_CHR_IMPORT + 1), "Outbreak NPCs"));
-    CHECK(!strcmp(appear_group(COOP_CHR_ACTOR), "CVX cutscene") && !strcmp(appear_group(COOP_CHR_ACTOR + 13), "CVX story cast"));
-    CHECK(!strcmp(appear_group(COOP_CHR_ACTOR + 61), "CVX enemies"));
+    CHECK(!strcmp(appear_group(1), "Code: Veronica Characters") && !strcmp(appear_group(COOP_CHR_IMPORT + 1), "Outbreak Supporting Cast"));
+    CHECK(!strcmp(appear_group(COOP_CHR_ACTOR), "Code: Veronica Cutscenes") && !strcmp(appear_group(COOP_CHR_ACTOR + 13), "Code: Veronica Cast"));
+    CHECK(!strcmp(appear_group(COOP_CHR_ACTOR + 61), "Code: Veronica Enemies"));
     CHECK(actor_model(ACTOR_MODELS + 1) == &actor_imports[1] && !actor_model(ACTOR_MODELS + 2) && actor_model(3) == &actor_models[3]);
     actor_import_n = 0;
     printf("appear: ok, %d of %d listed\n", n, COOP_CHR_MAX + 1);

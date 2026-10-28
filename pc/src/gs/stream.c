@@ -89,7 +89,7 @@ static int tex_event(const Ev* e)
 static void* xrealloc(void* p, size_t n)
 {
     void* q = realloc(p, n);
-    if (!q && n) host_fatal("stream: out of memory (%zu bytes)", n);
+    if (!q && n) host_fatal("Not enough memory (%zu bytes).", n);
     return q;
 }
 #define GROW(ptr, n, cap, extra) do { if ((n) + (extra) > (cap)) { (cap) = ((n) + (extra)) * 2 + 1024; (ptr) = xrealloc((ptr), (cap) * sizeof(*(ptr))); } } while (0)

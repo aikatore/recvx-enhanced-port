@@ -753,13 +753,13 @@ void cheat_frame(void)
 
     req = __atomic_exchange_n(&g_cheat.request, 0, __ATOMIC_ACQ_REL);
     if (!req) return;
-    if (req & CHEAT_HEAL) { plp->hp = max_hp; g_cheat.result = "healed"; }
+    if (req & CHEAT_HEAL) { plp->hp = max_hp; g_cheat.result = "Health restored."; }
     if (req & CHEAT_GIVE) {
-        g_cheat.result = "inventory full";
+        g_cheat.result = "Inventory full.";
         for (i = 2; i < 2 + slots; i++)
             if (!(inv[i] >> 16)) {
                 inv[i] = (unsigned int)g_cheat.give_id << 16 | (g_cheat.give_count & 0xFFFF);
-                g_cheat.result = "item added";
+                g_cheat.result = "Item added.";
                 break;
             }
     }
@@ -767,10 +767,10 @@ void cheat_frame(void)
     if (req & CHEAT_TELEPORT) {
         /* the game's own door transition (door type 255 skips the animation), under the
            conditions the door trigger checks (hitchk.c) */
-        if ((sys->gm_flg & 0x9) || (sys->cb_flg & 0x1)) g_cheat.result = "can't teleport now";
+        if ((sys->gm_flg & 0x9) || (sys->cb_flg & 0x1)) g_cheat.result = "Cannot teleport now. Finish the current action first.";
         else {
             teleport(g_cheat.tp_stg, g_cheat.tp_rom, g_cheat.tp_pos, -1);
-            g_cheat.result = "teleporting";
+            g_cheat.result = "Teleporting...";
         }
     }
 }

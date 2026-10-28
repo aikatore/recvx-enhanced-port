@@ -14,22 +14,22 @@ int g_appear_cutscene = 1;
 
 const ActorModel actor_models[] = {
     /* the story cast, moved by the player's motions (a man's or a woman's, section 8) */
-    { "Claire (cutscene model)", 3150, 0, 91, 0, FE },
-    { "Chris (cutscene model)", 9180, 2, 92, 0, MA },
+    { "Claire (Cutscene Model)", 3150, 0, 91, 0, FE },
+    { "Chris (Cutscene Model)", 9180, 2, 92, 0, MA },
     { "Chris (event model)", 9320, 1, 42, 0, MA },
-    { "Steve (cutscene model)", 40, 0, 93, 0, MA },
+    { "Steve (Cutscene Model)", 40, 0, 93, 0, MA },
     { "Steve (event model)", 1140, 0, 43, 0, MA },
-    { "Wesker (cutscene model)", 9360, 2, 97, 0, MA },
+    { "Wesker (Cutscene Model)", 9360, 2, 97, 0, MA },
     { "Wesker (event model)", 1002, 2, 49, 0, MA },
     { "Wesker (event model 2)", 8030, 0, 47, 0, MA },
     { "Alfred Ashford", 1020, 1, 94, 0, MA },
     { "Alfred Ashford 2", 3240, 2, 96, 0, MA },
-    { "Alfred Ashford (wounded)", 9180, 1, 96, 1, MA },
+    { "Alfred Ashford (Wounded)", 9180, 1, 96, 1, MA },
     { "Alfred Ashford (event model)", 7030, 2, 44, 0, MA },
     { "Alexia Ashford", 9150, 2, 95, 0, FE },
     { "Rodrigo Juan Raval", 0, 1, 98, 0, MA },
-    { "Man in a hazmat suit", 3130, 2, 99, 0, MA },
-    { "Alexia (first form)", 5820, 1, 12, 0, FE },
+    { "Hazmat Suit Man", 3130, 2, 99, 0, MA },
+    { "Alexia (First Form)", 5820, 1, 12, 0, FE },
     /* creatures: humanoids moved by the player's motions (a man's), the others playing their own idle */
     { "Nosferatu", 5800, 0, 15, 0, MA },
     { "Tyrant", 5840, 0, 19, 0, MA },
@@ -40,9 +40,9 @@ const ActorModel actor_models[] = {
     { "Bandersnatch", 2000, 0, 9, 0, MA },
     { "Bandersnatch 2", 3130, 0, 9, 1, MA },
     { "Cerberus", 3020, 2, 4, 0, I },
-    { "Anatomist zombie", 110, 4, 26, 0, MA },
-    { "Albinoid (adult)", 7100, 0, 22, 0, I },
-    { "Albinoid (infant)", 3120, 0, 21, 0, I },
+    { "Anatomist Zombie", 110, 4, 26, 0, MA },
+    { "Albinoid (Adult)", 7100, 0, 22, 0, I },
+    { "Albinoid (Infant)", 3120, 0, 21, 0, I },
     { "Black Widow", 7080, 0, 3, 0, I },
     { "Giant Black Widow", 9050, 0, 23, 0, I },
     { "Moth", 6030, 3, 6, 0, I },
@@ -50,34 +50,34 @@ const ActorModel actor_models[] = {
     { "Fish", 5510, 0, 8, 0, I },
     { "Spotter", 7081, 0, 11, 0, I },
     { "Ant", 9170, 12, 20, 0, I },
-    { "Zombie: prisoner", 5520, 0, 1, 0, MA },
-    { "Zombie: prisoner 2", 150, 0, 1, 1, MA },
-    { "Zombie: prisoner 3", 5520, 1, 1, 31, MA },
-    { "Zombie: soldier", 1070, 0, 1, 2, MA },
-    { "Zombie: soldier 2", 1070, 1, 1, 3, MA },
-    { "Zombie: soldier 3", 9120, 1, 1, 4, MA },
-    { "Zombie: soldier 4", 9310, 1, 1, 21, MA },
-    { "Zombie: soldier 5", 5680, 3, 1, 32, MA },
-    { "Zombie: soldier 6", 5680, 0, 1, 33, MA },
-    { "Zombie: soldier 7", 9310, 0, 1, 34, MA },
-    { "Zombie: lab coat", 3200, 0, 1, 5, MA },
-    { "Zombie: lab coat 2", 5520, 3, 1, 6, MA },
-    { "Zombie: worker", 3200, 2, 1, 7, MA },
-    { "Zombie: worker 2", 1100, 2, 1, 8, MA },
-    { "Zombie: frozen", 3060, 1, 1, 9, MA },
-    { "Zombie: frozen 2", 3060, 0, 1, 10, MA },
-    { "Zombie: base staff", 6020, 1, 1, 35, MA },
-    { "Zombie: base staff 2", 9020, 0, 1, 36, MA },
-    { "Zombie: base staff 3", 5620, 1, 1, 42, MA },
-    { "Zombie: civilian", 9190, 1, 1, 37, MA },
-    { "Zombie: civilian 2", 9120, 0, 1, 38, MA },
-    { "Zombie: hazmat suit", 3140, 7, 1, 39, MA },
-    { "Zombie: dark uniform", 5700, 0, 1, 40, MA },
-    { "Zombie: dark uniform 2", 8000, 3, 1, 41, MA },
+    { "Zombie: Prisoner", 5520, 0, 1, 0, MA },
+    { "Zombie: Prisoner 2", 150, 0, 1, 1, MA },
+    { "Zombie: Prisoner 3", 5520, 1, 1, 31, MA },
+    { "Zombie: Soldier", 1070, 0, 1, 2, MA },
+    { "Zombie: Soldier 2", 1070, 1, 1, 3, MA },
+    { "Zombie: Soldier 3", 9120, 1, 1, 4, MA },
+    { "Zombie: Soldier 4", 9310, 1, 1, 21, MA },
+    { "Zombie: Soldier 5", 5680, 3, 1, 32, MA },
+    { "Zombie: Soldier 6", 5680, 0, 1, 33, MA },
+    { "Zombie: Soldier 7", 9310, 0, 1, 34, MA },
+    { "Zombie: Lab Coat", 3200, 0, 1, 5, MA },
+    { "Zombie: Lab Coat 2", 5520, 3, 1, 6, MA },
+    { "Zombie: Worker", 3200, 2, 1, 7, MA },
+    { "Zombie: Worker 2", 1100, 2, 1, 8, MA },
+    { "Zombie: Frozen", 3060, 1, 1, 9, MA },
+    { "Zombie: Frozen 2", 3060, 0, 1, 10, MA },
+    { "Zombie: Base Staff", 6020, 1, 1, 35, MA },
+    { "Zombie: Base Staff 2", 9020, 0, 1, 36, MA },
+    { "Zombie: Base Staff 3", 5620, 1, 1, 42, MA },
+    { "Zombie: Civilian", 9190, 1, 1, 37, MA },
+    { "Zombie: Civilian 2", 9120, 0, 1, 38, MA },
+    { "Zombie: Hazmat Suit", 3140, 7, 1, 39, MA },
+    { "Zombie: Dark Uniform", 5700, 0, 1, 40, MA },
+    { "Zombie: Dark Uniform 2", 8000, 3, 1, 41, MA },
     /* scripted zombies without motions of their own */
-    { "Zombie: prisoner 4", 3000, 2, 51, 0, MA },
-    { "Zombie: bandaged", 6040, 4, 52, 0, MA },
-    { "Zombie: bandaged 2", 9050, 1, 52, 1, MA },
+    { "Zombie: Prisoner 4", 3000, 2, 51, 0, MA },
+    { "Zombie: Bandaged", 6040, 4, 52, 0, MA },
+    { "Zombie: Bandaged 2", 9050, 1, 52, 1, MA },
 };
 _Static_assert(sizeof(actor_models) / sizeof(actor_models[0]) == ACTOR_MODELS, "ACTOR_MODELS");
 
@@ -231,20 +231,20 @@ int appear_step(int chr, int dir)
    models (the tail), then the imports by their group */
 const char* appear_group(int chr)
 {
-    static const char* const imp[4] = { "Outbreak playable", "Outbreak cutscene", "Outbreak NPCs", "Outbreak enemies" };
+    static const char* const imp[4] = { "Outbreak Characters", "Outbreak Cutscenes", "Outbreak Supporting Cast", "Outbreak Enemies" };
     int k = import_of(chr), id;
     if (k >= 0) return imp[actor_import_group[k] & 3];
     chr = appear_canon(chr);
-    if (chr < COOP_CHR_ACTOR || chr == COOP_CHR_CINE) return "CVX characters";
-    if (tail_at(chr) >= 0) return "CVX cutscene";
+    if (chr < COOP_CHR_ACTOR || chr == COOP_CHR_CINE) return "Code: Veronica Characters";
+    if (tail_at(chr) >= 0) return "Code: Veronica Cutscenes";
     id = actor_models[chr - COOP_CHR_ACTOR].id;
-    return id > 30 && id != 51 && id != 52 ? "CVX story cast" : "CVX enemies";   /* (51, 52: zombies) */
+    return id > 30 && id != 51 && id != 52 ? "Code: Veronica Cast" : "Code: Veronica Enemies";   /* (51, 52: zombies) */
 }
 
 const char* appear_name(int chr)
 {
-    static const char* files[COOP_CHR_ACTOR] = { "As played", "Claire", "Chris", "Steve", "Wesker", "Claire (2nd costume)" };
+    static const char* files[COOP_CHR_ACTOR] = { "Current Character", "Claire", "Chris", "Steve", "Wesker", "Claire (Alternate Costume)" };
     if (import_of(chr) >= 0) return actor_imports[import_of(chr)].name;
-    if (chr == COOP_CHR_CINE) return "As played (cutscene)";
+    if (chr == COOP_CHR_CINE) return "Current Character (Cutscene)";
     return chr >= 0 && chr < COOP_CHR_ACTOR ? files[chr] : chr <= COOP_CHR_MAX ? actor_models[chr - COOP_CHR_ACTOR].name : "?";
 }

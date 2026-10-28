@@ -91,7 +91,7 @@ static uint64_t page_hash_get(uint32_t p)
 
 /* ---------------- batching ---------------- */
 #define GROW_TO(ptr, need, cap) do { if ((need) > (cap)) { (cap) = (need) * 2 + 1024; (ptr) = realloc((ptr), (cap) * sizeof(*(ptr))); \
-                                       if (!(ptr)) host_fatal("gs: out of memory (%zu entries)", (size_t)(cap)); } } while (0)
+                                       if (!(ptr)) host_fatal("Not enough graphics memory (%zu entries).", (size_t)(cap)); } } while (0)
 typedef struct {
     float x, y, z, w;     /* GS pixel position and depth; homogeneous (times w) for native 3D, else w = 1 */
     float s, t, q;
@@ -250,13 +250,13 @@ static GLuint compile(const char* vs, const char* fs)
         glShaderSource(s[i], 1, &src[i], NULL);
         glCompileShader(s[i]);
         glGetShaderiv(s[i], GL_COMPILE_STATUS, &ok);
-        if (!ok) { char log[2048]; glGetShaderInfoLog(s[i], sizeof(log), NULL, log); host_fatal("shader: %s", log); }
+        if (!ok) { char log[2048]; glGetShaderInfoLog(s[i], sizeof(log), NULL, log); host_fatal("Cannot load graphics effects: %s", log); }
         glAttachShader(p, s[i]);
     }
     glLinkProgram(p);
     {
         GLint ok; glGetProgramiv(p, GL_LINK_STATUS, &ok);
-        if (!ok) { char log[2048]; glGetProgramInfoLog(p, sizeof(log), NULL, log); host_fatal("link: %s", log); }
+        if (!ok) { char log[2048]; glGetProgramInfoLog(p, sizeof(log), NULL, log); host_fatal("Cannot prepare graphics effects: %s", log); }
     }
     glDeleteShader(s[0]); glDeleteShader(s[1]);
     return p;
@@ -266,9 +266,9 @@ static void* gl_getproc(const char* name) { return (void*)SDL_GL_GetProcAddress(
 
 void gs_renderer_init(void)
 {
-    if (!gl_load(gl_getproc)) host_fatal("OpenGL 3.3 entry points missing");
+    if (!gl_load(gl_getproc)) host_fatal("OpenGL 3.3 is required. Update your graphics driver.");
     host_log("gl: %s / %s\n", glGetString(GL_RENDERER), glGetString(GL_VERSION));
-    if (!gs_mem_selftest()) host_fatal("GS swizzle tables failed self test");
+    if (!gs_mem_selftest()) host_fatal("Graphics setup failed. Restart the game.");
     gs_reset();
 
     prog = compile(vs_src, fs_src);

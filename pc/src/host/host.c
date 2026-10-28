@@ -129,7 +129,7 @@ void host_fatal(const char* fmt, ...)
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
     fprintf(stderr, "fatal: %s\n", buf);
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "recvx", buf, g_window);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Code: Veronica X", buf, g_window);
     exit(1);
 }
 
@@ -344,17 +344,17 @@ int main(int argc, char** argv)
     ps2_memory_init();
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD))
-        host_fatal("SDL_Init: %s", SDL_GetError());
+        host_fatal("Cannot start the game: %s", SDL_GetError());
     bind_apply_source();   /* Gamepad only: gamepads also in the background */
 
     if (!iso_given && (!g_config.iso_path[0] || !cdvd_open_image(g_config.iso_path))) {
         pick_iso();
-        if (!g_config.iso_path[0]) { usage(); host_fatal("no game disc image selected (or start with: recvx <image.iso>)"); }
-        if (!cdvd_open_image(g_config.iso_path)) host_fatal("cannot open game disc image '%s'", g_config.iso_path);
+        if (!g_config.iso_path[0]) { usage(); host_fatal("Select a game disc image, or start recvx with the disc image path."); }
+        if (!cdvd_open_image(g_config.iso_path)) host_fatal("Cannot open game disc image: %s", g_config.iso_path);
         config_save();
     } else {
-        if (!g_config.iso_path[0]) { usage(); host_fatal("no game disc image given"); }
-        if (!cdvd_open_image(g_config.iso_path)) host_fatal("cannot open game disc image '%s'", g_config.iso_path);
+        if (!g_config.iso_path[0]) { usage(); host_fatal("Select a game disc image first."); }
+        if (!cdvd_open_image(g_config.iso_path)) host_fatal("Cannot open game disc image: %s", g_config.iso_path);
     }
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -363,19 +363,19 @@ int main(int argc, char** argv)
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     g_window = SDL_CreateWindow("Resident Evil Code: Veronica X", g_config.window_w, g_config.window_h,
                                 SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
-    if (!g_window) host_fatal("SDL_CreateWindow: %s", SDL_GetError());
+    if (!g_window) host_fatal("Cannot open the game window: %s", SDL_GetError());
     settings_display_modes();
     settings_apply_display();   /* hidden: fullscreen (and its mode) are taken when it is shown */
     SDL_ShowWindow(g_window);
     g_gl = SDL_GL_CreateContext(g_window);
-    if (!g_gl) host_fatal("SDL_GL_CreateContext: %s", SDL_GetError());
+    if (!g_gl) host_fatal("Cannot start graphics: %s", SDL_GetError());
     SDL_GL_SetSwapInterval(g_config.vsync ? 1 : 0);
     gs_renderer_init();
     overlay_init(g_window, g_gl);
     audio_init();
 
     stream_init();
-    if (!SDL_CreateThread(game_thread, "game", NULL)) host_fatal("cannot start the game thread: %s", SDL_GetError());
+    if (!SDL_CreateThread(game_thread, "game", NULL)) host_fatal("Cannot start the game: %s", SDL_GetError());
     render_loop();   /* the main thread renders and presents; never returns */
     return 0;
 }

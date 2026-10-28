@@ -339,13 +339,13 @@ int ob2_read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int
     Rd r = { d, n, 0 };
     memset(m, 0, sizeof(*m));
     uint32_t hs = u32(&r, 4);   /* the table: 16 bytes per entry, ends where the textures start; all of it in the file */
-    if (r.bad || u32(&r, 0) != 0x00584554u || hs < 48 || hs > 256 || hs > n) { snprintf(err, en, "not an NBD model"); return 0; }   /* "TEX\0" */
+    if (r.bad || u32(&r, 0) != 0x00584554u || hs < 48 || hs > 256 || hs > n) { snprintf(err, en, "Unsupported model format."); return 0; }   /* "TEX\0" */
     uint32_t amo = 0, ahi = 0;
     for (uint32_t e = 16; e + 16 <= hs; e += 16) {
         if (u32(&r, e) == 0x004F4D41u && !amo) amo = u32(&r, e + 4);   /* "AMO\0" */
         if (u32(&r, e) == 0x00494841u && !ahi) ahi = u32(&r, e + 4);   /* "AHI\0" */
     }
-    if (!amo || !ahi) { snprintf(err, en, "no model/hierarchy in the file"); return 0; }
+    if (!amo || !ahi) { snprintf(err, en, "Model data is missing."); return 0; }
     /* textures: count entries of u32 size + SLD data */
     uint32_t tp = u32(&r, 4), tc = u32(&r, 12);
     for (uint32_t k = 0; k < tc && k < IMP_TEX && !r.bad; k++) {
@@ -354,7 +354,7 @@ int ob2_read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int
         if (r.bad || sz > n - tp) { r.bad = 1; break; }
         int cap = 8 << 20, got;
         unsigned char* out = malloc(cap);
-        if (!out || (got = ob2_sld(d + tp, (int)sz, out, cap)) < 64) { free(out); snprintf(err, en, "texture %u: bad compressed data", k); imp_free(m); return 0; }
+        if (!out || (got = ob2_sld(d + tp, (int)sz, out, cap)) < 64) { free(out); snprintf(err, en, "Texture %u is damaged.", k); imp_free(m); return 0; }
         unsigned char* fit = realloc(out, got);
         m->tim2[m->ntex] = fit ? fit : out;
         m->tim2_len[m->ntex++] = got;
@@ -363,14 +363,14 @@ int ob2_read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int
     Amo a;
     int meshnode[IMP_NODES];
     float (*W)[16];
-    if (!read_ahi(&r, ahi, m, meshnode)) { snprintf(err, en, "bad node hierarchy"); imp_free(m); return 0; }
-    if (!read_amo(&r, amo, &a)) { snprintf(err, en, "bad model data"); imp_free(m); return 0; }
+    if (!read_ahi(&r, ahi, m, meshnode)) { snprintf(err, en, "Model structure is damaged."); imp_free(m); return 0; }
+    if (!read_amo(&r, amo, &a)) { snprintf(err, en, "Model data is damaged."); imp_free(m); return 0; }
     if (!(W = calloc(m->nn, sizeof(*W)))) { imp_free(m); return 0; }
     imp_world(m, W);
     int meshes = 0;
     for (int i = 0; i < a.nmesh; i++) meshes += read_mesh(&r, &a.mesh[i], &a, i, meshnode, m, W);
     free(W);
-    if (!meshes || !m->nv) { snprintf(err, en, "no readable mesh"); imp_free(m); return 0; }
+    if (!meshes || !m->nv) { snprintf(err, en, "No usable model found."); imp_free(m); return 0; }
     m->nmesh = meshes;
     return 1;
 }
@@ -516,9 +516,9 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
     char cnf[128] = { 0 };
     ImportProgress* pg = &g_import_progress;
     *count = 0;
-    if (!f) { snprintf(pg->phase, sizeof(pg->phase), "cannot open %s", isopath); return -1; }
+    if (!f) { snprintf(pg->phase, sizeof(pg->phase), "Cannot open disc image: %s", isopath); return -1; }
     if (!iso_find(f, "SYSTEM.CNF", &cnf_off, &cnf_size) || !rd_at(f, cnf_off, cnf, cnf_size < 127 ? cnf_size : 127) || !strstr(cnf, "SLUS_209.84")) {
-        snprintf(pg->phase, sizeof(pg->phase), "not Resident Evil Outbreak File #2 (US, SLUS-20984)");
+        snprintf(pg->phase, sizeof(pg->phase), "Use a US Resident Evil Outbreak File #2 disc (SLUS-20984).");
         fclose(f);
         return -1;
     }
@@ -526,7 +526,7 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
     for (int i = 0; top && i < nfiles && !rom; i++)
         if (!SDL_strcasecmp(top[i].name, "romdata_usa.afs")) rom = afs_list(f, top[i].off, top[i].size, &nrom);
     free(top);
-    if (!rom) { snprintf(pg->phase, sizeof(pg->phase), "NETBIO00.DAT / romdata_usa.afs not found"); fclose(f); return -1; }
+    if (!rom) { snprintf(pg->phase, sizeof(pg->phase), "Required game data not found. Check the selected disc image."); fclose(f); return -1; }
 
     /* what to extract (all character models are in romdata_usa.afs; the scenario archives hold rooms,
        objects and effects only): the players (P<chr>_<costume>.nbd), their cutscene (EP) and high-detail
@@ -557,18 +557,18 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
             if (c >= 0 && c < 8) {
                 snprintf(it->name, sizeof(it->name), "%s", cast[c]);
                 if (id[0] == 'P') snprintf(it->variant, sizeof(it->variant), "Costume %d", v + 1);
-                else if (id[0] == 'E') snprintf(it->variant, sizeof(it->variant), "Cutscene, costume %d", v + 1);
-                else snprintf(it->variant, sizeof(it->variant), "High detail");
+                else if (id[0] == 'E') snprintf(it->variant, sizeof(it->variant), "Cutscene Costume %d", v + 1);
+                else snprintf(it->variant, sizeof(it->variant), "High Detail");
                 it->female = c >= 5;
             } else {
-                snprintf(it->name, sizeof(it->name), "%s %s", it->group == IMPORT_GROUP_ENEMIES ? "Enemy" : "NPC", id);
-                snprintf(it->variant, sizeof(it->variant), "%s", id[0] == 'H' ? "High detail" : "");
+                snprintf(it->name, sizeof(it->name), "%s %s", it->group == IMPORT_GROUP_ENEMIES ? "Enemy" : "Character", id);
+                snprintf(it->variant, sizeof(it->variant), "%s", id[0] == 'H' ? "High Detail" : "");
                 it->female = it->group == IMPORT_GROUP_ENEMIES ? -1 : 0;   /* (NPCs: not known; a man's motions) */
             }
         }
         snprintf(pg->phase, sizeof(pg->phase), "%s %s (%s)", it->name, it->variant, e->name);
         unsigned char* data = e->size > 0 && e->size < (64u << 20) ? malloc(e->size) : NULL;
-        if (!data || !rd_at(f, e->off, data, e->size)) snprintf(err, sizeof(err), "cannot read %s from the disc", e->name);
+        if (!data || !rd_at(f, e->off, data, e->size)) snprintf(err, sizeof(err), "Cannot read %s from the disc.", e->name);
         else if (ob2_read_nbd(data, e->size, &m, err, sizeof(err))) {
             it->nodes = m.nn; it->verts = m.nv; it->tris = imp_tris(&m); it->textures = m.ntex;
             it->meshes = m.nmesh;
@@ -578,7 +578,7 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
             it->ok = imp_write_glb(&m, path, id, 0.01f, err, sizeof(err));
             for (int k = 0; k < m.ntex; k++) {
                 snprintf(path, sizeof(path), "%s/%s_tex%d.png", dir, id, k);
-                if (!imp_write_png(&m, k, path) && !err[0]) snprintf(err, sizeof(err), "texture %d: unsupported picture", k);
+                if (!imp_write_png(&m, k, path) && !err[0]) snprintf(err, sizeof(err), "Texture %d uses an unsupported format.", k);
             }
             /* (people on a skeleton of their own: N08's 24 nodes, HN_70's 74, convert by the body groups too;
                the "*_N" files are hair and face parts of the high-detail models) */
@@ -586,7 +586,7 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
             for (int v = 0; v < m.nv; v++) { lo = fminf(lo, m.pos[v][1]); hi = fmaxf(hi, m.pos[v][1]); }
             int human = it->ok && (human_skeleton(&m) || (it->group != IMPORT_GROUP_ENEMIES && !strstr(id, "_N"))) &&
                         hi - lo > 100.0f;   /* a whole body, at least a metre tall (HE01_56 is a severed arm on the skeleton) */
-            if (it->ok && !human && !err[0]) snprintf(err, sizeof(err), "glTF only: not a whole body on the human skeleton (%d nodes)", m.nn);
+            if (it->ok && !human && !err[0]) snprintf(err, sizeof(err), "Exported only: incompatible body structure (%d parts).", m.nn);
             if (human && it->female < 0) it->female = 0;   /* an enemy on the human skeleton (as a man) */
             if (human) {   /* "You appear as": every model on the human skeleton */
                 char e2[160] = "";
@@ -596,9 +596,9 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
                 ob2_fit(id, &m, &fit);
                 snprintf(path, sizeof(path), "%s/%s.cvxm", dir, id);
                 if (imp_write_cvxm(&m, path, 0.1f, 0x00F00000u + 16u * (unsigned)list[li], &fit, e2, sizeof(e2))) it->player = 1;
-                else snprintf(err, sizeof(err), "no player model: %s", e2);
+                else snprintf(err, sizeof(err), "Not playable: %s", e2);
             }
-            if (m.eyes_left_out && !err[0]) snprintf(err, sizeof(err), "eyeball overlay left out (it hid the painted irises)");
+            if (m.eyes_left_out && !err[0]) snprintf(err, sizeof(err), "Eye overlay removed to keep the eyes visible.");
             imp_free(&m);
         }
         free(data);
