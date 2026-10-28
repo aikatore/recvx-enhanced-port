@@ -6,7 +6,8 @@
  * codes 0..94), and the player and actor models, loaded with the stock loaders into buffers of
  * our own and posed, lit and drawn in a small scene of their own in front of the picture.
  * Networking stays in pc/glue/coop_glue.c: the lobby only sets g_coop and requests.
- * With --dev a BIORAND row follows MULTIPLAYER; mode 30 is then its screen (pc/glue/biorand_menu.c).
+ * The title menu's EXTRA submenu (BIORAND and IMPORT with --dev, BATTLE GAME) is here too; mode 30 is then the
+ * BIORAND screen (pc/glue/biorand_menu.c) or the IMPORT screen (pc/glue/import_menu.c) instead of the lobby.
  */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
@@ -136,8 +137,9 @@ static void arrow(float x, float y, int dir, unsigned int argb)
 /* ---------------------------------------------------------------- title menu */
 /* The MULTIPLAYER row in the plates' own lettering: each letter cut from a plate of the title
    texture (texture 1: LOAD GAME at v 64, OPTION 128, SOUND MUSEUM 192, EASY 288, NORMAL 320;
-   u = the letter's left edge, w its width, measured from the texture). */
-static const struct { short u, v, w; } mp_letters[] = {
+   u = the letter's left edge, w its width, measured from the texture's alpha with a pixel each side). */
+typedef struct { short u, v, w; } Letter;
+static const Letter mp_letters[] = {
     { 312, 64, 25 },  /* M of GAME */
     { 174, 192, 23 }, /* U of SOUND */
     { 160, 64, 20 },  /* L of LOAD */
@@ -150,61 +152,89 @@ static const struct { short u, v, w; } mp_letters[] = {
     { 339, 64, 20 },  /* E of GAME */
     { 67, 320, 23 },  /* R of NORMAL */
 };
-
 /* BIORAND (--dev, biorand_shown) the same way: B of BATTLE (v 224), I O N of OPTION, R of NORMAL, A of GAME, D of LOAD */
-static const struct { short u, v, w; } br_letters[] = {
+static const Letter br_letters[] = {
     { 146, 224, 20 }, { 268, 128, 12 }, { 201, 128, 22 }, { 67, 320, 23 }, { 286, 64, 24 }, { 304, 128, 22 }, { 226, 64, 23 },
 };
+/* EXTRA: E X T R A of EXTREAM (v 384, the PAL/JP battle game's plates, unused in the US menu) */
+static const Letter ex_letters[] = { { 46, 384, 18 }, { 65, 384, 21 }, { 86, 384, 19 }, { 105, 384, 22 }, { 147, 384, 22 } };
+/* IMPORT (--dev): I of OPTION, M of GAME, P O of OPTION, R of NORMAL, T of OPTION */
+static const Letter im_letters[] = {
+    { 268, 128, 12 }, { 312, 64, 25 }, { 224, 128, 21 }, { 201, 128, 22 }, { 67, 320, 23 }, { 246, 128, 21 },
+};
+enum { W_MP, W_BR, W_EX, W_IM };
+static const struct { const Letter* l; int n; } plate_words[] = {
+    { mp_letters, 11 }, { br_letters, 7 }, { ex_letters, 5 }, { im_letters, 6 },
+};
 
-static void plate_word(int br, float cx, float y, unsigned int col, unsigned int shadow, float scale)
+static void plate_word(int word, float cx, float y, unsigned int col, unsigned int shadow, float scale)
 {
-    int i, n = br ? (int)(sizeof(br_letters) / sizeof(br_letters[0])) : (int)(sizeof(mp_letters) / sizeof(mp_letters[0]));
+    const Letter* l = plate_words[word].l;
+    int i, n = plate_words[word].n;
     float w = 0, x;
     QUAD q;
-    for (i = 0; i < n; i++) w += ((br ? br_letters[i].w : mp_letters[i].w) + 1) * scale;
+    for (i = 0; i < n; i++) w += (l[i].w + 1) * scale;
     x = cx - w / 2;
     for (i = 0; i < n; i++) {
-        float u = br ? br_letters[i].u : mp_letters[i].u, v = br ? br_letters[i].v : mp_letters[i].v, lw = br ? br_letters[i].w : mp_letters[i].w;
-        SetQuadPos(x, y, lw * scale, 33.0f * scale, &q);
-        SetQuadUv2(u, v, lw, 33.0f, 1, &q);
+        SetQuadPos(x, y, l[i].w * scale, 33.0f * scale, &q);
+        SetQuadUv2(l[i].u, l[i].v, l[i].w, 33.0f, 1, &q);
         AdvEasyDrawTextureS(1, col, &q, 0.5f, 1, shadow);
-        x += (lw + 1) * scale;
+        x += (l[i].w + 1) * scale;
     }
 }
-static void mp_word(float cx, float y, unsigned int col, unsigned int shadow, float scale) { plate_word(0, cx, y, col, shadow, scale); }
-void pc_title_word_br(float cx, float y, unsigned int col, unsigned int shadow) { plate_word(1, cx, y, col, shadow, 1.0f); }   /* biorand_menu.c */
+static void mp_word(float cx, float y, unsigned int col, unsigned int shadow, float scale) { plate_word(W_MP, cx, y, col, shadow, scale); }
+void pc_title_word_br(float cx, float y, unsigned int col, unsigned int shadow) { plate_word(W_BR, cx, y, col, shadow, 1.0f); }   /* biorand_menu.c */
+void pc_title_word_import(float cx, float y, unsigned int col, unsigned int shadow) { plate_word(W_IM, cx, y, col, shadow, 1.0f); }   /* import_menu.c */
 
 /* the rows between the logo (to y 235) and the copyright (from y 396): 4 rows as the game's
-   own 4-row layout but 16 higher, 5 rows closer together, 6 (BIORAND) closer still (the letters are
-   rows 6..26 of a 33 px plate: the last ends at y 393) */
-static float title_row_y(int i, int n) { return n >= 6 ? 232.0f + 27.0f * i : n >= 5 ? 234.0f + 30.0f * i : 256.0f + 32.0f * i; }
-static float title_row_h(int n) { return n >= 6 ? 27.0f : n >= 5 ? 30.0f : 32.0f; }
+   own 4-row layout but 16 higher, 5 rows closer together */
+static float title_row_y(int i, int n) { return n >= 5 ? 234.0f + 30.0f * i : 256.0f + 32.0f * i; }
+static float title_row_h(int n) { return n >= 5 ? 30.0f : 32.0f; }
 
-/* the BIORAND row (--dev): the last, after MULTIPLAYER; -1 none. Not in ModeCommandId (5 entries; with
-   BATTLE GAME it is the sixth row): pc_title_mouse takes its confirm before CheckButton reads it. */
-static int br_title_row = -1;
+/* The title menu: LOAD GAME, NEW GAME, OPTION, EXTRA, MULTIPLAYER. EXTRA (ModeCommandId TITLE_EXTRA, which CheckButton
+   does nothing for) opens a submenu in level 0 itself, laid out as the difficulty screen: the word EXTRA where MODE
+   SELECT is, its rows below: BIORAND (--dev), BATTLE GAME (unlocked, or the setting), IMPORT (--dev). Without any
+   EXTRA is not there (the menu as the game's, with MULTIPLAYER). pc_title_mouse runs the submenu before CheckButton
+   reads the pad and takes the keys it used (its own cursor: CheckButton moves Cursor[0] off row 0 while there is no
+   save); the switch fades the menu out and in again (mode 10, then 8: ex.pending applied on mode 8's first frame). */
+#define TITLE_EXTRA 5
+enum { XR_BIORAND, XR_BATTLE, XR_IMPORT };
+static struct {
+    int on, pending, cur, n, main_row;  /* the submenu is shown; becomes shown (1) / hidden (0) at mode 8, -1 none; its
+                                           cursor and rows; EXTRA's row in the menu (-1 none) */
+    int row[3];
+} ex = { .pending = -1, .main_row = -1 };
+static float ex_row_y(int i) { return 304.0f + 32.0f * i; }   /* DisplayNewGamePlate's rows; EXTRA at 272 as MODE SELECT */
+
 static int br_screen;                   /* mode 30 is the BioRand screen (biorand_menu.c), not the lobby */
+static int im_screen;                   /* ... the IMPORT screen (import_menu.c) */
 
 void pc_title_menu_init(void)
 {
     ADV_WORK* ap = &AdvWork;
-    int n;
-    if (pc_battle_unlocked() && !ap->ExtraFlag) {   /* setting: BATTLE GAME as after a cleared game; the system data's clear flag (ssd_flg 1) stays as it is (its characters: event.c bhCk) */
-        ap->ExtraFlag = 1;
-        ap->CursorMax[0] = 4;
-        ap->ModeCommandId[0] = 0; ap->ModeCommandId[1] = 1; ap->ModeCommandId[2] = 3; ap->ModeCommandId[3] = 2;
-    }
+    int n = 0, i;
+    if (pc_battle_unlocked()) ap->ExtraFlag = 1;   /* setting: BATTLE GAME as after a cleared game; the system data's clear flag (ssd_flg 1) stays as it is (its characters: event.c bhCk) */
     biorand_scan();   /* BioRand's pack (the BIORAND screen, the lobby) */
     biorand_game(0);   /* NEW GAME and BATTLE GAME are plain games; START (BIORAND), a save or the lobby's rule turn it on */
-    n = ap->CursorMax[0];
-    ap->ModeCommandId[n] = TITLE_MP;
-    ap->CursorFlag[0][n] = 1;
-    ap->CursorMax[0] = n + 1;
-    br_title_row = -1;
-    if (biorand_shown()) {   /* CursorFlag[0][5] is CursorFlag[1][0] (5 columns), 1 as mode 0 set it */
-        br_title_row = n + 1;
-        ap->CursorFlag[0][n + 1] = 1;
-        ap->CursorMax[0] = n + 2;
+    ex.n = 0;
+    if (biorand_shown()) ex.row[ex.n++] = XR_BIORAND;
+    if (ap->ExtraFlag) ex.row[ex.n++] = XR_BATTLE;
+    ap->ModeCommandId[n++] = 0;
+    ap->ModeCommandId[n++] = 1;
+    ap->ModeCommandId[n++] = 2;
+    ex.main_row = -1;
+    if (ex.n) { ex.main_row = n; ap->ModeCommandId[n++] = TITLE_EXTRA; }
+    ap->ModeCommandId[n++] = TITLE_MP;
+    for (i = 0; i < n; i++) ap->CursorFlag[0][i] = 1;
+    ap->CursorMax[0] = n;
+    ex.on = 0;
+    ex.pending = -1;
+    ex.cur = 0;
+    if (ap->FromTitle == 2) ap->Cursor[0] = 2;   /* back from OPTION */
+    if (ap->FromTitle == 3 && ex.main_row >= 0) {   /* back from BATTLE GAME: into EXTRA, on its row */
+        ex.on = 1;
+        ap->Cursor[0] = ex.main_row;
+        for (i = 0; i < ex.n; i++) if (ex.row[i] == XR_BATTLE) ex.cur = i;
     }
 }
 
@@ -213,25 +243,32 @@ void pc_tex_keep_original(int texno);
 /* DisplayNewGamePlate's hook: the game draws the difficulty screen itself (0) */
 int pc_newgame_plates(int cursor, float fade, int flag) { (void)cursor; (void)fade; (void)flag; return 0; }
 
-/* DisplayGameModePlate with the MULTIPLAYER row (the game's 3 or 4 rows moved up to make room) */
+/* DisplayGameModePlate with our rows (the game's 3 or 4 rows moved up to make room), or the EXTRA submenu */
 void pc_title_plates(int cursor, int n, float fade, int flag)
 {
-    static const float vdef[2][4] = { { 64.0f, 96.0f, 128.0f, 224.0f }, { 64.0f, 96.0f, 224.0f, 128.0f } };
+    static const float v[4] = { 64.0f, 96.0f, 128.0f, 224.0f };   /* ModeCommandId 0..3: LOAD GAME, NEW GAME, OPTION, BATTLE GAME */
     ADV_WORK* ap = &AdvWork;
-    int i, extra = ap->ExtraFlag != 0;
-    pc_tex_keep_original(1);   /* MULTIPLAYER is cut from it: no HD replacement (texture_glue.c) */
+    int i;
+    pc_tex_keep_original(1);   /* our words are cut from it: no HD replacement (texture_glue.c) */
+    if (ex.on) {
+        plate_word(W_EX, 320.0f, 272.0f, ((unsigned int)fade << 24) | 0xFFFFFF, fade, 1.0f);   /* as MODE SELECT */
+        n = ex.n;
+    }
     for (i = 0; i < n; i++) {
         unsigned int alpha = fade, col = 0x7F7F7F;
-        float y = title_row_y(i, n);
-        if (i == cursor) { alpha += (unsigned int)ap->FlushCount2; col = ap->FontBaseColor; }
+        int id = ex.on ? -1 - ex.row[i] : ap->ModeCommandId[i];
+        float y = ex.on ? ex_row_y(i) : title_row_y(i, n);
+        if (i == (ex.on ? ex.cur : cursor)) { alpha += (unsigned int)ap->FlushCount2; col = ap->FontBaseColor; }
         alpha <<= 24;
         if (flag == 0) alpha = 0xFF000000;
-        if (i == br_title_row) plate_word(1, 320.0f, y, alpha | col, fade, 1.0f);
-        else if (ap->ModeCommandId[i] == TITLE_MP) mp_word(320.0f, y, alpha | col, fade, 1.0f);
+        if (id == TITLE_MP) mp_word(320.0f, y, alpha | col, fade, 1.0f);
+        else if (id == TITLE_EXTRA) plate_word(W_EX, 320.0f, y, alpha | col, fade, 1.0f);
+        else if (id == -1 - XR_BIORAND) plate_word(W_BR, 320.0f, y, alpha | col, fade, 1.0f);
+        else if (id == -1 - XR_IMPORT) plate_word(W_IM, 320.0f, y, alpha | col, fade, 1.0f);
         else {
             QUAD q;
             SetQuadPos(64.0f, y, 513.0f, 33.0f, &q);
-            SetQuadUv2(0, vdef[extra][i < 4 ? i : 3], 513.0f, 33.0f, 1, &q);
+            SetQuadUv2(0, v[id == -1 - XR_BATTLE ? 3 : id & 3], 513.0f, 33.0f, 1, &q);
             AdvEasyDrawTextureS(1, alpha | col, &q, 0.5f, 1, fade);
         }
     }
@@ -247,6 +284,7 @@ static void title_version(void);
 /* Adv_BioCvTitle, every frame before its mode's work */
 void pc_title_mouse_active(int on)
 {
+    if (ex.pending >= 0 && AdvWork.Mode == 8) { ex.on = ex.pending; ex.pending = -1; }   /* EXTRA in or out, as the menu fades in */
     g_menu_mouse.active = on;
     title_version();
 }
@@ -264,9 +302,61 @@ void menu_mouse_take(MouseTake* t)
     if (!menu_mouse_on()) t->left = t->right = t->wheel = t->moved = 0;
 }
 
+/* the menu fades out, then in again with (1) or without (0) the EXTRA submenu */
+static void ex_switch(int on)
+{
+    ADV_WORK* ap = &AdvWork;
+    ex.pending = on;
+    if (!on) ap->Cursor[0] = ex.main_row;
+    ap->NextMode = 8;
+    ap->Mode = 10;
+}
+
+/* mode 30 instead of the lobby: a screen of ours (br_screen, im_screen), as CheckButton opens MULTIPLAYER's */
+static void to_screen(int* screen)
+{
+    ADV_WORK* ap = &AdvWork;
+    ap->LastLevel = 0;
+    ap->NextMode = 30;
+    ap->Mode = 10;
+    *screen = 1;
+}
+
+/* the EXTRA submenu (level 0 while ex.on): up/down (wrapping, as the difficulty screen), hover, confirm or a click, cancel
+   or a right click back to the menu; the keys it reads are taken from the pad so CheckButton does nothing with them */
+static void extra_input(void)
+{
+    ADV_WORK* ap = &AdvWork;
+    unsigned int ok = BTN_START | AdvGetOkButton(), cancel = AdvGetCancelButton();
+    unsigned int press = Pad[ap->PortId].press, rept = Pad[ap->PortId].Rept;
+    int hit = -1, i;
+    for (i = 0; i < ex.n; i++)
+        if (mt.x >= 140 && mt.x < 500 && mt.y >= ex_row_y(i) && mt.y < ex_row_y(i) + 32) hit = i;
+    Pad[ap->PortId].press &= ~(ok | cancel | BTN_UP | BTN_DOWN);
+    Pad[ap->PortId].Rept &= ~(BTN_UP | BTN_DOWN);
+    if (hit >= 0 && (mt.moved || mt.left) && hit != ex.cur) { ex.cur = hit; CallSystemSe(0, 2); }
+    if ((mt.left && hit >= 0) || (press & ok)) {
+        switch (ex.row[ex.cur]) {
+        case XR_BIORAND: to_screen(&br_screen); CallSystemSe(0, 3); break;
+        case XR_IMPORT: to_screen(&im_screen); CallSystemSe(0, 3); break;
+        default:   /* BATTLE GAME, as CheckButton's ModeCommandId 3 */
+            ap->AppMode = 1;
+            ap->FromTitle = 3;
+            ap->LastLevel = 0;
+            sys->gm_mode = 3;
+            TitleCall(ap->PortId, 6);
+            break;
+        }
+    } else if (mt.right || (press & cancel)) { ex_switch(0); CallSystemSe(0, 0); }
+    else if ((rept & (BTN_UP | BTN_DOWN)) && ex.n > 1) {
+        ex.cur = (ex.cur + ((rept & BTN_UP) ? ex.n - 1 : 1)) % ex.n;
+        CallSystemSe(0, 2);
+    }
+}
+
 /* CheckButton (before it reads the pad): hovering a row moves the cursor to it, a click on it
-   confirms (as Start), a right click cancels. Level 0 the game modes, 1 the difficulty, 2 the
-   extra games. */
+   confirms (as Start), a right click cancels. Level 0 the game modes (or EXTRA's), 1 the difficulty,
+   2 the extra games (not reached in the US menu). */
 void pc_title_mouse(int level, int flag)
 {
     ADV_WORK* ap = &AdvWork;
@@ -274,12 +364,10 @@ void pc_title_mouse(int level, int flag)
     menu_mouse_take(&mt);
     if (level == 0 && coop_biorand_offer(NULL)) {   /* a co-op guest (F3, --coop-join): the host's BioRand seed, offered on the
                                                        BIORAND screen as from its row (the lobby opens it itself: pc_lobby) */
-        ap->LastLevel = 0;
-        ap->NextMode = 30;
-        ap->Mode = 10;
-        br_screen = 1;
+        to_screen(&br_screen);
         return;
     }
+    if (level == 0 && ex.on) { extra_input(); return; }
     for (i = 0; i < n; i++) {
         float x0, y0, w;
         if (level == 0) { x0 = 140; w = 360; y0 = title_row_y(i, n); }
@@ -294,13 +382,10 @@ void pc_title_mouse(int level, int flag)
     }
     if (mt.left && hit >= 0) Pad[ap->PortId].press |= BTN_START;
     else if (mt.right) Pad[ap->PortId].press |= AdvGetCancelButton();
-    if (level == 0 && ap->Cursor[0] == br_title_row && (Pad[ap->PortId].press & (BTN_START | AdvGetOkButton()))) {
-        /* BIORAND: its screen in mode 30, as CheckButton opens MULTIPLAYER's (ModeCommandId 4) */
-        Pad[ap->PortId].press &= ~(BTN_START | AdvGetOkButton());
-        ap->LastLevel = 0;
-        ap->NextMode = 30;
-        ap->Mode = 10;
-        br_screen = 1;
+    if (level == 0 && ap->ModeCommandId[(int)ap->Cursor[0]] == TITLE_EXTRA && (Pad[ap->PortId].press & (BTN_START | AdvGetOkButton()))) {
+        Pad[ap->PortId].press &= ~(BTN_START | AdvGetOkButton());   /* EXTRA: its submenu */
+        ex.cur = 0;
+        ex_switch(1);
         CallSystemSe(0, 3);
     }
 }
