@@ -92,6 +92,11 @@ int   pc_fast_loading(void);         /* "Fast loading": room sound packs and tex
 /* mods folder (pc/src/audio/adx.c, docs/modding/README.md "The mods folder"): size of <mods>/name or -1; ADXF handle or NULL */
 int   pc_mod_file_size(const char* name);
 void* pc_mod_open(const char* name);
+/* languages (pc/glue/lang_glue.c, docs/LANGUAGES.md): the language font's width of a glyph (< 0: the game's own);
+   bhSetRoom's message table in the language */
+float pc_font_width(unsigned short code);
+unsigned int* pc_lang_room_mes(unsigned int* mesp);
+int   lang_picture(int adv);    /* the language of the ADV.AFS picture read last (0: English) */
 int   pc_model_cull(void);      /* actors/objects off-screen are skipped (bhCheckClipModel/Point) */
 int   pc_frame_blend(void);     /* PS2_swap blends the new frame 75% over the previous one (motion trail) */
 unsigned int pc_noclip(void);   /* F2 cheat: player flags whose enemy/wall push bhControlPlayer skips */

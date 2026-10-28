@@ -18,6 +18,7 @@
 #include "../src/host/bindings.h"
 #include "../src/host/menu_mouse.h"
 #include "../src/host/tps.h"
+#include "../src/host/lang.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -121,11 +122,26 @@ static void word(const Glyph* g, int n, float x, float y, unsigned int col, floa
     }
 }
 
+/* OPTION's picture in another language (lang.h): other letters on its plates, so our words are set in the font */
+static int foreign(void) { return lang_picture(4) != LANG_EN; }
+static unsigned int ps2_argb(unsigned int c)   /* a plate's colour (0x80 full) for the font */
+{
+    unsigned int r = 0;
+    for (int i = 0; i < 32; i += 8) { unsigned int k = (c >> i & 0xFF) * 2; r |= (k > 255 ? 255 : k) << i; }
+    return r;
+}
+static float font_word_sc(const char* t, float w) { float n = pc_ui_text_w(t, 1); return n > w ? w / n : 1; }
+static void font_word(const char* t, float x, float y, unsigned int col, float w)
+{
+    pc_ui_text(x, y + 3, t, font_word_sc(t, w), ps2_argb(col));
+    AdvEasySetTextureList(0);   /* the screen's textures again (the font set its own) */
+}
+
 static unsigned int pulse(void) { return ((unsigned int)AdvWork.FlushCount2 + 255) << 24 | 0xFFFFFF; }
 static unsigned int row_col(int i) { return OptionDef[i].SelectFlag ? pulse() : 0x7FAFAFAF; }   /* as the other rows */
 /* ENHANCED SETTINGS is 13 px wider than a label: its letters a little narrower, so it ends where the labels do */
 static float enh_sx(void) { return (ROW_W - N_OF(w_enhanced)) / (word_w(w_enhanced, N_OF(w_enhanced), 1) - N_OF(w_enhanced)); }
-static float exit_x(void) { return ROW_RIGHT - word_w(w_exit, 1, 1); }   /* right-aligned with the values */
+static float exit_x(void) { return ROW_RIGHT - (foreign() ? pc_ui_text_w(tr("EXIT"), 1) : word_w(w_exit, 1, 1)); }   /* right-aligned with the values */
 
 /* the cursor's next row from idx (adv.c DisplayOptionPlateLevel0; dir 0 up, 1 down, 2 left, 3 right; vib:
    VIBRATION can be chosen): up/down along the labels, wrapping, EXIT the last at the title; in a game left/right
@@ -156,9 +172,9 @@ int pc_options_move(int idx, int dir, int vib)
 #define DLG_BTN_SC 0.95f
 static float dlg_btn_w(const char* b, int glyphs)
 {
-    if (glyphs && !strcmp(b, "YES")) return word_w(w_yes, 3, 1);
-    if (glyphs && !strcmp(b, "NO")) return word_w(w_no, 2, 1);
-    return pc_ui_text_w(b, DLG_BTN_SC);
+    if (glyphs && !foreign() && !strcmp(b, "YES")) return word_w(w_yes, 3, 1);
+    if (glyphs && !foreign() && !strcmp(b, "NO")) return word_w(w_no, 2, 1);
+    return pc_ui_text_w(tr(b), DLG_BTN_SC);
 }
 static float dlg_btn_x(int i, const char* b0, const char* b1, int glyphs)
 {
@@ -205,7 +221,7 @@ static int text_wrap_c(int draw, float y, float w, const char* s, float sc, unsi
    (RETURN TO TITLE's proportions) */
 void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, float extra, float* y0, float* y1)
 {
-    int n = l2 ? text_wrap_c(0, 0, DLG_X1 - DLG_X0 - 40, l2, sc2, 0, lines) : 0;
+    int n = l2 ? text_wrap_c(0, 0, DLG_X1 - DLG_X0 - 40, tr(l2), sc2, 0, lines) : 0;
     float h = (l1 ? 54 : 22) + n * 28 * sc2 * 1.05f + extra + 64;
     *y0 = (float)(int)(240 - h / 2);
     *y1 = *y0 + (float)(int)(h + 0.5f);
@@ -220,8 +236,8 @@ static void dlg_frame(float y0, float y1, float z)
 
 static void dlg_texts(float y0, const char* l1, const char* l2, float sc2, unsigned int col2, int lines)
 {
-    if (l1) pc_ui_text(320 - pc_ui_text_w(l1, 0.7f) / 2, y0 + 22, l1, 0.7f, 0xFFFFFFFF);
-    if (l2) text_wrap_c(1, l1 ? y0 + 54 : y0 + 22, DLG_X1 - DLG_X0 - 40, l2, sc2, col2, lines);
+    if (l1) { l1 = tr(l1); pc_ui_text(320 - pc_ui_text_w(l1, 0.7f) / 2, y0 + 22, l1, 0.7f, 0xFFFFFFFF); }
+    if (l2) text_wrap_c(1, l1 ? y0 + 54 : y0 + 22, DLG_X1 - DLG_X0 - 40, tr(l2), sc2, col2, lines);
     AdvEasySetTextureList(0);   /* the screen's textures again (the font set its own) */
 }
 
@@ -233,9 +249,9 @@ void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, f
         const char* b = i ? b1 : b0;
         float x = dlg_btn_x(i, b0, b1, glyphs);
         unsigned int col = i == sel ? pulse() : 0x7FAFAFAF;
-        if (glyphs && !strcmp(b, "YES")) word(w_yes, 3, x, y1 - 48, col, 0.3f, 1);
-        else if (glyphs && !strcmp(b, "NO")) word(w_no, 2, x, y1 - 48, col, 0.3f, 1);
-        else pc_ui_text(x, y1 - 44, b, DLG_BTN_SC, col);
+        if (glyphs && !foreign() && !strcmp(b, "YES")) word(w_yes, 3, x, y1 - 48, col, 0.3f, 1);
+        else if (glyphs && !foreign() && !strcmp(b, "NO")) word(w_no, 2, x, y1 - 48, col, 0.3f, 1);
+        else pc_ui_text(x, y1 - 44, tr(b), DLG_BTN_SC, glyphs ? ps2_argb(col) : col);
     }
     dlg_texts(y0, l1, l2, sc2, col2, lines);
 }
@@ -319,9 +335,15 @@ static void quit_draw(void)
 /* DisplayOptionPlateLevel0, with the other rows: drawn as they are (dim, or pulsing when selected) */
 void pc_options_rows0(void)
 {
-    word(w_enhanced, N_OF(w_enhanced), 32.0f, 320.0f, row_col(7), 0.05f, enh_sx());
-    if (pc_in_game()) word(w_title, N_OF(w_title), 32.0f, 352.0f, row_col(8), 0.05f, 1);
-    word(w_exit, 1, exit_x(), 352.0f, row_col(6), 0.05f, 1);
+    if (foreign()) {
+        font_word(tr("ENHANCED SETTINGS"), 32.0f, 320.0f, row_col(7), ROW_W);
+        if (pc_in_game()) font_word(tr("RETURN TO TITLE"), 32.0f, 352.0f, row_col(8), ROW_W - 40);
+        font_word(tr("EXIT"), exit_x(), 352.0f, row_col(6), 200);
+    } else {
+        word(w_enhanced, N_OF(w_enhanced), 32.0f, 320.0f, row_col(7), 0.05f, enh_sx());
+        if (pc_in_game()) word(w_title, N_OF(w_title), 32.0f, 352.0f, row_col(8), 0.05f, 1);
+        word(w_exit, 1, exit_x(), 352.0f, row_col(6), 0.05f, 1);
+    }
     if (quit.open) quit_draw();
 }
 

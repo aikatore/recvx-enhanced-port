@@ -15,7 +15,8 @@ ImportSettings g_import;
 ImportProgress g_import_progress;
 volatile int g_import_reload;
 const ImportSource import_sources[IMPORT_SOURCES] = {
-    { "outbreak2", "Resident Evil Outbreak File #2", "SLUS-20984" },
+    { "outbreak2", "Resident Evil Outbreak File #2", "SLUS-20984", IMPORT_CAT_CHARACTERS },
+    { "sles50306", "Resident Evil Code: Veronica X (Europe)", "SLES-50306", IMPORT_CAT_LANGUAGES },
 };
 
 #define ITEMS_MAX 1024
@@ -61,7 +62,7 @@ int import_results(int src, ImportItem* out, int max, char* when, int wn)
     int n = 0;
     source_dir(src, p, sizeof(p));
     SDL_strlcat(p, "/manifest.txt", sizeof(p));
-    FILE* f = pc_fopen(p, "r");
+    FILE* f = import_sources[src].cat == IMPORT_CAT_CHARACTERS ? pc_fopen(p, "r") : NULL;
     if (when && wn) when[0] = 0;
     if (!f) return 0;
     while (fgets(line, sizeof(line), f) && n < max) {
@@ -97,6 +98,11 @@ int import_run(int src, int what)
     snprintf(pg->phase, sizeof(pg->phase), "Reading disc...");
     source_dir(src, dir, sizeof(dir));
     SDL_CreateDirectory(dir);   /* (creates the parents too) */
+    if (import_sources[src].cat == IMPORT_CAT_LANGUAGES) {
+        r = lang_extract(src, g_import.iso[src], dir);
+        host_log("import: %s: %s\n", import_sources[src].key, pg->phase);
+        return r;
+    }
     r = ob2_extract(g_import.iso[src], dir, what & IMPORT_OFFERED, items, ITEMS_MAX, &n);
     if (r < 0) { host_log("import: %s: %s\n", import_sources[src].key, pg->phase); return -1; }
     Save s = { src, n, items, g_import.iso[src] };

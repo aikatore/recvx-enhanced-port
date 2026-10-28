@@ -13,6 +13,8 @@
 #include "settings.h"
 #include "biorand.h"
 #include "../import/import.h"
+#include "lang.h"
+extern char g_lang_us_iso[1024];   /* import/lang.c */
 #include "../net/update.h"
 void render_loop(void);
 #include <SDL3/SDL.h>
@@ -169,7 +171,7 @@ void host_pump_events(void)
     }
     settings_poll();
     lobby_io_frame(g_window);
-    if (__atomic_exchange_n(&g_import_reload, 0, __ATOMIC_ACQ_REL)) import_registry_load();   /* (the IMPORT screen's extraction) */
+    if (__atomic_exchange_n(&g_import_reload, 0, __ATOMIC_ACQ_REL)) { import_registry_load(); lang_scan(); }   /* (the IMPORT screen's extraction or delete) */
 }
 
 #ifndef _WIN32
@@ -339,6 +341,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < IMPORT_SOURCES; i++) if (!strcmp(SDL_getenv("RECVX_IMPORT"), import_sources[i].key)) src = i;
         if (src < 0) host_fatal("RECVX_IMPORT: unknown source '%s' (outbreak2)", SDL_getenv("RECVX_IMPORT"));
         if (SDL_getenv("RECVX_IMPORT_ISO")) SDL_strlcpy(g_import.iso[src], SDL_getenv("RECVX_IMPORT_ISO"), sizeof(g_import.iso[src]));
+        SDL_strlcpy(g_lang_us_iso, g_config.iso_path, sizeof(g_lang_us_iso));   /* (a language import reads the US text) */
         exit(import_run(src, what) == 0 ? 0 : 1);
     }
     update_start();   /* the newest version for the title, on a thread of its own (net/update.h) */
@@ -357,6 +360,8 @@ int main(int argc, char** argv)
         if (!g_config.iso_path[0]) { usage(); host_fatal("Select a game disc image first."); }
         if (!cdvd_open_image(g_config.iso_path)) host_fatal("Cannot open game disc image: %s", g_config.iso_path);
     }
+    SDL_strlcpy(g_lang_us_iso, g_config.iso_path, sizeof(g_lang_us_iso));   /* (a language import reads the US text) */
+    lang_scan();   /* the installed languages (lang.h) */
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);

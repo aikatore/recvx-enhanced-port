@@ -9,6 +9,7 @@
 #include "../ps2_platform.h"
 #include "audio.h"
 #include "../host/biorand.h"
+#include "../host/lang.h"
 #include "../../include/pc_parse.h"
 #include <SDL3/SDL.h>
 #include <string.h>
@@ -40,14 +41,22 @@ static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t 
 {
     static const char* dir;
     FILE* f = NULL;
+    const char* ld;
+    int src = LF_BIORAND;
     if (!dir) dir = SDL_getenv("RECVX_MODS") ? SDL_getenv("RECVX_MODS") : "mods";
     while (*name == '\\' || *name == '/') name++;
     if (biorand_active() && SDL_strcasecmp(name, "ADV.AFS/2")) {   /* (not its title picture: its colours are broken; the disc's, or an HD pack's) */
         snprintf(path, npath, "%s/biorand/%s", dir, name);
         f = pc_fopen(path, "rb");
     }
-    if (!f) snprintf(path, npath, "%s/%s", dir, name);
-    if (!f && !(f = pc_fopen(path, "rb"))) return NULL;
+    if (!f) { snprintf(path, npath, "%s/%s", dir, name); f = pc_fopen(path, "rb"); src = LF_MODS; }
+    if (!f && (ld = pc_lang_file_dir())) {   /* the language's version of the file (lang.h; docs/LANGUAGES.md) */
+        snprintf(path, npath, "%s/%s", ld, name);
+        f = pc_fopen(path, "rb");
+        src = LF_LANG;
+    }
+    pc_lang_file_opened(name, f ? src : LF_DISC);
+    if (!f) return NULL;
     {
         long n = fseek(f, 0, SEEK_END) ? -1 : ftell(f);
         if (n < 0 || n > 0x7FFFF800L) {   /* (sizes are ints in the game; whole sectors are read) */
@@ -57,7 +66,7 @@ static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t 
         }
         *size = (uint32_t)n;
     }
-    host_log("mods: %s replaces the disc file (%u bytes)\n", path, *size);
+    if (src != LF_LANG) host_log("mods: %s replaces the disc file (%u bytes)\n", path, *size);
     return f;
 }
 static FILE* mod_open(const char* name, uint32_t* size) { char path[512]; return mod_open_path(name, size, path, sizeof path); }

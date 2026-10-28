@@ -15,6 +15,7 @@
 #include "lobby.h"
 #include "savestore.h"
 #include "biorand.h"
+#include "lang.h"
 #include "../net/update.h"
 #include "../audio/audio.h"
 #include <SDL3/SDL.h>
@@ -227,6 +228,22 @@ static const char* tenths(int v, char* b, int n) { snprintf(b, n, "%d.%d", v / 1
    while a SET_CALIB row is chosen: squares on a black and on a white strip, the faint ones at the ends */
 const unsigned char settings_calib[2][CALIB_STEPS] = { { 5, 10, 16, 24, 32 }, { 223, 231, 239, 245, 250 } };
 static void picture_reset(void) { g_config.brightness = 0; g_config.contrast = 100; g_config.gamma = 10; settings_save_later(); }
+/* Language: English and the installed languages (lang.h), in LANG_* order; Subtitles */
+static int lang_n(void) { int n = 0; for (int l = 0; l < LANG_COUNT; l++) n += lang_installed(l); return n; }
+static int lang_at(int v) { for (int l = 0; l < LANG_COUNT; l++) if (lang_installed(l) && v-- == 0) return l; return LANG_EN; }
+static int lang_get(void) { int v = 0; for (int l = 0; l < g_lang && l < LANG_COUNT; l++) v += lang_installed(l); return lang_installed(g_lang) ? v : 0; }
+static void lang_set(int v) { g_lang = lang_at(v); }
+static const char* lang_name(int v, char* buf, int n) { (void)buf; (void)n; return lang_names[lang_at(v)]; }
+static const char* lang_locked(void)
+{
+    if (lang_n() < 2) return "No other language is installed.";
+    return pc_in_game() ? "Change it on the title screen." : NULL;
+}
+static const char* subs_locked(void)
+{
+    for (int l = 1; l < LANG_COUNT; l++) if (lang_has_subtitles(l)) return lang_has_subtitles(g_lang) ? NULL : "Only the imported languages have subtitles.";
+    return "No language with subtitles is installed.";
+}
 static const char* rifle_locked(void) { return biorand_active() ? "Required by BioRand." : NULL; }
 /* "You appear as": positions in the menus' list (actors.c, without event doubles) */
 static int chr_get(void) { int o = pc_biorand_appear(); return appear_pos(o >= 0 ? o : g_coop.chr); }   /* (BioRand's pick of this game shown) */
@@ -371,7 +388,10 @@ const Setting g_settings[] = {
     { SP_DISPLAY, "HD Menus", V(g_config.hd_textures_ui), 0, 1, 1,
       .help = "Allow redesigned menus and artwork from the texture pack. Off keeps replacements faithful to the original." },
 
-    { SP_GAMEPLAY, "Skip Intro", V(g_config.skip_intro), 0, 1, 1, .flags = SET_RESTART, .help = "Go straight to the title screen. Off lets you skip each logo and movie with a button press.", .group = "GENERAL" },
+    { SP_GAMEPLAY, "Language", NULL, 0, 0, 1, .get = lang_get, .set = lang_set, .name = lang_name, .count = lang_n, .locked = lang_locked, .group = "GENERAL",
+      .help = "The game's text. Applies from the next screen." },
+    { SP_GAMEPLAY, "Subtitles", V(g_subtitles), 0, 1, 1, .locked = subs_locked, .help = "Show subtitles in cutscenes, in the chosen language." },
+    { SP_GAMEPLAY, "Skip Intro", V(g_config.skip_intro), 0, 1, 1, .flags = SET_RESTART, .help = "Go straight to the title screen. Off lets you skip each logo and movie with a button press." },
     { SP_GAMEPLAY, "Check For Updates", V(g_config.update_check), 0, 1, 1, .apply = update_start,
       .help = "Check for a newer game version at startup and show it on the title screen." },
     { SP_GAMEPLAY, "Skip Door Animations", V(g_config.skip_doors), 0, 2, 1, (const char* const[]){ "Off", "Instant", "Skippable" },

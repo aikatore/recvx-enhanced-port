@@ -38,6 +38,7 @@
 #include "../src/net/rdv_proto.h"
 #include "../src/net/coop_proto.h"   /* REC_*: what the host keeps for us */
 #include "../src/net/update.h"
+#include "../src/host/lang.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,15 +65,15 @@ enum { BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000
 #define Z_DIM 0.012f                    /* behind the models */
 #define Z_FRONT 0.3f                    /* in front of them */
 
-static int code_of(char c) { return c > 32 && c < 127 ? c - 32 : 0; }
-static float adv(int c) { return c ? FontSz[c] : 11.0f; }   /* the font's space is a full cell */
+/* UTF-8, the letters of the loaded font (lang.h pc_glyph_next: accents with a language's font) */
+static float adv(int c) { return c ? pc_glyph_w(c) : 11.0f; }   /* the font's space is a full cell */
 
 #define TRACK 0.88f                     /* a little tighter than the game's messages */
 
 static float text_w(const char* s, float sc)
 {
     float w = 0;
-    for (; *s; s++) w += adv(code_of(*s)) * sc * TRACK;
+    for (int c; (c = pc_glyph_next(&s)) >= 0;) w += adv(c) * sc * TRACK;
     return w;
 }
 
@@ -88,8 +89,8 @@ static void text(float x, float y, const char* s, float sc, unsigned int argb)
     if (!font_ok) return;
     bhFontScaleSet(sc, sc, sc);
     for (pass = 0; pass < 2; pass++)
-        for (p = s, x = x0; *p; p++) {
-            int c = code_of(*p);
+        for (p = s, x = x0; *p;) {
+            int c = pc_glyph_next(&p);
             NJS_POINT2 pos = { x + (pass ? 0 : 2), y + (pass ? 0 : 2) };
             if (c) bhDispFontEx(&pos, c, pass ? argb : (argb & 0xFF000000) >> 1 & 0xFF000000, PRI_TEXT);
             x += adv(c) * sc * TRACK;
@@ -169,12 +170,24 @@ static const struct { const Letter* l; int n; } plate_words[] = {
     { mp_letters, 11 }, { br_letters, 7 }, { ex_letters, 5 }, { im_letters, 6 },
 };
 
+static void title_font(void);
 static void plate_word(int word, float cx, float y, unsigned int col, unsigned int shadow, float scale)
 {
     const Letter* l = plate_words[word].l;
     int i, n = plate_words[word].n;
     float w = 0, x;
     QUAD q;
+    if (word != W_EX && lang_picture(2) != LANG_EN) {   /* another language's title picture: other letters on its plates (EXTREAM's stay) */
+        static const char* const words[] = { "MULTIPLAYER", "BIORAND", "EXTRA", "IMPORT" };
+        const char* t = tr(words[word]);
+        unsigned int rgb = 0;
+        for (i = 0; i < 24; i += 8) { unsigned int c = (col >> i & 0xFF) * 2; rgb |= (c > 255 ? 255 : c) << i; }   /* (the plates' 0x80 is full) */
+        (void)shadow;
+        title_font();
+        text(cx - text_w(t, 1.15f * scale) / 2, y + 3 * scale, t, 1.15f * scale, (col & 0xFF000000) | rgb);
+        AdvEasySetTextureList(0);   /* the title's textures again (the font set its own) */
+        return;
+    }
     for (i = 0; i < n; i++) w += (l[i].w + 1) * scale;
     x = cx - w / 2;
     for (i = 0; i < n; i++) {
@@ -748,8 +761,9 @@ static void font_release(void)
    game's file reader stays free) and kept; released when the title ends (lobby_close). */
 static void title_font(void)
 {
-    static int have;   /* font_file holds the font: 1; -1 it cannot be read */
+    static int have, have_lang;   /* font_file holds the font: 1; -1 it cannot be read; of which language (lang.h) */
     if (!(sys->ss_flg & 0x40) && !font_state) {
+        if (have_lang != g_lang) { have = 0; have_lang = g_lang; }
         if (!have) have = afs_read(sys->sys_partid, 1, font_file, sizeof(font_file)) ? 1 : -1;
         if (have < 0) return;
         bhSetFontTexture(font_file);

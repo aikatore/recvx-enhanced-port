@@ -22,58 +22,64 @@
 #define NBD_VERTS (1 << 20)      /* a model's vertices and strip indices, at most (far above Outbreak's) */
 #define NBD_INDICES (1 << 24)
 
-static int64_t rd_at(FILE* f, int64_t off, void* buf, size_t n)
+int64_t imp_read_at(FILE* f, int64_t off, void* buf, size_t n)
 {
     if (fseeko(f, (off_t)off, SEEK_SET) != 0) return 0;
     return fread(buf, 1, n, f) == n;
 }
 static uint32_t le32(const unsigned char* p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 
-/* ---------------------------------------------------------------- ISO 9660 (root directory only) */
-static int iso_find(FILE* f, const char* name, int64_t* off, uint32_t* size)
+/* ---------------------------------------------------------------- ISO 9660
+   `path`: a file of the root, or folders and the file with '/' between them (ENG/SYSMES1.ALD); any case */
+int imp_iso_find(FILE* f, const char* path, int64_t* off, uint32_t* size)
 {
     unsigned char pvd[SECTOR], *dir;
-    if (!rd_at(f, 16 * SECTOR, pvd, SECTOR) || pvd[0] != 1 || memcmp(pvd + 1, "CD001", 5)) return 0;
+    if (!imp_read_at(f, 16 * SECTOR, pvd, SECTOR) || pvd[0] != 1 || memcmp(pvd + 1, "CD001", 5)) return 0;
     uint32_t lba = le32(pvd + 156 + 2), len = le32(pvd + 156 + 10);
-    if (len > (1 << 20) || !(dir = malloc(len))) return 0;
-    int found = 0;
-    if (rd_at(f, (int64_t)lba * SECTOR, dir, len))
-        for (uint32_t i = 0; i < len && !found;) {
-            int l = dir[i];
-            if (!l) { i = (i / SECTOR + 1) * SECTOR; continue; }
-            if (i + l > len || l < 34) break;
-            int nl = dir[i + 32];
-            if (nl && 33 + nl <= l) {
-                char n[64] = { 0 };
-                memcpy(n, dir + i + 33, nl < 63 ? nl : 63);
-                char* sc = strchr(n, ';');
-                if (sc) *sc = 0;
-                if (!SDL_strcasecmp(n, name) && !(dir[i + 25] & 2)) {
-                    *off = (int64_t)le32(dir + i + 2) * SECTOR;
-                    *size = le32(dir + i + 10);
-                    found = 1;
+    for (;;) {
+        const char* slash = strchr(path, '/');
+        size_t want = slash ? (size_t)(slash - path) : strlen(path);
+        int found = 0;
+        if (len > (1 << 20) || !(dir = malloc(len))) return 0;
+        if (imp_read_at(f, (int64_t)lba * SECTOR, dir, len))
+            for (uint32_t i = 0; i < len && !found;) {
+                int l = dir[i];
+                if (!l) { i = (i / SECTOR + 1) * SECTOR; continue; }
+                if (i + l > len || l < 34) break;
+                int nl = dir[i + 32];
+                if (nl && 33 + nl <= l) {
+                    char n[64] = { 0 };
+                    memcpy(n, dir + i + 33, nl < 63 ? nl : 63);
+                    char* sc = strchr(n, ';');
+                    if (sc) *sc = 0;
+                    if (strlen(n) == want && !SDL_strncasecmp(n, path, want) && !(dir[i + 25] & 2) == !slash) {
+                        lba = le32(dir + i + 2);
+                        len = le32(dir + i + 10);
+                        found = 1;
+                    }
                 }
+                i += l;
             }
-            i += l;
-        }
-    free(dir);
-    return found;
+        free(dir);
+        if (!found) return 0;
+        if (!slash) { *off = (int64_t)lba * SECTOR; *size = len; return 1; }
+        path = slash + 1;
+    }
 }
 
 /* ---------------------------------------------------------------- AFS */
-typedef struct AfsFile { int64_t off; uint32_t size; char name[32]; } AfsFile;
 
 /* the files of the AFS archive at `base` (`size` bytes; malloc'd), with their names if it has a name
    table; an entry outside the archive gets size 0 (not read) */
-static AfsFile* afs_list(FILE* f, int64_t base, uint64_t size, int* count)
+AfsFile* imp_afs_list(FILE* f, int64_t base, uint64_t size, int* count)
 {
     unsigned char h[8];
     int c;
-    if (!rd_at(f, base, h, 8) || memcmp(h, "AFS", 4) || (c = pc_afs_count(h, size)) <= 0 || !pc_range_ok(8, (uint64_t)c * 8 + 8, size)) return NULL;
+    if (!imp_read_at(f, base, h, 8) || memcmp(h, "AFS", 4) || (c = pc_afs_count(h, size)) <= 0 || !pc_range_ok(8, (uint64_t)c * 8 + 8, size)) return NULL;
     uint32_t n = (uint32_t)c;
     unsigned char* t = malloc((size_t)(n + 1) * 8 + 8);
     AfsFile* out = calloc(n, sizeof(*out));
-    if (!t || !out || !rd_at(f, base, t, (size_t)(n + 1) * 8 + 8)) { free(t); free(out); return NULL; }
+    if (!t || !out || !imp_read_at(f, base, t, (size_t)(n + 1) * 8 + 8)) { free(t); free(out); return NULL; }
     uint32_t first = 0xFFFFFFFF;
     for (uint32_t i = 0; i < n; i++) {
         uint32_t o, l;
@@ -84,9 +90,9 @@ static AfsFile* afs_list(FILE* f, int64_t base, uint64_t size, int* count)
     }
     uint32_t noff = le32(t + 8 + 8 * n), nsz = le32(t + 8 + 8 * n + 4);
     unsigned char p[8];
-    if ((nsz != n * 48 || !noff) && first != 0xFFFFFFFF && first >= 16 && rd_at(f, base + first - 8, p, 8)) { noff = le32(p); nsz = le32(p + 4); }
+    if ((nsz != n * 48 || !noff) && first != 0xFFFFFFFF && first >= 16 && imp_read_at(f, base + first - 8, p, 8)) { noff = le32(p); nsz = le32(p + 4); }
     unsigned char* nt = nsz == n * 48 && noff && pc_range_ok(noff, nsz, size) ? malloc(nsz) : NULL;
-    if (nt && rd_at(f, base + noff, nt, nsz))
+    if (nt && imp_read_at(f, base + noff, nt, nsz))
         for (uint32_t i = 0; i < n; i++) memcpy(out[i].name, nt + 48 * i, 31);
     else
         for (uint32_t i = 0; i < n; i++) snprintf(out[i].name, sizeof(out[i].name), "#%u", i);
@@ -517,14 +523,14 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
     ImportProgress* pg = &g_import_progress;
     *count = 0;
     if (!f) { snprintf(pg->phase, sizeof(pg->phase), "Cannot open disc image: %s", isopath); return -1; }
-    if (!iso_find(f, "SYSTEM.CNF", &cnf_off, &cnf_size) || !rd_at(f, cnf_off, cnf, cnf_size < 127 ? cnf_size : 127) || !strstr(cnf, "SLUS_209.84")) {
+    if (!imp_iso_find(f, "SYSTEM.CNF", &cnf_off, &cnf_size) || !imp_read_at(f, cnf_off, cnf, cnf_size < 127 ? cnf_size : 127) || !strstr(cnf, "SLUS_209.84")) {
         snprintf(pg->phase, sizeof(pg->phase), "Use a US Resident Evil Outbreak File #2 disc (SLUS-20984).");
         fclose(f);
         return -1;
     }
-    AfsFile *top = iso_find(f, "NETBIO00.DAT", &off, &size) ? afs_list(f, off, size, &nfiles) : NULL, *rom = NULL;
+    AfsFile *top = imp_iso_find(f, "NETBIO00.DAT", &off, &size) ? imp_afs_list(f, off, size, &nfiles) : NULL, *rom = NULL;
     for (int i = 0; top && i < nfiles && !rom; i++)
-        if (!SDL_strcasecmp(top[i].name, "romdata_usa.afs")) rom = afs_list(f, top[i].off, top[i].size, &nrom);
+        if (!SDL_strcasecmp(top[i].name, "romdata_usa.afs")) rom = imp_afs_list(f, top[i].off, top[i].size, &nrom);
     free(top);
     if (!rom) { snprintf(pg->phase, sizeof(pg->phase), "Required game data not found. Check the selected disc image."); fclose(f); return -1; }
 
@@ -568,7 +574,7 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
         }
         snprintf(pg->phase, sizeof(pg->phase), "%s %s (%s)", it->name, it->variant, e->name);
         unsigned char* data = e->size > 0 && e->size < (64u << 20) ? malloc(e->size) : NULL;
-        if (!data || !rd_at(f, e->off, data, e->size)) snprintf(err, sizeof(err), "Cannot read %s from the disc.", e->name);
+        if (!data || !imp_read_at(f, e->off, data, e->size)) snprintf(err, sizeof(err), "Cannot read %s from the disc.", e->name);
         else if (ob2_read_nbd(data, e->size, &m, err, sizeof(err))) {
             it->nodes = m.nn; it->verts = m.nv; it->tris = imp_tris(&m); it->textures = m.ntex;
             it->meshes = m.nmesh;
