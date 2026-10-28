@@ -3127,6 +3127,8 @@ void coop_item_late(int bit)
 }
 
 static void gate_hold(int w, unsigned int* set, unsigned int* clr);
+static unsigned int latch_bits(int w);
+static void used_mark(int w, unsigned int bits);
 static void rb_mark(int w, unsigned int bits);
 static void gate_ours(int w, unsigned int bits);
 static void gate_release(void);
@@ -3306,6 +3308,7 @@ static int apply_session_event(const Event* e)
                     host_log("coop: the host took item %d of flag word %d as we did: ours goes back\n", item, w);
                 }
             }
+            c.u.fl.set[j] &= ~latch_bits(w); c.u.fl.clr[j] &= ~latch_bits(w);   /* a loop of this room: ours */
             gate_hold(w, &c.u.fl.set[j], &c.u.fl.clr[j]);   /* a gate of the scene we are in: when it ends */
             rb_mark(w, f[w] ^ ((f[w] | c.u.fl.set[j]) & ~c.u.fl.clr[j]));
             f[w] = (f[w] | c.u.fl.set[j]) & ~c.u.fl.clr[j];
@@ -3546,6 +3549,10 @@ static AtrSet aset[128];                   /* the room records' type/attr/prm th
 static int naset;
 static unsigned char nevflip[256];
 static unsigned char evdoor[256];          /* the event goes through a door (SetDoorCall), itself or by an event it starts */
+static unsigned short evtop[256][8];       /* world flags each event sets outside its blocks (always): as evflip */
+static unsigned char nevtop[256];
+static struct { unsigned char set; unsigned short bit; } latch[8];   /* gates of this room's own loops (see analyze) */
+static int nlatch;
 static unsigned short trace_buf[4096];
 static int ntrace;
 static unsigned int pre_flags[NFLAG];
@@ -3637,7 +3644,7 @@ static void analyze(void)
     for (k = 0; k < nev; k++) {   /* the world flags each event sets */
         int ne = 0;
         unsigned int ends[32];
-        nevflip[k] = 0;
+        nevflip[k] = nevtop[k] = 0;
         evdoor[k] = 0;
         o = tab[k + 2];
         lim = code_end(tab, ntab, o);
@@ -3648,11 +3655,13 @@ static void analyze(void)
             if (naset < 128 && coop_atr_set(d + o, &aset[naset])) naset++;
             if (d[o] == 5 && world_off(d[o + 1]) >= 0 && d[o + 5] <= 2 && nevflip[k] < 8)
                 evflip[k][nevflip[k]++] = d[o + 1] << 12 | d[o + 5] << 10 | (u16at(d + o + 2) & 0x3FF);
+            if (d[o] == 5 && !ne && world_off(d[o + 1]) >= 0 && d[o + 5] <= 1 && nevtop[k] < 8)
+                evtop[k][nevtop[k]++] = d[o + 1] << 12 | d[o + 5] << 10 | (u16at(d + o + 2) & 0x3FF);
             o += n;
             if (!ne && (d[o - n] == 0 || d[o - n] == 255)) break;
         }
     }
-    for (; k < 256; k++) nevflip[k] = evdoor[k] = 0;
+    for (; k < 256; k++) nevflip[k] = nevtop[k] = evdoor[k] = 0;
     for (j = 0; j < 3; j++)   /* events started by door events' starters: three levels deep */
         for (k = 0; k < nev; k++) {
             o = tab[k + 2];
@@ -3676,11 +3685,47 @@ static void analyze(void)
         o += n;
         if (!ns && d[o - n] == 0) break;
     }
+    /* A block whose own event sets its gate back is a loop of this room, not a world event: 4/1 case 1 (the
+       airport hangar) starts its ambient motion (objects 5 and 14) by ev_flg 249 clear -> set, and the motion's
+       event clears it again at its end, every 7 s. As a world event each game sent it every round, so a
+       world event window was always open: the room was never rebuilt from the partner's flags (the bridge
+       the partner lowered stayed up here), and each round's records went to the partner - the bridge raised
+       meanwhile included, placed back where it was a moment before (raised, it stayed down there, but could
+       be crossed). Its gate (only at the then-part's top level: the event always runs, and always resets it)
+       is no world flag while we are in the room: each game runs its own loop (apply_flags leaves it alone). */
+    nlatch = 0;
+    for (i = 0; i < nreg; i++) {
+        Region* r = &reg[i];
+        int loop = 0;
+        for (o = r->then0; o < r->then1 && !loop && (n = insn_len(d + o)) > 0; o += n) {
+            if (d[o] == 1) { Blk b; open_block(d, o, &b); n = (int)(b.end - o); continue; }
+            if (d[o] == 20)
+                for (k = 0; k < nevtop[d[o + 3]]; k++) {
+                    unsigned int f = evtop[d[o + 3]][k];
+                    if ((int)(f >> 12) == r->set && (int)(f & 0x3FF) == r->bit && (int)(f >> 10 & 3) == !r->val) loop = 1;
+                }
+        }
+        if (!loop) continue;
+        host_log("coop: block %04x (gate flag %d/%d) is a loop of this room: its own event sets the gate back, no world event\n", r->start, r->set, r->bit);
+        if (nlatch < 8) { latch[nlatch].set = r->set; latch[nlatch++].bit = r->bit; }
+        reg[i--] = reg[--nreg];
+    }
     if (trace)
         for (i = 0; i < nreg; i++)
             fprintf(stderr, "coop: world block %04x..%04x gate set %d bit %d %s, %d flips\n", reg[i].start, reg[i].then1,
                     reg[i].set, reg[i].bit, reg[i].val ? "set" : "clear", reg[i].nf);
     host_log("coop: room %d/%d case %d: %d world event blocks\n", sys->stg_no, sys->rom_no, sys->rcase, nreg);
+}
+
+/* the gates of this room's own loops in flag word w */
+static unsigned int latch_bits(int w)
+{
+    unsigned int m = 0;
+    int i;
+    if (rom->evtp != reg_evtp || scd_sig() != reg_sig) return 0;
+    for (i = 0; i < nlatch; i++)
+        if (world_off(latch[i].set) + (latch[i].bit >> 5) == w) m |= 0x80000000u >> (latch[i].bit & 31);
+    return m;
 }
 
 static Region* region_at(unsigned int start)
@@ -3859,20 +3904,33 @@ static void atr_put(int kind, int ix, const AtrRec* r)
    flag, a room-flag block then makes the door, so the partner's door stayed locked. So when the partner
    changes world flags (ev_flg, ky_flg) while we are in the room, the entry script's record writes (walls,
    triggers, floors) in the blocks that test them run again, as entering would run them, once our scene
-   and any world event window are over. Nothing else of the entry script runs (models, enemies, items,
-   sounds, room flags), and a block with another test than Ck / CmpB / CmpW is left alone. */
+   and any world event window are over. So do the placements of the room's objects there (an object's
+   LoadWork, then its position and angles: CommonCtr 7 8 9 11 12 13 47) and effects shown or hidden
+   (EffDispSet): a card door's shutter (7/20, 7/21, 3/15..3/17: the card's scene is the user's own, not a world
+   event) let the partner through but still looked closed until the room was entered again. Nothing else of
+   the entry script runs (enemies, items, sounds, lights, room flags), and a block with another test than
+   Ck / CmpB / CmpW is left alone. */
 static unsigned int rb_bits[NFLAG];     /* world flags the partner changed in this room, not rebuilt yet */
 static int rb_key = -1;
 static void rb_mark(int w, unsigned int bits)
 {
     int key = coop_room_key() * 16 + sys->rcase;
     if (!bits || !(w < 32 || (w >= 96 && w < 112))) return;   /* ev_flg, ky_flg */
+    used_mark(w, bits);
     if (key != rb_key) { memset(rb_bits, 0, sizeof(rb_bits)); rb_key = key; }
     rb_bits[w] |= bits;
 }
 static int rb_is_rec(int op) { return op == 10 || op == 11 || op == 12 || op == 37 || op == 123 || op == 124; }   /* (Wal|Etc|Flr)AtariSet(2) */
+static BH_SCEWORK rb_task;              /* the walk's own task: its LoadWork must not retarget a running event's */
+static int rb_obj;                      /* rb_task's work is an object */
+/* an entry script write of what the room shows: an object's placement (behind its LoadWork), an effect on or off */
+static int rb_is_show(const unsigned char* p)
+{
+    if (p[0] == 105) return rb_obj && (p[1] == 7 || p[1] == 8 || p[1] == 9 || p[1] == 11 || p[1] == 12 || p[1] == 13 || p[1] == 47);
+    return p[0] == 67;   /* EffDispSet */
+}
 /* the entry script's code in [o, end) as the interpreter takes it; `hit`: inside a block that tests a changed
-   flag. Returns the record writes run. */
+   flag. Returns the writes run. */
 static int rb_walk(const unsigned char* d, unsigned int o, unsigned int end, int hit, int depth)
 {
     int n, runs = 0;
@@ -3895,8 +3953,13 @@ static int rb_walk(const unsigned char* d, unsigned int o, unsigned int end, int
             o = b.end;
             continue;
         }
-        if (hit && rb_is_rec(d[o])) {
-            if (trace) fprintf(stderr, "coop: entry script record write at %04x: op %d record %d\n", o, d[o], d[o + 1]);
+        if (d[o] == 101 && (rb_obj = d[o + 1] == 2)) {   /* LoadWork of an object: only points rb_task at it */
+            bhScePtr = (unsigned char*)d + o;
+            bhScenarioJmpT[101]();
+        }
+        if (d[o] == 104 || d[o] == 181) rb_obj = 0;   /* LoadWork2, LoadWorkEx: another work, not run here */
+        if (hit && (rb_is_rec(d[o]) || rb_is_show(d + o))) {
+            if (trace) fprintf(stderr, "coop: entry script write at %04x: op %d %d\n", o, d[o], d[o + 1]);
             bhScePtr = (unsigned char*)d + o;
             bhScenarioJmpT[d[o]]();
             runs++;
@@ -3916,9 +3979,16 @@ static void rebuild(int key)
     if (!any || !d || in_scene() || win_rx.open || win_tx.open) return;
     for (first = tab[0], k = 0; k * 4 < first && k < 1024; k++)
         if (tab[k] && tab[k] < first) first = tab[k];
-    runs = rb_walk(d, tab[0], code_end(tab, first / 4, tab[0]), 0, 0);
+    {
+        BH_SCEWORK* cur = bhCetask;
+        memset(&rb_task, 0, sizeof(rb_task));
+        bhCetask = &rb_task;
+        rb_obj = 0;
+        runs = rb_walk(d, tab[0], code_end(tab, first / 4, tab[0]), 0, 0);
+        bhCetask = cur;
+    }
     memset(rb_bits, 0, sizeof(rb_bits));
-    if (runs) host_log("coop: the partner changed world flags of %d/%d: %d record writes of its entry script run again\n", sys->stg_no, sys->rom_no, runs);
+    if (runs) host_log("coop: the partner changed world flags of %d/%d: %d writes of its entry script run again\n", sys->stg_no, sys->rom_no, runs);
 }
 
 /* ---- an entry script that would undo the partner's solution
@@ -4019,8 +4089,11 @@ static int apply_atr(const Event* e)
         e->idx != sys->rcase || e->u.at.sig != scd_sig())
         return 1;   /* another room: its flags build it when we get there */
     for (k = 0; k < e->u.at.n; k++) {
-        atr_put(e->u.at.kind, e->u.at.ix[k], &e->u.at.r[k]);
-        if (win_rx.open && atr_pend_n < 64) {
+        int pend = win_rx.open && atr_pend_n < 64;
+        /* an object our replay of its events still moves takes its place when they have ended: put now, the
+           rest of a relative motion (a bridge's steps) took it past its end (4/1's bridge rose 5 m too high) */
+        if (!pend || e->u.at.kind != ATR_OBJ) atr_put(e->u.at.kind, e->u.at.ix[k], &e->u.at.r[k]);
+        if (pend) {
             atr_pend[atr_pend_n].kind = e->u.at.kind;
             atr_pend[atr_pend_n].ix = e->u.at.ix[k];
             atr_pend[atr_pend_n++].r = e->u.at.r[k];
@@ -4036,7 +4109,10 @@ static int apply_atr(const Event* e)
 static void replay(void)
 {
     unsigned char* d = (unsigned char*)rom->evtp;
+    unsigned int* f = flag_block();
+    unsigned int pre[NFLAG];
     int i, work_ok = 1, skipped = 0;
+    memcpy(pre, f, sizeof(pre));
     for (i = 0; i < trig.n; i++) {
         unsigned char* p = d + trig.ops[i];
         if (is_cond(*p) || is_flow(*p)) continue;
@@ -4047,6 +4123,8 @@ static void replay(void)
         bhScenarioJmpT[*bhScePtr]();
     }
     bhIfelFlg = 0;
+    for (i = 0; i < 32; i++) used_mark(i, pre[i] ^ f[i]);   /* ev_flg */
+    for (i = 96; i < 112; i++) used_mark(i, pre[i] ^ f[i]);   /* ky_flg */
     if (skipped) host_log("coop: %d actions of the partner's block act on its own game (door, player): not run here\n", skipped);
     win_open(&win_rx, ev_levels(d, trig.ops, trig.n));
     count_keys(keys_had);   /* a key the block took (PlItemLost) is the partner's use, not ours */
@@ -5580,6 +5658,55 @@ static void skip_now(const char* why)
    is held by it (a message, a scene, a terminal), and the partner in the same room cannot examine the
    same trigger meanwhile: "<name> is using this". */
 static int use_etc = -1, use_free, use_key = -1;   /* the trigger we examined; frames we have been free since */
+/* A lever the partner moved stays as it left it: the trigger the partner used last in our room (p_use, seen in
+   its pose until p_use_at) is locked for us for the rest of our visit of the room (used_etc; used_gen: the room
+   load) when, within USED_WIN frames, the partner changes a world flag that our room script tests in that
+   trigger's own block: "<name> already used this". The submarine's lever (1/14, 4/5) takes the player who pulls
+   it through a door into the moved submarine, where the toggle of ev_flg 19 follows; the partner in the
+   submarine got the flag and the lever's motion, but could pull it again at once, which moved the submarine
+   back for both (and took that player alone to the other dock). The airport hangar's bridge switch (4/1, ev_flg
+   35) toggles the same way. A trigger the flag closes (a solved puzzle, a one-way switch) is closed anyway. */
+#define USED_WIN 600
+static int p_use = -1, p_use_key = -1, used_etc = -1, used_gen = -1;
+static unsigned int p_use_at;
+/* the room's scd1 has a block taken at trigger `etc` (its Ck "player is at trigger") that tests flag set/bit */
+static int scd1_tests_at(int etc, int set, int bit)
+{
+    const unsigned char* d = (const unsigned char*)rom->evtp;
+    const unsigned int* tab = (const unsigned int*)rom->evtp;
+    unsigned int first = tab[0], o, p, end;
+    int k, n, m;
+    for (k = 0; k * 4 < (int)first && k < 1024; k++)
+        if (tab[k] && tab[k] < first) first = tab[k];
+    end = code_end(tab, first / 4, tab[1]);
+    for (o = tab[1]; o < end && (n = insn_len(d + o)) > 0 && d[o] != 0; o += n) {
+        Blk b;
+        int at = 0;
+        if (d[o] != 1) continue;
+        open_block(d, o, &b);
+        for (p = o + 2; p < b.then0 && (m = insn_len(d + p)) > 0; p += m)
+            if (d[p] == 4 && d[p + 1] == 10 && (u16at(d + p + 2) & 0x3FF) == 23 && d[p + 4] == etc) at = 1;
+        if (!at || b.end > end) continue;
+        for (p = o; p < b.end && (m = insn_len(d + p)) > 0; p += m)
+            if (d[p] == 4 && d[p + 1] == set && (u16at(d + p + 2) & 0x3FF) == bit) return 1;
+    }
+    return 0;
+}
+/* world flags the partner changed in our room (its flags, its block replayed here): ev_flg / ky_flg word w */
+static void used_mark(int w, unsigned int bits)
+{
+    int b, set = w < 32 ? 1 : 2, key;
+    if (!bits || !sys || !rom || !rom->evtp) return;
+    key = coop_room_key() * 16 + sys->rcase;
+    if (p_use < 0 || p_use_key != key || frame_no - p_use_at > USED_WIN || (used_etc == p_use && used_gen == enemy_room_gen)) return;
+    for (b = 0; b < 32; b++)
+        if ((bits << b & 0x80000000u) && scd1_tests_at(p_use, set, (w - world_off(set)) * 32 + b)) {
+            used_etc = p_use;
+            used_gen = enemy_room_gen;
+            host_log("coop: the partner's trigger %d in %d/%d changed flag %d/%d: used, not ours until we leave\n", p_use, sys->stg_no, sys->rom_no, set, (w - world_off(set)) * 32 + b);
+            return;
+        }
+}
 /* hitchk.c bhCheckExmAtari: we examine trigger `etc` (a puzzle, a message, a terminal); 1: not now */
 int coop_examine(int etc)
 {
@@ -5588,6 +5715,12 @@ int coop_examine(int etc)
         snprintf(g_trade.msg, sizeof(g_trade.msg), "%s is using this", g_trade.name[0] ? g_trade.name : "Your partner");
         g_trade.msg_until = net_ms() + 3000;
         host_log("coop: trigger %d in %d/%d: the partner is using it\n", etc, sys->stg_no, sys->rom_no);
+        return 1;
+    }
+    if (etc == used_etc && used_gen == enemy_room_gen) {
+        snprintf(g_trade.msg, sizeof(g_trade.msg), "%s already used this", g_trade.name[0] ? g_trade.name : "Your partner");
+        g_trade.msg_until = net_ms() + 3000;
+        host_log("coop: trigger %d in %d/%d: the partner used it\n", etc, sys->stg_no, sys->rom_no);
         return 1;
     }
     use_etc = etc;
@@ -5603,6 +5736,11 @@ static void use_frame(void)
     if (use_etc >= 0 && tx_in_game && !(sys->st_flg & 0x4) && !(sys->cb_flg & 0x4) && ++use_free > 10) use_etc = -1;
     else if (use_etc >= 0 && (!tx_in_game || (sys->st_flg & 0x4) || (sys->cb_flg & 0x4))) use_free = 0;
     tx.use = use_etc >= 0 ? (uint8_t)(use_etc + 1) : 0;
+    if (have_rx && !echo_delay && rx.use && partner_here()) {   /* the partner's trigger, for used_mark */
+        p_use = rx.use - 1;
+        p_use_key = coop_room_key() * 16 + sys->rcase;
+        p_use_at = frame_no;
+    }
 }
 /* event.c bhEvtComSet: an event of the partner's world event, replayed here, opens no terminal (1/09: the
    office computer's power-on event ends in the password screen; replayed, it put the partner into it) */
@@ -6426,8 +6564,11 @@ static void world_trace(void)
         const unsigned int* f = flag_block();
         unsigned int h = 0;
         for (i = 0; i < NFLAG; i++)
-            if (!item_word(i)) h = h * 31 + f[i];
+            if (!item_word(i)) h = h * 31 + (f[i] & ~latch_bits(i));   /* a loop's gate is each game's own */
         fprintf(stderr, "coop: world flags %08x at frame %u in %d/%d\n", h, frame_no, sys->stg_no, sys->rom_no);
+        fprintf(stderr, "coop: objects at frame %u:", frame_no);   /* their placement (a door, a bridge) */
+        for (i = 4; i < obj_count(); i++) fprintf(stderr, " %d:%.0f,%.0f,%.0f", i, sys->obwp[i].px, sys->obwp[i].py, sys->obwp[i].pz);
+        fprintf(stderr, "\n");
     }
 }
 
