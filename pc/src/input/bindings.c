@@ -25,29 +25,29 @@ const BindRow bind_rows[B_COUNT] = {
     [B_L1] = { "l1", "L1", BG_GAME, 1 },               [B_R1] = { "r1", "R1", BG_GAME, 1 },
     [B_TRIANGLE] = { "triangle", "Triangle", BG_GAME, 1 }, [B_CIRCLE] = { "circle", "Circle", BG_GAME, 1 },
     [B_CROSS] = { "cross", "Cross", BG_GAME, 1 },      [B_SQUARE] = { "square", "Square", BG_GAME, 1 },
-    [B_QUICKTURN] = { "quickturn", "Quick turn (back, then run)", BG_GAME, 1 },
-    [B_QUICKKNIFE] = { "quickknife", "Quick knife (hold)", BG_GAME, 1 },
-    [B_TRADE] = { "trade", "Trade request (co-op)", BG_GAME, 1 },
+    [B_QUICKTURN] = { "quickturn", "Quick Turn", BG_GAME, 1 },
+    [B_QUICKKNIFE] = { "quickknife", "Quick Knife (Hold)", BG_GAME, 1 },
+    [B_TRADE] = { "trade", "Trade (Co-op)", BG_GAME, 1 },
     [B_RELOAD] = { "reload", "Reload", BG_GAME, 1 },
-    [B_FREEAIM] = { "freeaim", "Aim (no auto-aim)", BG_GAME, 1 },
+    [B_FREEAIM] = { "freeaim", "Free Aim", BG_GAME, 1 },
     [B_TPS_FWD] = { "tps_forward", "Forward", BG_TPS, 0 },   [B_TPS_BACK] = { "tps_back", "Back", BG_TPS, 0 },
-    [B_TPS_LEFT] = { "tps_left", "Turn left", BG_TPS, 0 },   [B_TPS_RIGHT] = { "tps_right", "Turn right", BG_TPS, 0 },
-    [B_TPS_RUN] = { "tps_run", "Run", BG_TPS, 1 },           [B_TPS_ACTION] = { "tps_action", "Action / confirm", BG_TPS, 1 },
+    [B_TPS_LEFT] = { "tps_left", "Turn Left", BG_TPS, 0 },   [B_TPS_RIGHT] = { "tps_right", "Turn Right", BG_TPS, 0 },
+    [B_TPS_RUN] = { "tps_run", "Run", BG_TPS, 1 },           [B_TPS_ACTION] = { "tps_action", "Action / Confirm", BG_TPS, 1 },
     [B_TPS_CANCEL] = { "tps_cancel", "Cancel", BG_TPS, 1 },  [B_TPS_STATUS] = { "tps_inventory", "Inventory", BG_TPS, 1 },
-    [B_TPS_MAP] = { "tps_map", "Map", BG_TPS, 1 },           [B_TPS_AIM] = { "tps_aim", "Aim (hold)", BG_TPS, 1 },
+    [B_TPS_MAP] = { "tps_map", "Map", BG_TPS, 1 },           [B_TPS_AIM] = { "tps_aim", "Aim (Hold)", BG_TPS, 1 },
     [B_TPS_FIRE] = { "tps_fire", "Fire", BG_TPS, 1 },        [B_TPS_RELOAD] = { "tps_reload", "Reload", BG_TPS, 1 },
-    [B_TPS_QUICKTURN] = { "tps_quickturn", "Quick turn", BG_TPS, 1 },
-    [B_TPS_KNIFE] = { "tps_knife", "Quick knife (hold)", BG_TPS, 2 },
+    [B_TPS_QUICKTURN] = { "tps_quickturn", "Quick Turn", BG_TPS, 1 },
+    [B_TPS_KNIFE] = { "tps_knife", "Quick Knife (Hold)", BG_TPS, 2 },
     [B_TPS_OPTIONS] = { "tps_options", "Options", BG_TPS, 2 },
-    [B_TPS_RECENTER] = { "tps_recenter", "Camera behind character", BG_TPS, 2 },
-    [B_TPS_TOGGLE] = { "tps_toggle", "Third-person camera on/off", BG_HOTKEY, 0 },
-    [B_SETTINGS] = { "settings", "Settings overlay", BG_HOTKEY, 0 },
-    [B_CHEATS] = { "cheats", "Cheat menu", BG_HOTKEY, 0 },
-    [B_COOP] = { "coop", "Co-op window", BG_HOTKEY, 0 },
-    [B_IMPORT] = { "import", "Import window", BG_HOTKEY, 0 },
+    [B_TPS_RECENTER] = { "tps_recenter", "Center Camera", BG_TPS, 2 },
+    [B_TPS_TOGGLE] = { "tps_toggle", "Toggle Third Person", BG_HOTKEY, 0 },
+    [B_SETTINGS] = { "settings", "Settings Window", BG_HOTKEY, 0 },
+    [B_CHEATS] = { "cheats", "Cheat Menu", BG_HOTKEY, 0 },
+    [B_COOP] = { "coop", "Co-op Window", BG_HOTKEY, 0 },
+    [B_IMPORT] = { "import", "Import Window", BG_HOTKEY, 0 },
     [B_FULLSCREEN] = { "fullscreen", "Fullscreen", BG_HOTKEY, 0 },
-    [B_NOCLIP_UP] = { "noclip_up", "Noclip fly up", BG_HOTKEY, 0 },
-    [B_NOCLIP_DOWN] = { "noclip_down", "Noclip fly down", BG_HOTKEY, 0 },
+    [B_NOCLIP_UP] = { "noclip_up", "Fly Up", BG_HOTKEY, 0 },
+    [B_NOCLIP_DOWN] = { "noclip_down", "Fly Down", BG_HOTKEY, 0 },
 };
 
 const int bind_order[B_COUNT] = {
@@ -360,7 +360,7 @@ const char* bind_code_name(int dev, int code, char* buf, int n)
 
 const char* bind_pad_desc(char* d, int n)
 {
-    if (g_input_source == INPUT_KBM) return "Gamepads ignored (input source: keyboard/mouse only)";
+    if (g_input_source == INPUT_KBM) return "Gamepads disabled. Change Input Devices to use one.";
     if (pad_info_get(NULL, d, n)) return d;
     if (g_input_pad) { snprintf(d, n, "Gamepad %d not connected", g_input_pad); return d; }
     return "No gamepad connected";
@@ -370,8 +370,8 @@ const char* bind_pad_desc(char* d, int n)
    bits; 0x10000 skip and 0x20000 pause are left out, they come with others) */
 const char* bind_row_label(int row, char* buf, int n)
 {
-    static const char* vnames[16] = { "Forward", "Back", "Turn left", "Turn right", "Aim", "Aim up", "Aim down",
-                                      "Change aim", "Fire", "Examine", "Run", "Confirm", "Cancel", "Map", "Inventory", "Options" };
+    static const char* vnames[16] = { "Forward", "Back", "Turn Left", "Turn Right", "Aim", "Aim Up", "Aim Down",
+                                      "Change Aim", "Fire", "Examine", "Run", "Confirm", "Cancel", "Map", "Inventory", "Options" };
     int len = 0;
     if (row >= 16) { snprintf(buf, n, "%s", bind_rows[row].name); return buf; }
     buf[0] = 0;

@@ -241,7 +241,7 @@ static struct {
 static Row rows[MAX_ROWS];
 static int nrows;
 
-static const char* const heads[] = { "", "THIRD PERSON (KEYBOARD AND MOUSE)", "HOTKEYS" };
+static const char* const heads[] = { "", "THIRD PERSON: KEYBOARD AND MOUSE", "HOTKEYS" };
 
 /* every row of the page that is shown now (what F1 shows of a page, this shows too), headings first */
 static void page_rows(void)
@@ -339,7 +339,7 @@ static int activate(const Row* r)
     case K_RESET:
         bind_reset(st.dev);
         settings_save_later();
-        say(st.dev ? "Gamepad bindings reset to the defaults" : "Keyboard bindings reset to the defaults");
+        say(st.dev ? "Gamepad bindings restored." : "Keyboard bindings restored.");
         CallSystemSe(0, 3);
         return 0;
     case K_BACK: CallSystemSe(0, 0); return 1;
@@ -347,7 +347,7 @@ static int activate(const Row* r)
         if (settings_locked(s)) { CallSystemSe(0, 1); say(settings_locked(s)); return 0; }
         if (s->flags & SET_ACTION) {
             if (s->flags & SET_NOW) settings_act(s);
-            else { st.pending[r->idx] = 1; st.any_pending = 1; say("Done when you leave the menu"); }
+            else { st.pending[r->idx] = 1; st.any_pending = 1; say("Applies when you leave this menu."); }
             CallSystemSe(0, 3);
             return 0;
         }
@@ -369,7 +369,7 @@ static void capture_end(int code)
     settings_save_later();
     CallSystemSe(0, 3);
     if (bind_swapped()) { snprintf(nm, sizeof(nm), "Swapped with %s", bind_swapped()); say(nm); }
-    else if (bind_combo(row, st.dev, st.slot)) say("Shared: hold aim and press it to reload; without aim it does its own action.");
+    else if (bind_combo(row, st.dev, st.slot)) say("Hold Aim and press this button to reload. Without Aim, it keeps its other action.");
     host_log("options: %s %s slot %d = %s\n", st.dev ? "pad" : "key", bind_rows[row].ini, st.slot + 1, bind_code_name(st.dev, code < 0 ? 0 : code, nm, sizeof(nm)));
 }
 
@@ -430,8 +430,8 @@ static void draw_row(int i, int sel)
     case K_GROUP: pc_ui_text(X_LABEL - 6, y + 2, g_settings[r->idx].group, 0.45f, 0xFFE0C080); return;
     case K_HEAD: {
         char t[64];
-        if (r->idx == BG_GAME) snprintf(t, sizeof(t), "GAME (KEY CONFIG TYPE %c)", 'A' + pc_keytype());
-        else snprintf(t, sizeof(t), "%s", r->idx == BG_TPS && st.dev ? "THIRD PERSON (GAMEPAD, MODERN)" : heads[r->idx]);
+        if (r->idx == BG_GAME) snprintf(t, sizeof(t), "GAME (CONTROL TYPE %c)", 'A' + pc_keytype());
+        else snprintf(t, sizeof(t), "%s", r->idx == BG_TPS && st.dev ? "THIRD PERSON: MODERN GAMEPAD" : heads[r->idx]);
         pc_ui_text(X_LABEL - 6, y + 2, t, 0.45f, 0xFFE0C080);
         return;
     }
@@ -456,10 +456,10 @@ static void draw_row(int i, int sel)
         return;
     }
     case K_SET:
-        snprintf(label, sizeof(label), "%s%s", s->label, (s->flags & SET_RESTART) ? " (next start)" : "");
+        snprintf(label, sizeof(label), "%s%s", s->label, (s->flags & SET_RESTART) ? " (restart needed)" : "");
         text_fit(X_LABEL, y, label, SC_ROW, 296, col);
         if (s->flags & SET_ACTION) {
-            if (st.pending[r->idx]) pc_ui_text(X_VALUE, y, "(when you leave)", 0.5f, 0xFFE0C080);
+            if (st.pending[r->idx]) pc_ui_text(X_VALUE, y, "(on leaving menu)", 0.5f, 0xFFE0C080);
             return;
         }
         settings_value(s, val, sizeof(val));
@@ -490,31 +490,30 @@ static void draw_help(void)
     unsigned int col = 0xFFC0C0C0;
     t[0] = 0;
     if (st.capture) {
-        snprintf(t, sizeof(t), "Press a %s for %s ... (Esc cancels, Delete clears, %d s)", st.dev ? "gamepad button" : "key or mouse button",
+        snprintf(t, sizeof(t), "Press a %s for %s. Esc: cancel. Delete: clear. %d s left.", st.dev ? "gamepad button" : "key or mouse button",
                  bind_rows[st.capture - 1].name, (bind_capture_left_ms() + 999) / 1000);
         col = 0xFFFFE080;
     } else if (st.msg_t > 0) { st.msg_t--; snprintf(t, sizeof(t), "%s", st.msg); col = 0xFFFFE080; }
     else switch (r->kind) {
-    case K_PAGE: snprintf(t, sizeof(t), "Left/right or %s change the page, up/down choose a setting. Changes are saved at once; F1 shows the same settings.",
+    case K_PAGE: snprintf(t, sizeof(t), "Left/right or %s: change page; up/down: choose a setting. Changes save automatically.",
                           page_keys(nm, sizeof(nm))); break;
-    case K_DEVICE: snprintf(t, sizeof(t), "%s", st.dev ? bind_pad_desc(nm, sizeof(nm)) : "The game's buttons, third-person keys and hotkeys. Mouse buttons can be bound too, e.g. right mouse on Aim, left on Fire."); break;
-    case K_RESET: snprintf(t, sizeof(t), "All %s bindings back to the defaults.", st.dev ? "gamepad" : "keyboard and mouse"); break;
-    case K_BACK: snprintf(t, sizeof(t), "Back to the OPTION screen (also cancel or a right click)."); break;
+    case K_DEVICE: snprintf(t, sizeof(t), "%s", st.dev ? bind_pad_desc(nm, sizeof(nm)) : "Choose bindings for game actions, third person and hotkeys. Mouse buttons can be assigned too."); break;
+    case K_RESET: snprintf(t, sizeof(t), "Restore default %s bindings.", st.dev ? "gamepad" : "keyboard and mouse"); break;
+    case K_BACK: snprintf(t, sizeof(t), "Return to OPTION. Cancel or right-click also goes back."); break;
     case K_BIND: {
         int c = bind_conflict(r->idx, st.dev);
-        if (c) { snprintf(t, sizeof(t), "Also bound to: %s. Bind one of them to something else.", bind_rows[c - 1].name); col = 0xFFFF8080; }
-        else if (r->idx == B_QUICKTURN || r->idx == B_TPS_QUICKTURN) snprintf(t, sizeof(t), "Tap it: holds back, then presses run, as the game's own quick turn.");
+        if (c) { snprintf(t, sizeof(t), "Also assigned to %s. Change either binding to avoid a conflict.", bind_rows[c - 1].name); col = 0xFFFF8080; }
+        else if (r->idx == B_QUICKTURN || r->idx == B_TPS_QUICKTURN) snprintf(t, sizeof(t), "Press to turn around quickly.");
         else if (r->idx == B_RELOAD || r->idx == B_TPS_RELOAD)
-            snprintf(t, sizeof(t), "Reloads from the inventory's ammo, as firing on an empty magazine does. Shared with another action: "
-                                   "Aim + button reloads.");
-        else snprintf(t, sizeof(t), "Confirm: change. Left/right: first or second binding (%s).", bind_code_name(st.dev, bind_get(r->idx, st.dev, st.slot), nm, sizeof(nm)));
+            snprintf(t, sizeof(t), "Reload using ammo from your inventory. If shared with another action, hold Aim and press the button.");
+        else snprintf(t, sizeof(t), "Confirm: rebind. Left/right: choose a binding (%s).", bind_code_name(st.dev, bind_get(r->idx, st.dev, st.slot), nm, sizeof(nm)));
         break;
     }
     case K_SET: {
         const char* lock = settings_locked(s);
-        snprintf(t, sizeof(t), "%s%s%s%s", lock ? lock : "", lock ? " " : "", (s->flags & SET_RESTART) ? "Takes effect at the next start. " : "", s->help ? s->help : "");
+        snprintf(t, sizeof(t), "%s%s%s%s", lock ? lock : "", lock ? " " : "", (s->flags & SET_RESTART) ? "Restart needed. " : "", s->help ? s->help : "");
         if (lock) col = 0xFFFFC060;
-        if (s->flags & SET_ACTION && !lock && !(s->flags & SET_NOW)) snprintf(t + strlen(t), sizeof(t) - strlen(t), "%sRuns when you leave the menu.", s->help ? " " : "");
+        if (s->flags & SET_ACTION && !lock && !(s->flags & SET_NOW)) snprintf(t + strlen(t), sizeof(t) - strlen(t), "%sApplies when you leave this menu.", s->help ? " " : "");
         break;
     }
     }

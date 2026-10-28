@@ -175,7 +175,7 @@ int main(void)
     bind_set(B_TPS_RUN, BIND_PAD, 0, 1 + SDL_GAMEPAD_BUTTON_DPAD_UP);
     CHECK(!bind_swapped() && bind_get(B_UP, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_DPAD_UP && !bind_conflict(B_TPS_RUN, BIND_PAD));
     bind_set(B_TPS_FIRE, BIND_PAD, 0, 1 + SDL_GAMEPAD_BUTTON_SOUTH);   /* within the set: swaps with action */
-    CHECK(bind_swapped() && !strcmp(bind_swapped(), "Action / confirm") && bind_get(B_TPS_ACTION, BIND_PAD, 0) == BIND_AXIS + SDL_GAMEPAD_AXIS_RIGHT_TRIGGER * 2);
+    CHECK(bind_swapped() && !strcmp(bind_swapped(), "Action / Confirm") && bind_get(B_TPS_ACTION, BIND_PAD, 0) == BIND_AXIS + SDL_GAMEPAD_AXIS_RIGHT_TRIGGER * 2);
     CHECK(bind_get(B_CROSS, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_SOUTH && bind_get(B_QUICKKNIFE, BIND_PAD, 0) == BIND_AXIS + SDL_GAMEPAD_AXIS_RIGHT_TRIGGER * 2);
     bind_set(B_TPS_FIRE, BIND_PAD, 0, BIND_AXIS + SDL_GAMEPAD_AXIS_RIGHT_TRIGGER * 2);   /* back */
     CHECK(bind_get(B_TPS_ACTION, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_SOUTH);
