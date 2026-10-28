@@ -19,6 +19,9 @@ typedef struct LobbyIO {
     volatile int clip_req;          /* ... taken by the main thread */
     volatile int paste_req;         /* game thread sets 1; the main thread puts the clipboard's text in paste and sets 2 */
     char paste[160];
+    volatile int file_req;          /* game thread sets 1 (file: the folder or file to start in, or ""); the main thread opens
+                                       the system's file dialog (2), then file is the chosen one and 3, or 4 cancelled */
+    char file[1024];
 } LobbyIO;
 extern LobbyIO g_lobby_io;
 

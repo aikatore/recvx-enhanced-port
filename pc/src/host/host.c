@@ -169,6 +169,7 @@ void host_pump_events(void)
     }
     settings_poll();
     lobby_io_frame(g_window);
+    if (__atomic_exchange_n(&g_import_reload, 0, __ATOMIC_ACQ_REL)) import_registry_load();   /* (the IMPORT screen's extraction) */
 }
 
 #ifndef _WIN32

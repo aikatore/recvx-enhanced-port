@@ -13,6 +13,7 @@ void host_log(const char* fmt, ...);
 
 ImportSettings g_import;
 ImportProgress g_import_progress;
+volatile int g_import_reload;
 const ImportSource import_sources[IMPORT_SOURCES] = {
     { "outbreak2", "Resident Evil Outbreak File #2", "SLUS-20984" },
 };
@@ -27,6 +28,12 @@ static void source_dir(int src, char* out, int n)
     else snprintf(out, n, "%s/import/%s", mods, import_sources[src].key);
 }
 void import_source_dir(int src, char* out, int n) { source_dir(src, out, n); }
+int import_present(int src)
+{
+    char d[1100];
+    source_dir(src, d, sizeof(d));
+    return SDL_GetPathInfo(d, NULL);
+}
 
 /* <dir>/<source>/manifest.txt: a header, then one line per model:
    item|id|name|variant|ok|nodes|meshes|verts|tris|textures|player|female|note */
@@ -109,7 +116,7 @@ static int run_src, run_what;
 static int SDLCALL run_thread(void* ud)
 {
     (void)ud;
-    import_run(run_src, run_what);
+    g_import_progress.result = import_run(run_src, run_what);
     __atomic_store_n(&g_import_progress.running, 0, __ATOMIC_RELEASE);
     return 0;
 }
@@ -154,5 +161,6 @@ void import_registry_load(void)
         }
     }
     if (full) host_log("import: the list of imported models is full (%d): %d more not listed\n", ACTOR_IMPORT_MAX, full);
+    if (k != actor_import_n) host_log("import: %d imported player models listed\n", k);
     __atomic_store_n(&actor_import_n, k, __ATOMIC_RELEASE);
 }

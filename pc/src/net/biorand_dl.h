@@ -50,6 +50,8 @@ void biorand_cli_status(BrdlStatus* s);   /* any thread; error only in BRDL_ERRO
 int  biorand_cli_generate(const char* seed, const char* iso, const char* mods, const char* cfg);
 #define BRDL_GEN_FREE_MB 4096   /* free space it needs in mods: the pack 1.4 GB, the CLI's scratch 2.4 GB while it runs */
 int  biorand_free_mb(const char* dir);   /* free space of dir's disk in MB (at most INT_MAX), -1 unknown */
+int  brdl_rm_tree(const char* path);      /* deletes path and all below it (8 levels), never following a link (the IMPORT
+                                             screen's DELETE IMPORTED MODELS too); 1 when it is gone */
 
 /* a line of the CLI's stderr: 'P' "Progress: N% text" (*pct 0..100), 'E' "Error: text", 'W' "Warning: text",
    0 other (Info:); *text after the prefix */

@@ -48,6 +48,8 @@ void coop_own_from_save(const void* save);
 void bhReturnTitle(void);
 int  pc_biorand_menu(void);             /* biorand_menu.c: the BIORAND screen, once per frame; 1 back to the title menu */
 void pc_biorand_menu_close(void);
+int  pc_import_menu(void);              /* import_menu.c: the IMPORT screen, once per frame; 1 back to the title menu */
+void pc_import_menu_close(void);
 extern ADV_WORK AdvWork;
 extern float FontScaleY;
 extern const char PlyFlip[23];
@@ -219,6 +221,7 @@ void pc_title_menu_init(void)
     ex.n = 0;
     if (biorand_shown()) ex.row[ex.n++] = XR_BIORAND;
     if (ap->ExtraFlag) ex.row[ex.n++] = XR_BATTLE;
+    if (biorand_shown()) ex.row[ex.n++] = XR_IMPORT;   /* (--dev, as BIORAND: held back) */
     ap->ModeCommandId[n++] = 0;
     ap->ModeCommandId[n++] = 1;
     ap->ModeCommandId[n++] = 2;
@@ -1711,7 +1714,8 @@ static void lobby_close(int keep)
 void pc_lobby_close(void)
 {
     if (br_screen) pc_biorand_menu_close();
-    br_screen = 0;
+    if (im_screen) pc_import_menu_close();
+    br_screen = im_screen = 0;
     lobby_close(0);
 }
 
@@ -1721,6 +1725,11 @@ int pc_lobby(void)
     int r;
     char note[64];
     if (lb.open && !br_screen && coop_biorand_offer(NULL)) br_screen = 1;   /* a guest: the host's BioRand seed, offered there */
+    if (im_screen) {   /* the IMPORT screen (import_menu.c): 1 back to the menu */
+        title_font();
+        if ((r = pc_import_menu())) im_screen = 0;
+        return r;
+    }
     if (br_screen) {   /* the BioRand screen (biorand_menu.c): 1 back to the menu, or to the lobby it was offered from */
         title_font();
         if ((r = pc_biorand_menu())) br_screen = 0;

@@ -46,12 +46,14 @@ extern const ImportSource import_sources[IMPORT_SOURCES];
 /* progress of a running extraction (written by its thread, read by the overlay) */
 typedef struct ImportProgress {
     volatile int running, done, total, failed;
-    char phase[160];      /* what is being done (always 0-terminated) */
+    volatile int result;  /* the last run's import_run result, set before running drops to 0 */
+    char phase[160];      /* what is being done (always 0-terminated); after a run its summary or why the disc is unusable */
 } ImportProgress;
 extern ImportProgress g_import_progress;
 
-/* where `src`'s files go */
+/* where `src`'s files go; whether that folder is there */
 void import_source_dir(int src, char* out, int n);
+int  import_present(int src);
 
 /* the results of the last extraction of `src` (read from its manifest) */
 int import_results(int src, ImportItem* out, int max, char* when, int wn);
@@ -64,6 +66,8 @@ int import_run(int src, int what);
 /* "You appear as": publishes the converted player models of all sources' manifests to
    actors.c (actor_imports). Main thread; at start (config_load) and after an extraction. */
 void import_registry_load(void);
+/* any thread: 1 asks the main thread for import_registry_load (host.c, every frame; the IMPORT screen's runs) */
+extern volatile int g_import_reload;
 
 /* source-specific extractors (ob2.c) */
 int ob2_group(const char* id);   /* IMPORT_GROUP_* of a disc file name, -1: not a character model */
