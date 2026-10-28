@@ -246,6 +246,10 @@ The joining player's choice (lobby FOLLOW, F3, F1 / ENHANCED SETTINGS CO-OP "Fol
   a world event that would take the partner through a door is not replayed for it (it gets the
   flags only).
 
+The training facility's security camera (Command room, 3/12) is not a door: the host looking through it
+is in the bio-experiment room (3/14) only as a camera view, so you are not taken along, and a regroup due
+meanwhile waits until the host is back. The camera view itself pulls nobody either, however long it lasts.
+
 When pulled, you land at the door the host came through, not next to the host, in the room as the host has it:
 some rooms change with the story (the prison yard once its gate is open), and each version is a room file of its
 own (its *case*, picked by the script of the door the host took). A room that lacks the case you were in is
@@ -995,7 +999,14 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
 * **Flags** (`EV_FLAGS`): the 120-word block `ev_flg it_flg ic_flg ed_flg ky_flg mp_flg` is diffed
   each in-game frame; changed words go out as set and cleared bits. Host authority: the host drops
   a joiner's bits in words it changed itself since the joiner's base. Individual loot leaves the item
-  words (`it_flg`, `ic_flg`) out. Not synced: `rm_flg st_flg sp_flg`.
+  words (`it_flg`, `ic_flg`) out. Not synced: `rm_flg st_flg sp_flg`, and world flags that hold one
+  player's state (`own_bits`, also left out of the logged hash): the security camera's `ev_flg` 218 (looking
+  through it) and 65, 66, 72 (what it zoomed in on). The camera (3/12 trigger 5) takes the player into the
+  bio-experiment room (3/14), hidden, with 218 set; back in 3/12 a block on 218 ends the view and clears it.
+  Shared, the partner's 3/12 ran that block at once and cleared 218 for both: the player looking stood in
+  3/14 in person, past its code door, and a following partner with it. The follow (`follow`) skips the
+  host's change from 3/12 to 3/14 (nothing else leads there directly), and `regroup_check` counts no cinema
+  during which 218 was set.
 * **Pickups** (`EV_PICKUP`): an item flag set and the examined spot's object hidden within 30 frames
   is a pickup; the partner hides the object in the same room (the flag came with `EV_FLAGS`). The
   event's `item` is what the partner gets too (0: nothing): with shared loot only the kinds of
