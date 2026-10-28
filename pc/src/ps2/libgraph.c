@@ -11,6 +11,7 @@
 #include "../host/coop.h"
 #include "../host/tps.h"
 #include "../host/lobby.h"
+#include "../host/lang.h"
 #include <string.h>
 
 static int field;
@@ -88,6 +89,7 @@ int sceGsSwapDBuffDc(sceGsDBuffDc* db, int id)
     stream_disp(d->dispfb.FBP, d->dispfb.FBW, d->dispfb.PSM);
     prof_frame_end();
     cheat_frame();
+    lang_frame();
     coop_frame();
     lobby_frame();
     biorand_frame();

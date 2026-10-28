@@ -30,6 +30,7 @@ int ikou3(BH_PWORK* epw, NJS_POINT3* pos, int add_dir);   /* zonzon.c (its heade
 #include "../../decomp/include/ps2/veronica/prog/pwksub.h"
 #include "../../decomp/include/ps2/veronica/prog/ps2_sg_pdvib.h"
 #include "../src/host/coop.h"
+#include "../src/host/lang.h"
 #include "../src/host/menu_mouse.h"
 #include "../src/host/lobby.h"
 #include "../src/host/cheat.h"
@@ -2397,7 +2398,7 @@ static int own_hold;               /* our own game restarted (continue after a g
 static int blob_rec, want_rec;          /* the host's game state on its way carries our saved items; we requested them */
 static char note_msg[96];               /* "Restored your saved items ...": shown with the status line for a while */
 static unsigned int note_until;
-static void note(const char* m) { snprintf(note_msg, sizeof(note_msg), "%s", m); note_until = net_ms() + 30000; host_log("coop: %s\n", m); }
+static void note(const char* m) { snprintf(note_msg, sizeof(note_msg), "%s", tr(m)); note_until = net_ms() + 30000; host_log("coop: %s\n", m); }
 
 /* The inventory source for the next join: a save region (the bytes a save file holds, from
    sys->version; e.g. a save slot chosen in a lobby). NULL: our current game state (default). */
@@ -2800,8 +2801,8 @@ static int blob_record(unsigned char* b)
     rec_done = 1;
     if (!(rx_ext.items == ITEMS_HOST || id_rejoin) || !(r = rec_find(id_pid))) return 0;
     own_put(b, r->own);
-    if (id_name[0]) snprintf(m, sizeof(m), "Restored %s's saved items", id_name);
-    else snprintf(m, sizeof(m), "Restored the partner's saved items");
+    if (id_name[0]) snprintf(m, sizeof(m), tr("Restored %s's saved items"), id_name);
+    else snprintf(m, sizeof(m), tr("Restored the partner's saved items"));
     note(m);
     return 1;
 }
@@ -3297,7 +3298,7 @@ static int apply_session_event(const Event* e)
             const char* bad = blob_valid(blob_in);
             if (bad) {   /* the host would only send the same again: the session ends, and both sides say why */
                 static char why[160];
-                snprintf(why, sizeof(why), "Cannot load the host's game (%s). Disconnected.", bad);
+                snprintf(why, sizeof(why), tr("Cannot load the host's game (%s). Disconnected."), bad);
                 host_log("coop: the host's game state is not valid here: %s\n", bad);
                 coop_xfer_reset(&blob_x);
                 if (!bye_reason) { bye_reason = why; bye_code = COOP_REJ_STATE; }
@@ -4355,7 +4356,7 @@ static const char* item_name(unsigned int entry)
     static char buf[48];
     int id = (entry >> 16) & 0xFF;
     if (id < CHEAT_ITEMS && g_cheat.names[id][0]) snprintf(buf, sizeof(buf), "%s x%u", g_cheat.names[id], entry & 0xFFFF);
-    else snprintf(buf, sizeof(buf), "item %d x%u", id, entry & 0xFFFF);
+    else snprintf(buf, sizeof(buf), tr("item %d x%u"), id, entry & 0xFFFF);
     return buf;
 }
 
@@ -4586,15 +4587,15 @@ static void trade_frame(void)
     if (!sys || !plp) return;
     if (tx_in_game && t_out.state == 2) {
         if (inv_add(t_out.entry)) { t_out.state = 0; count_keys(keys_had); trade_msg("Offer ended. %s returned to your inventory.", t_out.entry); }
-        else snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), "Make room in your inventory to reclaim %s.", item_name(t_out.entry));
+        else snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), tr("Make room in your inventory to reclaim %s."), item_name(t_out.entry));
     }
-    if (req && !tx_in_game) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), "Finish the current menu, scene or door transition first."); req = 0; }
+    if (req && !tx_in_game) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), tr("Finish the current menu, scene or door transition first.")); req = 0; }
     switch (req) {
     case COOP_TRADE_OFFER: {
         unsigned int e;
-        if (t_out.state) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), "Finish your current offer first."); break; }
-        if (!near || !have_peer) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), "Stand next to your partner to trade."); break; }
-        if (!(e = inv_take(g_coop.trade_slot, g_coop.trade_count))) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), "Choose an unequipped item that fits in one inventory space."); break; }
+        if (t_out.state) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), tr("Finish your current offer first.")); break; }
+        if (!near || !have_peer) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), tr("Stand next to your partner to trade.")); break; }
+        if (!(e = inv_take(g_coop.trade_slot, g_coop.trade_count))) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), tr("Choose an unequipped item that fits in one inventory space.")); break; }
         count_keys(keys_had);
         t_out.tid = my_sid * 31u + ++tid_count;
         t_out.entry = e;
@@ -4605,12 +4606,12 @@ static void trade_frame(void)
         break;
     }
     case COOP_TRADE_CANCEL:
-        if (t_out.state == 1) { trade_send(TD_CANCEL, t_out.tid, t_out.entry, 0); snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), "Withdrawing offer..."); }
+        if (t_out.state == 1) { trade_send(TD_CANCEL, t_out.tid, t_out.entry, 0); snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), tr("Withdrawing offer...")); }
         break;
     case COOP_TRADE_ACCEPT:
         if (!t_in.on) break;
-        if (!near) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), "Stand next to your partner to trade."); break; }
-        if (!inv_add(t_in.entry)) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), "No room for %s.", item_name(t_in.entry)); break; }
+        if (!near) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), tr("Stand next to your partner to trade.")); break; }
+        if (!inv_add(t_in.entry)) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), tr("No room for %s."), item_name(t_in.entry)); break; }
         count_keys(keys_had);
         ledger_add(t_in.tid, 1);
         trade_send(TD_ANSWER, t_in.tid, t_in.entry, 1);
@@ -4668,7 +4669,7 @@ const char* coop_item_name(unsigned int w)
     static char buf[40];
     int id = (w >> 16) & 0xFF;
     if (id < CHEAT_ITEMS && g_cheat.names[id][0]) return g_cheat.names[id];
-    snprintf(buf, sizeof(buf), "item %d", id);
+    snprintf(buf, sizeof(buf), tr("item %d"), id);
     return buf;
 }
 
@@ -4735,11 +4736,11 @@ static int pair_why(void)
     char* o = g_trade.why;
     int n = sizeof(g_trade.why);
     *o = 0;
-    if (g_trade.sel[0] < 0) { snprintf(o, n, "Choose an item to give and confirm. Choose an empty space to receive only."); return WHY_NOTHING; }
-    if (g_trade.sel[1] < 0) { snprintf(o, n, "Waiting for %s to choose...", g_trade.name); return WHY_WAIT; }
-    if (!mine && !theirs) { snprintf(o, n, "Choose an item to give, or wait for %s to offer one.", g_trade.name); return WHY_NOTHING; }
-    if (mine && wm == g_trade.eq[0]) { snprintf(o, n, "Unequip your %s in the inventory first.", coop_item_name(mine)); return WHY_EQUIPPED; }
-    if (theirs && wt == g_trade.eq[1]) { snprintf(o, n, "%s's %s is equipped", g_trade.name, coop_item_name(theirs)); return WHY_EQUIPPED; }
+    if (g_trade.sel[0] < 0) { snprintf(o, n, tr("Choose an item to give and confirm. Choose an empty space to receive only.")); return WHY_NOTHING; }
+    if (g_trade.sel[1] < 0) { snprintf(o, n, tr("Waiting for %s to choose..."), g_trade.name); return WHY_WAIT; }
+    if (!mine && !theirs) { snprintf(o, n, tr("Choose an item to give, or wait for %s to offer one."), g_trade.name); return WHY_NOTHING; }
+    if (mine && wm == g_trade.eq[0]) { snprintf(o, n, tr("Unequip your %s in the inventory first."), coop_item_name(mine)); return WHY_EQUIPPED; }
+    if (theirs && wt == g_trade.eq[1]) { snprintf(o, n, tr("%s's %s is equipped"), g_trade.name, coop_item_name(theirs)); return WHY_EQUIPPED; }
     blk_of(0, b);
     if (mine) blk_take(b, g_trade.cells[0], 2 + wm, 0, 1);
     if (theirs && !blk_add(b, g_trade.cells[0], theirs)) {
@@ -4868,7 +4869,7 @@ void coop_trade_want(int cell)
     if (g_trade.phase != TRADE_OPEN) return;
     if (cell >= 0 && !w) { CallSystemSe(0, 1); return; }   /* an empty cell: nothing to ask for */
     if (cell >= 0 && cell_word(1, cell) == g_trade.eq[1]) {
-        snprintf(m, sizeof(m), "%s's %s is equipped", g_trade.name, coop_item_name(w));
+        snprintf(m, sizeof(m), tr("%s's %s is equipped"), g_trade.name, coop_item_name(w));
         ts_say(m); CallSystemSe(0, 1); return;
     }
     if (cell == g_trade.want[0] && (cell < 0 || w == g_trade.want_w[0])) return;
@@ -4883,7 +4884,7 @@ int coop_trade_wanted(int cell, unsigned int w)
     char m[96];
     if (g_trade.phase != TRADE_OPEN) return 0;
     if (cell < 0) {
-        if (g_trade.want[1] >= 0) { snprintf(m, sizeof(m), "%s withdrew the request", g_trade.name); ts_say(m); }
+        if (g_trade.want[1] >= 0) { snprintf(m, sizeof(m), tr("%s withdrew the request"), g_trade.name); ts_say(m); }
         g_trade.want[1] = -1;
         return 1;
     }
@@ -4891,7 +4892,7 @@ int coop_trade_wanted(int cell, unsigned int w)
     if (cell >= g_trade.cells[0] || !w || cell_val(0, cell) != w) { host_log("coop: trade screen: request for %d (%08x) refused: not what we have there\n", cell, w); return 0; }
     if (cell == g_trade.want[1] && w == g_trade.want_w[1]) return 1;
     g_trade.want[1] = cell; g_trade.want_w[1] = w;
-    snprintf(m, sizeof(m), "%s requests: %s", g_trade.name, coop_item_name(w));
+    snprintf(m, sizeof(m), tr("%s requests: %s"), g_trade.name, coop_item_name(w));
     ts_say(m);
     CallSystemSe(0, 3);
     return 1;
@@ -4929,7 +4930,7 @@ int coop_trade_back(int may_leave)
         break;
     case TB_DECLINE:
         ts_want_send(TS_DECLINE, g_trade.want[1], g_trade.want_w[1]);
-        snprintf(m, sizeof(m), "Declined %s's request", g_trade.name);
+        snprintf(m, sizeof(m), tr("Declined %s's request"), g_trade.name);
         ts_say(m);
         g_trade.want[1] = -1;
         CallSystemSe(0, 0);
@@ -4962,8 +4963,8 @@ static void ts_done_msg(int yes, int why, unsigned int gave, unsigned int got)
 {
     char m[96];
     static const char* const whys[] = { "", "nothing to swap", "an item is equipped", "no room", "no room", "the selection changed", "not ready", "it did not reach the partner" };
-    if (!yes) snprintf(m, sizeof(m), "Trade failed: %s.", why < (int)(sizeof(whys) / sizeof(whys[0])) ? whys[why] : "refused");
-    else if (gave && got) snprintf(m, sizeof(m), "Traded %.32s for %.32s.", coop_item_name(gave), coop_item_name(got));
+    if (!yes) snprintf(m, sizeof(m), tr("Trade failed: %s."), why < (int)(sizeof(whys) / sizeof(whys[0])) ? whys[why] : "refused");
+    else if (gave && got) snprintf(m, sizeof(m), tr("Traded %.32s for %.32s."), coop_item_name(gave), coop_item_name(got));
     else snprintf(m, sizeof(m), gave ? "Gave %.32s." : "Received %.32s.", coop_item_name(gave ? gave : got));
     ts_say(m);
 }
@@ -5005,11 +5006,11 @@ static void host_swap_frame(void)
 {
     if (!tx_in_game || ts.sw.state < 2) return;
     if (ts.sw.state == 3) {
-        if (ts.sw.take && !inv_add(ts.sw.take)) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), "Make room in your inventory to receive %s.", coop_item_name(ts.sw.take)); return; }
+        if (ts.sw.take && !inv_add(ts.sw.take)) { snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), tr("Make room in your inventory to receive %s."), coop_item_name(ts.sw.take)); return; }
         ts_done_msg(1, 0, ts.sw.give, ts.sw.take);
         CallSystemSe(0, 3);
     } else if (ts.sw.give && !inv_add(ts.sw.give)) {
-        snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), "Make room in your inventory to reclaim %s.", coop_item_name(ts.sw.give));
+        snprintf(g_coop.trade_msg, sizeof(g_coop.trade_msg), tr("Make room in your inventory to reclaim %s."), coop_item_name(ts.sw.give));
         return;
     }
     count_keys(keys_had);
@@ -5074,7 +5075,7 @@ static int apply_tscreen(const Event* e)
     case TS_CANCEL:
         if (g_trade.phase == TRADE_ASKED && e->u.ts.sid == ts.sid) {
             g_trade.phase = TRADE_IDLE;
-            snprintf(m, sizeof(m), "%s withdrew the trade request", nm);
+            snprintf(m, sizeof(m), tr("%s withdrew the trade request"), nm);
             ts_say(m);
         }
         return 1;
@@ -5084,7 +5085,7 @@ static int apply_tscreen(const Event* e)
         return 1;
     case TS_CLOSE:
         if (e->u.ts.sid != ts.sid) return 1;
-        if (g_trade.phase == TRADE_OPEN) { snprintf(m, sizeof(m), "%s closed the trade", nm); ts_close(0, m); CallSystemSe(0, 0); }
+        if (g_trade.phase == TRADE_OPEN) { snprintf(m, sizeof(m), tr("%s closed the trade"), nm); ts_close(0, m); CallSystemSe(0, 0); }
         else if (g_trade.phase == TRADE_ASKING) g_trade.phase = TRADE_IDLE;
         return 1;
     case TS_STATE: {
@@ -5114,7 +5115,7 @@ static int apply_tscreen(const Event* e)
     case TS_DECLINE:
         if (g_trade.phase == TRADE_OPEN && e->u.ts.sid == ts.sid && e->u.ts.cell == g_trade.want[0] && e->u.ts.take == g_trade.want_w[0]) {
             g_trade.want[0] = -1;
-            snprintf(m, sizeof(m), "%s declined the request", nm);
+            snprintf(m, sizeof(m), tr("%s declined the request"), nm);
             ts_say(m);
             CallSystemSe(0, 0);
         }
@@ -5250,7 +5251,7 @@ static void ts_frame(void)
     case TRADE_IDLE:
         if (!press || !tx_in_game) break;
         if (!have_peer || g_coop.state != COOP_CONNECTED) ts_say("No partner to trade with");
-        else if (!near) { snprintf(m, sizeof(m), "Stand next to %s to trade", g_trade.name); ts_say(m); }
+        else if (!near) { snprintf(m, sizeof(m), tr("Stand next to %s to trade"), g_trade.name); ts_say(m); }
         else if (!me || !partner) ts_say("Finish menus, scenes or enemy grabs before trading. Both players must be free.");
         else if (ts.sw.state) ts_say("The last trade is still completing.");
         else {
@@ -5264,17 +5265,17 @@ static void ts_frame(void)
         }
         break;
     case TRADE_ASKING:
-        snprintf(g_trade.hint, sizeof(g_trade.hint), "Waiting for %s...  (%s: cancel)", g_trade.name, g_trade.key);
+        snprintf(g_trade.hint, sizeof(g_trade.hint), tr("Waiting for %s...  (%s: cancel)"), g_trade.name, g_trade.key);
         if (press) { ts_send(TS_CANCEL, ts.sid); g_trade.phase = TRADE_IDLE; CallSystemSe(0, 0); ts_say("Trade request withdrawn"); }
         else if (!near || !me) { ts_send(TS_CANCEL, ts.sid); g_trade.phase = TRADE_IDLE; ts_say("Too far apart: trade request withdrawn"); }
-        else if (now - ts.t > TS_ASK_MS) { ts_send(TS_CANCEL, ts.sid); g_trade.phase = TRADE_IDLE; snprintf(m, sizeof(m), "%s did not answer", g_trade.name); ts_say(m); }
+        else if (now - ts.t > TS_ASK_MS) { ts_send(TS_CANCEL, ts.sid); g_trade.phase = TRADE_IDLE; snprintf(m, sizeof(m), tr("%s did not answer"), g_trade.name); ts_say(m); }
         break;
     case TRADE_ASKED:
-        snprintf(g_trade.hint, sizeof(g_trade.hint), "%s wants to trade - press %s", g_trade.name, g_trade.key);
+        snprintf(g_trade.hint, sizeof(g_trade.hint), tr("%s wants to trade - press %s"), g_trade.name, g_trade.key);
         if (now - ts.t > TS_ASKED_MS || !have_rx || !same_room()) g_trade.phase = TRADE_IDLE;
         else if (press) {
             if (!me) ts_say("Finish the menu, scene or enemy grab before trading.");
-            else if (!near) { snprintf(m, sizeof(m), "Stand next to %s to trade", g_trade.name); ts_say(m); }
+            else if (!near) { snprintf(m, sizeof(m), tr("Stand next to %s to trade"), g_trade.name); ts_say(m); }
             else { ts_send(TS_OPEN, ts.sid); ts_open(ts.sid); CallSystemSe(0, 3); }
         }
         break;
@@ -5283,7 +5284,7 @@ static void ts_frame(void)
         if (!have_rx || !have_peer) ts_close(0, "Partner disconnected. Trade closed.");
         else if (!near) ts_close(1, "Too far apart. Trade closed.");
         else if (!tx_in_game || plp->hp < 0 || plp->mode0 != 1) ts_close(1, "Trade closed");
-        else if (rx.busy != BUSY_TRADE && now - ts.t > 3000) { snprintf(m, sizeof(m), "%s stopped trading. Trade closed.", g_trade.name); ts_close(1, m); }
+        else if (rx.busy != BUSY_TRADE && now - ts.t > 3000) { snprintf(m, sizeof(m), tr("%s stopped trading. Trade closed."), g_trade.name); ts_close(1, m); }
         else {
             if (g_trade.want[1] >= 0 && cell_val(0, g_trade.want[1]) != g_trade.want_w[1]) {   /* the item moved or went */
                 g_trade.want[1] = -1;
@@ -5759,13 +5760,13 @@ int coop_examine(int etc)
 {
     if (!sys || etc < 0 || etc > 254) return 0;
     if (have_rx && !echo_delay && partner_here() && rx.use == etc + 1) {
-        snprintf(g_trade.msg, sizeof(g_trade.msg), "%s is using this", g_trade.name[0] ? g_trade.name : "Your partner");
+        snprintf(g_trade.msg, sizeof(g_trade.msg), tr("%s is using this"), g_trade.name[0] ? g_trade.name : "Your partner");
         g_trade.msg_until = net_ms() + 3000;
         host_log("coop: trigger %d in %d/%d: the partner is using it\n", etc, sys->stg_no, sys->rom_no);
         return 1;
     }
     if (etc == used_etc && used_gen == enemy_room_gen) {
-        snprintf(g_trade.msg, sizeof(g_trade.msg), "%s already used this", g_trade.name[0] ? g_trade.name : "Your partner");
+        snprintf(g_trade.msg, sizeof(g_trade.msg), tr("%s already used this"), g_trade.name[0] ? g_trade.name : "Your partner");
         g_trade.msg_until = net_ms() + 3000;
         host_log("coop: trigger %d in %d/%d: the partner used it\n", etc, sys->stg_no, sys->rom_no);
         return 1;
@@ -5838,11 +5839,11 @@ static void skip_frame(void)
     partner_asked = asked;
     tx.flags = (tx.flags & ~(PF_CINE | PF_SKIP)) | (cine ? PF_CINE : 0) | (cine && skip_want ? PF_SKIP : 0);
     coop_skip_hint[0] = 0;
-    if (together && skip_want) snprintf(coop_skip_hint, sizeof(coop_skip_hint), "Waiting for %s to skip...", g_trade.name);   /* (its name as ts_frame shows it) */
+    if (together && skip_want) snprintf(coop_skip_hint, sizeof(coop_skip_hint), tr("Waiting for %s to skip..."), g_trade.name);   /* (its name as ts_frame shows it) */
     else if (asked) {
         unsigned int raw = pad_type[sys->keytype & 3][16];   /* the DS2 button of the skip action: binding row in report order */
         int row = raw >= 0x100 ? __builtin_ctz(raw) - 8 : raw ? __builtin_ctz(raw) + 8 : B_SELECT;
-        snprintf(coop_skip_hint, sizeof(coop_skip_hint), "%s wants to skip. Press %s to skip.", g_trade.name, binding_names(row, key, sizeof(key)));
+        snprintf(coop_skip_hint, sizeof(coop_skip_hint), tr("%s wants to skip. Press %s to skip."), g_trade.name, binding_names(row, key, sizeof(key)));
     }
 }
 
@@ -6089,7 +6090,7 @@ static void kick(void)
     gone_sid = peer_sid;
     have_peer = have_rx = 0;
     snap_n = 0;
-    snprintf(left_msg, sizeof(left_msg), "%s removed", who[0] ? who : "The partner");
+    snprintf(left_msg, sizeof(left_msg), tr("%s removed"), who[0] ? who : "The partner");
     g_coop.state = COOP_HOSTING;
 }
 
@@ -6124,7 +6125,7 @@ static void join_resolve(void)
         static char why[200];
         if (!r) net_resolve_cancel(join_dns);
         join_dns = NULL;
-        snprintf(why, sizeof(why), "Cannot find host %s%s. Check the address and connection.", join_host, r ? "" : " (lookup timed out)");
+        snprintf(why, sizeof(why), tr("Cannot find host %s%s. Check the address and connection."), join_host, r ? "" : " (lookup timed out)");
         bye_reason = why;
     }
 }
@@ -6151,10 +6152,10 @@ static int rdv_begin(int host, const char* room)
         memcpy(srv, (const void*)g_coop.server, sizeof(srv));
         srv[sizeof(srv) - 1] = 0;
         if (!host && g_coop.conn == COOP_CONN_DIRECT)
-            snprintf(g_coop.status, sizeof(g_coop.status), "Choose Automatic or Server Relay to join with a room code.");
-        else if (!srv[0]) snprintf(g_coop.status, sizeof(g_coop.status), "Enter a co-op server address to join with a room code.");
-        else if (!rdv_server_valid(srv)) snprintf(g_coop.status, sizeof(g_coop.status), "Invalid server address: %s. Use a name or name:port.", srv);
-        else if (!host && net_open(0) != 1) snprintf(g_coop.status, sizeof(g_coop.status), "Cannot open a network connection. Try again.");
+            snprintf(g_coop.status, sizeof(g_coop.status), tr("Choose Automatic or Server Relay to join with a room code."));
+        else if (!srv[0]) snprintf(g_coop.status, sizeof(g_coop.status), tr("Enter a co-op server address to join with a room code."));
+        else if (!rdv_server_valid(srv)) snprintf(g_coop.status, sizeof(g_coop.status), tr("Invalid server address: %s. Use a name or name:port."), srv);
+        else if (!host && net_open(0) != 1) snprintf(g_coop.status, sizeof(g_coop.status), tr("Cannot open a network connection. Try again."));
         else g_coop.status[0] = 0;
     }
     if (g_coop.status[0]) {
@@ -6189,7 +6190,7 @@ static void start(int req)
             return;
         }
         if (!host_code()) {
-            snprintf(g_coop.status, sizeof(g_coop.status), "Cannot create a secure join code. Try restarting the game.");
+            snprintf(g_coop.status, sizeof(g_coop.status), tr("Cannot create a secure join code. Try restarting the game."));
             host_log("coop: %s\n", g_coop.status);
             net_close();
             return;
@@ -6220,15 +6221,15 @@ static void start(int req)
             return;
         }
         if (g_coop.conn == COOP_CONN_SERVER)
-            snprintf(g_coop.status, sizeof(g_coop.status), "Server Relay needs a room code. For an address, choose Automatic or Direct.");
+            snprintf(g_coop.status, sizeof(g_coop.status), tr("Server Relay needs a room code. For an address, choose Automatic or Direct."));
         else if (!coop_parse_join(join, host, sizeof(host), &port, code_rx))
-            snprintf(g_coop.status, sizeof(g_coop.status), "Invalid address: %s. Paste the host's copied join address.", join);
+            snprintf(g_coop.status, sizeof(g_coop.status), tr("Invalid address: %s. Paste the host's copied join address."), join);
         else if (!code_rx[0])
-            snprintf(g_coop.status, sizeof(g_coop.status), "Join code missing. Ask the host to use Copy Join Address.");
+            snprintf(g_coop.status, sizeof(g_coop.status), tr("Join code missing. Ask the host to use Copy Join Address."));
         else if (!strcmp(code_rx, "?"))
-            snprintf(g_coop.status, sizeof(g_coop.status), "Invalid join code. Use the eight letters and digits shown by the host.");
-        else if (net_open(0) != 1) snprintf(g_coop.status, sizeof(g_coop.status), "Cannot open a network connection. Try again.");
-        else if (!(join_dns = net_resolve_start(host, port))) snprintf(g_coop.status, sizeof(g_coop.status), "Cannot look up host %s. Try restarting the game.", host);
+            snprintf(g_coop.status, sizeof(g_coop.status), tr("Invalid join code. Use the eight letters and digits shown by the host."));
+        else if (net_open(0) != 1) snprintf(g_coop.status, sizeof(g_coop.status), tr("Cannot open a network connection. Try again."));
+        else if (!(join_dns = net_resolve_start(host, port))) snprintf(g_coop.status, sizeof(g_coop.status), tr("Cannot look up host %s. Try restarting the game."), host);
         else g_coop.status[0] = 0;
         if (g_coop.status[0]) { host_log("coop: %s\n", g_coop.status); net_close(); return; }
         /* the host's name is looked up on a thread (join_resolve, 5 s at most): DNS never stalls the game */
@@ -6305,10 +6306,10 @@ static void biorand_from_host(void)
         if (!br_wait) br_wait = net_ms() ? net_ms() : 1;
         if (net_ms() - br_wait < 2000) return;
     }
-    if (rx_ext.br_seed == 0xFFFFFFFFu) snprintf(why, sizeof(why), "BioRand games do not match. Generate the host's seed and options, or ask them to turn BioRand off.");
+    if (rx_ext.br_seed == 0xFFFFFFFFu) snprintf(why, sizeof(why), tr("BioRand games do not match. Generate the host's seed and options, or ask them to turn BioRand off."));
     else if (biorand_pack() && (uint32_t)biorand_seed() == rx_ext.br_seed)
-        snprintf(why, sizeof(why), "BioRand seed %u differs. Match the host's options and BioRand version, or ask them to turn BioRand off.", rx_ext.br_seed);
-    else snprintf(why, sizeof(why), "Generate the host's BioRand seed %u, or ask them to turn BioRand off.", rx_ext.br_seed);
+        snprintf(why, sizeof(why), tr("BioRand seed %u differs. Match the host's options and BioRand version, or ask them to turn BioRand off."), rx_ext.br_seed);
+    else snprintf(why, sizeof(why), tr("Generate the host's BioRand seed %u, or ask them to turn BioRand off."), rx_ext.br_seed);
     bye_reason = why;
     bye_code = COOP_REJ_BIORAND;
 }
@@ -6396,7 +6397,7 @@ static void receive(void)
         if (r == COOP_BAD_VERSION && n >= 8) {   /* another build: say so (an older one reads our version from the reply) */
             memcpy(&p, buf, 8);
             if (!ver_msg[0]) host_log("coop: %s runs co-op protocol %d, we %d\n", net_addr_str(&from), p.version, COOP_VERSION);
-            snprintf(ver_msg, sizeof(ver_msg), "%s uses co-op compatibility version %d; yours is %d. Use matching game builds.", is_host ? "A partner" : "The host", p.version, COOP_VERSION);
+            snprintf(ver_msg, sizeof(ver_msg), tr("%s uses co-op compatibility version %d; yours is %d. Use matching game builds."), is_host ? "A partner" : "The host", p.version, COOP_VERSION);
             if (is_host) send_reject(&from, COOP_REJ_CODE);
             continue;
         }
@@ -6524,7 +6525,7 @@ static void publish_status(void)
     s.peer_rec = g_coop.peer_rec;
     s.trade_hint[0] = 0;
     s.trade_open = g_trade.phase == TRADE_OPEN;
-    if (g_trade.phase == TRADE_ASKED) snprintf(s.trade_hint, sizeof(s.trade_hint), "wants to trade - press %.30s", g_trade.key);
+    if (g_trade.phase == TRADE_ASKED) snprintf(s.trade_hint, sizeof(s.trade_hint), tr("wants to trade - press %.30s"), g_trade.key);
     memcpy(s.code, g_coop.code, sizeof(s.code)); s.code[sizeof(s.code) - 1] = 0;
     memcpy(s.room, g_coop.room, sizeof(s.room)); s.room[sizeof(s.room) - 1] = 0;
     while (__atomic_test_and_set(&pub_lock, __ATOMIC_ACQUIRE)) ;
@@ -6536,8 +6537,8 @@ static void publish_status(void)
 static const char* peer_desc(void)
 {
     static char s[160];
-    if (!via_rdv(&peer)) { snprintf(s, sizeof(s), "%s, encrypted", net_addr_str(&peer)); return s; }
-    snprintf(s, sizeof(s), "the partner (%s)", rdv_status());
+    if (!via_rdv(&peer)) { snprintf(s, sizeof(s), tr("%s, encrypted"), net_addr_str(&peer)); return s; }
+    snprintf(s, sizeof(s), tr("the partner (%s)"), rdv_status());
     return s;
 }
 
@@ -6560,25 +6561,25 @@ static void publish(void)
     snprintf(g_coop.room, sizeof(g_coop.room), "%s", rdv_active() ? rdv_room() : "");
     switch (g_coop.state) {
     case COOP_HOSTING:
-        snprintf(g_coop.status, sizeof(g_coop.status), "%s%sHosting on port %d. Waiting for a partner.%s%s%s%s", left_msg, left_msg[0] ? " - " : "", g_coop.port,
+        snprintf(g_coop.status, sizeof(g_coop.status), tr("%s%sHosting on port %d. Waiting for a partner.%s%s%s%s"), left_msg, left_msg[0] ? " - " : "", g_coop.port,
                  ver_msg[0] ? " - " : "", ver_msg, rdv_active() || srv_msg[0] ? " - server: " : "", rdv_active() ? rdv_status() : srv_msg);
         break;
     case COOP_JOINING:   /* the hint after 5 s and 30 frames sent (a frame may take seconds while loading) */
         if (ver_msg[0]) snprintf(g_coop.status, sizeof(g_coop.status), "%s", ver_msg);
-        else if (via_rdv(&peer)) snprintf(g_coop.status, sizeof(g_coop.status), "Joining via server: %s", rdv_status());
-        else if (join_dns) snprintf(g_coop.status, sizeof(g_coop.status), "Looking up host %s...", join_host);
-        else if (net_ms() - join_at < 5000 || frame_no - join_frame < 30) snprintf(g_coop.status, sizeof(g_coop.status), "Joining %s. Waiting for the host.", net_addr_str(&peer));
+        else if (via_rdv(&peer)) snprintf(g_coop.status, sizeof(g_coop.status), tr("Joining via server: %s"), rdv_status());
+        else if (join_dns) snprintf(g_coop.status, sizeof(g_coop.status), tr("Looking up host %s..."), join_host);
+        else if (net_ms() - join_at < 5000 || frame_no - join_frame < 30) snprintf(g_coop.status, sizeof(g_coop.status), tr("Joining %s. Waiting for the host."), net_addr_str(&peer));
         else {
             snprintf(g_coop.status, sizeof(g_coop.status),
-                     "Joining %s: no reply for %u s. Check the copied address, host lobby, router and firewall. Try Via Server.",
+                     tr("Joining %s: no reply for %u s. Check the copied address, host lobby, router and firewall. Try Via Server."),
                      net_addr_str(&peer), (net_ms() - join_at) / 1000);
             if (!join_hinted) { join_hinted = 1; host_log("coop: no reply from the host %s yet (port forwarding / firewall?)\n", net_addr_str(&peer)); }
         }
         break;
-    case COOP_LOST: snprintf(g_coop.status, sizeof(g_coop.status), "Partner at %s is not responding (%u s).", peer_desc(), (net_ms() - rx_at) / 1000); break;
+    case COOP_LOST: snprintf(g_coop.status, sizeof(g_coop.status), tr("Partner at %s is not responding (%u s)."), peer_desc(), (net_ms() - rx_at) / 1000); break;
     case COOP_CONNECTED:
-        if (!g_coop.peer_in_game) snprintf(g_coop.status, sizeof(g_coop.status), "Connected to %s. Ping: %d ms. Partner has not entered the game.", peer_desc(), g_coop.ping_ms);
-        else snprintf(g_coop.status, sizeof(g_coop.status), "Connected to %s. Ping: %d ms. %s is in area %d, room %d%s",
+        if (!g_coop.peer_in_game) snprintf(g_coop.status, sizeof(g_coop.status), tr("Connected to %s. Ping: %d ms. Partner has not entered the game."), peer_desc(), g_coop.ping_ms);
+        else snprintf(g_coop.status, sizeof(g_coop.status), tr("Connected to %s. Ping: %d ms. %s is in area %d, room %d%s"),
                       peer_desc(), g_coop.ping_ms, g_coop.peer_name[0] ? g_coop.peer_name : names[rx.chr & 3], rx.stg, rx.rom, g_coop.remote_visible ? ", visible" : "");
         break;
     }
@@ -6769,7 +6770,7 @@ void coop_frame(void)
         else if ((sys->tk_flg & 0x8) && was_game) {
             host_log("coop: back at the title, the session ends\n");
             stop();
-            snprintf(g_coop.status, sizeof(g_coop.status), "Returned to title. Co-op session ended.");
+            snprintf(g_coop.status, sizeof(g_coop.status), tr("Returned to title. Co-op session ended."));
         }
     }
     g_coop.at_title = sys && (sys->tk_flg & 0x8);   /* the lobby hint (overlay) */
@@ -6836,7 +6837,7 @@ void coop_frame(void)
         if (have_rx && (int)(now - rx_at) > 3000) { have_rx = 0; snap_n = 0; g_coop.state = COOP_LOST; host_log("coop: partner timed out\n"); }
         else if (g_coop.state == COOP_LOST && (int)(now - rx_at) > LOST_MS) {   /* no goodbye came: crashed, or the network is gone */
             host_log("coop: partner gone (nothing for %d s)\n", LOST_MS / 1000);
-            if (is_host) { partner_gone(0); have_peer = 0; snprintf(left_msg, sizeof(left_msg), "The partner timed out"); g_coop.state = COOP_HOSTING; }
+            if (is_host) { partner_gone(0); have_peer = 0; snprintf(left_msg, sizeof(left_msg), tr("The partner timed out")); g_coop.state = COOP_HOSTING; }
             else bye_reason = "Lost the connection to the host";
         }
         if (bye_reason) {   /* the guest's session ends; in game it goes on in single player */

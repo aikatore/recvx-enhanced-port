@@ -8,6 +8,7 @@
 #include "../../decomp/include/ps2/veronica/prog/main.h"
 #include "../../decomp/include/ps2/veronica/prog/item.h"
 #include "../src/host/biorand.h"
+#include "../src/host/lang.h"
 #include "../src/host/biorand_opts.h"
 #include "../src/host/actors.h"
 #include "../src/host/cast.h"
@@ -66,12 +67,12 @@ int pc_biorand_save_differs(const void* save)
     if (!biorand_shown() || (w[0] & 0xFF000000u) != BR_ON) { biorand_game(0); return 0; }   /* (BioRand only with --dev) */
     if (biorand_pack() && w[1] == biorand_id()) { biorand_game(1); return 0; }
     seed = (int)(w[0] & 0xFFFFF);
-    if (seed == 0xFFFFF) snprintf(ask[0], sizeof(ask[0]), "Save: different BioRand game.");
-    else snprintf(ask[0], sizeof(ask[0]), "Save: BioRand seed %d.", seed);
-    if (!biorand_pack()) snprintf(ask[1], sizeof(ask[1]), "No BioRand game is generated.");
-    else if (seed == cur) snprintf(ask[1], sizeof(ask[1]), "Generated game: different options.");
-    else if (cur >= 0) snprintf(ask[1], sizeof(ask[1]), "Generated game: seed %d.", cur);
-    else snprintf(ask[1], sizeof(ask[1]), "Generated game differs.");
+    if (seed == 0xFFFFF) snprintf(ask[0], sizeof(ask[0]), tr("Save: different BioRand game."));
+    else snprintf(ask[0], sizeof(ask[0]), tr("Save: BioRand seed %d."), seed);
+    if (!biorand_pack()) snprintf(ask[1], sizeof(ask[1]), tr("No BioRand game is generated."));
+    else if (seed == cur) snprintf(ask[1], sizeof(ask[1]), tr("Generated game: different options."));
+    else if (cur >= 0) snprintf(ask[1], sizeof(ask[1]), tr("Generated game: seed %d."), cur);
+    else snprintf(ask[1], sizeof(ask[1]), tr("Generated game differs."));
     snprintf(ask[2], sizeof(ask[2]), biorand_pack() ? "Items and doors will differ. Load anyway?" : "Load it without BioRand?");
     host_log("biorand: %s %s %s\n", ask[0], ask[1], ask[2]);
     return 1;

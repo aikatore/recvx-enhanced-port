@@ -11,6 +11,7 @@
 #include "../../decomp/include/ps2/veronica/prog/hitchk.h"
 void bhSetMessage(int mes_typ, int mes_idx);   /* message.h (its macros.h clashes with this file's headers) */
 #include "../src/host/cheat.h"
+#include "../src/host/lang.h"
 #include "../src/host/coop.h"
 #include "../src/net/coop_proto.h"
 #include "pc_rules.h"
@@ -330,7 +331,7 @@ void pc_unlock_scd1(int after)
     }
 }
 
-/* item and room names from the game's own message data: glyph = ASCII - 32, 0xFF01 = space. Built when the data
+/* item and room names from the game's own message data (lang.h pc_glyphs_utf8: UTF-8). Built when the data
    appears or moves (the system load sets sys->mes_ip twice: the file, then its table), not every frame:
    the overlay (render thread) reads them. A name that changes is published whole: its first character
    last, so a reader sees the old name, an empty one (skipped) or the new one. */
@@ -340,8 +341,10 @@ static void publish(char* out, int size, const unsigned int* tab, int i)
     const unsigned short* dp = (const unsigned short*)((const char*)tab + ofs);
     char name[32] = { 0 };
     int n = 0;
-    if (ofs < 0x40000)   /* sysmes.ald is 87 KB */
-        for (; n < size - 1 && *dp != 0xFFFF; dp++) name[n++] = *dp == 0xFF01 ? ' ' : *dp < 95 ? (char)(*dp + 32) : '?';
+    if (ofs < 0x40000) {   /* sysmes.ald is 87 KB (a language's about 100 KB) */
+        pc_glyphs_utf8(dp, name, size < (int)sizeof(name) ? size : (int)sizeof(name));   /* (UTF-8: a language's letters) */
+        n = (int)strlen(name);
+    }
     while (n && name[n - 1] == ' ') name[--n] = 0;   /* "Starting Part 2 " */
     if (!memcmp(name, out, size)) return;
     __atomic_store_n(&out[0], 0, __ATOMIC_RELEASE);

@@ -14,6 +14,9 @@
 int ob2_sld(const unsigned char* src, int n, unsigned char* dst, int cap);
 int ob2_read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int en);
 void host_log(const char* fmt, ...) { (void)fmt; }
+const unsigned char FontSz[126];                 /* (the decomp's, for import/lang.c) */
+unsigned int fstbl[24], fsheader[24];            /* (set by the languages' test) */
+const char* tr(const char* en) { return en; }   /* (host/tr.c) */
 static uint32_t rd(const unsigned char* p) { uint32_t v; memcpy(&v, p, 4); return v; }
 
 /* an 8-bit 16x16 TIM2 (16-byte header): pixel i has index i, palette entry k is (k, 0, 0, 0x80) */
@@ -29,6 +32,38 @@ static unsigned char* tim2(int* len)
     for (int i = 0; i < 256; i++) { t[64 + i] = (unsigned char)i; t[64 + 256 + 4 * i] = (unsigned char)i; t[64 + 256 + 4 * i + 3] = 0x80; }
     *len = n;
     return t;
+}
+
+/* an ALD of 2 item names and the messages t[0..n) (u16 texts; 0 = empty), as lang_sysmes reads it */
+static unsigned char* ald(const uint16_t* t, int n, uint32_t* size)
+{
+    uint32_t ni = 4 + 4 * 2 + 4 * 2, ns = 4 + 4 * n, o, k;
+    for (int i = 0; i < n; i++) ns += t[i] ? 4 : 2;
+    unsigned char* b = calloc(1, 8 + ni + ns);
+    uint16_t name[2] = { 33, 0xFFFF };
+    memcpy(b, &ni, 4);
+    k = 2; memcpy(b + 4, &k, 4);
+    for (k = 0; k < 2; k++) { o = 12 + 4 * k; memcpy(b + 4 + 4 + 4 * k, &o, 4); memcpy(b + 4 + o, name, 4); }
+    memcpy(b + 4 + ni, &ns, 4);
+    unsigned char* m = b + 8 + ni;
+    k = (uint32_t)n; memcpy(m, &k, 4);
+    o = 4 + 4 * n;
+    for (int i = 0; i < n; i++) {
+        uint16_t s[2] = { t[i], 0xFFFF };
+        memcpy(m + 4 + 4 * i, &o, 4);
+        memcpy(m + o, t[i] ? s : s + 1, t[i] ? 4 : 2);
+        o += t[i] ? 4 : 2;
+    }
+    *size = 8 + ni + ns;
+    return b;
+}
+/* message i of an ALD's system messages: its first code (0xFFFF: empty) */
+static uint16_t ald_mes(const unsigned char* b, int i)
+{
+    uint32_t ni = rd(b), o = rd(b + 8 + ni + 4 + 4 * i);
+    uint16_t c;
+    memcpy(&c, b + 8 + ni + o, 2);
+    return c;
 }
 
 int main(int argc, char** argv)
@@ -56,6 +91,28 @@ int main(int argc, char** argv)
         nbd = realloc(nbd, 48); memset(nbd + 16, 0, 32); nbd[4] = 48; nbd[5] = 0;   /* hs = 48, no AMO / AHI */
         CHECK(!ob2_read_nbd(nbd, 48, &nm, err, sizeof(err)));
         free(nbd);
+    }
+
+    {   /* languages (docs/LANGUAGES.md "System messages"): the US layout 280 messages, 24 files of one page (280..303),
+           the load question 304, 305, two empty, 3 memory card messages (308..310); the language's file 0 has two pages
+           (its files 280..304, the load question 305, 306, one empty, the card 308..310) */
+        uint16_t us[311] = { 0 }, l[311] = { 0 };
+        unsigned fl[24] = { 1 }, hl[24], ho[24];
+        uint32_t nus, n;
+        for (int f = 0; f < 24; f++) { fstbl[f] = 0; fsheader[f] = f; hl[f] = f + (f > 0); }
+        for (int i = 0; i < 311; i++) { us[i] = i < 306 || i > 307 ? 1000 + i : 0; l[i] = i == 307 ? 0 : 2000 + i; }
+        unsigned char *ub = ald(us, 311, &nus), *lb = ald(l, 311, &n), *o = lang_sysmes(ub, nus, lb, &n, fl, hl, ho);
+        CHECK(o);
+        CHECK(ald_mes(o, 0) == 2000 && ald_mes(o, 279) == 2279);          /* the same up to the files */
+        CHECK(ald_mes(o, 280) == 2280 && ald_mes(o, 281) == 2282 && ald_mes(o, 303) == 2304);   /* page 0 of each file */
+        CHECK(ald_mes(o, 304) == 2305 && ald_mes(o, 305) == 2306);        /* the load question */
+        CHECK(ald_mes(o, 306) == 0xFFFF && ald_mes(o, 307) == 0xFFFF);
+        CHECK(ald_mes(o, 308) == 2308 && ald_mes(o, 310) == 2310);        /* the memory card block, from the end */
+        CHECK(ald_mes(o, 311) == 2280 && ald_mes(o, 312) == 2281 && ald_mes(o, 311 + 24) == 2304);   /* its own pages appended */
+        CHECK(ho[0] == 31 && ho[1] == 33 && ho[23] == 31 + 24);           /* (311 - 280 + its first pages) */
+        fl[23] = 15; n = nus;   /* a layout that does not fit (its files run into the card block): refused */
+        CHECK(!lang_sysmes(ub, nus, lb, &n, fl, hl, ho));
+        free(ub); free(lb); free(o);
     }
 
     /* TIM2: CSM1 swaps palette entries 8..15 and 16..23 of every 32 */

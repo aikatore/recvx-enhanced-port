@@ -15,6 +15,7 @@
 #include "lobby.h"
 #include "savestore.h"
 #include "biorand.h"
+#include "lang.h"
 #include "../net/update.h"
 #include "../audio/audio.h"
 #include <SDL3/SDL.h>
@@ -145,7 +146,7 @@ void settings_apply_display(void)
         char kind[64];
         SDL_GetWindowPosition(g_window, &x, &y);
         SDL_GetWindowSize(g_window, &w, &h);
-        if (excl) snprintf(kind, sizeof(kind), "exclusive fullscreen %d x %d @ %.2f Hz", m.w, m.h, m.refresh_rate);
+        if (excl) snprintf(kind, sizeof(kind), tr("exclusive fullscreen %d x %d @ %.2f Hz"), m.w, m.h, m.refresh_rate);
         else snprintf(kind, sizeof(kind), "%s", !g_config.fullscreen ? "windowed" : bl ? "borderless window" : "borderless fullscreen");
         host_log("display: %s, window %d,%d %d x %d\n", kind, x, y, w, h);
     }
@@ -210,16 +211,16 @@ static void fsres_set(int v)
 }
 static const char* fsres_name(int v, char* b, int n)
 {
-    if (v == 0) snprintf(b, n, "Desktop");
-    else if (v > 0 && v <= fs_n) snprintf(b, n, "%d x %d, %d Hz", fs_modes[v - 1].w, fs_modes[v - 1].h, fs_modes[v - 1].hz);
-    else snprintf(b, n, "%d x %d, %d Hz", g_config.fullscreen_w, g_config.fullscreen_h, g_config.fullscreen_hz);
+    if (v == 0) snprintf(b, n, tr("Desktop"));
+    else if (v > 0 && v <= fs_n) snprintf(b, n, tr("%d x %d, %d Hz"), fs_modes[v - 1].w, fs_modes[v - 1].h, fs_modes[v - 1].hz);
+    else snprintf(b, n, tr("%d x %d, %d Hz"), g_config.fullscreen_w, g_config.fullscreen_h, g_config.fullscreen_hz);
     return b;
 }
 static int exclusive_on(void) { return g_config.fullscreen && g_config.fullscreen_exclusive; }
 static const char* scale_name(int v, char* b, int n)
 {
     if (v) snprintf(b, n, "%dx (%d x %d)", v, 640 * v, 448 * v);
-    else snprintf(b, n, "Auto (%dx)", (int)gs_wanted_scale());
+    else snprintf(b, n, tr("Auto (%dx)"), (int)gs_wanted_scale());
     return b;
 }
 static const char* tenths(int v, char* b, int n) { snprintf(b, n, "%d.%d", v / 10, v % 10); return b; }
@@ -227,11 +228,27 @@ static const char* tenths(int v, char* b, int n) { snprintf(b, n, "%d.%d", v / 1
    while a SET_CALIB row is chosen: squares on a black and on a white strip, the faint ones at the ends */
 const unsigned char settings_calib[2][CALIB_STEPS] = { { 5, 10, 16, 24, 32 }, { 223, 231, 239, 245, 250 } };
 static void picture_reset(void) { g_config.brightness = 0; g_config.contrast = 100; g_config.gamma = 10; settings_save_later(); }
+/* Language: English and the installed languages (lang.h), in LANG_* order; Subtitles */
+static int lang_n(void) { int n = 0; for (int l = 0; l < LANG_COUNT; l++) n += lang_installed(l); return n; }
+static int lang_at(int v) { for (int l = 0; l < LANG_COUNT; l++) if (lang_installed(l) && v-- == 0) return l; return LANG_EN; }
+static int lang_get(void) { int v = 0; for (int l = 0; l < g_lang && l < LANG_COUNT; l++) v += lang_installed(l); return lang_installed(g_lang) ? v : 0; }
+static void lang_set(int v) { g_lang = lang_at(v); }
+static const char* lang_name(int v, char* b, int n) { snprintf(b, n, "%s", lang_names[lang_at(v)]); return b; }
+static const char* lang_locked(void)
+{
+    if (lang_n() < 2) return "No other language is installed.";
+    return pc_in_game() ? "Change it on the title screen." : NULL;
+}
+static const char* subs_locked(void)
+{
+    for (int l = 1; l < LANG_COUNT; l++) if (lang_has_subtitles(l)) return lang_has_subtitles(g_lang) ? NULL : "Only the imported languages have subtitles.";
+    return "No language with subtitles is installed.";
+}
 static const char* rifle_locked(void) { return biorand_active() ? "Required by BioRand." : NULL; }
 /* "You appear as": positions in the menus' list (actors.c, without event doubles) */
 static int chr_get(void) { int o = pc_biorand_appear(); return appear_pos(o >= 0 ? o : g_coop.chr); }   /* (BioRand's pick of this game shown) */
 static void chr_set(int v) { g_coop.chr = appear_at(v); pc_biorand_appear_drop(); }
-static const char* chr_name(int v, char* b, int n) { snprintf(b, n, "%s", appear_name(appear_at(v))); return b; }
+static const char* chr_name(int v, char* b, int n) { snprintf(b, n, "%s", tr(appear_name(appear_at(v)))); return b; }
 /* saves: the memory card's copied into the native folder (as the first native start does) */
 static void import_card(void)
 {
@@ -371,7 +388,10 @@ const Setting g_settings[] = {
     { SP_DISPLAY, "HD Menus", V(g_config.hd_textures_ui), 0, 1, 1,
       .help = "Allow redesigned menus and artwork from the texture pack. Off keeps replacements faithful to the original." },
 
-    { SP_GAMEPLAY, "Skip Intro", V(g_config.skip_intro), 0, 1, 1, .flags = SET_RESTART, .help = "Go straight to the title screen. Off lets you skip each logo and movie with a button press.", .group = "GENERAL" },
+    { SP_GAMEPLAY, "Language", NULL, 0, 0, 1, .get = lang_get, .set = lang_set, .name = lang_name, .count = lang_n, .locked = lang_locked, .group = "GENERAL",
+      .help = "The game's text. Applies from the next screen." },
+    { SP_GAMEPLAY, "Subtitles", V(g_subtitles), 0, 1, 1, .locked = subs_locked, .help = "Show subtitles in cutscenes, in the chosen language." },
+    { SP_GAMEPLAY, "Skip Intro", V(g_config.skip_intro), 0, 1, 1, .flags = SET_RESTART, .help = "Go straight to the title screen. Off lets you skip each logo and movie with a button press." },
     { SP_GAMEPLAY, "Check For Updates", V(g_config.update_check), 0, 1, 1, .apply = update_start,
       .help = "Check for a newer game version at startup and show it on the title screen." },
     { SP_GAMEPLAY, "Skip Door Animations", V(g_config.skip_doors), 0, 2, 1, (const char* const[]){ "Off", "Instant", "Skippable" },
@@ -547,9 +567,9 @@ const char* settings_value(const Setting* s, char* b, int n)
     int v = settings_get(s);
     if (s->flags & SET_ACTION) b[0] = 0;
     else if (s->name) s->name(v, b, n);
-    else if (s->names) snprintf(b, n, "%s", s->names[v - s->lo]);
-    else if (s->fmt) snprintf(b, n, s->fmt, v);
-    else snprintf(b, n, "%s", v ? "On" : "Off");
+    else if (s->names) snprintf(b, n, "%s", tr(s->names[v - s->lo]));
+    else if (s->fmt) snprintf(b, n, tr(s->fmt), v);
+    else snprintf(b, n, "%s", tr(v ? "On" : "Off"));
     return b;
 }
 
@@ -557,7 +577,7 @@ const char* settings_locked(const Setting* s)
 {
     const char* r = s->locked ? s->locked() : NULL;
     if (!r && (s->flags & SET_GAME_ONLY) && !pc_in_game()) r = "Start or load a game first.";
-    return r;
+    return r ? tr(r) : r;
 }
 
 void settings_save_later(void) { __atomic_store_n(&dirty_any, 1, __ATOMIC_RELEASE); }

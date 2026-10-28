@@ -2,10 +2,11 @@
  * opens it as Adv_BioCvTitle mode 30, as BIORAND opens its screen. The in-game version of the F9 window
  * (overlay.cpp import_window), drawn as the BIORAND screen with the same helpers (pc_ui_*) and dialogs (options_glue.c
  * pc_ui_dialog). Pages, each a list of rows:
- *   P_CATS   what can be imported: CHARACTERS (cats[]; languages and others can be added as rows)
- *   P_GAMES  the games a category reads (import_sources[])
- *   P_OPTS   one game: the groups (Playable Characters, NPCs: IMPORT_OFFERED), the disc image (the system's file
- *            dialog, lobby_io.c; ini import_outbreak2_iso), START IMPORT, DELETE IMPORTED MODELS, and what is imported
+ *   P_CATS   what can be imported: CHARACTERS, LANGUAGES (cats[], IMPORT_CAT_*)
+ *   P_GAMES  the games a category reads (import_sources[] of that category)
+ *   P_OPTS   one game: the groups (characters: Playable Characters, NPCs: IMPORT_OFFERED), the disc image (the system's
+ *            file dialog, lobby_io.c; ini import_<key>_iso), START IMPORT, DELETE, and what is imported (languages:
+ *            lang.h, docs/LANGUAGES.md)
  * States: IS_MENU the page; IS_WORK the extraction's thread (import_start: g_import_progress) with a bar; IS_RESULT a
  * message and OK; IS_ASK DELETE's Yes/No. Game thread. */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
@@ -17,6 +18,7 @@
 #include "../src/host/lobby.h"
 #include "../src/host/settings.h"
 #include "../src/import/import.h"
+#include "../src/host/lang.h"
 #include "../src/net/biorand_dl.h"
 #include <stdio.h>
 #include <string.h>
@@ -40,9 +42,10 @@ enum { IS_MENU, IS_ASK, IS_WORK, IS_RESULT };
 enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK };
 typedef struct { int kind, idx; } Row;
 
-/* the categories: one so far */
+/* the categories (IMPORT_CAT_*) */
 static const struct { const char* name; const char* help; } cats[] = {
     { "CHARACTERS", "Character models of other games, to play as (Character Model) and for the cutscene cast." },
+    { "LANGUAGES", "The game's text in other languages, from your own disc of another release (Language)." },
 };
 #define N_CATS (int)(sizeof(cats) / sizeof(cats[0]))
 
@@ -84,14 +87,40 @@ static ImportItem items[1024];
 
 static void add(int kind, int idx) { rows[nrows++] = (Row){ kind, idx }; }
 
+/* a language source: how many of its languages are installed (lang.h); -1 a character source */
+static int langs(void)
+{
+    char d[1100], e[1200];
+    int n = 0;
+    if (import_sources[im.src].cat != IMPORT_CAT_LANGUAGES) return -1;
+    import_source_dir(im.src, d, sizeof(d));
+    for (int l = 1; l < LANG_COUNT; l++) {
+        snprintf(e, sizeof(e), "%s/%s", d, lang_codes[l]);
+        n += lang_installed(l) && lang_dir(l) && !strcmp(lang_dir(l), e);
+    }
+    return n;
+}
+/* their names, "Fran\xC3\xA7ais, Deutsch" */
+static const char* lang_list(char* t, int n)
+{
+    char d[1100], e[1200];
+    t[0] = 0;
+    import_source_dir(im.src, d, sizeof(d));
+    for (int l = 1; l < LANG_COUNT; l++) {
+        snprintf(e, sizeof(e), "%s/%s", d, lang_codes[l]);
+        if (lang_installed(l) && lang_dir(l) && !strcmp(lang_dir(l), e)) snprintf(t + strlen(t), n - strlen(t), "%s%s", t[0] ? ", " : "", lang_names[l]);
+    }
+    return t;
+}
+
 static void build_rows(void)
 {
     nrows = 0;
     if (im.page == P_CATS) for (int i = 0; i < N_CATS; i++) add(K_CAT, i);
-    else if (im.page == P_GAMES) for (int i = 0; i < IMPORT_SOURCES; i++) add(K_GAME, i);
+    else if (im.page == P_GAMES) { for (int i = 0; i < IMPORT_SOURCES; i++) if (import_sources[i].cat == im.cat) add(K_GAME, i); }
     else {
-        if (IMPORT_OFFERED & IMPORT_PLAYERS) add(K_PLAYERS, 0);
-        if (IMPORT_OFFERED & IMPORT_NPCS) add(K_NPCS, 0);
+        if (langs() < 0 && (IMPORT_OFFERED & IMPORT_PLAYERS)) add(K_PLAYERS, 0);
+        if (langs() < 0 && (IMPORT_OFFERED & IMPORT_NPCS)) add(K_NPCS, 0);
         add(K_DISC, 0);
         add(K_START, 0);
         add(K_DELETE, 0);
@@ -115,9 +144,9 @@ static void look(void)
 
 static const char* counts(char* t, int n)
 {
-    if (im.players && im.npcs) snprintf(t, n, "%d playable characters and %d NPCs can be played.", im.players, im.npcs);
-    else if (im.players || im.npcs) snprintf(t, n, "%d %s can be played.", im.players + im.npcs, im.players ? "playable characters" : "NPCs");
-    else snprintf(t, n, "No models can be played.");
+    if (im.players && im.npcs) snprintf(t, n, tr("%d playable characters and %d NPCs can be played."), im.players, im.npcs);
+    else if (im.players || im.npcs) snprintf(t, n, tr("%d %s can be played."), im.players + im.npcs, im.players ? "playable characters" : "NPCs");
+    else snprintf(t, n, tr("No models can be played."));
     return t;
 }
 
@@ -161,7 +190,7 @@ static const char* row_why(const Row* r)
     case K_START:
         if (running()) return "An import is running.";
         if (!g_import.iso[im.src][0]) return "Choose the disc image first.";
-        if (!(im.what & IMPORT_OFFERED)) return "Turn on Playable Characters or NPCs first.";
+        if (langs() < 0 && !(im.what & IMPORT_OFFERED)) return "Turn on Playable Characters or NPCs first.";
         return NULL;
     case K_DELETE:
         if (running()) return "An import is running.";
@@ -182,7 +211,8 @@ static void back(void)
 {
     CallSystemSe(0, 0);
     set_page(im.page == P_OPTS ? P_GAMES : P_CATS);
-    if (im.page == P_GAMES) im.row = im.src;
+    if (im.page == P_GAMES) for (int i = 0; i < im.src; i++) im.row += import_sources[i].cat == im.cat;   /* (on the game's row) */
+    if (im.page == P_CATS) im.row = im.cat;
 }
 
 static void toggle(const Row* r)
@@ -208,6 +238,11 @@ static void delete_imports(void)
     if (!brdl_rm_tree(d)) { result("Some imported files could not be deleted. Check the folder's access rights.", 1); return; }
     host_log("import menu: deleted %s\n", d);
     look();
+    if (langs() >= 0) {   /* (the main thread lists the languages again: host.c) */
+        __atomic_store_n(&g_import_reload, 1, __ATOMIC_RELEASE);
+        result("Imported languages deleted. The game's text is English from the next screen.", 0);
+        return;
+    }
     result("Imported models deleted. They stay in the model lists until you restart the game; choosing one there "
            "shows the character you play instead.", 0);
 }
@@ -221,8 +256,14 @@ static void work_end(void)
     __atomic_store_n(&g_import_reload, 1, __ATOMIC_RELEASE);   /* the new models into Character Model (main thread, host.c) */
     host_log("import menu: ended %d: %s\n", g_import_progress.result, g_import_progress.phase);
     if (g_import_progress.result < 0) { result(g_import_progress.phase, 1); return; }
+    if (langs() >= 0) {   /* (lang_scan runs on the main thread before the menu reads the list again) */
+        snprintf(t, sizeof(t), "%s", g_import_progress.result > 0 ? "Some languages could not be imported (see recvx.log)."
+                 : "The languages are installed. Choose one under Language on the GAMEPLAY page of ENHANCED SETTINGS.");
+        result(t, g_import_progress.result > 0);
+        return;
+    }
     counts(t, sizeof(t));
-    if (g_import_progress.result > 0) snprintf(t + strlen(t), sizeof(t) - strlen(t), " %d models failed (see recvx.log).", g_import_progress.result);
+    if (g_import_progress.result > 0) snprintf(t + strlen(t), sizeof(t) - strlen(t), tr(" %d models failed (see recvx.log)."), g_import_progress.result);
     result(t, 0);
 }
 
@@ -231,7 +272,7 @@ static int activate(const Row* r)
 {
     const char* why = row_why(r);
     switch (r->kind) {
-    case K_CAT: CallSystemSe(0, 3); im.cat = r->idx; set_page(P_GAMES); return 0;
+    case K_CAT: CallSystemSe(0, 3); im.cat = r->idx; set_page(P_GAMES); return 0;   /* (cats[] in IMPORT_CAT_* order) */
     case K_GAME: CallSystemSe(0, 3); im.src = r->idx; set_page(P_OPTS); return 0;
     case K_PLAYERS: case K_NPCS: toggle(r); return 0;
     case K_DISC:
@@ -273,8 +314,8 @@ static const char* ask_text(void)
     static char t[240];
     char d[1100];
     import_source_dir(im.src, d, sizeof(d));
-    snprintf(t, sizeof(t), "Delete the models imported from %s? This deletes the folder %s. You can import them again from your disc.",
-             title_of(im.src), d);
+    snprintf(t, sizeof(t), langs() >= 0 ? tr("Delete the languages imported from %s? This deletes the folder %s. You can import them again from your disc.")
+             : tr("Delete the models imported from %s? This deletes the folder %s. You can import them again from your disc."), title_of(im.src), d);
     return t;
 }
 static const char* result_head(void) { return im.err ? "IMPORT - ERROR" : "IMPORT"; }
@@ -339,12 +380,14 @@ static const char* row_help(const Row* r)
 {
     switch (r->kind) {
     case K_CAT: return cats[r->idx].help;
-    case K_GAME: return "Import from your own disc image of this game.";
+    case K_GAME: return import_sources[r->idx].cat == IMPORT_CAT_LANGUAGES ? "Import the languages of your own disc image of this release."
+                                                                       : "Import from your own disc image of this game.";
     case K_PLAYERS: return "The playable characters and their costumes.";
     case K_NPCS: return "The other people of the game. Some have no names; they are listed by their file.";
     case K_DISC: return "Choose your disc image (.iso) in a file dialog.";
-    case K_START: return "Import the chosen groups from the disc image. This takes a few seconds to a minute.";
-    case K_DELETE: return "Delete the imported models of this game from the mods folder.";
+    case K_START: return langs() >= 0 ? "Import every language of the disc image. This takes a few seconds."
+                                       : "Import the chosen groups from the disc image. This takes a few seconds to a minute.";
+    case K_DELETE: return langs() >= 0 ? "Delete the imported languages from the mods folder." : "Delete the imported models of this game from the mods folder.";
     default: return im.page == P_CATS ? "Back to the title menu (also cancel or a right click)." : "Back (also cancel or a right click).";
     }
 }
@@ -356,6 +399,7 @@ static void draw_row(int i)
     float y = row_y(i);
     unsigned int col = !live ? (sel ? 0xFF909090 : 0xFF686868) : sel ? 0xFFFFFFFF : 0xFFB0B0B0;
     static const char* const names[] = { "", "", "Playable Characters", "NPCs", "Disc Image", "START IMPORT", "DELETE IMPORTED MODELS", "BACK" };
+    const char* label = r->kind == K_DELETE && langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : names[r->kind];
     const char* v = NULL;
     if (sel) pc_ui_rect(ROW_X - 8, y - 3, 600, y + ROW_H - 4, 0x50FFFFFF, Z_ROW);
     switch (r->kind) {
@@ -365,7 +409,7 @@ static void draw_row(int i)
     case K_NPCS: v = (im.what & IMPORT_NPCS) ? "On" : "Off"; break;
     case K_DISC: v = disc_name(); break;
     }
-    pc_ui_text(ROW_X, y, names[r->kind], ROW_SC, col);
+    pc_ui_text(ROW_X, y, tr(label), ROW_SC, col);
     if (r->kind == K_DISC) {   /* the file's name, its end cut when it is long */
         char c[256];
         int n = snprintf(c, sizeof(c), "%s", v);
@@ -380,8 +424,8 @@ static void draw_row(int i)
 
 static void draw_page(void)
 {
-    static const char* const heads[] = { "IMPORT FROM OTHER GAMES", "CHARACTERS", NULL };
-    const char* head = heads[im.page] ? heads[im.page] : title_of(im.src);
+    static const char* const heads[] = { "IMPORT FROM OTHER GAMES", NULL, NULL };
+    const char* head = im.page == P_GAMES ? tr(cats[im.cat].name) : heads[im.page] ? tr(heads[im.page]) : title_of(im.src);
     char t[320];
     unsigned int col = 0xFFA0D0FF;
     pc_ui_text(320 - pc_ui_text_w(head, 0.72f) / 2, PAGE_Y - 2, head, 0.72f, 0xFFE8E0C0);
@@ -389,22 +433,31 @@ static void draw_page(void)
     pc_ui_rect(40, 94.5f, 600, 95.5f, 0x60FFFFFF, Z_RULE);
     for (int i = 0; i < nrows; i++) draw_row(i);
     pc_ui_rect(40, INFO_Y - 4.5f, 600, INFO_Y - 3.5f, 0x60FFFFFF, Z_RULE);
-    if (im.page == P_OPTS) {
-        snprintf(t, sizeof(t), "Needs a clean US disc image of %s: %s.", title_of(im.src), import_sources[im.src].serial);
-        pc_ui_text(ROW_X - 4, INFO_Y, "DISC", SMALL_SC, 0xFFFFE080);
+    if (im.page == P_OPTS && langs() >= 0) {
+        char c[160];
+        snprintf(t, sizeof(t), tr("Needs a clean European disc image of %s: %s."), "Resident Evil Code: Veronica X", import_sources[im.src].serial);
+        pc_ui_text(ROW_X - 4, INFO_Y, tr("DISC"), SMALL_SC, 0xFFFFE080);
         pc_ui_text(ROW_X - 4, INFO_Y + 16, t, SMALL_SC, 0xFFFFFFFF);
-        pc_ui_text(ROW_X - 4, INFO_Y + 36, "IMPORTED", SMALL_SC, 0xFFFFE080);
+        pc_ui_text(ROW_X - 4, INFO_Y + 36, tr("IMPORTED"), SMALL_SC, 0xFFFFE080);
+        if (langs() > 0) snprintf(t, sizeof(t), tr("Installed: %s."), lang_list(c, sizeof(c)));
+        else snprintf(t, sizeof(t), "%s", tr("Nothing imported yet."));
+        pc_ui_text(ROW_X - 4, INFO_Y + 52, t, SMALL_SC, 0xFFFFFFFF);
+    } else if (im.page == P_OPTS) {
+        snprintf(t, sizeof(t), tr("Needs a clean US disc image of %s: %s."), title_of(im.src), import_sources[im.src].serial);
+        pc_ui_text(ROW_X - 4, INFO_Y, tr("DISC"), SMALL_SC, 0xFFFFE080);
+        pc_ui_text(ROW_X - 4, INFO_Y + 16, t, SMALL_SC, 0xFFFFFFFF);
+        pc_ui_text(ROW_X - 4, INFO_Y + 36, tr("IMPORTED"), SMALL_SC, 0xFFFFE080);
         if (im.have) {
             char c[96];
-            snprintf(t, sizeof(t), "%s%s%s", counts(c, sizeof(c)), im.when[0] ? " On " : "", im.when);
-        } else snprintf(t, sizeof(t), "Nothing imported yet.");
+            snprintf(t, sizeof(t), "%s%s%s", counts(c, sizeof(c)), im.when[0] ? tr(" On ") : "", im.when);
+        } else snprintf(t, sizeof(t), tr("Nothing imported yet."));
         pc_ui_text(ROW_X - 4, INFO_Y + 52, t, SMALL_SC, 0xFFFFFFFF);
     } else pc_ui_text_wrap(ROW_X - 4, INFO_Y, 552, "Import content from your own discs of other games. It is saved to the mods folder; "
                            "nothing is downloaded.", SMALL_SC, 0xFFC0C0C0, 3);
     if (im.say_t > 0) { snprintf(t, sizeof(t), "%s", im.say); col = im.say_err ? 0xFFFFC060 : 0xFFFFE080; }
     else {
         const char* why = row_why(&rows[im.row]);
-        snprintf(t, sizeof(t), "%s%s%s", why ? why : "", why ? " " : "", row_help(&rows[im.row]));
+        snprintf(t, sizeof(t), "%s%s%s", why ? tr(why) : "", why ? " " : "", tr(row_help(&rows[im.row])));
         if (why) col = 0xFFFFC060;
     }
     pc_ui_text_wrap(24, 390, 592, t, 0.5f, col, 5);
@@ -416,7 +469,8 @@ static void draw_work(void)
     char line[48] = "";
     float y0, y1, f = pg->total > 0 ? (float)pg->done / pg->total : 0, x, yb;
     dlg_box(&y0, &y1);
-    pc_ui_dialog(y0, y1, Z_BOX, "IMPORTING CHARACTERS", pg->phase[0] ? pg->phase : "Reading the disc...", 0.55f, 0xFFC0C0C0, 2, "", NULL, -1, 0);
+    pc_ui_dialog(y0, y1, Z_BOX, langs() >= 0 ? "IMPORTING LANGUAGES" : "IMPORTING CHARACTERS", pg->phase[0] ? pg->phase : "Reading the disc...",
+                 0.55f, 0xFFC0C0C0, 2, "", NULL, -1, 0);
     if (f > 1) f = 1;
     if (pg->total > 0) snprintf(line, sizeof(line), "%d / %d", pg->done, pg->total);
     x = BOX_X0 + 20 + (BOX_X1 - BOX_X0 - 40) * f;   /* as the BIORAND screen's bar: at half pixels */

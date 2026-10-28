@@ -18,6 +18,7 @@
 #include "../src/host/bindings.h"
 #include "../src/host/menu_mouse.h"
 #include "../src/host/tps.h"
+#include "../src/host/lang.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -121,11 +122,26 @@ static void word(const Glyph* g, int n, float x, float y, unsigned int col, floa
     }
 }
 
+/* OPTION's picture in another language (lang.h): other letters on its plates, so our words are set in the font */
+static int foreign(void) { return lang_picture(4) != LANG_EN; }
+static unsigned int ps2_argb(unsigned int c)   /* a plate's colour (0x80 full) for the font */
+{
+    unsigned int r = 0;
+    for (int i = 0; i < 32; i += 8) { unsigned int k = (c >> i & 0xFF) * 2; r |= (k > 255 ? 255 : k) << i; }
+    return r;
+}
+static float font_word_sc(const char* t, float w) { float n = pc_ui_text_w(t, 1); return n > w ? w / n : 1; }
+static void font_word(const char* t, float x, float y, unsigned int col, float w)
+{
+    pc_ui_text(x, y + 3, t, font_word_sc(t, w), ps2_argb(col));
+    AdvEasySetTextureList(0);   /* the screen's textures again (the font set its own) */
+}
+
 static unsigned int pulse(void) { return ((unsigned int)AdvWork.FlushCount2 + 255) << 24 | 0xFFFFFF; }
 static unsigned int row_col(int i) { return OptionDef[i].SelectFlag ? pulse() : 0x7FAFAFAF; }   /* as the other rows */
 /* ENHANCED SETTINGS is 13 px wider than a label: its letters a little narrower, so it ends where the labels do */
 static float enh_sx(void) { return (ROW_W - N_OF(w_enhanced)) / (word_w(w_enhanced, N_OF(w_enhanced), 1) - N_OF(w_enhanced)); }
-static float exit_x(void) { return ROW_RIGHT - word_w(w_exit, 1, 1); }   /* right-aligned with the values */
+static float exit_x(void) { return ROW_RIGHT - (foreign() ? pc_ui_text_w(tr("EXIT"), 1) : word_w(w_exit, 1, 1)); }   /* right-aligned with the values */
 
 /* the cursor's next row from idx (adv.c DisplayOptionPlateLevel0; dir 0 up, 1 down, 2 left, 3 right; vib:
    VIBRATION can be chosen): up/down along the labels, wrapping, EXIT the last at the title; in a game left/right
@@ -156,9 +172,9 @@ int pc_options_move(int idx, int dir, int vib)
 #define DLG_BTN_SC 0.95f
 static float dlg_btn_w(const char* b, int glyphs)
 {
-    if (glyphs && !strcmp(b, "YES")) return word_w(w_yes, 3, 1);
-    if (glyphs && !strcmp(b, "NO")) return word_w(w_no, 2, 1);
-    return pc_ui_text_w(b, DLG_BTN_SC);
+    if (glyphs && !foreign() && !strcmp(b, "YES")) return word_w(w_yes, 3, 1);
+    if (glyphs && !foreign() && !strcmp(b, "NO")) return word_w(w_no, 2, 1);
+    return pc_ui_text_w(tr(b), DLG_BTN_SC);
 }
 static float dlg_btn_x(int i, const char* b0, const char* b1, int glyphs)
 {
@@ -205,7 +221,7 @@ static int text_wrap_c(int draw, float y, float w, const char* s, float sc, unsi
    (RETURN TO TITLE's proportions) */
 void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, float extra, float* y0, float* y1)
 {
-    int n = l2 ? text_wrap_c(0, 0, DLG_X1 - DLG_X0 - 40, l2, sc2, 0, lines) : 0;
+    int n = l2 ? text_wrap_c(0, 0, DLG_X1 - DLG_X0 - 40, tr(l2), sc2, 0, lines) : 0;
     float h = (l1 ? 54 : 22) + n * 28 * sc2 * 1.05f + extra + 64;
     *y0 = (float)(int)(240 - h / 2);
     *y1 = *y0 + (float)(int)(h + 0.5f);
@@ -220,8 +236,8 @@ static void dlg_frame(float y0, float y1, float z)
 
 static void dlg_texts(float y0, const char* l1, const char* l2, float sc2, unsigned int col2, int lines)
 {
-    if (l1) pc_ui_text(320 - pc_ui_text_w(l1, 0.7f) / 2, y0 + 22, l1, 0.7f, 0xFFFFFFFF);
-    if (l2) text_wrap_c(1, l1 ? y0 + 54 : y0 + 22, DLG_X1 - DLG_X0 - 40, l2, sc2, col2, lines);
+    if (l1) { l1 = tr(l1); pc_ui_text(320 - pc_ui_text_w(l1, 0.7f) / 2, y0 + 22, l1, 0.7f, 0xFFFFFFFF); }
+    if (l2) text_wrap_c(1, l1 ? y0 + 54 : y0 + 22, DLG_X1 - DLG_X0 - 40, tr(l2), sc2, col2, lines);
     AdvEasySetTextureList(0);   /* the screen's textures again (the font set its own) */
 }
 
@@ -233,9 +249,9 @@ void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, f
         const char* b = i ? b1 : b0;
         float x = dlg_btn_x(i, b0, b1, glyphs);
         unsigned int col = i == sel ? pulse() : 0x7FAFAFAF;
-        if (glyphs && !strcmp(b, "YES")) word(w_yes, 3, x, y1 - 48, col, 0.3f, 1);
-        else if (glyphs && !strcmp(b, "NO")) word(w_no, 2, x, y1 - 48, col, 0.3f, 1);
-        else pc_ui_text(x, y1 - 44, b, DLG_BTN_SC, col);
+        if (glyphs && !foreign() && !strcmp(b, "YES")) word(w_yes, 3, x, y1 - 48, col, 0.3f, 1);
+        else if (glyphs && !foreign() && !strcmp(b, "NO")) word(w_no, 2, x, y1 - 48, col, 0.3f, 1);
+        else pc_ui_text(x, y1 - 44, tr(b), DLG_BTN_SC, glyphs ? ps2_argb(col) : col);
     }
     dlg_texts(y0, l1, l2, sc2, col2, lines);
 }
@@ -319,9 +335,15 @@ static void quit_draw(void)
 /* DisplayOptionPlateLevel0, with the other rows: drawn as they are (dim, or pulsing when selected) */
 void pc_options_rows0(void)
 {
-    word(w_enhanced, N_OF(w_enhanced), 32.0f, 320.0f, row_col(7), 0.05f, enh_sx());
-    if (pc_in_game()) word(w_title, N_OF(w_title), 32.0f, 352.0f, row_col(8), 0.05f, 1);
-    word(w_exit, 1, exit_x(), 352.0f, row_col(6), 0.05f, 1);
+    if (foreign()) {
+        font_word(tr("ENHANCED SETTINGS"), 32.0f, 320.0f, row_col(7), ROW_W);
+        if (pc_in_game()) font_word(tr("RETURN TO TITLE"), 32.0f, 352.0f, row_col(8), ROW_W - 40);
+        font_word(tr("EXIT"), exit_x(), 352.0f, row_col(6), 200);
+    } else {
+        word(w_enhanced, N_OF(w_enhanced), 32.0f, 320.0f, row_col(7), 0.05f, enh_sx());
+        if (pc_in_game()) word(w_title, N_OF(w_title), 32.0f, 352.0f, row_col(8), 0.05f, 1);
+        word(w_exit, 1, exit_x(), 352.0f, row_col(6), 0.05f, 1);
+    }
     if (quit.open) quit_draw();
 }
 
@@ -434,7 +456,7 @@ static const char* page_keys(char* buf, int n)
     return buf;
 }
 
-static void say(const char* m) { snprintf(st.msg, sizeof(st.msg), "%s", m); st.msg_t = 120; }
+static void say(const char* m) { snprintf(st.msg, sizeof(st.msg), "%s", tr(m)); st.msg_t = 120; }
 
 static void move_sel(int dir)
 {
@@ -518,7 +540,7 @@ static void capture_end(int code)
     bind_set(row, st.dev, st.slot, code == -3 ? 0 : code);
     settings_save_later();
     CallSystemSe(0, 3);
-    if (bind_swapped()) { snprintf(nm, sizeof(nm), "Swapped with %s", bind_swapped()); say(nm); }
+    if (bind_swapped()) { snprintf(nm, sizeof(nm), tr("Swapped with %s"), bind_swapped()); say(nm); }
     else if (bind_combo(row, st.dev, st.slot)) say("Hold Aim and press this button to reload. Without Aim, it keeps its other action.");
     host_log("options: %s %s slot %d = %s\n", st.dev ? "pad" : "key", bind_rows[row].ini, st.slot + 1, bind_code_name(st.dev, code < 0 ? 0 : code, nm, sizeof(nm)));
 }
@@ -580,7 +602,7 @@ static void draw_row(int i, int sel)
     case K_GROUP: pc_ui_text(X_LABEL - 6, y + 2, g_settings[r->idx].group, 0.45f, 0xFFE0C080); return;
     case K_HEAD: {
         char t[64];
-        if (r->idx == BG_GAME) snprintf(t, sizeof(t), "GAME (CONTROL TYPE %c)", 'A' + pc_keytype());
+        if (r->idx == BG_GAME) snprintf(t, sizeof(t), tr("GAME (CONTROL TYPE %c)"), 'A' + pc_keytype());
         else snprintf(t, sizeof(t), "%s", r->idx == BG_TPS && st.dev ? "THIRD PERSON: MODERN GAMEPAD" : heads[r->idx]);
         pc_ui_text(X_LABEL - 6, y + 2, t, 0.45f, 0xFFE0C080);
         return;
@@ -599,14 +621,14 @@ static void draw_row(int i, int sel)
             unsigned int c = conflict ? 0xFFFF6060 : k == st.slot && sel ? col : dim;
             const char* nm = st.capture == r->idx + 1 && k == st.slot ? "..." : bind_code_name(st.dev, bind_get(r->idx, st.dev, k), val, sizeof(val));
             char combo[80];
-            if (!(st.capture == r->idx + 1 && k == st.slot) && bind_combo(r->idx, st.dev, k)) { snprintf(combo, sizeof(combo), "Aim + %s", nm); nm = combo; }
+            if (!(st.capture == r->idx + 1 && k == st.slot) && bind_combo(r->idx, st.dev, k)) { snprintf(combo, sizeof(combo), tr("Aim + %s"), nm); nm = combo; }
             if (sel && k == st.slot) pc_ui_rect(x - 4, y - 2, x + 116, y + ROW_H - 5, 0x40FFFFFF, Z_HI + 0.01f);
             text_fit(x, y, nm, SC_ROW, 110, c);
         }
         return;
     }
     case K_SET:
-        snprintf(label, sizeof(label), "%s%s", s->label, (s->flags & SET_RESTART) ? " (restart needed)" : "");
+        snprintf(label, sizeof(label), "%s%s", tr(s->label), (s->flags & SET_RESTART) ? tr(" (restart needed)") : "");
         text_fit(X_LABEL, y, label, SC_ROW, 296, col);
         if (s->flags & SET_ACTION) {
             if (st.pending[r->idx]) pc_ui_text(X_VALUE, y, "(on leaving menu)", 0.5f, 0xFFE0C080);
@@ -640,30 +662,30 @@ static void draw_help(void)
     unsigned int col = 0xFFC0C0C0;
     t[0] = 0;
     if (st.capture) {
-        snprintf(t, sizeof(t), "Press a %s for %s. Esc: cancel. Delete: clear. %d s left.", st.dev ? "gamepad button" : "key or mouse button",
-                 bind_rows[st.capture - 1].name, (bind_capture_left_ms() + 999) / 1000);
+        snprintf(t, sizeof(t), tr("Press a %s for %s. Esc: cancel. Delete: clear. %d s left."), tr(st.dev ? "gamepad button" : "key or mouse button"),
+                 tr(bind_rows[st.capture - 1].name), (bind_capture_left_ms() + 999) / 1000);
         col = 0xFFFFE080;
     } else if (st.msg_t > 0) { st.msg_t--; snprintf(t, sizeof(t), "%s", st.msg); col = 0xFFFFE080; }
     else switch (r->kind) {
-    case K_PAGE: snprintf(t, sizeof(t), "Left/right or %s: change page; up/down: choose a setting. Changes save automatically.",
+    case K_PAGE: snprintf(t, sizeof(t), tr("Left/right or %s: change page; up/down: choose a setting. Changes save automatically."),
                           page_keys(nm, sizeof(nm))); break;
-    case K_DEVICE: snprintf(t, sizeof(t), "%s", st.dev ? bind_pad_desc(nm, sizeof(nm)) : "Choose bindings for game actions, third person and hotkeys. Mouse buttons can be assigned too."); break;
-    case K_RESET: snprintf(t, sizeof(t), "Restore default %s bindings.", st.dev ? "gamepad" : "keyboard and mouse"); break;
-    case K_BACK: snprintf(t, sizeof(t), "Return to OPTION. Cancel or right-click also goes back."); break;
+    case K_DEVICE: snprintf(t, sizeof(t), "%s", st.dev ? bind_pad_desc(nm, sizeof(nm)) : tr("Choose bindings for game actions, third person and hotkeys. Mouse buttons can be assigned too.")); break;
+    case K_RESET: snprintf(t, sizeof(t), tr("Restore default %s bindings."), tr(st.dev ? "gamepad" : "keyboard and mouse")); break;
+    case K_BACK: snprintf(t, sizeof(t), tr("Return to OPTION. Cancel or right-click also goes back.")); break;
     case K_BIND: {
         int c = bind_conflict(r->idx, st.dev);
-        if (c) { snprintf(t, sizeof(t), "Also assigned to %s. Change either binding to avoid a conflict.", bind_rows[c - 1].name); col = 0xFFFF8080; }
-        else if (r->idx == B_QUICKTURN || r->idx == B_TPS_QUICKTURN) snprintf(t, sizeof(t), "Press to turn around quickly.");
+        if (c) { snprintf(t, sizeof(t), tr("Also assigned to %s. Change either binding to avoid a conflict."), tr(bind_rows[c - 1].name)); col = 0xFFFF8080; }
+        else if (r->idx == B_QUICKTURN || r->idx == B_TPS_QUICKTURN) snprintf(t, sizeof(t), tr("Press to turn around quickly."));
         else if (r->idx == B_RELOAD || r->idx == B_TPS_RELOAD)
-            snprintf(t, sizeof(t), "Reload using ammo from your inventory. If shared with another action, hold Aim and press the button.");
-        else snprintf(t, sizeof(t), "Confirm: rebind. Left/right: choose a binding (%s).", bind_code_name(st.dev, bind_get(r->idx, st.dev, st.slot), nm, sizeof(nm)));
+            snprintf(t, sizeof(t), tr("Reload using ammo from your inventory. If shared with another action, hold Aim and press the button."));
+        else snprintf(t, sizeof(t), tr("Confirm: rebind. Left/right: choose a binding (%s)."), bind_code_name(st.dev, bind_get(r->idx, st.dev, st.slot), nm, sizeof(nm)));
         break;
     }
     case K_SET: {
         const char* lock = settings_locked(s);
-        snprintf(t, sizeof(t), "%s%s%s%s", lock ? lock : "", lock ? " " : "", (s->flags & SET_RESTART) ? "Restart needed. " : "", s->help ? s->help : "");
+        snprintf(t, sizeof(t), "%s%s%s%s", lock ? lock : "", lock ? " " : "", (s->flags & SET_RESTART) ? tr("Restart needed. ") : "", s->help ? tr(s->help) : "");
         if (lock) col = 0xFFFFC060;
-        if (s->flags & SET_ACTION && !lock && !(s->flags & SET_NOW)) snprintf(t + strlen(t), sizeof(t) - strlen(t), "%sApplies when you leave this menu.", s->help ? " " : "");
+        if (s->flags & SET_ACTION && !lock && !(s->flags & SET_NOW)) snprintf(t + strlen(t), sizeof(t) - strlen(t), tr("%sApplies when you leave this menu."), s->help ? " " : "");
         break;
     }
     }

@@ -17,6 +17,7 @@
 #include "../../decomp/include/ps2/veronica/prog/ps2_SystemLoadScreen.h"
 #include "../../decomp/include/ps2/veronica/prog/ps2_SystemSaveScreen.h"
 #include "../src/host/savestore.h"
+#include "../src/host/lang.h"
 #include "../src/host/fileio.h"
 #include "../src/host/lobby.h"
 #include "../src/host/coop.h"
@@ -72,15 +73,15 @@ void pc_save_list(SELECTFILEWINDOW* win, MEMORYCARDSTATE* mc, int saving)
 
 /* mcDisplayFileSelectWindow's header (MEMORY CARD and the slot, messages 463 and 464 + port, at
    y 32): with native saves "Load Game" / "Save Game" instead, as a message in the game's font
-   (codes: ASCII - 32, 0xFF01 a space) drawn by bhDispMessage the same way, centred above the list */
+   (codes: lang.h pc_glyph_next, 0xFF01 a space) drawn by bhDispMessage the same way, centred above the list */
 int pc_save_header(void)
 {
-    const char* s = listing_save ? "Save Game" : "Load Game";
-    unsigned short mes[16];
+    const char* s = tr(listing_save ? "Save Game" : "Load Game");
+    unsigned short mes[48];
     void* keep = sys->mes_tp;
-    int i;
+    int i = 0, c;
     if (!native) return 0;
-    for (i = 0; s[i]; i++) mes[i] = s[i] == ' ' ? 0xFF01 : s[i] - 32;
+    while (i < 47 && (c = pc_glyph_next(&s)) >= 0) mes[i++] = c ? c : 0xFF01;
     mes[i] = 0xFFFF;
     sys->mes_tp = mes;
     bhDispMessage(320.0f - bhMesLen(mes) / 2, 32.0f, 0, 2, 0, 0, 0);

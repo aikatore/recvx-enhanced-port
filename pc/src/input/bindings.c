@@ -1,6 +1,7 @@
 /* Control bindings: keyboard/mouse and gamepad -> DS2 buttons, third-person keys, hotkeys.
    docs/ARCHITECTURE.md "Input". The defaults are the port's fixed layout from before (pad.c,
    tps_input.c, host.c, overlay.cpp), so nothing changes until a binding is edited. */
+#include "../host/lang.h"
 #include "../host/bindings.h"
 #include "../host/tps.h"
 #include <SDL3/SDL.h>
@@ -373,16 +374,16 @@ const char* bind_row_label(int row, char* buf, int n)
     static const char* vnames[16] = { "Forward", "Back", "Turn Left", "Turn Right", "Aim", "Aim Up", "Aim Down",
                                       "Change Aim", "Fire", "Examine", "Run", "Confirm", "Cancel", "Map", "Inventory", "Options" };
     int len = 0;
-    if (row >= 16) { snprintf(buf, n, "%s", bind_rows[row].name); return buf; }
+    if (row >= 16) { snprintf(buf, n, "%s", tr(bind_rows[row].name)); return buf; }
     buf[0] = 0;
     for (int v = 0; v < 16; v++) {
         int m = pc_keytype_mask(v);
         if (m < 0) m = 0;
         if (v == 9 && (pc_keytype_mask(8) & (1 << row))) continue;   /* examine goes with fire */
-        if (m & (1 << row)) len += snprintf(buf + len, len < n ? n - len : 0, "%s%s", len ? " / " : "", vnames[v]);
+        if (m & (1 << row)) len += snprintf(buf + len, len < n ? n - len : 0, "%s%s", len ? " / " : "", tr(vnames[v]));
     }
-    if (!len) len = snprintf(buf, n, "Not used");
-    snprintf(buf + len, len < n ? n - len : 0, " (%s)", bind_rows[row].name);
+    if (!len) len = snprintf(buf, n, "%s", tr("Not used"));
+    snprintf(buf + len, len < n ? n - len : 0, " (%s)", tr(bind_rows[row].name));
     return buf;
 }
 

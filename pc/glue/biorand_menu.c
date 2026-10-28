@@ -25,6 +25,7 @@
 #include "../../decomp/include/ps2/veronica/prog/sdfunc.h"
 #include "../../decomp/include/ps2/veronica/prog/ps2_NaDraw.h"
 #include "../src/host/menu_mouse.h"
+#include "../src/host/lang.h"
 #include "../src/host/lobby.h"
 #include "../src/host/settings.h"
 #include "../src/host/bindings.h"
@@ -178,9 +179,9 @@ static const char* gen_text(void)
 {
     static char t[400];
     char h[64];
-    if (bm.host) snprintf(h, sizeof(h), "Generate the host's BioRand seed %d", bm.o.Seed);   /* (A_HOST) */
-    else snprintf(h, sizeof(h), "Generate BioRand seed %d", bm.o.Seed);
-    snprintf(t, sizeof(t), "%s? This replaces your generated game and may briefly use about 6 GB of memory.", h);
+    if (bm.host) snprintf(h, sizeof(h), tr("Generate the host's BioRand seed %d"), bm.o.Seed);   /* (A_HOST) */
+    else snprintf(h, sizeof(h), tr("Generate BioRand seed %d"), bm.o.Seed);
+    snprintf(t, sizeof(t), tr("%s? This replaces your generated game and may briefly use about 6 GB of memory."), h);
     return t;
 }
 
@@ -189,16 +190,16 @@ static const char* disk_why(void)
 {
     static char t[160];
     if (bm.free_mb < 0 || bm.free_mb >= BRDL_GEN_FREE_MB) return NULL;
-    snprintf(t, sizeof(t), "Not enough disk space to generate. BioRand needs about %d GB free in the mods folder while it runs; "
-             "%.1f GB are free.", BRDL_GEN_FREE_MB / 1024, bm.free_mb / 1024.0);
+    snprintf(t, sizeof(t), tr("Not enough disk space to generate. BioRand needs about %d GB free in the mods folder while it runs; "
+             "%.1f GB are free."), BRDL_GEN_FREE_MB / 1024, bm.free_mb / 1024.0);
     return t;
 }
 static int disk_low(void) { return bm.free_mb >= 0 && bm.free_mb < GEN_WARN_MB; }
 static const char* disk_text(void)
 {
     static char t[200];
-    snprintf(t, sizeof(t), "Disk space is low: %.1f GB free in the mods folder. BioRand needs about %d GB while it runs. "
-             "Generate anyway?", bm.free_mb / 1024.0, BRDL_GEN_FREE_MB / 1024);
+    snprintf(t, sizeof(t), tr("Disk space is low: %.1f GB free in the mods folder. BioRand needs about %d GB while it runs. "
+             "Generate anyway?"), bm.free_mb / 1024.0, BRDL_GEN_FREE_MB / 1024);
     return t;
 }
 
@@ -229,7 +230,7 @@ static int gen_end(const BrdlStatus* s)
     }
     if (s->state == BRDL_GENERATED) {
         host_log("biorand menu: generated %s; the pack says seed %d\n", bm.str, biorand_seed());
-        snprintf(m, sizeof(m), "BioRand seed %d is ready. Choose START to play it.%s%s", bm.gen_seed,
+        snprintf(m, sizeof(m), tr("BioRand seed %d is ready. Choose START to play it.%s%s"), bm.gen_seed,
                  s->warn[0] ? " Warning: " : "", s->warn);
         result(m, 0);
     } else if (s->state == BRDL_ERROR) result(s->error, 1);
@@ -378,7 +379,7 @@ static const char* row_why(const Row* r)
         if (l) return l;
         if (biorand_opt_active(&bm.o, r->idx)) return NULL;
         for (int p = biorand_opt_find(biorand_opt[r->idx].parent); p >= 0; p = biorand_opt_find(biorand_opt[p].parent))
-            if (!biorand_opt_get(&bm.o, p)) { snprintf(why, sizeof(why), "Turn on \"%s\" first.", biorand_opt[p].label); break; }
+            if (!biorand_opt_get(&bm.o, p)) { snprintf(why, sizeof(why), tr("Turn on \"%s\" first."), biorand_opt[p].label); break; }
         return why;
     }
     }
@@ -511,7 +512,7 @@ static void copy_string(void)
     char m[192];
     snprintf(g_lobby_io.clip, sizeof(g_lobby_io.clip), "%s", bm.str);
     g_lobby_io.clip_req = 1;   /* lobby_io.c sets the clipboard */
-    snprintf(m, sizeof(m), "Seed string copied: %s", bm.str);
+    snprintf(m, sizeof(m), tr("Seed string copied: %s"), bm.str);
     say(m, 0);
     host_log("biorand menu: copied %s\n", bm.str);
     CallSystemSe(0, 3);
@@ -527,7 +528,7 @@ static void paste_end(const char* text)
     biorand_opts_rules(&t);
     bm.o = t;
     saved("paste", t.Seed);
-    snprintf(m, sizeof(m), "Seed %d and options pasted.", t.Seed);
+    snprintf(m, sizeof(m), tr("Seed %d and options pasted."), t.Seed);
     say(m, 0);
     CallSystemSe(0, 3);
 }
@@ -625,15 +626,15 @@ static const char* pick_text(void)
 {
     static char t[240];
     const char* ps = biorand_seed_string();
-    snprintf(t, sizeof(t), "Choose the difficulty.%s", ps[0] && strcmp(ps, bm.str) ? " Your option changes are not generated yet: "
+    snprintf(t, sizeof(t), tr("Choose the difficulty.%s"), ps[0] && strcmp(ps, bm.str) ? " Your option changes are not generated yet: "
              "this plays the generated game. GENERATE first to play them." : "");
     return t;
 }
 static const char* pick_head(void)
 {
     static char t[48];
-    if (biorand_seed() >= 0) snprintf(t, sizeof(t), "START BIORAND SEED %d", biorand_seed());
-    else snprintf(t, sizeof(t), "START BIORAND");
+    if (biorand_seed() >= 0) snprintf(t, sizeof(t), tr("START BIORAND SEED %d"), biorand_seed());
+    else snprintf(t, sizeof(t), tr("START BIORAND"));
     return t;
 }
 static void dlg_box(float* y0, float* y1)
@@ -890,46 +891,47 @@ static void help_text(char* t, int n, unsigned int* col)
     const Row* r = &rows[bm.row];
     const char* why = row_why(r);
     char k[48];
+    if (why) why = tr(why);
     *col = 0xFFA0D0FF;
-    if (bm.edit) { snprintf(t, n, "Type seed 0 to %d. Enter: confirm; Esc: cancel; gamepad: up/down edits, left/right moves.", BIORAND_SEED_MAX); return; }
+    if (bm.edit) { snprintf(t, n, tr("Type seed 0 to %d. Enter: confirm; Esc: cancel; gamepad: up/down edits, left/right moves."), BIORAND_SEED_MAX); return; }
     if (bm.say_t > 0) { snprintf(t, n, "%s", bm.say); *col = bm.say_err ? 0xFFFFC060 : 0xFFFFE080; return; }
     if (bm.list) { snprintf(t, n, "%s", cast_list_help()); return; }
     switch (r->kind) {
     case K_PAGE:
-        snprintf(t, n, "Left/right or %s: change page; up/down: choose an option. Changes save automatically.", page_keys(k, sizeof(k)));
+        snprintf(t, n, tr("Left/right or %s: change page; up/down: choose an option. Changes save automatically."), page_keys(k, sizeof(k)));
         return;
     case K_OPT: {
         const BioOpt* d = &biorand_opt[r->idx];
         const char* h = d->help ? d->help : "Choose a starting weapon type: None, Random, Sidearm, Primary or Powerful.";
-        snprintf(t, n, "%s%s%s%s", why ? why : "", why ? " " : "", h, r->idx == bm.seed_i ? " Confirm: enter a seed. Left/right: adjust." : "");
+        snprintf(t, n, "%s%s%s%s", why ? why : "", why ? " " : "", tr(h), r->idx == bm.seed_i ? tr(" Confirm: enter a seed. Left/right: adjust.") : "");
         for (char* p = t; *p; p++) if (*p == '\n') *p = ' ';
         if (why) *col = 0xFFFFC060;
         return;
     }
-    case K_RANDOM: snprintf(t, n, "Choose a random seed number. Keep the other options."); return;
-    case K_COPY: snprintf(t, n, "Copy the seed string to share the seed and BioRand options."); return;
-    case K_PASTE: snprintf(t, n, "Paste a seed string to use its seed and BioRand options."); return;
+    case K_RANDOM: snprintf(t, n, tr("Choose a random seed number. Keep the other options.")); return;
+    case K_COPY: snprintf(t, n, tr("Copy the seed string to share the seed and BioRand options.")); return;
+    case K_PASTE: snprintf(t, n, tr("Paste a seed string to use its seed and BioRand options.")); return;
     case K_GEN:
-        snprintf(t, n, "%s%sGenerate your BioRand game with these options. START plays it.", why ? why : "", why ? " " : "");
+        snprintf(t, n, tr("%s%sGenerate your BioRand game with these options. START plays it."), why ? why : "", why ? " " : "");
         if (why) *col = 0xFFFFC060;
         return;
     case K_START:
-        snprintf(t, n, "%s%sStart a new game with your generated BioRand game%s%s. NEW GAME on the title menu always starts "
-                 "without BioRand.", why ? why : "", why ? " " : "", biorand_seed() >= 0 ? ", " : "", biorand_seed() >= 0 ? biorand_seed_text() : "");
+        snprintf(t, n, tr("%s%sStart a new game with your generated BioRand game%s%s. NEW GAME on the title menu always starts "
+                 "without BioRand."), why ? why : "", why ? " " : "", biorand_seed() >= 0 ? ", " : "", biorand_seed() >= 0 ? biorand_seed_text() : "");
         if (why) *col = 0xFFFFC060;
         return;
-    case K_CHECK: snprintf(t, n, "Check GitHub for the latest BioRand generator and offer to download it."); return;
+    case K_CHECK: snprintf(t, n, tr("Check GitHub for the latest BioRand generator and offer to download it.")); return;
     case K_APPEAR:
-        snprintf(t, n, "Choose a character model for each generated seed. Saved separately from the seed string.");
+        snprintf(t, n, tr("Choose a character model for each generated seed. Saved separately from the seed string."));
         return;
     case K_CUSTOM: snprintf(t, n, "Choose the models the characters can appear as."); return;
     case K_SET: {
         const Setting* s = &g_settings[r->idx];
-        snprintf(t, n, "%s%s%s", why ? why : "", why ? " " : "", s->help ? s->help : "");
+        snprintf(t, n, "%s%s%s", why ? why : "", why ? " " : "", s->help ? tr(s->help) : "");
         if (why) *col = 0xFFFFC060;
         return;
     }
-    default: snprintf(t, n, "Back to the title menu (also cancel or a right click)."); return;
+    default: snprintf(t, n, tr("Back to the title menu (also cancel or a right click).")); return;
     }
 }
 
@@ -971,7 +973,7 @@ static void draw_work(void)
         const char* m = s.msg;
         char head[48];
         if (m[0] == '[' && strstr(m, "] ")) m = strstr(m, "] ") + 2;   /* ("[P1] Randomizing doors": the player's part) */
-        snprintf(head, sizeof(head), "BIORAND - GENERATING SEED %d", bm.gen_seed);
+        snprintf(head, sizeof(head), tr("BIORAND - GENERATING SEED %d"), bm.gen_seed);
         pc_ui_dialog(y0, y1, Z_BOX, head, bm.cancelling ? "Cancelling..." : m[0] ? m : "Starting BioRand...", 0.55f, 0xFFC0C0C0, 2,
                      "CANCEL", NULL, 0, 0);
         f = s.pct / 100.0f;
@@ -982,7 +984,7 @@ static void draw_work(void)
         if (!bm.install) return;
         if (s.state >= BRDL_VERIFY) f = 1;
         else if (s.total > 0) f = s.done >= s.total ? 1.0f : (float)s.done / s.total;
-        if (s.total > 0) snprintf(line, sizeof(line), "%.1f / %.1f MB", s.done / 1048576.0, s.total / 1048576.0);
+        if (s.total > 0) snprintf(line, sizeof(line), tr("%.1f / %.1f MB"), s.done / 1048576.0, s.total / 1048576.0);
     }
     {   /* the done part and the rest side by side; at half pixels: the renderer's rows of a long flat quad's
            two triangles can differ by one (a step in an opaque bar), at most the last row this way */

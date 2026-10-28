@@ -419,8 +419,9 @@ one page back, from the first to EXTRA.
 
 | page | rows |
 |---|---|
-| IMPORT FROM OTHER GAMES | the categories (`cats[]`): **CHARACTERS** for now; languages and other content can be added as rows |
-| CHARACTERS | the games (`import_sources[]`): Resident Evil Outbreak File #2 |
+| IMPORT FROM OTHER GAMES | the categories (`cats[]`, `IMPORT_CAT_*`): **CHARACTERS**, **LANGUAGES** ([LANGUAGES.md](LANGUAGES.md)) |
+| CHARACTERS | the games (`import_sources[]` of that category): Resident Evil Outbreak File #2 |
+| LANGUAGES | the releases: Resident Evil Code: Veronica X (Europe); its page has Disc Image, START IMPORT (every language of the disc), DELETE IMPORTED LANGUAGES and "Needs a clean European disc image of Resident Evil Code: Veronica X: SLES-50306." with the installed languages |
 | the game | **Playable Characters** and **NPCs** On/Off (the groups of `IMPORT_OFFERED`; both on at first); **Disc Image** (the file's name; confirm opens the system's file dialog, ini `import_outbreak2_iso`); **START IMPORT**; **DELETE IMPORTED MODELS**; BACK. Below: "Needs a clean US disc image of Resident Evil Outbreak File 2: SLUS-20984." and what is imported ("30 playable characters and 238 NPCs can be played." from the manifest, with its date) |
 
 - **The file dialog** has to be opened by the main thread: the screen sets `g_lobby_io.file_req` (lobby.h), and

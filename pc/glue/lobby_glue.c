@@ -39,6 +39,7 @@
 #include "../src/net/rdv_proto.h"
 #include "../src/net/coop_proto.h"   /* REC_*: what the host keeps for us */
 #include "../src/net/update.h"
+#include "../src/host/lang.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,15 +72,16 @@ enum { BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000
 #define Z_DIM 0.012f                    /* behind the models */
 #define Z_FRONT 0.3f                    /* in front of them */
 
-static int code_of(char c) { return c > 32 && c < 127 ? c - 32 : 0; }
-static float adv(int c) { return c ? FontSz[c] : 11.0f; }   /* the font's space is a full cell */
+/* UTF-8, the letters of the loaded font (lang.h pc_glyph_next: accents with a language's font) */
+static float adv(int c) { return c ? pc_glyph_w(c) : 11.0f; }   /* the font's space is a full cell */
 
 #define TRACK 0.88f                     /* a little tighter than the game's messages */
 
 static float text_w(const char* s, float sc)
 {
     float w = 0;
-    for (; *s; s++) w += adv(code_of(*s)) * sc * TRACK;
+    s = tr(s);   /* (our texts in the language: drawn and measured the same) */
+    for (int c; (c = pc_glyph_next(&s)) >= 0;) w += adv(c) * sc * TRACK;
     return w;
 }
 
@@ -93,10 +95,11 @@ static void text(float x, float y, const char* s, float sc, unsigned int argb)
     const char* p;
     int pass;
     if (!font_ok) return;
+    s = tr(s);
     bhFontScaleSet(sc, sc, sc);
     for (pass = 0; pass < 2; pass++)
-        for (p = s, x = x0; *p; p++) {
-            int c = code_of(*p);
+        for (p = s, x = x0; *p;) {
+            int c = pc_glyph_next(&p);
             NJS_POINT2 pos = { x + (pass ? 0 : 2), y + (pass ? 0 : 2) };
             if (c) bhDispFontEx(&pos, c, pass ? argb : (argb & 0xFF000000) >> 1 & 0xFF000000, PRI_TEXT);
             x += adv(c) * sc * TRACK;
@@ -111,6 +114,7 @@ static int text_wrap(float x, float y, float w, const char* s, float sc, unsigne
 {
     char line[160];
     int n = 0;
+    s = tr(s);
     while (*s && n < max_lines) {
         int len = 0, fit = 0;
         while (s[len] && len < (int)sizeof(line) - 1) {
@@ -176,12 +180,24 @@ static const struct { const Letter* l; int n; } plate_words[] = {
     { mp_letters, 11 }, { br_letters, 7 }, { ex_letters, 5 }, { im_letters, 6 },
 };
 
+static void title_font(void);
 static void plate_word(int word, float cx, float y, unsigned int col, unsigned int shadow, float scale)
 {
     const Letter* l = plate_words[word].l;
     int i, n = plate_words[word].n;
     float w = 0, x;
     QUAD q;
+    if (word != W_EX && lang_picture(2) != LANG_EN) {   /* another language's title picture: other letters on its plates (EXTREAM's stay) */
+        static const char* const words[] = { "MULTIPLAYER", "BIORAND", "EXTRA", "IMPORT" };
+        const char* t = tr(words[word]);
+        unsigned int rgb = 0;
+        for (i = 0; i < 24; i += 8) { unsigned int c = (col >> i & 0xFF) * 2; rgb |= (c > 255 ? 255 : c) << i; }   /* (the plates' 0x80 is full) */
+        (void)shadow;
+        title_font();
+        text(cx - text_w(t, 1.15f * scale) / 2, y + 3 * scale, t, 1.15f * scale, (col & 0xFF000000) | rgb);
+        AdvEasySetTextureList(0);   /* the title's textures again (the font set its own) */
+        return;
+    }
     for (i = 0; i < n; i++) w += (l[i].w + 1) * scale;
     x = cx - w / 2;
     for (i = 0; i < n; i++) {
@@ -682,8 +698,8 @@ static const char* chr_names[] = { "Claire", "Chris", "Steve", "Wesker" };
 static void save_label(char* out, int n, int slot)
 {
     int i = save_at(slot);
-    if (i < 0) { snprintf(out, n, "Save %02d", slot + 1); return; }
-    snprintf(out, n, "Save %02d: %s %d-%02d", slot + 1, chr_names[saves[i].ply_id], saves[i].stg, saves[i].rom);
+    if (i < 0) { snprintf(out, n, tr("Save %02d"), slot + 1); return; }
+    snprintf(out, n, tr("Save %02d: %s %d-%02d"), slot + 1, chr_names[saves[i].ply_id], saves[i].stg, saves[i].rom);
 }
 
 /* the choices as lists: host START WITH: 0..2 new game, 3 + slot; joining ITEMS FROM: saved with the host, new, slot */
@@ -709,9 +725,9 @@ static void start_label(char* out, int n, int v)
 static void items_label(char* out, int n, int v)
 {
     if (v == COOP_ITEMS_HOST)   /* the host says whether it has them once we are in its lobby */
-        snprintf(out, n, "Saved with the host%s", g_coop.state == COOP_OFF || g_coop.host || g_coop.peer_rec < 0 ? ""
+        snprintf(out, n, tr("Saved with the host%s"), g_coop.state == COOP_OFF || g_coop.host || g_coop.peer_rec < 0 ? ""
                  : g_coop.peer_rec == REC_HAVE ? " (available)" : g_coop.peer_rec == REC_OFF ? " (host: off)" : " (none)");
-    else if (v < 0) snprintf(out, n, "New inventory");
+    else if (v < 0) snprintf(out, n, tr("New inventory"));
     else save_label(out, n, v);
 }
 
@@ -755,8 +771,9 @@ static void font_release(void)
    game's file reader stays free) and kept; released when the title ends (lobby_close). */
 static void title_font(void)
 {
-    static int have;   /* font_file holds the font: 1; -1 it cannot be read */
+    static int have, have_lang;   /* font_file holds the font: 1; -1 it cannot be read; of which language (lang.h) */
     if (!(sys->ss_flg & 0x40) && !font_state) {
+        if (have_lang != g_lang) { have = 0; have_lang = g_lang; }
         if (!have) have = afs_read(sys->sys_partid, 1, font_file, sizeof(font_file)) ? 1 : -1;
         if (have < 0) return;
         bhSetFontTexture(font_file);
@@ -797,14 +814,16 @@ static void title_version(void)
     title_font();
     st = update_newest(newest, sizeof(newest));
     val[0] = update_installed();
-    val[1] = st == UPD_KNOWN ? newest : st == UPD_OFF ? "off" : st == UPD_CHECKING ? "..." : "unknown";
+    val[1] = st == UPD_KNOWN ? newest : st == UPD_OFF ? tr("off") : st == UPD_CHECKING ? "..." : tr("unknown");
     col[0] = st == UPD_KNOWN && upd_newer(newest, val[0]) ? 0xE04040 : 0x60D060;
     col[1] = st == UPD_KNOWN ? 0x60D060 : 0xA0A0A0;
-    lw = text_w(label[0], VER_SC) + text_w("  ", VER_SC);   /* the longer label, then the versions' column */
+    lw = text_w(label[0], VER_SC);   /* the longer label (in another language either), then the versions' column */
+    if (text_w(label[1], VER_SC) > lw) lw = text_w(label[1], VER_SC);
+    lw += text_w("  ", VER_SC);
     w0 = ver_text(0, 0, val[0], VER_SC, 0, 0);
     w1 = ver_text(0, 0, val[1], VER_SC, 0, 0);
     {   /* the column as wide as the widest it can show ("unknown"), so the block never moves when the answer comes */
-        float wu = ver_text(0, 0, "unknown", VER_SC, 0, 0), wm = w0 > w1 ? w0 : w1;
+        float wu = ver_text(0, 0, tr("unknown"), VER_SC, 0, 0), wm = w0 > w1 ? w0 : w1;
         x = 632 - lw - (wm > wu ? wm : wu);
     }
     for (i = 0; i < 2; i++) {
@@ -1137,7 +1156,7 @@ static int activate(int r)
         const Setting* st = eset(&g_enemy_opts.seed);
         char m[48];
         settings_set(st, (int)((net_ms() * 2654435761u >> 8) % (unsigned)(st->hi + 1)));
-        snprintf(m, sizeof(m), "New seed: %d", g_enemy_opts.seed);
+        snprintf(m, sizeof(m), tr("New seed: %d"), g_enemy_opts.seed);
         say(m);
         CallSystemSe(0, 3);
         return 0;
@@ -1179,7 +1198,7 @@ static int activate(int r)
                 if (asked != g_coop.start) {
                     char m[96];
                     asked = g_coop.start;
-                    snprintf(m, sizeof(m), "%s %s START again to load.", pc_biorand_ask(0), pc_biorand_ask(1));
+                    snprintf(m, sizeof(m), tr("%s %s START again to load."), pc_biorand_ask(0), pc_biorand_ask(1));
                     say(m);
                     CallSystemSe(0, 1);
                     return 0;
@@ -1266,7 +1285,7 @@ static const char* heading(void)
     if (lb.step == 8) return "GAME RULES - CUSTOM MODELS";
     if (lb.step > 3) return lb.step == 4 ? (lb.role ? "HOST RULES - RANDOMIZER" : "GAME RULES - RANDOMIZER")
                                          : (lb.role ? "HOST RULES - EXTRA EVENTS" : "GAME RULES - EXTRA EVENTS");
-    snprintf(h, sizeof(h), "%s - %s", lb.role ? "JOIN A GAME" : "HOST A GAME", lb.mode ? "VIA SERVER" : "DIRECT");
+    snprintf(h, sizeof(h), "%s - %s", tr(lb.role ? "JOIN A GAME" : "HOST A GAME"), tr(lb.mode ? "VIA SERVER" : "DIRECT"));
     return h;
 }
 
@@ -1643,15 +1662,15 @@ static void draw_info(void)
     y += 16 * text_wrap(24, y, 592, g_coop.status[0] ? coop_shown(g_coop.status) : "Not connected", 0.52f, !session_on() && g_coop.status[0] ? 0xFFFFC060 : col, 2);
     if (!hosting()) return;
     if (g_coop.room[0]) {
-        snprintf(line, sizeof(line), "ROOM CODE %.4s-%.4s (via server)", g_coop.room, g_coop.room + 4);
+        snprintf(line, sizeof(line), tr("ROOM CODE %.4s-%.4s (via server)"), g_coop.room, g_coop.room + 4);
         text(24, y, line, 0.52f, 0xFFFFFFFF); y += 16;
     }
     portmap_status(&pm);
     if (lb.mode || !(pm.local_ip[0] || pm.msg[0])) return;
     /* the address COPY JOIN ADDRESS gives (the router's port mapping runs as before; its status is only in the log) */
-    if (pm.public_ip[0]) snprintf(line, sizeof(line), "ADDRESS %s:%d", pm.public_ip, pm.public_port);
-    else snprintf(line, sizeof(line), "ADDRESS %s:%d", pm.local_ip[0] ? pm.local_ip : "?", g_coop.port);
-    if (g_coop.code[0]) snprintf(line + strlen(line), sizeof(line) - strlen(line), "   CODE %.4s-%.4s", g_coop.code, g_coop.code + 4);
+    if (pm.public_ip[0]) snprintf(line, sizeof(line), tr("ADDRESS %s:%d"), pm.public_ip, pm.public_port);
+    else snprintf(line, sizeof(line), tr("ADDRESS %s:%d"), pm.local_ip[0] ? pm.local_ip : "?", g_coop.port);
+    if (g_coop.code[0]) snprintf(line + strlen(line), sizeof(line) - strlen(line), tr("   CODE %.4s-%.4s"), g_coop.code, g_coop.code + 4);
     text(24, y, coop_shown(line), 0.52f, col); y += 16;
     if (!pm.public_ip[0] && pm.state != PM_BUSY && g_coop.state != COOP_CONNECTED && y < 470)   /* no internet address: direct joins likely fail */
         text(24, y, "If your partner cannot connect, set CONNECT to Via server.", 0.48f, 0xFFA0A0A0);
@@ -1692,7 +1711,7 @@ static void draw_previews(void)
     scene_end();
     if (g_coop.state == COOP_CONNECTED && g_coop.peer_in_game) {
         char t[64];
-        snprintf(t, sizeof(t), "%s is playing", g_coop.peer_name[0] ? g_coop.peer_name : "Your partner");
+        snprintf(t, sizeof(t), tr("%s is playing"), g_coop.peer_name[0] ? g_coop.peer_name : "Your partner");
         text_c(232, 210, t, 0.5f, 0xFFFFE0A0);
     } else if (!partner) text_c(232, 210, joining() ? "Waiting for the host" : hosting() ? "Waiting for a partner" : "", 0.5f, 0xFFA0A0A0);
     else if (!g_coop.peer_lobby) text_c(222, 372, "(in the title menu)", 0.45f, 0xFFA0A0A0);

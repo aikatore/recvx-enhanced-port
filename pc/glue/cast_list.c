@@ -12,6 +12,7 @@
 #include "../src/host/lobby.h"
 #include "../src/host/menu_mouse.h"
 #include "../src/host/settings.h"
+#include "../src/host/lang.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -198,6 +199,6 @@ const char* cast_list_help(void)
 const char* cast_list_summary(const unsigned char* off, int imports_n, char* buf, int n)
 {
     int total, on = cast_custom_count(off, imports_n, &total);
-    snprintf(buf, (size_t)n, "%d of %d", on, total);
+    snprintf(buf, (size_t)n, tr("%d of %d"), on, total);
     return buf;
 }
