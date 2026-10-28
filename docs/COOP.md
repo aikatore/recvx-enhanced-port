@@ -993,6 +993,13 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   events run on the partner too, so the office computer's power-on (1/09, gate `ev_flg` 164: movie, then
   `EvtComSet 7`) put the partner into the password screen. An event of the partner's block replayed here
   (its task level in the replay window) skips the terminal; the rest of the event runs.
+* **A scene that takes the player down stairs** (`player.c bhKaidanPlayerMotion`, the scripts'
+  `PlayerKaidanMotion`): the palace main hall's first descent (1/02, gate `ev_flg` 144) and the vehicle bay
+  (6/06, `ev_flg` 294) put the player on a staircase. A climber marks the staircase and its other end in use
+  (`attr` 0x400000) until its climb ends. A single player is never on other stairs when this happens; the
+  partner replaying the scene can be: it was taken off its stairs, and their mark stayed until the room
+  was entered again (those stairs took neither player). A player already on stairs now leaves them as its
+  climb's end would.
 
 ### Flags, pickups, game state
 

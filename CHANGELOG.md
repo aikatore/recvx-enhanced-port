@@ -17,6 +17,8 @@
 
 - **Grenade launcher aim with another Character Model**: in third person the grenade launcher no longer
   points up while aiming with another model; it points at the crosshair.
+- **Co-op: stairs after a scene**: stairs you were climbing when your partner's scene took you down
+  other stairs (the palace main hall) no longer stay blocked until you leave the room.
 - **Co-op: security camera in the training facility**: looking through the Command room's camera no
   longer puts both of you inside the bio-experiment room past its code door. Only the player who
   looks sees the camera view; the partner stays where it is.
