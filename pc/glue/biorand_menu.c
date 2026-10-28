@@ -5,7 +5,8 @@
  *   BS_MENU    the generator's pages SEED, DOORS, ITEMS, ENEMIES, EXTRA OPTIONS: BioRand's options
  *              (biorand_opts.h; each change re-encodes the seed string into recvx.ini biorand_seed),
  *              the doors estimate, the item and enemy distribution bars, the seed string's copy / paste
- *   BS_ASK     a Yes/No question over it (A_DOWNLOAD with no CLI: No leaves; A_CHECK; A_NEWER; A_GEN)
+ *   BS_ASK     a Yes/No question over it (A_DOWNLOAD with no CLI: No leaves; A_CHECK; A_NEWER; A_GEN; A_DISK: GENERATE's
+ *              warning when the mods folder's disk has less than GEN_WARN_MB free)
  *   BS_WORK    the downloader's thread runs (pc/src/net/biorand_dl.h): its stage, a bar, MB, CANCEL; or the
  *              CLI generates the pack (bm.gen, S5): its Progress: percent and message on the bar
  *   BS_RESULT  a message (newest, installed, generated, an error) and OK
@@ -54,7 +55,8 @@ static const char* const diff_btn[] = { "NORMAL", "EASY", "VERY EASY", "CANCEL" 
 
 enum { BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };
 enum { BS_MENU, BS_ASK, BS_WORK, BS_RESULT, BS_PICK };
-enum { A_DOWNLOAD, A_CHECK, A_NEWER, A_GEN, A_HOST, A_DIGEST };
+enum { A_DOWNLOAD, A_CHECK, A_NEWER, A_GEN, A_HOST, A_DIGEST, A_DISK };
+#define GEN_WARN_MB 5120     /* GENERATE warns below this much free space (BRDL_GEN_FREE_MB, 4 GB, is what a run takes) */
 /* the pages; DOORS..ENEMIES show biorand_opt[]'s groups BOG_DOORS..BOG_ENEMIES (the same numbers) */
 enum { PG_SEED, PG_DOORS, PG_ITEMS, PG_ENEMIES, PG_PORT, PG_N };
 static const char* const page_names[PG_N] = { "SEED", "DOORS", "ITEMS", "ENEMIES", "EXTRA OPTIONS" };
@@ -137,6 +139,7 @@ static const char* const ask_text[] = {
     NULL,   /* A_GEN: gen_text() */
     NULL,   /* A_HOST: gen_text() */
     "Your BioRand version differs from the host's. Download the latest version first? The host should update too. No uses your installed version.",
+    NULL,   /* A_DISK: disk_text() */
 };
 
 static void ask(int a) { bm.state = BS_ASK; bm.ask = a; bm.sel = 1; }   /* No first */
@@ -161,16 +164,32 @@ static int to_menu(void)
 
 static void say(const char* m, int err);
 
-/* GENERATE's question: what it does, the memory it takes, the free space */
+/* GENERATE's question: what it does, the memory it takes */
 static const char* gen_text(void)
 {
     static char t[400];
-    char f[40] = "";
     char h[64];
-    if (bm.free_mb >= 0) snprintf(f, sizeof(f), " Free disk space: %.1f GB.", bm.free_mb / 1024.0);
     if (bm.host) snprintf(h, sizeof(h), "Generate the host's BioRand seed %d", bm.o.Seed);   /* (A_HOST) */
     else snprintf(h, sizeof(h), "Generate BioRand seed %d", bm.o.Seed);
-    snprintf(t, sizeof(t), "%s? This replaces your generated game and may briefly use about 6 GB of memory.%s", h, f);
+    snprintf(t, sizeof(t), "%s? This replaces your generated game and may briefly use about 6 GB of memory.", h);
+    return t;
+}
+
+/* the free space (looked at on GENERATE's OK, look_mods): not enough is an error, close to it a warning; unknown neither */
+static const char* disk_why(void)
+{
+    static char t[160];
+    if (bm.free_mb < 0 || bm.free_mb >= BRDL_GEN_FREE_MB) return NULL;
+    snprintf(t, sizeof(t), "Not enough disk space to generate. BioRand needs about %d GB free in the mods folder while it runs; "
+             "%.1f GB are free.", BRDL_GEN_FREE_MB / 1024, bm.free_mb / 1024.0);
+    return t;
+}
+static int disk_low(void) { return bm.free_mb >= 0 && bm.free_mb < GEN_WARN_MB; }
+static const char* disk_text(void)
+{
+    static char t[200];
+    snprintf(t, sizeof(t), "Disk space is low: %.1f GB free in the mods folder. BioRand needs about %d GB while it runs. "
+             "Generate anyway?", bm.free_mb / 1024.0, BRDL_GEN_FREE_MB / 1024);
     return t;
 }
 
@@ -224,6 +243,8 @@ static int host_next(void)
     }
     look_mods();
     if (row_why(&g)) result(row_why(&g), 1);
+    else if (disk_why()) result(disk_why(), 1);
+    else if (disk_low()) ask(A_DISK);
     else gen_start();
     return 0;
 }
@@ -266,7 +287,8 @@ static int choose(int yes)
 {
     CallSystemSe(0, yes ? 3 : 0);
     if (bm.state == BS_ASK) {
-        if (yes && bm.ask == A_GEN) { gen_start(); return 0; }
+        if (yes && bm.ask == A_GEN && disk_low()) { ask(A_DISK); return 0; }
+        if (yes && (bm.ask == A_GEN || bm.ask == A_DISK)) { gen_start(); return 0; }
         if (bm.ask == A_HOST) return yes ? host_next() : to_menu();
         if (!yes && bm.ask == A_DIGEST) return host_next();   /* with our CLI */
         if (yes) { work(bm.ask != A_CHECK); return 0; }
@@ -335,10 +357,6 @@ static const char* row_why(const Row* r)
         if (!biorand_iso_known()) return "Start the game with a disc image first.";
         if (pc_in_game()) return "Only at the title screen.";
         if (coop_biorand() >= 0 && !bm.host) return "Only the co-op host can generate here.";   /* (the host's own seed: S5b) */
-        if (bm.free_mb >= 0 && bm.free_mb < BRDL_GEN_FREE_MB) {
-            snprintf(why, sizeof(why), "Needs about %d GB of disk space. Available: %.1f GB.", BRDL_GEN_FREE_MB / 1024, bm.free_mb / 1024.0);
-            return why;
-        }
         return NULL;
     case K_START:
         if (!biorand_pack()) return "Generate a BioRand game first.";
@@ -530,6 +548,7 @@ static int activate(const Row* r)
     case K_GEN:
         look_mods();   /* (the free space now) */
         if (row_why(r)) refuse(row_why(r));
+        else if (disk_why()) { CallSystemSe(0, 1); result(disk_why(), 1); }
         else { CallSystemSe(0, 3); ask(A_GEN); }
         return 0;
     case K_START:
@@ -588,7 +607,7 @@ static int click(int i, float x)
 }
 
 /* the dialog's texts and box (the box as tall as its text; the progress one fixed, its text changes) */
-static const char* ask_msg(void) { return bm.ask == A_GEN || bm.ask == A_HOST ? gen_text() : ask_text[bm.ask]; }
+static const char* ask_msg(void) { return bm.ask == A_GEN || bm.ask == A_HOST ? gen_text() : bm.ask == A_DISK ? disk_text() : ask_text[bm.ask]; }
 static const char* result_head(void) { return bm.err ? "BIORAND - ERROR" : "BIORAND"; }
 /* START's question: the pack's seed; whether the options shown are not what it was generated with */
 static const char* pick_text(void)
@@ -874,8 +893,7 @@ static void help_text(char* t, int n, unsigned int* col)
     case K_COPY: snprintf(t, n, "Copy the seed string to share the seed and BioRand options."); return;
     case K_PASTE: snprintf(t, n, "Paste a seed string to use its seed and BioRand options."); return;
     case K_GEN:
-        snprintf(t, n, "%s%sGenerate and enable your BioRand game. Uses about 1.4 GB of disk space.",
-                 why ? why : "", why ? " " : "");
+        snprintf(t, n, "%s%sGenerate your BioRand game with these options. START plays it.", why ? why : "", why ? " " : "");
         if (why) *col = 0xFFFFC060;
         return;
     case K_START:

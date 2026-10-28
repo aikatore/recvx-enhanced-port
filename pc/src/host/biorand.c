@@ -144,8 +144,9 @@ static void mods_abs(char* out, int n)
 int biorand_mods_free_mb(void)
 {
     char m[1100];
+    const char* test = SDL_getenv("RECVX_BIORAND_FREE_MB_TEST");   /* test aid: the free space to assume, in MB */
     mods_abs(m, sizeof(m));
-    return biorand_free_mb(m);
+    return test ? SDL_atoi(test) : biorand_free_mb(m);
 }
 
 int biorand_iso_known(void) { return g_config.iso_path[0] != 0; }
