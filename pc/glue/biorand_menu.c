@@ -9,6 +9,8 @@
  *   BS_WORK    the downloader's thread runs (pc/src/net/biorand_dl.h): its stage, a bar, MB, CANCEL; or the
  *              CLI generates the pack (bm.gen, S5): its Progress: percent and message on the bar
  *   BS_RESULT  a message (newest, installed, generated, an error) and OK
+ *   BS_PICK    START's difficulty (NORMAL, EASY, VERY EASY, CANCEL; "Difficulty select" off: NORMAL, not asked): a new
+ *              game that plays the generated pack (biorand_game(1); pc_biorand_menu returns 2)
  * A co-op guest whose pack is not the host's opens it from the lobby or the title menu (bm.host, S5b:
  * coop_biorand_offer): it asks to generate the host's seed string (A_HOST), downloads the CLI first when there is none
  * (A_DOWNLOAD), offers the newest CLI when the host's digest differs (A_DIGEST), generates, and returns to where it
@@ -45,15 +47,19 @@ void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, f
 int pc_ui_dialog_hit(float y1, const char* b0, const char* b1, int glyphs, float x, float y);
 void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, float extra, float* y0, float* y1);
 int pc_in_game(void);   /* options_glue.c */
+void pc_ui_dialog_btns(float y0, float y1, float z, const char* l1, const char* l2, float sc2, unsigned int col2, int lines,
+                       const char* const* b, int n, int sel);
+int pc_ui_dialog_btns_hit(float y1, const char* const* b, int n, float x, float y);
+static const char* const diff_btn[] = { "NORMAL", "EASY", "VERY EASY", "CANCEL" };   /* sys->gm_mode 0, 1, 2 (adv.c NewGameDef) */
 
 enum { BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };
-enum { BS_MENU, BS_ASK, BS_WORK, BS_RESULT };
+enum { BS_MENU, BS_ASK, BS_WORK, BS_RESULT, BS_PICK };
 enum { A_DOWNLOAD, A_CHECK, A_NEWER, A_GEN, A_HOST, A_DIGEST };
 /* the pages; DOORS..ENEMIES show biorand_opt[]'s groups BOG_DOORS..BOG_ENEMIES (the same numbers) */
 enum { PG_SEED, PG_DOORS, PG_ITEMS, PG_ENEMIES, PG_PORT, PG_N };
 static const char* const page_names[PG_N] = { "SEED", "DOORS", "ITEMS", "ENEMIES", "EXTRA OPTIONS" };
 /* row kinds: K_OPT a biorand_opt[] row, K_SET a settings table row (the cutscene cast) */
-enum { K_PAGE, K_OPT, K_RANDOM, K_COPY, K_PASTE, K_GEN, K_CHECK, K_APPEAR, K_SET, K_BACK };
+enum { K_PAGE, K_OPT, K_RANDOM, K_COPY, K_PASTE, K_GEN, K_START, K_CHECK, K_APPEAR, K_SET, K_BACK };
 typedef struct { int kind, idx; } Row;
 #define MAX_ROWS 30          /* (ROW_Z has room for 30; ITEMS has 27) */
 
@@ -194,9 +200,8 @@ static int gen_end(const BrdlStatus* s)
         return 1;
     }
     if (s->state == BRDL_GENERATED) {
-        biorand_enable();
-        host_log("biorand menu: generated %s; the pack says seed %d; BioRand on\n", bm.str, biorand_seed());
-        snprintf(m, sizeof(m), "BioRand seed %d is ready. BioRand is on; start a NEW GAME.%s%s", bm.gen_seed,
+        host_log("biorand menu: generated %s; the pack says seed %d\n", bm.str, biorand_seed());
+        snprintf(m, sizeof(m), "BioRand seed %d is ready. Choose START to play it.%s%s", bm.gen_seed,
                  s->warn[0] ? " Warning: " : "", s->warn);
         result(m, 0);
     } else if (s->state == BRDL_ERROR) result(s->error, 1);
@@ -295,6 +300,7 @@ static void build_rows(void)
         add(K_COPY, 0);
         add(K_PASTE, 0);
         add(K_GEN, 0);
+        add(K_START, 0);
         add(K_CHECK, 0);
     } else if (bm.page == PG_PORT) {
         add(K_APPEAR, 0);
@@ -333,6 +339,10 @@ static const char* row_why(const Row* r)
             snprintf(why, sizeof(why), "Needs about %d GB of disk space. Available: %.1f GB.", BRDL_GEN_FREE_MB / 1024, bm.free_mb / 1024.0);
             return why;
         }
+        return NULL;
+    case K_START:
+        if (!biorand_pack()) return "Generate a BioRand game first.";
+        if (coop_biorand() >= 0) return "Not while joined to a co-op host.";
         return NULL;
     case K_SET: return settings_locked(&g_settings[r->idx]);
     case K_OPT: {
@@ -494,7 +504,16 @@ static void paste_end(const char* text)
     CallSystemSe(0, 3);
 }
 
-/* confirm on a row: 1 leave the screen */
+/* START: a new game of difficulty d (sys->gm_mode) that plays the generated pack; 2 (pc_lobby: TitleCall as NEW GAME) */
+static int start(int d)
+{
+    sys->gm_mode = d;
+    biorand_game(1);
+    host_log("biorand menu: start, difficulty %s, the pack's %s\n", diff_btn[d], biorand_seed_text()[0] ? biorand_seed_text() : "seed unknown");
+    return 2;
+}
+
+/* confirm on a row: 1 leave the screen, 2 start the game */
 static int activate(const Row* r)
 {
     switch (r->kind) {
@@ -512,6 +531,13 @@ static int activate(const Row* r)
         look_mods();   /* (the free space now) */
         if (row_why(r)) refuse(row_why(r));
         else { CallSystemSe(0, 3); ask(A_GEN); }
+        return 0;
+    case K_START:
+        if (row_why(r)) { refuse(row_why(r)); return 0; }
+        CallSystemSe(0, 3);
+        if (!pc_difficulty_select()) return start(0);   /* (the setting off: NORMAL, as NEW GAME) */
+        bm.state = BS_PICK;
+        bm.sel = 0;
         return 0;
     case K_CHECK: CallSystemSe(0, 3); ask(A_CHECK); return 0;
     case K_BACK: CallSystemSe(0, 0); return 1;
@@ -564,14 +590,31 @@ static int click(int i, float x)
 /* the dialog's texts and box (the box as tall as its text; the progress one fixed, its text changes) */
 static const char* ask_msg(void) { return bm.ask == A_GEN || bm.ask == A_HOST ? gen_text() : ask_text[bm.ask]; }
 static const char* result_head(void) { return bm.err ? "BIORAND - ERROR" : "BIORAND"; }
+/* START's question: the pack's seed; whether the options shown are not what it was generated with */
+static const char* pick_text(void)
+{
+    static char t[240];
+    const char* ps = biorand_seed_string();
+    snprintf(t, sizeof(t), "Choose the difficulty.%s", ps[0] && strcmp(ps, bm.str) ? " Your option changes are not generated yet: "
+             "this plays the generated game. GENERATE first to play them." : "");
+    return t;
+}
+static const char* pick_head(void)
+{
+    static char t[48];
+    if (biorand_seed() >= 0) snprintf(t, sizeof(t), "START BIORAND SEED %d", biorand_seed());
+    else snprintf(t, sizeof(t), "START BIORAND");
+    return t;
+}
 static void dlg_box(float* y0, float* y1)
 {
     if (bm.state == BS_ASK) pc_ui_dialog_place(NULL, ask_msg(), 0.55f, 5, 0, y0, y1);
+    else if (bm.state == BS_PICK) pc_ui_dialog_place(pick_head(), pick_text(), 0.55f, 4, 0, y0, y1);
     else if (bm.state == BS_RESULT) pc_ui_dialog_place(result_head(), bm.msg, 0.55f, 4, 0, y0, y1);
     else pc_ui_dialog_place("", NULL, 0.55f, 0, WORK_TEXT + WORK_BAR, y0, y1);
 }
 
-/* 1 leave */
+/* 1 leave, 2 start the game */
 static int input(void)
 {
     ADV_WORK* ap = &AdvWork;
@@ -606,6 +649,18 @@ static int input(void)
         return 0;
     }
     dlg_box(&y0, &y1);
+    if (bm.state == BS_PICK) {   /* START's difficulty */
+        hit = pc_ui_dialog_btns_hit(y1, diff_btn, 4, m->x, m->y);
+        if (hit >= 0 && (m->moved || m->left) && hit != bm.sel) { bm.sel = hit; CallSystemSe(0, 2); }
+        if (rept & (BTN_LEFT | BTN_UP)) { bm.sel = (bm.sel + 3) % 4; CallSystemSe(0, 2); }
+        else if (rept & (BTN_RIGHT | BTN_DOWN)) { bm.sel = (bm.sel + 1) % 4; CallSystemSe(0, 2); }
+        else if ((m->left && hit >= 0) || (press & ok)) {
+            if (bm.sel < 3) { CallSystemSe(0, 3); return start(bm.sel); }
+            CallSystemSe(0, 0);
+            bm.state = BS_MENU;
+        } else if (m->right || (press & cancel)) { CallSystemSe(0, 0); bm.state = BS_MENU; }
+        return 0;
+    }
     hit = bm.state == BS_ASK ? pc_ui_dialog_hit(y1, "YES", "NO", 0, m->x, m->y)   /* the dialog's buttons */
                              : pc_ui_dialog_hit(y1, bm.state == BS_RESULT ? "OK" : "CANCEL", NULL, 0, m->x, m->y);
     if (bm.state == BS_ASK) {
@@ -674,7 +729,7 @@ static void draw_row(int i)
     int sel = bm.state == BS_MENU && i == bm.row, live = !row_why(r);
     float y = i ? row_y(i) : PAGE_Y;
     unsigned int col = !live ? (sel ? 0xFF909090 : 0xFF686868) : sel ? 0xFFFFFFFF : 0xFFB0B0B0;
-    static const char* const names[] = { "", "", "RANDOM SEED", "COPY SEED STRING", "PASTE SEED STRING", "GENERATE",
+    static const char* const names[] = { "", "", "RANDOM SEED", "COPY SEED STRING", "PASTE SEED STRING", "GENERATE", "START",
                                          "CHECK FOR UPDATES", "Randomize Character Model", "", "BACK" };
     char v[96];
     if (sel) pc_ui_rect(ROW_X - 8, y - 3, 600, y + ROW_H - 4, bm.edit ? 0x60406080 : 0x50FFFFFF, Z_ROW);
@@ -823,6 +878,11 @@ static void help_text(char* t, int n, unsigned int* col)
                  why ? why : "", why ? " " : "");
         if (why) *col = 0xFFFFC060;
         return;
+    case K_START:
+        snprintf(t, n, "%s%sStart a new game with your generated BioRand game%s%s. NEW GAME on the title menu always starts "
+                 "without BioRand.", why ? why : "", why ? " " : "", biorand_seed() >= 0 ? ", " : "", biorand_seed() >= 0 ? biorand_seed_text() : "");
+        if (why) *col = 0xFFFFC060;
+        return;
     case K_CHECK: snprintf(t, n, "Check GitHub for the latest BioRand generator and offer to download it."); return;
     case K_APPEAR:
         snprintf(t, n, "Choose a character model for each generated seed. Saved separately from the seed string.");
@@ -907,7 +967,8 @@ void pc_biorand_menu_close(void)
     host_log("biorand menu: closed\n");
 }
 
-/* Adv_BioCvTitle mode 30 while the BioRand screen is up (lobby_glue.c pc_lobby): 1 back to the title menu */
+/* Adv_BioCvTitle mode 30 while the BioRand screen is up (lobby_glue.c pc_lobby): 1 back to the title menu, 2 START's new
+   game (sys->gm_mode set, BioRand on for it) */
 int pc_biorand_menu(void)
 {
     int r = 0;
@@ -957,6 +1018,7 @@ int pc_biorand_menu(void)
         float y0, y1;
         dlg_box(&y0, &y1);
         if (bm.state == BS_ASK) pc_ui_dialog(y0, y1, Z_BOX, NULL, ask_msg(), 0.55f, 0xFFFFFFFF, 5, "YES", "NO", bm.sel, 0);
+        else if (bm.state == BS_PICK) pc_ui_dialog_btns(y0, y1, Z_BOX, pick_head(), pick_text(), 0.55f, 0xFFC0C0C0, 4, diff_btn, 4, bm.sel);
         else pc_ui_dialog(y0, y1, Z_BOX, result_head(), bm.msg, 0.55f, bm.err ? 0xFFFFC060 : 0xFFC0C0C0, 4, "OK", NULL, 0, 0);
     }
     AdvEasySetTextureList(0);   /* the title's texture list again (the font set its own) */

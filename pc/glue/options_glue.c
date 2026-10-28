@@ -187,12 +187,24 @@ void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, fl
     *y1 = *y0 + (float)(int)(h + 0.5f);
 }
 
-void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, float sc2, unsigned int col2, int lines,
-                  const char* b0, const char* b1, int sel, int glyphs)
+static void dlg_frame(float y0, float y1, float z)
 {
     NJS_POINT3 tl = { DLG_X0, y0, z + 0.01f }, br = { DLG_X1, y1, z + 0.01f };
     pc_ui_rect(DLG_X0, y0, DLG_X1, y1, 0xE0000000, z);
     AdvEasyDrawWindow(&tl, &br, 0xFFAFAFAF, 0x3F5F5F5F);
+}
+
+static void dlg_texts(float y0, const char* l1, const char* l2, float sc2, unsigned int col2, int lines)
+{
+    if (l1) pc_ui_text(320 - pc_ui_text_w(l1, 0.7f) / 2, y0 + 22, l1, 0.7f, 0xFFFFFFFF);
+    if (l2) text_wrap_c(1, l1 ? y0 + 54 : y0 + 22, DLG_X1 - DLG_X0 - 40, l2, sc2, col2, lines);
+    AdvEasySetTextureList(0);   /* the screen's textures again (the font set its own) */
+}
+
+void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, float sc2, unsigned int col2, int lines,
+                  const char* b0, const char* b1, int sel, int glyphs)
+{
+    dlg_frame(y0, y1, z);
     for (int i = 0; i < (b1 ? 2 : 1); i++) {
         const char* b = i ? b1 : b0;
         float x = dlg_btn_x(i, b0, b1, glyphs);
@@ -201,9 +213,47 @@ void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, f
         else if (glyphs && !strcmp(b, "NO")) word(w_no, 2, x, y1 - 48, col, 0.3f);
         else pc_ui_text(x, y1 - 44, b, DLG_BTN_SC, col);
     }
-    if (l1) pc_ui_text(320 - pc_ui_text_w(l1, 0.7f) / 2, y0 + 22, l1, 0.7f, 0xFFFFFFFF);
-    if (l2) text_wrap_c(1, l1 ? y0 + 54 : y0 + 22, DLG_X1 - DLG_X0 - 40, l2, sc2, col2, lines);
-    AdvEasySetTextureList(0);   /* the screen's textures again (the font set its own) */
+    dlg_texts(y0, l1, l2, sc2, col2, lines);
+}
+
+/* the same box with n answers in the font (the BIORAND screen's difficulty: NORMAL, EASY, VERY EASY, CANCEL), spread
+   evenly on the answer row, smaller when they do not fit; btns_x: answer i's left edge, its width in *w */
+#define DLG_GAP 36.0f
+static float btns_sc(const char* const* b, int n)
+{
+    float w = 0, room = DLG_X1 - DLG_X0 - 40 - DLG_GAP * (n - 1);
+    for (int i = 0; i < n; i++) w += pc_ui_text_w(b[i], DLG_BTN_SC);
+    return w > room ? DLG_BTN_SC * room / w : DLG_BTN_SC;
+}
+static float btns_x(const char* const* b, int n, int i, float sc, float* w)
+{
+    float all = DLG_GAP * (n - 1), x;
+    for (int k = 0; k < n; k++) all += pc_ui_text_w(b[k], sc);
+    x = 320 - all / 2;
+    for (int k = 0; k < i; k++) x += pc_ui_text_w(b[k], sc) + DLG_GAP;
+    *w = pc_ui_text_w(b[i], sc);
+    return x;
+}
+
+int pc_ui_dialog_btns_hit(float y1, const char* const* b, int n, float x, float y)
+{
+    float sc = btns_sc(b, n), w;
+    if (y >= y1 - 52 && y < y1 - 12)
+        for (int i = 0; i < n; i++) {
+            float bx = btns_x(b, n, i, sc, &w);
+            if (x >= bx - DLG_GAP / 2 && x < bx + w + DLG_GAP / 2) return i;
+        }
+    return -1;
+}
+
+void pc_ui_dialog_btns(float y0, float y1, float z, const char* l1, const char* l2, float sc2, unsigned int col2, int lines,
+                       const char* const* b, int n, int sel)
+{
+    float sc = btns_sc(b, n), w;
+    dlg_frame(y0, y1, z);
+    for (int i = 0; i < n; i++)
+        pc_ui_text(btns_x(b, n, i, sc, &w), y1 - 44 + (DLG_BTN_SC - sc) * 9.0f, b[i], sc, i == sel ? pulse() : 0x7FAFAFAF);
+    dlg_texts(y0, l1, l2, sc2, col2, lines);
 }
 
 /* RETURN TO TITLE's question, over the option screen in the game's window: NO preselected; left/right

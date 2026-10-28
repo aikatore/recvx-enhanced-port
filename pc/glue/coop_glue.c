@@ -2568,7 +2568,7 @@ static void brseed_sync(void)
     static unsigned int sid;
     Event e = { 0 };
     const char* s = biorand_seed_string();
-    if (!biorand_active()) return;
+    if (!biorand_next()) return;
     e.type = EV_BRSEED;
     memcpy(e.u.br.str, s, strlen(s) < COOP_BR_STR ? strlen(s) : COOP_BR_STR);   /* (68 or 0) */
     if (!strncmp(g_biorand_cli_digest, "sha256:", 7) && strlen(g_biorand_cli_digest) >= 7 + COOP_BR_DIG)
@@ -2958,7 +2958,7 @@ static int item_word(int w) { return w >= IT_FLG && w < IT_FLG + 32; }
 static int rule(int opt)
 {
     if (is_host) return opt == OPT_IMPORTANT ? g_coop.important : opt == OPT_SKIP_SYNC ? g_coop.skip_sync : opt == OPT_GAMEOVER_BOTH ? g_coop.gameover_both :
-                        opt == OPT_SKIP_DETECTOR ? g_coop.skip_detector : opt == OPT_QUICK_START && g_coop.quick_start && !biorand_active();
+                        opt == OPT_SKIP_DETECTOR ? g_coop.skip_detector : opt == OPT_QUICK_START && g_coop.quick_start && !biorand_next();
     return peer_opts >= 0 && (peer_opts & opt);
 }
 
@@ -6616,14 +6616,15 @@ void coop_frame(void)
     tx_ext.lobby = g_coop.lobby;
     if (!is_host) { memcpy(tx_ext.pid, g_coop.pid, 16); memcpy(tx_ext.tag, my_tag, 16); tx_ext.items = (uint8_t)items_wire(); }
     else tx_ext.rec = !g_coop.remember ? REC_OFF : !id_ok ? REC_UNKNOWN : rec_have(id_pid) ? REC_HAVE : REC_NONE;
-    tx_ext.br = (uint8_t)(is_host ? biorand_active() : biorand_pack());   /* BioRand (protocol 27): the host's choice; a guest's pack */
+    tx_ext.br = (uint8_t)(is_host ? biorand_next() : biorand_pack());   /* BioRand (protocol 27): the host's game (at the title: the one
+                                                                             its lobby starts); a guest's pack */
     tx_ext.br_seed = biorand_seed() >= 0 ? (uint32_t)biorand_seed() : 0xFFFFFFFFu;
     tx_ext.br_id = biorand_id();
     tx_ext.imp_id = cast_import_id();   /* (protocol 29) the cutscene cast takes imported models only while both have the same */
     tx.opts = is_host ? (g_coop.loot ? OPT_INDIVIDUAL : 0) | (g_coop.trade_freeze ? OPT_TRADE_FREEZE : 0) | (g_coop.important ? OPT_IMPORTANT : 0) |
                         (pc_cfg_no_ink_ribbon() ? OPT_NO_RIBBON : 0) | (g_coop.skip_sync ? OPT_SKIP_SYNC : 0) |
                         (g_coop.gameover_both ? OPT_GAMEOVER_BOTH : 0) | (g_coop.skip_detector ? OPT_SKIP_DETECTOR : 0) |
-                        (g_coop.quick_start && !biorand_active() ? OPT_QUICK_START : 0) : 0;   /* BioRand: its own start inventory */
+                        (g_coop.quick_start && !biorand_next() ? OPT_QUICK_START : 0) : 0;   /* BioRand: its own start inventory */
     tx.regroup = regroups;
     tx.seq = frame_no;
     if (echo_delay) {

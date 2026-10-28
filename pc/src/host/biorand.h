@@ -2,8 +2,11 @@
    writes a pack for this port into <mods>/biorand/ - room files RM_*.RDX, SYSTEM.AFS/10 and /11 (player
    models), ADV.AFS/2 (title background), log_pl0.txt (the spoiler log with the seed). The folder is
    BioRand's: it deletes and writes it whole. The mods loader (audio/adx.c mod_open_path, teleport.c)
-   serves its files over <mods>/ only while BioRand is on (biorand_active); off, the folder is ignored.
-   docs/USER_GUIDE.md "Randomizer (BioRand)", pc/glue/biorand_glue.c. */
+   serves its files over <mods>/ only while the game plays BioRand (biorand_active); off, the folder is ignored.
+   BioRand is a state of the game, not a setting: START on the BIORAND screen begins a BioRand game, a save
+   keeps it (its words, biorand_glue.c), a co-op host's lobby rule BIORAND gives it to the lobby's new game;
+   NEW GAME and BATTLE GAME from the title are always without it (biorand_game(0) at each title menu).
+   docs/modding/README.md "Randomizer (BioRand)", pc/glue/biorand_glue.c. */
 #ifndef RECVX_BIORAND_H
 #define RECVX_BIORAND_H
 #include <string.h>
@@ -34,11 +37,15 @@ int  biorand_seed(void);              /* its seed number (BioRand's, 0..1048575)
 unsigned int biorand_id(void);        /* the pack: a hash of its seed line (all options), log and room files; 0 none */
 const char* biorand_seed_text(void);  /* "seed 123456", "" unknown */
 const char* biorand_seed_string(void);   /* the pack's whole seed string (68 characters, decodable), "" unknown */
-int  biorand_active(void);            /* the loader serves the pack now: our setting, a co-op guest the host's choice */
-int  biorand_shown(void);            /* the BioRand settings exist: only with --dev (g_dev_mode) */
-const char* biorand_locked(void);     /* why the setting cannot change now (no pack, in game, a co-op guest), or NULL */
-int  biorand_setting(void);           /* the setting (ini biorand), whether or not a pack is there */
-int  biorand_toggle(void);            /* the title's BIORAND row: flips the setting; 0 when it is locked (biorand_locked) */
+int  biorand_active(void);            /* the loader serves the pack now: this game's state, a co-op guest the host's choice */
+void biorand_game(int on);            /* this game's state: 0 at each title menu, 1 START (BIORAND screen), a save's words,
+                                         the co-op host's lobby rule for the lobby's new game */
+int  biorand_next(void);              /* what co-op sends and shows: in a game biorand_active; at the title the game about to
+                                         start (START's, a loaded save's, else the host's lobby rule BIORAND) */
+int  biorand_shown(void);            /* BioRand exists: only with --dev (g_dev_mode) */
+const char* biorand_locked(void);     /* why the lobby rule cannot change now (no pack, in game, a co-op guest), or NULL */
+int  biorand_setting(void);           /* the co-op host's lobby rule BIORAND (ini biorand), whether or not a pack is there */
+int  biorand_toggle(void);            /* the lobby rule's row: flips it; 0 when it is locked (biorand_locked) */
 int  biorand_rifle_stack(void);       /* rifle ammo stacks: the setting, always while BioRand is on */
 void* biorand_room0(int* size);       /* the pack's room 0/0 (RM_0000.RDX) expanded, malloc'd (free it); NULL none */
 /* generating (docs/BIORAND_INGAME.md S5; the BIORAND screen, game thread) */
@@ -46,7 +53,6 @@ int  biorand_mods_free_mb(void);      /* the mods folder (created) has this much
 int  biorand_iso_known(void);         /* the game's disc image path is set */
 int  biorand_generate(const char* seed_string);   /* the private settings.json, then the CLI's thread (biorand_cli_generate):
                                                      1 started, 0 a job runs, -1 settings.json not written */
-void biorand_enable(void);            /* BioRand on (a pack was generated), saved */
 void biorand_frame(void);             /* game thread, every frame: rifle ammo stacking (biorand_glue.c) */
 
 /* game thread (biorand_glue.c): the save words, a co-op guest's start inventory */
