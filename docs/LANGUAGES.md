@@ -306,7 +306,7 @@ Gothic / Segoe UI, Arial; Linux: Noto Sans CJK / DejaVu Sans), else those letter
 **Address window** (docs/ARCHITECTURE.md "Data model and memory"): the imported data (`ROOMS.MES`, the merged
 tables, the executable's texts, the Japanese glyph index) and the importer's tables are on the heap; the textures
 of our own above the window (`ps2_dma_alloc`). The US plates' 257 KB buffer left the window; the five languages'
-strings of `tr_table.inc` and the Japanese cells (4 KB) are in it: `_end` 0x3FD26568, about 2.85 MB free (before:
+strings of `tr_table.inc` and the Japanese cells (4 KB) are in it: `_end` 0x3FD27568, about 2.85 MB free (before:
 0x3FD5E608).
 
 **Layout**: the European font is monospaced (16 units for most letters, the US font 10..24), so translated text is

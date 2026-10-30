@@ -207,7 +207,7 @@ unsigned lang_char(int l, int code)
         for (size_t i = 0; i < sizeof(ru_signs) / sizeof(ru_signs[0]); i++) if (ru_signs[i].code == code) return ru_signs[i].u;
         return '?';
     }
-    if (l == LANG_EN) return code == 95 ? 0xAE : '?';
+    if (l == LANG_EN || l == LANG_JA) return code == 95 ? 0xAE : '?';   /* (the US codes) */
     for (int i = 0; i < N_ACCENTS; i++) if (accents[i].code == code) return accents[i].u;
     return '?';
 }
