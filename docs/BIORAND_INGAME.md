@@ -1045,7 +1045,8 @@ is its own (`baseSeed + 3`), so the option changes nothing else in the pack. One
 on and every ratio None the CLI stops with "No enemy ratios set." (as the GUI would).
 
 - **Decided: the ENEMIES rows are read-only, not changed.** `row_why()` greys all 12 `BOG_ENEMIES` rows with
-  "BioRand cannot randomize enemies in this game. Use RANDOMIZER on the EXTRA OPTIONS page instead." (in orange
+  "BioRand can't randomize enemies in this game yet; this will be added later. For now, use RANDOMIZER on the
+  EXTRA OPTIONS page." (in orange
   before the row's help; a change buzzes and says it). Their values stay what the seed string says: the string is not
   rewritten, so a pasted GUI string copies back unchanged and the co-op pack comparison is as before.
   `biorand_opts.c` is unchanged (its codec and ctest too; `biorand_enemy_dist` is now used only by the ctest).

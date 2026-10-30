@@ -74,7 +74,7 @@ static const char* const page_names[PG_N] = { "SEED", "DOORS", "ITEMS", "ENEMIES
 /* row kinds: K_OPT a biorand_opt[] row, K_SET a settings table row (the cutscene cast, the enemy options) */
 enum { K_PAGE, K_OPT, K_RANDOM, K_COPY, K_PASTE, K_GEN, K_START, K_CHECK, K_APPEAR, K_SET, K_CUSTOM, K_RANDPG, K_RSEED, K_BACK };   /* K_CUSTOM: the cast's
     "Custom" list; K_RANDPG: the RANDOMIZER sub-page; K_RSEED: its RANDOM SEED */
-static const char* const enemy_why = "BioRand cannot randomize enemies in this game. Use RANDOMIZER on the EXTRA OPTIONS page instead.";
+static const char* const enemy_why = "BioRand can't randomize enemies in this game yet; this will be added later. For now, use RANDOMIZER on the EXTRA OPTIONS page.";
 typedef struct { int kind, idx; } Row;
 #define MAX_ROWS 30          /* (ROW_Z has room for 30; ITEMS has 27) */
 
