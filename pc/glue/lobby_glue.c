@@ -930,12 +930,7 @@ static const Setting* lset(const char* label)
 static void say(const char* m) { snprintf(lb.msg, sizeof(lb.msg), "%s", m); lb.msg_t = 150; }
 
 /* the enemy options' entries of the settings table (F1 and the OPTION pages edit the same) */
-static const Setting* eset(const int* var)
-{
-    int i;
-    for (i = 0; i < g_settings_n; i++) if (g_settings[i].val == var) return &g_settings[i];
-    return NULL;
-}
+static const Setting* eset(const int* var) { return settings_of(var); }
 
 static int allowed(int field, int c)
 {

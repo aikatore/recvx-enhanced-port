@@ -535,6 +535,11 @@ static unsigned char dirty[256];
 static int dirty_any;
 
 int settings_get(const Setting* s) { return s->get ? s->get() : s->val ? *s->val : 0; }
+const Setting* settings_of(const int* val)
+{
+    for (int i = 0; i < g_settings_n; i++) if (g_settings[i].val == val) return &g_settings[i];
+    return NULL;
+}
 int settings_hi(const Setting* s) { return s->count ? s->count() - 1 : s->hi; }
 int settings_is_bool(const Setting* s) { return !(s->flags & SET_ACTION) && s->lo == 0 && s->hi == 1 && !s->names && !s->name && !s->fmt; }
 
