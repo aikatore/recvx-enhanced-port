@@ -94,7 +94,7 @@ static int is_font(const void* tim2)
    TITLE: letters of the title and option textures): HD texture packs keep them original even with
    hd_textures_ui, so the port's entries match the letters around them. Forgotten with a disc
    read over them (pc_tex_invalidate). */
-#define NKEEP 8
+#define NKEEP 16
 static const void* keep[NKEEP];
 static int nkeep;
 

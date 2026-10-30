@@ -13,11 +13,13 @@ extern const char* const lang_names[LANG_COUNT];   /* in the language itself (UT
 
 /* Glyph codes. The Japanese font's cell c is code LANG_JA_BASE + c (the importer moves the Japanese text up);
    the codes below are the US font's, drawn with the Japanese font's look-alikes (digits, times: the US engine
-   writes them). A subtitle in another language than the game's (Subtitles) is LANG_SUB_BASE + its code, drawn
-   with that language's font; LANG_SUB_BASE + LANG_SUB_SPACE is its space (0xFF01). */
+   writes them). A letter in another language's font than the loaded one (a subtitle in another language than the
+   game's; our texts right after the Language setting changed) is LANG_OTHER(language, its code), drawn with that
+   language's font; LANG_OTHER(l, LANG_OTHER_SPACE) is its space (0xFF01). */
 #define LANG_JA_BASE 108
-#define LANG_SUB_BASE 0x8000
-#define LANG_SUB_SPACE 0x7DFF
+#define LANG_OTHER_BASE 0x8000
+#define LANG_OTHER(l, c) (LANG_OTHER_BASE + ((l) << 12) + (c))
+#define LANG_OTHER_SPACE 0xFFF
 
 /* the setting (ini language, LANG_*; English when the language is not installed) and Subtitles (ini subtitles:
    0 Off, 1 the game language's (older ini files), 2 + LANG_* that language's) */
@@ -27,7 +29,7 @@ int  lang_installed(int l);           /* its folder is complete (English: always
 int  lang_has_subtitles(int l);       /* its rooms have cutscene subtitles */
 int  lang_sub(void);                  /* the subtitles' language (installed, with subtitles), -1 none */
 const char* lang_dir(int l);          /* its folder, NULL for English */
-int  lang_font(void);                 /* the language whose font is loaded (the game font's glyphs and widths) */
+int  lang_font(void);                 /* the language of the font our texts are drawn in (pc_glyph_next) */
 int  lang_picture(int adv);           /* ... of the ADV.AFS picture read last (2: the title's menu plates, 4: OPTION's) */
 /* our words (MULTIPLAYER, ENHANCED SETTINGS, YES, ...) are the US plates' letters in every language: with another
    language's picture adv loaded, its US plates (the title's texture 1, OPTION's texture 0) become the current
@@ -38,7 +40,8 @@ int  lang_us_plates(int adv);
 const char* tr(const char* en);
 void tr_init(void);
 /* UTF-8 text in the game font: the next glyph code of *s (advances it; -1 at the end; 0 a space). Letters use the
-   loaded font's codes (lang_font(): the European accents, Cyrillic, kana and kanji), else the plain letter or '?'. */
+   codes of the text language's font (lang_font(): the European accents, Cyrillic, kana and kanji; LANG_OTHER while
+   the game's loaded font is still another language's), else the plain letter or '?'. */
 int  pc_glyph_next(const char** s);
 float pc_glyph_w(int code);           /* a glyph's advance at scale 1 (bhGetFontSize's) */
 /* language l's font (glyphs.c, pure): the next glyph code of the UTF-8 *s (as pc_glyph_next); the cell a code is

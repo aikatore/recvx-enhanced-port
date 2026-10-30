@@ -149,7 +149,6 @@ int lang_sub(void)
     return g_subtitles && lang_has_subtitles(l) ? l : -1;
 }
 const char* lang_dir(int l) { return l > 0 && lang_installed(l) ? info[l].dir : NULL; }
-int lang_font(void) { return font_lang; }
 int lang_picture(int adv) { return adv >= 0 && adv < 64 ? adv_lang[adv] : LANG_EN; }
 int lang_eu_picture(int adv) { int l = lang_picture(adv); return l == LANG_FR || l == LANG_DE || l == LANG_ES; }
 static int data_lang(void) { return lang_installed(g_lang) ? g_lang : LANG_EN; }
@@ -237,7 +236,7 @@ void pc_tex_keep_original(int texno);
 extern int PatId[4];
 extern unsigned int Ps2_current_texbreak;
 void* ps2_dma_alloc(int slot, uint32_t len);
-enum { DMA_PLATES, DMA_SUBFONT, DMA_FPAGE };
+enum { DMA_PLATES, DMA_FONT, DMA_FPAGE, DMA_FONT2 };
 
 static void tex_set(NJS_TEXNAME* name, NJS_TEXMEMLIST* mem, void* tim)
 {
@@ -277,52 +276,109 @@ static int disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n)
 }
 
 /* ---------------------------------------------------------------- the font */
-/* the subtitles' font when they are in another language than the game's: the first textures of that language's
-   SYSTEM.AFS/1 (as bhSetFontTexture finds them), outside the address window */
-static struct { int lang, n; unsigned char* d; NJS_TEXNAME name[4]; NJS_TEXMEMLIST mem[4]; NJS_TEXLIST list; } subf = { -1 };
+/* the colours a font's textures show in the game: bhSetMemPvpTexture copies each texture's CLUT into the palette
+   banks (palbuf) its PLI chunk names, and the font is drawn with its bank's colours, which a later texture of the
+   file can overwrite (the Russian fan translation's: its font's own CLUT is not what the game shows). Ours are drawn
+   with their own CLUT: the bank's colours go there (where ClutCopy takes them from). */
+void ClutCopy(void* data, void* org_data);
+void ClutCopy256(void* data, void* org_data);
+static void font_colours(unsigned char* d, uint32_t n, unsigned char** tims, int nt)
+{
+    unsigned int bank[64 * 16] = { 0 }, pal[64];
+    int npal = 0, fb[4] = { -1, -1, -1, -1 };
+    for (uint32_t o = 0; pc_range_ok(o, 32, n);) {
+        uint32_t code = pc_rd32(d + o), sz = pc_rd32(d + o + 4);
+        unsigned char* ap = d + o + 32;
+        if (code == 0xFFFFFFFFu || !pc_range_ok(o + 32ull, sz, n)) break;
+        if (!memcmp(d + o, "PLI", 4) && sz >= 4) {
+            npal = (int)pc_rd32(ap);
+            if (npal > 64 || !pc_range_ok(4, 8ull * npal, sz)) npal = 0;
+            for (int i = 0; i < npal; i++) pal[i] = pc_rd32(ap + 4 + 8 * i + 4);
+        } else if (!memcmp(d + o, "TIM2", 4) && sz >= 0xD0) {
+            TIM2_PICTUREHEADER_EX* t = (TIM2_PICTUREHEADER_EX*)ap;
+            int ct = t->ImageType == 5 ? 256 : 16, step = ct == 256 ? 1024 : 128;
+            uint64_t c = 256ull + t->ImageSize;   /* (the CLUT where the game takes it from) */
+            if (!pc_range_ok(c, t->ClutSize, sz)) { o += 32 + sz; continue; }
+            Ps2CheckTextureAlpha(ap);   /* (as the game, before the copy: the colours' alpha) */
+            for (int i = 0; t->PictFormat >= 5 && t->PictFormat < 9 && i < npal; i++, c += step) {
+                int bk = pal[i] >> 8 & 0xFF, at = (int)(pal[i] >> 16) + (bk & 0x3F) * 16;
+                if (!pc_range_ok(c, step, sz)) break;
+                if (bk == 255 || at + ct > 64 * 16) continue;   /* (a bank given at load: not one of the fonts') */
+                if (ct == 256) ClutCopy256(bank + at, ap + c); else ClutCopy(bank + at, ap + c);
+                for (int k = 0; k < nt; k++) if (ap == tims[k] && !i) fb[k] = bk & 0x3F;
+            }
+        }
+        o += 32 + sz;
+    }
+    for (int k = 0; k < nt; k++) {
+        TIM2_PICTUREHEADER_EX* t = (TIM2_PICTUREHEADER_EX*)tims[k];
+        unsigned int* c = (unsigned int*)(tims[k] + 256 + t->ImageSize);
+        if (fb[k] < 0 || t->ImageType != 4) continue;
+        for (int i = 0; i < 8; i++) { c[i] = bank[fb[k] * 16 + i]; c[16 + i] = bank[fb[k] * 16 + 8 + i]; }
+    }
+}
 
-static int sub_font(int l)
+/* fonts of other languages than the loaded one's: a subtitle's in another language, and our texts' right after the
+   Language setting changed (the game loads that font with the next screen). The first textures of the language's
+   SYSTEM.AFS/1 (as bhSetFontTexture finds them), outside the address window; two kept (the subtitles' and our
+   texts' languages), each in its own DMA slot. */
+typedef struct { int lang, n; NJS_TEXNAME name[4]; NJS_TEXMEMLIST mem[4]; NJS_TEXLIST list; } XFont;
+static XFont xf[2] = { { -1 }, { -1 } };
+static int xf_last;   /* the one used last (a third language replaces the other) */
+
+static XFont* other_font(int l)
 {
     char p[1300];
     FILE* f;
     long n = 0;
-    unsigned char *dp, *tims[4];
+    unsigned char *b = NULL, *dp, *tims[4];
     uint32_t sz;
-    if (subf.lang == l) return subf.n > 0;
-    memset(&subf, 0, sizeof(subf));
-    subf.lang = l;
-    if (!lang_dir(l)) return 0;
+    int k = xf[0].lang == l ? 0 : xf[1].lang == l ? 1 : -1;
+    XFont* x;
+    if (k >= 0) { xf_last = k; return xf[k].n ? &xf[k] : NULL; }
+    x = &xf[xf_last ^= 1];
+    memset(x, 0, sizeof(*x));
+    x->lang = l;
+    if (!lang_dir(l)) return NULL;
     snprintf(p, sizeof(p), "%s/SYSTEM.AFS/1", lang_dir(l));
     if ((f = pc_fopen(p, "rb"))) {
-        unsigned char* b = NULL;
         if (fseek(f, 0, SEEK_END) || (n = ftell(f)) < 64 || n > (16 << 20) || fseek(f, 0, SEEK_SET) ||
-            !(b = ps2_dma_alloc(DMA_SUBFONT, (uint32_t)n)) || fread(b, 1, n, f) != (size_t)n) n = 0;
-        subf.d = n ? b : NULL;
+            !(b = ps2_dma_alloc(xf_last ? DMA_FONT2 : DMA_FONT, (uint32_t)n)) || fread(b, 1, n, f) != (size_t)n) n = 0;
         fclose(f);
     }
     if (n) {   /* (page aligned as the game's buffer: the stream is aligned to 32 bytes from it) */
-        unsigned char* b = subf.d;
         dp = b + 4;
         sz = pc_rd32(b);
         for (int i = 0; ef_info[i].flg != (unsigned)-1 && dp < b + n; i++)
             if (ef_info[i].flg & 1) { dp += sz; if (dp + 4 > b + n) break; sz = pc_rd32(dp); dp += 4; }
         dp = (unsigned char*)(((uintptr_t)dp + 31) & ~(uintptr_t)31);
-        if (dp < b + n) subf.n = tim_chunks(dp, (uint32_t)(b + n - dp), tims, l == LANG_JA ? 4 : 1);
+        if (dp < b + n) x->n = tim_chunks(dp, (uint32_t)(b + n - dp), tims, l == LANG_JA ? 4 : 1);
+        if (x->n) font_colours(dp, (uint32_t)(b + n - dp), tims, x->n);
     }
-    if (!subf.n) { host_log("lang: the font of %s for subtitles cannot be read (%s)\n", lang_names[l], p); return 0; }
-    for (int i = 0; i < subf.n; i++) tex_set(&subf.name[i], &subf.mem[i], tims[i]);
-    subf.list.textures = subf.name;
-    subf.list.nbTexture = subf.n;
+    if (!x->n) { host_log("lang: the font of %s cannot be read (%s)\n", lang_names[l], p); return NULL; }
+    for (int i = 0; i < x->n; i++) tex_set(&x->name[i], &x->mem[i], tims[i]);
+    x->list.textures = x->name;
+    x->list.nbTexture = x->n;
     {
         extern NJS_TEXLIST* Ps2_current_texlist;
         NJS_TEXLIST* was = Ps2_current_texlist;
-        njSetTexture(&subf.list);
-        for (int i = 0; i < subf.n; i++) pc_tex_keep_original(i);   /* (its own letters, also with an HD pack's font) */
+        njSetTexture(&x->list);
+        for (int i = 0; i < x->n; i++) pc_tex_keep_original(i);   /* (its own letters, also with an HD pack's font) */
         if (was) njSetTexture(was);
     }
-    host_log("lang: the font of %s for subtitles (%d textures)\n", lang_names[l], subf.n);
-    return 1;
+    host_log("lang: the font of %s besides the loaded one (%d textures)\n", lang_names[l], x->n);
+    return x;
 }
+
+/* the font our texts are drawn in: the setting's language's (tr), also while the loaded one is still another's (the
+   Language setting changed; the game loads its font with the next screen). English: the loaded one (every font has
+   its letters); one that cannot be read: the loaded one (its letters, else '?') */
+static int text_font(void)
+{
+    int l = data_lang();
+    return l == font_lang || l == LANG_EN || !other_font(l) ? font_lang : l;
+}
+int lang_font(void) { return text_font(); }
 
 /* a glyph's advance in language l's font */
 static float width_of(int l, int code)
@@ -333,12 +389,19 @@ static float width_of(int l, int code)
 }
 static float space_of(int l) { return l == LANG_JA ? 28 : 14; }
 
+/* a code of another language's font (lang.h LANG_OTHER): its language, *code its own code; -1 none */
+static int other_of(int* code)
+{
+    int l = *code >= LANG_OTHER_BASE && *code < 0xFE00 ? (*code - LANG_OTHER_BASE) >> 12 : LANG_COUNT;
+    if (l >= LANG_COUNT) return -1;
+    *code &= 0xFFF;
+    return l;
+}
+
 float pc_font_width(unsigned short code)
 {
-    if (code >= LANG_SUB_BASE && code < 0xFE00 && subf.lang >= 0) {
-        code -= LANG_SUB_BASE;
-        return code == LANG_SUB_SPACE ? space_of(subf.lang) : width_of(subf.lang, code);
-    }
+    int c = code, l = other_of(&c);
+    if (l >= 0) return c == LANG_OTHER_SPACE ? space_of(l) : width_of(l, c);
     if (!font_lang || !info[font_lang].ok) return -1;
     return width_of(font_lang, code);
 }
@@ -355,18 +418,21 @@ static float shift_of(int l, int code) { return l == LANG_JA && code < LANG_JA_B
 
 int pc_font_glyph(int code, void** texlist, float* dx)
 {
-    int l = font_lang;
-    if (code >= LANG_SUB_BASE && code < 0xFE00) {   /* a subtitle in another language: its own font */
-        code -= LANG_SUB_BASE;
-        if (code == LANG_SUB_SPACE || subf.lang < 0 || !sub_font(subf.lang)) return -1;
-        *texlist = &subf.list;
-        l = subf.lang;
-    }
+    int l = other_of(&code);
+    if (l >= 0) {   /* another language's letter (a subtitle's, our text's): its own font */
+        XFont* x = code == LANG_OTHER_SPACE ? NULL : other_font(l);
+        if (!x) return -1;
+        *texlist = &x->list;
+    } else l = font_lang;
     *dx = shift_of(l, code);
     return lang_cell(l, code);
 }
 
-int pc_glyph_next(const char** s) { return lang_glyph(font_lang, s); }
+int pc_glyph_next(const char** s)
+{
+    int l = text_font(), c = lang_glyph(l, s);
+    return l != font_lang && c > 0 ? LANG_OTHER(l, c) : c;
+}
 
 void pc_glyphs_utf8(const unsigned short* g, char* out, int n)
 {
@@ -536,7 +602,7 @@ static const unsigned char* table_of(const unsigned char* b, uint32_t size, uint
 }
 
 /* the room's table with the language's messages: its message where it has one; where the US message shows nothing
-   (a cutscene's subtitle) the Subtitles language's, in its own font (LANG_SUB_BASE) when that is not the loaded
+   (a cutscene's subtitle) the Subtitles language's, in its own font (LANG_OTHER) when that is not the loaded
    one, nothing with Subtitles Off */
 static unsigned int* build(unsigned int* us, int idx)
 {
@@ -551,7 +617,7 @@ static unsigned int* build(unsigned int* us, int idx)
     if (s > 0 && s == l) { sb = lb; ssize = size; sn = ln; }
     if ((!lb && !sb) || n > 4096) return us;
     other = sb && s != font_lang;
-    if (other && !sub_font(s)) sb = NULL;
+    if (other && !other_font(s)) sb = NULL;
     for (int pass = 0; pass < 2; pass++) {
         unsigned char* out = buf[cur];
         o = 4 + 4 * n;
@@ -568,8 +634,8 @@ static unsigned int* build(unsigned int* us, int idx)
                 memcpy(out + 4 + 4 * i, &o, 4);
                 memcpy(w, t, 2 * ll);
                 for (uint32_t k = 0; conv && k + 1 < ll; k++) {   /* the subtitle's letters in its own font */
-                    if (w[k] == 0xFF01) w[k] = LANG_SUB_BASE + LANG_SUB_SPACE;
-                    else if (w[k] < 0xFE00) w[k] = (unsigned short)(LANG_SUB_BASE + w[k]);
+                    if (w[k] == 0xFF01) w[k] = LANG_OTHER(s, LANG_OTHER_SPACE);
+                    else if (w[k] < 0xFE00) w[k] = (unsigned short)LANG_OTHER(s, w[k]);
                     else if (w[k] == 0xFF02 || w[k] == 0xFF03) k++;
                 }
             }
