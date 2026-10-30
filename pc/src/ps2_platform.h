@@ -94,6 +94,7 @@ uint64_t ps2_vblank_count(void);
 #define PS2_SPR_SIZE 0x4000u
 void  ps2_memory_init(void);
 void* ps2_dma_ptr(uint32_t addr);
+void  ps2_dma_host(int slot, const void* p, uint32_t len);   /* a heap block DMA may read (slot 0..3; NULL: none) */
 
 /* dma.c / vif.c / gs */
 void ps2_vif1_transfer(const uint32_t* data, uint32_t qwc);

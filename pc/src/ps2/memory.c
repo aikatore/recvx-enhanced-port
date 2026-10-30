@@ -122,9 +122,21 @@ void ps2_memory_init(void)
 }
 char ps2_window_probe;
 
+/* blocks of host memory outside the window that DMA reads (textures of our own on the heap: lang_glue.c), whose
+   addresses would otherwise read as scratchpad or physical ones */
+static struct { uint32_t base, len; } dma_host[4];
+void ps2_dma_host(int slot, const void* p, uint32_t len)
+{
+    if (slot < 0 || slot >= 4) return;
+    dma_host[slot].len = 0;   /* (base first: a reader on another thread sees an empty range in between) */
+    dma_host[slot].base = (uint32_t)(uintptr_t)p;
+    dma_host[slot].len = p ? len : 0;
+}
+
 /* DMA MADR/TADR/ADDR field -> host pointer */
 void* ps2_dma_ptr(uint32_t addr)
 {
+    for (int i = 0; i < 4; i++) if (addr - dma_host[i].base < dma_host[i].len) return (void*)(uintptr_t)addr;
     if (addr & 0x80000000u) return (void*)(uintptr_t)(PS2_SPR_BASE | (addr & (PS2_SPR_SIZE - 1)));
     if ((addr & 0xF0000000u) == 0x70000000u) return (void*)(uintptr_t)(PS2_SPR_BASE | (addr & (PS2_SPR_SIZE - 1)));
     if (addr < 0x10000000u) addr |= 0x30000000u; /* physical address (masked with 0x0FFFFFFF) */
