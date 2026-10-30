@@ -99,7 +99,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "cast_models", &g_enemy_opts.cast_all, 0, 2 },     /* characters: 0 cutscene models, 1 all models, 2 custom (cast_custom_off lines) */
     { "cast_assign", &g_enemy_opts.cast_assign, 0, 1 },  /* 0 fixed per character, 1 random per cutscene */
     { "cast_imports", &g_enemy_opts.cast_imports, 0, 1 },
-    { "subtitles", &g_subtitles, 0, 1 },                  /* cutscene subtitles in the language (lang.h) */
+    { "subtitles", &g_subtitles, 0, 1 + LANG_COUNT },     /* cutscene subtitles: 0 off, 1 the game language's, 2 + LANG_* (lang.h) */
     { "tps", (int*)&g_tps.on, 0, 1 },
     { "tps_fov", &g_tps.fov, 30, 130 },
     { "tps_aim_fov", &g_tps.aim_fov, 20, 130 },
@@ -152,6 +152,22 @@ static char* trim(char* s)
 
 static char ini_hd_dir[1024];
 
+/* "import_<key>_iso = <path>" (import.h): 1 if it is one */
+static int import_iso_line(const char* line)
+{
+    for (int s = 0; s < IMPORT_SOURCES; s++) {
+        size_t n = strlen(import_sources[s].key);
+        const char* v = line + 7 + n;
+        if (strncmp(line + 7, import_sources[s].key, n) || strncmp(v, "_iso", 4)) continue;
+        for (v += 4; *v == ' '; v++) {}
+        if (*v++ != '=') return 0;
+        while (*v == ' ') v++;
+        snprintf(g_import.iso[s], sizeof(g_import.iso[s]), "%.*s", (int)strcspn(v, "\r\n"), v);
+        return 1;
+    }
+    return 0;
+}
+
 static void path(char* out, size_t n) { SDL_snprintf(out, n, "%s/recvx.ini", g_config.save_dir); }
 
 void config_load(void)
@@ -172,8 +188,7 @@ void config_load(void)
         else if (sscanf(line, " iso = %1023[^\r\n]", g_config.iso_path) == 1) continue;
         else if (sscanf(line, " hd_textures_dir = %1023[^\r\n]", ini_hd_dir) == 1) { SDL_strlcpy(g_config.hd_textures_dir, ini_hd_dir, sizeof(ini_hd_dir)); continue; }
         else if (sscanf(line, " import_dir = %1023[^\r\n]", g_import.dir) == 1) continue;   /* F9 imports (pc/src/import) */
-        else if (sscanf(line, " import_outbreak2_iso = %1023[^\r\n]", g_import.iso[IMPORT_OUTBREAK2]) == 1) continue;
-        else if (sscanf(line, " import_sles50306_iso = %1023[^\r\n]", g_import.iso[IMPORT_SLES50306]) == 1) continue;
+        else if (!strncmp(line, "import_", 7) && import_iso_line(line)) continue;   /* import_<key>_iso */
         else if (sscanf(line, " language = %7s", k) == 1) { for (int l = 0; l < LANG_COUNT; l++) if (!strcmp(k, lang_codes[l])) g_lang = l; continue; }   /* (lang.h) */
         else if (sscanf(line, " biorand_cli_digest = %71s", g_biorand_cli_digest) == 1) continue;   /* the installed BioRand CLI (biorand_dl.h) */
         else if (sscanf(line, " biorand_seed = %71s", g_biorand_seed) == 1) continue;   /* the BioRand generator's options (biorand_opts.h), checked when used */
@@ -241,8 +256,7 @@ static int write_ini(FILE* f, void* ud)
     if (g_config.iso_path[0]) fprintf(f, "iso = %s\n", g_config.iso_path);
     if (ini_hd_dir[0]) fprintf(f, "hd_textures_dir = %s\n", ini_hd_dir);   /* not --hd-textures */
     if (g_import.dir[0]) fprintf(f, "import_dir = %s\n", g_import.dir);
-    if (g_import.iso[IMPORT_OUTBREAK2][0]) fprintf(f, "import_outbreak2_iso = %s\n", g_import.iso[IMPORT_OUTBREAK2]);
-    if (g_import.iso[IMPORT_SLES50306][0]) fprintf(f, "import_sles50306_iso = %s\n", g_import.iso[IMPORT_SLES50306]);
+    for (int s = 0; s < IMPORT_SOURCES; s++) if (g_import.iso[s][0]) fprintf(f, "import_%s_iso = %s\n", import_sources[s].key, g_import.iso[s]);
     if (g_lang) fprintf(f, "language = %s\n", lang_codes[g_lang]);
     if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);
     if (g_biorand_seed[0]) fprintf(f, "biorand_seed = %s\n", g_biorand_seed);

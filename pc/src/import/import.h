@@ -1,7 +1,8 @@
 /* Importing assets from other games' discs (F9 window; docs/IMPORT_OUTBREAK.md) and other releases of this
    game (languages; docs/LANGUAGES.md). The user's own disc image is read in place; what is extracted goes to
    <dir>/<source>/ (default mods/import), never into the repository. Sources: Resident Evil Outbreak File #2
-   (SLUS-20984, characters), Resident Evil Code: Veronica X European (SLES-50306, languages). */
+   (SLUS-20984, characters); languages from Resident Evil Code: Veronica X European (SLES-50306), the US disc with
+   the Russian fan translation by Brosko (SLUS-20184) and Biohazard Code: Veronica Kanzenban (SLPM-65022). */
 #pragma once
 #include <stdint.h>
 #include <stdio.h>
@@ -9,7 +10,7 @@
 extern "C" {
 #endif
 
-enum { IMPORT_OUTBREAK2, IMPORT_SLES50306, IMPORT_SOURCES };
+enum { IMPORT_OUTBREAK2, IMPORT_SLES50306, IMPORT_SLUS20184RU, IMPORT_SLPM65022, IMPORT_SOURCES };
 enum { IMPORT_CAT_CHARACTERS, IMPORT_CAT_LANGUAGES };   /* what a source gives (the IMPORT screen's categories) */
 
 /* the groups of models (F9 lists them by group), and what to extract: bits 1 << group (F9 checkboxes,
@@ -45,6 +46,8 @@ typedef struct ImportSource {
     const char* title;    /* Resident Evil Outbreak File #2 */
     const char* serial;   /* SLUS-20984 (checked in SYSTEM.CNF) */
     int cat;              /* IMPORT_CAT_* */
+    const char* help;     /* the IMPORT screen's line for it (NULL: the category's) */
+    const char* need;     /* its DISC line, a format with the serial (NULL: the category's) */
 } ImportSource;
 extern const ImportSource import_sources[IMPORT_SOURCES];
 

@@ -16,6 +16,8 @@ int ob2_read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int
 void host_log(const char* fmt, ...) { (void)fmt; }
 const unsigned char FontSz[126];                 /* (the decomp's, for import/lang.c) */
 unsigned int fstbl[24], fsheader[24];            /* (set by the languages' test) */
+unsigned int wallpaper[24];                      /* (the decomp's, for import/lang.c) */
+void* comevt_message_tab[8];
 const char* tr(const char* en) { return en; }   /* (host/tr.c) */
 static uint32_t rd(const unsigned char* p) { uint32_t v; memcpy(&v, p, 4); return v; }
 

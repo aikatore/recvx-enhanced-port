@@ -16,8 +16,14 @@ ImportSettings g_import;
 ImportProgress g_import_progress;
 volatile int g_import_reload;
 const ImportSource import_sources[IMPORT_SOURCES] = {
-    { "outbreak2", "Resident Evil Outbreak File #2", "SLUS-20984", IMPORT_CAT_CHARACTERS },
-    { "sles50306", "Resident Evil Code: Veronica X (Europe)", "SLES-50306", IMPORT_CAT_LANGUAGES },
+    { "outbreak2", "Resident Evil Outbreak File #2", "SLUS-20984", IMPORT_CAT_CHARACTERS, NULL, NULL },
+    { "sles50306", "Resident Evil Code: Veronica X (Europe)", "SLES-50306", IMPORT_CAT_LANGUAGES, NULL, NULL },
+    { "slus20184ru", "Resident Evil Code: Veronica X (Russian fan translation)", "SLUS-20184", IMPORT_CAT_LANGUAGES,
+      "Russian fan translation by Brosko. Import it from your own disc image of the US release with the patch.",
+      "Needs the US disc image with the Russian fan translation by Brosko: %s." },
+    { "slpm65022", "Biohazard Code: Veronica Kanzenban (Japan)", "SLPM-65022", IMPORT_CAT_LANGUAGES,
+      "Japanese, with cutscene subtitles. Import it from your own disc image of the Japanese release.",
+      "Needs a Japanese disc image of Biohazard Code: Veronica Kanzenban: %s." },
 };
 
 #define ITEMS_MAX 1024

@@ -27,6 +27,9 @@ static inline uint16_t pc_rd16(const uint8_t* p) { return (uint16_t)(p[0] | p[1]
 int32_t pc_prs_decode(const uint8_t* s, uint32_t n, uint8_t* d, uint32_t cap);
 /* the same into *out (malloc'd, *cap bytes), grown as needed up to PC_PRS_MAX: the size, -1 if broken */
 long pc_prs_expand(const unsigned char* s, long n, unsigned char** out, long* cap);
+/* lax: a stream that stops at the data's end without the end mark gives what it expanded so far (the Russian fan
+   translation's rooms, docs/LANGUAGES.md) */
+long pc_prs_expand_ex(const unsigned char* s, long n, unsigned char** out, long* cap, int lax);
 
 /* ---------------------------------------------------------------- AFS archives (adx.c, import ob2.c)
    Header (8 bytes): "AFS", u32 count; then count x (u32 offset, u32 size). */

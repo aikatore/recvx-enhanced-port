@@ -6,12 +6,12 @@
 #include <string.h>
 
 /* ---------------------------------------------------------------- PRS */
-int32_t pc_prs_decode(const uint8_t* s, uint32_t n, uint8_t* d, uint32_t cap)
+static int32_t prs_decode(const uint8_t* s, uint32_t n, uint8_t* d, uint32_t cap, int lax)
 {
     uint32_t i = 0, o = 0;
     unsigned field, left, b;
     if (n > INT32_MAX || cap > INT32_MAX) return PC_PRS_BROKEN;
-#define NEED(k) do { if (n - i < (k)) return PC_PRS_BROKEN; } while (0)
+#define NEED(k) do { if (n - i < (k)) return lax ? (int32_t)o : PC_PRS_BROKEN; } while (0)
     /* a descriptor bit; a new descriptor byte when they run out (Expand_GetDescriptorBit) */
 #define BIT() (--left ? 0 : (field = s[i++], left = 8), b = field & 1, field >>= 1, b)
 #define REFILL() do { if (left == 1) NEED(1); } while (0)
@@ -53,12 +53,13 @@ int32_t pc_prs_decode(const uint8_t* s, uint32_t n, uint8_t* d, uint32_t cap)
 #undef BIT
 #undef REFILL
 }
+int32_t pc_prs_decode(const uint8_t* s, uint32_t n, uint8_t* d, uint32_t cap) { return prs_decode(s, n, d, cap, 0); }
 
-long pc_prs_expand(const unsigned char* s, long n, unsigned char** out, long* cap)
+long pc_prs_expand_ex(const unsigned char* s, long n, unsigned char** out, long* cap, int lax)
 {
     if (n < 0 || n > INT32_MAX || *cap <= 0) return -1;
     for (;;) {
-        int32_t r = pc_prs_decode(s, (uint32_t)n, *out, (uint32_t)*cap);
+        int32_t r = prs_decode(s, (uint32_t)n, *out, (uint32_t)*cap, lax);
         unsigned char* p;
         if (r != PC_PRS_FULL) return r < 0 ? -1 : r;
         if ((unsigned long)*cap >= PC_PRS_MAX || !(p = realloc(*out, (size_t)*cap * 2))) return -1;
@@ -66,6 +67,8 @@ long pc_prs_expand(const unsigned char* s, long n, unsigned char** out, long* ca
         *cap *= 2;
     }
 }
+long pc_prs_expand(const unsigned char* s, long n, unsigned char** out, long* cap) { return pc_prs_expand_ex(s, n, out, cap, 0); }
+
 
 /* ---------------------------------------------------------------- AFS */
 int pc_afs_count(const uint8_t* h, uint64_t size)

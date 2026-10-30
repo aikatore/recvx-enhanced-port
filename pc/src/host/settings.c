@@ -240,11 +240,13 @@ static const char* lang_locked(void)
     if (lang_n() < 2) return "No other language is installed.";
     return pc_in_game() ? "Change it on the title screen." : NULL;
 }
-static const char* subs_locked(void)
-{
-    for (int l = 1; l < LANG_COUNT; l++) if (lang_has_subtitles(l)) return lang_has_subtitles(g_lang) ? NULL : "Only the imported languages have subtitles.";
-    return "No language with subtitles is installed.";
-}
+/* Subtitles: Off and the installed languages with subtitles, whatever the game's language (lang.h g_subtitles) */
+static int subs_n(void) { int n = 1; for (int l = 0; l < LANG_COUNT; l++) n += lang_has_subtitles(l); return n; }
+static int subs_at(int v) { for (int l = 0; l < LANG_COUNT; l++) if (lang_has_subtitles(l) && --v == 0) return l; return -1; }
+static int subs_get(void) { int v = 1, s = lang_sub(); for (int l = 0; l < s; l++) v += lang_has_subtitles(l); return s < 0 ? 0 : v; }
+static void subs_set(int v) { g_subtitles = subs_at(v) < 0 ? 0 : 2 + subs_at(v); }
+static const char* subs_name(int v, char* b, int n) { snprintf(b, n, "%s", subs_at(v) < 0 ? tr("Off") : lang_names[subs_at(v)]); return b; }
+static const char* subs_locked(void) { return subs_n() < 2 ? "No language with subtitles is installed." : NULL; }
 static const char* rifle_locked(void) { return biorand_active() ? "Required by BioRand." : NULL; }
 /* "You appear as": positions in the menus' list (actors.c, without event doubles) */
 static int chr_get(void) { int o = pc_biorand_appear(); return appear_pos(o >= 0 ? o : g_coop.chr); }   /* (BioRand's pick of this game shown) */
@@ -391,7 +393,8 @@ const Setting g_settings[] = {
 
     { SP_GAMEPLAY, "Language", NULL, 0, 0, 1, .get = lang_get, .set = lang_set, .name = lang_name, .count = lang_n, .locked = lang_locked, .shown = lang_any, .group = "GENERAL",
       .help = "The game's text. Applies from the next screen." },
-    { SP_GAMEPLAY, "Subtitles", V(g_subtitles), 0, 1, 1, .locked = subs_locked, .shown = lang_any, .help = "Show subtitles in cutscenes, in the chosen language." },
+    { SP_GAMEPLAY, "Subtitles", NULL, 0, 0, 1, .get = subs_get, .set = subs_set, .name = subs_name, .count = subs_n, .locked = subs_locked, .shown = lang_any,
+      .help = "Cutscene subtitles in this language, also with the game in another one." },
     { SP_GAMEPLAY, "Skip Intro", V(g_config.skip_intro), 0, 1, 1, .flags = SET_RESTART, .help = "Go straight to the title screen. Off lets you skip each logo and movie with a button press." },
     { SP_GAMEPLAY, "Check For Updates", V(g_config.update_check), 0, 1, 1, .apply = update_start,
       .help = "Check for a newer game version at startup and show it on the title screen." },
