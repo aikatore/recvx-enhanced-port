@@ -96,7 +96,7 @@ void* pc_mod_open(const char* name);
    bhSetRoom's message table in the language */
 float pc_font_width(unsigned short code);
 float pc_font_space(void);      /* a space's (0xFF01) advance at scale 1 */
-int   pc_font_glyph(int code, void** texlist);   /* bhDispFont: the cell to draw (-1 none); *texlist another font's */
+int   pc_font_glyph(int code, void** texlist, float* dx);   /* bhDispFont: the cell to draw (-1 none); *texlist another font's; *dx its shift */
 const unsigned short* pc_lang_mes(int which, const unsigned short* us);   /* the executable's short texts (lang.h LM_*) */
 int   pc_lang_file_page(float x, float y, int file, int page);   /* a file page as the language's picture (1 drawn) */
 int   pc_lang_page_end(int us);   /* PlayPageCheck: the playing manual's hidden pages in the language's layout */

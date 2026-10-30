@@ -341,6 +341,36 @@ static void exe_mes_line(char* out, size_t on, const char* name, const unsigned 
     out[0] = 0;   /* (not found, or no end) */
 }
 
+/* the Japanese font's look-alikes of the US codes (glyphs.c lang_cell): advance (ink + 2) and shift (32 + 1 - the ink's
+   left edge: the cells are drawn left of their place) from the font's first texture (the first TIM2 of 512 x 512 at 4
+   bits in SYSTEM.AFS/1; alpha from its 16-colour palette) */
+static int ja_ink(const unsigned char* d, uint32_t n, unsigned char* w, unsigned char* ox)
+{
+    for (uint32_t i = 0; i + 0x40 < n; i += 4) {
+        uint32_t ph, img, clut, hs;
+        if (memcmp(d + i, "TIM2", 4)) continue;
+        ph = i + (d[i + 5] ? 128 : 16);
+        if (!pc_range_ok(ph, 0x30, n)) continue;
+        clut = pc_rd32(d + ph + 4); img = pc_rd32(d + ph + 8); hs = pc_rd16(d + ph + 12);
+        if (d[ph + 19] != 4 || pc_rd16(d + ph + 20) != 512 || pc_rd16(d + ph + 22) != 512 || pc_rd16(d + ph + 14) < 16 ||
+            img < 512 * 512 / 2 || clut < 64 || !pc_range_ok((uint64_t)ph + hs, (uint64_t)img + clut, n)) continue;
+        const unsigned char *px = d + ph + hs, *pal = px + img;
+        for (int c = 0; c < LANG_JA_BASE; c++) {
+            int cell = lang_cell(LANG_JA, c), l = 28, r = -1;
+            w[c] = c ? 0 : 10; ox[c] = 32;
+            if (cell < 0 || cell >= 324) continue;
+            for (int y = 0; y < 28; y++)
+                for (int x = 0; x < 28; x++) {
+                    int p = (cell / 18 * 28 + y) * 512 + cell % 18 * 28 + x, v = px[p / 2] >> (p & 1 ? 4 : 0) & 15;
+                    if (pal[4 * v + 3] > 20) { if (x < l) l = x; if (x > r) r = x; }
+                }
+            if (r >= 0) { w[c] = (unsigned char)(r - l + 3); ox[c] = (unsigned char)(32 + 1 - l); }
+        }
+        return 1;
+    }
+    return 0;
+}
+
 /* ---------------------------------------------------------------- archives */
 /* the entries [lo, hi] of the language's archive (fl: lng) that differ from the English one (fe: eng); ja: the
    Japanese title picture spliced into the US one (below) */
@@ -434,6 +464,7 @@ static int rooms(FILE* f, const char* dir, const char* rdx, const char* lname, i
 /* ---------------------------------------------------------------- the import */
 typedef struct LangTxt {
     int lang; const char* src; const char* iso; const unsigned char* w; int nw; const unsigned* fl; const unsigned* hl; int subs;
+    const unsigned char* ox;  /* the glyphs' shifts (32: none), nw of them, or NULL */
     int fpics;               /* the files are pictures from this entry of ITEM?.AFS on (Japanese), 0 text */
     const char* extra;       /* more lines (the executable's texts), or NULL */
 } LangTxt;
@@ -445,6 +476,10 @@ static int write_txt(FILE* o, void* ud)
     strftime(when, sizeof(when), "%Y-%m-%d %H:%M", localtime(&now));
     fprintf(o, "# recvx language 1\nlang|%s\nsource|%s\niso|%s\nwhen|%s\nsubtitles|%d\nwidths|", lang_codes[t->lang], t->src, t->iso, when, t->subs);
     for (int i = 0; i < t->nw; i++) fprintf(o, "%s%d", i ? "," : "", t->w[i]);
+    if (t->ox) {
+        fprintf(o, "\noffsets|");
+        for (int i = 0; i < t->nw; i++) fprintf(o, "%s%d", i ? "," : "", t->ox[i]);
+    }
     fprintf(o, "\nfstbl|");
     for (int i = 0; i < 24; i++) fprintf(o, "%s%u", i ? "," : "", t->fl[i]);
     fprintf(o, "\nfsheader|");
@@ -498,7 +533,7 @@ static int one_lang(FILE* f, const LangSource* s, const LangDisc* ld, const char
     if (!ok) { host_log("lang: %s: the pictures could not be read or written\n", lname); return 0; }
     snprintf(path, sizeof(path), "%s/RDX_LNK%d.AFS", ld->dir, ld->digit);
     if (!rooms(f, dir, path, lname, 0, &subs)) { host_log("lang: %s: the rooms could not be read or written\n", lname); return 0; }
-    LangTxt t = { ld->lang, import_sources[s->src].key, iso, w, nw, fl, hl2, subs, 0, NULL };
+    LangTxt t = { ld->lang, import_sources[s->src].key, iso, w, nw, fl, hl2, subs, NULL, 0, NULL };
     if (pc_save_file(txt, "w", write_txt, &t)) { host_log("lang: cannot write %s\n", txt); return 0; }
     host_log("lang: %s installed in %s (%d pictures, %d subtitles)\n", lname, dir, pics, subs);
     return 1;
@@ -546,7 +581,7 @@ static int one_disc(FILE* f, FILE* uf, const LangSource* s, const char* outdir, 
     const LangDisc* ld = &s->langs[0];
     const char* lname = lang_names[ld->lang];
     char dir[1100], txt[1200];
-    unsigned char *d, w[256];
+    unsigned char *d, w[256], ox[LANG_JA_BASE];
     unsigned fl[24], hl[24], count = 0;
     const unsigned char *table = NULL, *sl;
     uint32_t n, nsl = 0;
@@ -584,6 +619,16 @@ static int one_disc(FILE* f, FILE* uf, const LangSource* s, const char* outdir, 
         }
     }
     if (!ok) { host_log("lang: %s: the pictures could not be read or written\n", lname); return 0; }
+    if (ja) {   /* the look-alikes' widths, from the font */
+        int64_t off;
+        uint32_t size;
+        int na = 0;
+        AfsFile* a = imp_iso_find(f, "SYSTEM.AFS", &off, &size) ? imp_afs_list(f, off, size, &na) : NULL;
+        unsigned char* e = a && na > 1 && a[1].size < (16u << 20) ? malloc(a[1].size + 1) : NULL;
+        if (e && imp_read_at(f, a[1].off, e, a[1].size) && ja_ink(e, a[1].size, w, ox)) nw = LANG_JA_BASE;
+        else host_log("lang: %s: the font's letters cannot be measured\n", lname);
+        free(e); free(a);
+    }
     if (!rooms(f, dir, "RDX_LNK.AFS", lname, ja, &subs)) { host_log("lang: %s: the rooms could not be read or written\n", lname); return 0; }
     snprintf(pg->phase, sizeof(pg->phase), tr("%s: messages"), lname);
     if ((sl = exe_saveload(exe, nexe, &nsl))) {   /* the save / load messages */
@@ -601,7 +646,7 @@ static int one_disc(FILE* f, FILE* uf, const LangSource* s, const char* outdir, 
     } else host_log("lang: %s: the save messages are not in %s\n", lname, s->exe);
     if (!ja) extra = ru_texts(exe, nexe);
     pg->done++;
-    LangTxt t = { ld->lang, import_sources[s->src].key, iso, w, nw, fl, hl, subs, ja ? 160 : 0, extra };
+    LangTxt t = { ld->lang, import_sources[s->src].key, iso, w, nw, fl, hl, subs, ja ? ox : NULL, ja ? 160 : 0, extra };
     ok = !pc_save_file(txt, "w", write_txt, &t);
     free(extra);
     if (!ok) { host_log("lang: cannot write %s\n", txt); return 0; }

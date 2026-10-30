@@ -140,7 +140,7 @@ int lang_cell(int l, int code)
 static int code_of(int l, unsigned c, unsigned* plain)
 {
     *plain = 0;
-    if (c == ' ' || c == 0x3000 || (l == LANG_JA && c == 0x3001)) return 0;   /* (Japanese: 、 as a space, as the game's text) */
+    if (c == ' ' || c == 0x3000 || (l == LANG_JA && (c == 0x3001 || c == ','))) return 0;   /* (Japanese: 、 and , as a space, as the game's text) */
     if (l == LANG_JA) {
         int cell;
         if (c == 0x3002) c = 0xFF0E;   /* 。: the game's ． */

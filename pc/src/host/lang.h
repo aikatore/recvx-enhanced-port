@@ -56,7 +56,7 @@ const char* pc_lang_file_dir(void);                 /* the folder of the languag
 void pc_lang_file_opened(const char* name, int src); /* a file the game opens (by name or "ARCHIVE.AFS/n"), from LF_* */
 float pc_font_width(unsigned short code);           /* the language font's width, < 0: the game's own */
 float pc_font_space(void);                          /* the advance of a space (0xFF01) at scale 1: 14, Japanese 28 */
-int  pc_font_glyph(int code, void** texlist);       /* bhDispFont: the cell to draw (-1 none); *texlist another font's */
+int  pc_font_glyph(int code, void** texlist, float* dx);   /* bhDispFont: the cell to draw (-1 none); *texlist another font's; *dx left shift */
 const unsigned short* pc_lang_mes(int which, const unsigned short* us);   /* the executable's short texts (LM_*) */
 enum { LM_DEMO, LM_PRESS, LM_PAUSE, LM_RETRY, LM_COUNT };
 int  pc_lang_file_page(float x, float y, int file, int page);   /* fileview.c: a file page drawn as the language's picture */

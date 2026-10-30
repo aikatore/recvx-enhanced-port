@@ -32,7 +32,7 @@ typedef struct LangInfo {
     int ok, subs, nw, fpics, nterm;
     int pageend[6], npageend;        /* the playing manual's hidden pages per stage of the story (PlayPageCheck) */
     char dir[1200];
-    unsigned char w[256];
+    unsigned char w[256], ox[256];   /* widths; shifts + 32 (offsets|: Japanese; 0 none) */
     unsigned int fstbl[24], fsheader[24];
     unsigned short* mes[LM_COUNT];   /* the executable's short texts (heap), NULL: the US ones */
     Term* term;                      /* the computer's lines (heap) */
@@ -121,6 +121,9 @@ void lang_scan(void)
                 if (!strncmp(line, "widths|", 7)) {
                     x->nw = parse_list(line + 7, v, 256);
                     for (int i = 0; i < x->nw; i++) x->w[i] = (unsigned char)(v[i] > 28 ? 28 : v[i]);
+                } else if (!strncmp(line, "offsets|", 8)) {
+                    int n = parse_list(line + 8, v, 256);
+                    for (int i = 0; i < n; i++) x->ox[i] = (unsigned char)(v[i] < 64 ? v[i] : 32);
                 } else if (!strncmp(line, "fstbl|", 6)) nf = parse_list(line + 6, x->fstbl, 24);
                 else if (!strncmp(line, "fsheader|", 9)) nh = parse_list(line + 9, x->fsheader, 24);
                 else if (!strncmp(line, "subtitles|", 10)) x->subs = atoi(line + 10) > 0;
@@ -330,7 +333,7 @@ static int sub_font(int l)
 /* a glyph's advance in language l's font */
 static float width_of(int l, int code)
 {
-    if (l == LANG_JA) return code == 0 ? 14 : lang_cell(l, code) >= 0 ? 28 : 0;
+    if (l == LANG_JA) return code < LANG_JA_BASE && code < info[l].nw ? info[l].w[code] : code == 0 ? 14 : lang_cell(l, code) >= 0 ? 28 : 0;
     if (l == LANG_EN) return code < 108 ? FontSz[code] : 0;
     return code < info[l].nw ? info[l].w[code] : 0;
 }
@@ -353,15 +356,20 @@ float pc_glyph_w(int code)
     return code >= 0 && code < 126 ? FontSz[code] : 0;
 }
 
-int pc_font_glyph(int code, void** texlist)
+/* a glyph's shift left of its place (the Japanese look-alikes: proportional) */
+static float shift_of(int l, int code) { return l == LANG_JA && code < LANG_JA_BASE && code < info[l].nw && info[l].ox[code] ? info[l].ox[code] - 32.0f : 0; }
+
+int pc_font_glyph(int code, void** texlist, float* dx)
 {
+    int l = font_lang;
     if (code >= LANG_SUB_BASE && code < 0xFE00) {   /* a subtitle in another language: its own font */
         code -= LANG_SUB_BASE;
         if (code == LANG_SUB_SPACE || subf.lang < 0 || !sub_font(subf.lang)) return -1;
         *texlist = &subf.list;
-        return lang_cell(subf.lang, code);
+        l = subf.lang;
     }
-    return lang_cell(font_lang, code);
+    *dx = shift_of(l, code);
+    return lang_cell(l, code);
 }
 
 int pc_glyph_next(const char** s) { return lang_glyph(font_lang, s); }
