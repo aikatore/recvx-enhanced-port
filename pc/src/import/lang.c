@@ -450,7 +450,7 @@ static int write_txt(FILE* o, void* ud)
     fprintf(o, "\nfsheader|");
     for (int i = 0; i < 24; i++) fprintf(o, "%s%u", i ? "," : "", t->hl[i]);
     fprintf(o, "\n");
-    if (t->fpics) fprintf(o, "fpics|%d\n", t->fpics);
+    if (t->fpics) fprintf(o, "fpics|%d\npageend|0,1,2,3,4,5\n", t->fpics);   /* (the Japanese PlayPageCheck's) */
     if (t->extra) fputs(t->extra, o);
     return ferror(o) ? -1 : 0;
 }

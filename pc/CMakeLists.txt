@@ -261,6 +261,10 @@ add_executable(test_import tests/test_import.c src/import/impmodel.c src/import/
 target_link_libraries(test_import PRIVATE SDL3::SDL3 m)
 add_test(NAME import COMMAND test_import ${CMAKE_CURRENT_BINARY_DIR})
 
+# our translations (src/host/tr_table.inc) against their languages' game fonts (src/host/glyphs.c): no missing letter
+add_executable(test_lang tests/test_lang.c src/host/glyphs.c)
+add_test(NAME lang COMMAND test_lang)
+
 # checked file reading (include/pc_parse.h): PRS against the game's decoder, crafted AFS tables, .cvxm
 # models, DDS / PNG headers and BioRand start-kit scripts
 add_executable(test_parsers tests/test_parsers.c src/host/parse.c src/net/coop_proto.c src/net/rdv_proto.c)

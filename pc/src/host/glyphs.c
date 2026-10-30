@@ -117,8 +117,9 @@ static void ja_init(void)
 }
 static int ja_find(unsigned u)
 {
-    int lo = 0, hi = ja_n;
+    int lo = 0, hi;
     ja_init();
+    hi = ja_n;
     while (lo < hi) {
         int mid = (lo + hi) / 2;
         if (ja_index[mid].u == u) return ja_index[mid].cell;

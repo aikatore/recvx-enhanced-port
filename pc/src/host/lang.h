@@ -60,6 +60,7 @@ int  pc_font_glyph(int code, void** texlist);       /* bhDispFont: the cell to d
 const unsigned short* pc_lang_mes(int which, const unsigned short* us);   /* the executable's short texts (LM_*) */
 enum { LM_DEMO, LM_PRESS, LM_PAUSE, LM_RETRY, LM_COUNT };
 int  pc_lang_file_page(float x, float y, int file, int page);   /* fileview.c: a file page drawn as the language's picture */
+int  pc_lang_page_end(int us);                      /* fileview.c PlayPageCheck: the manual's hidden pages (US 0 1 2 4 6 7) */
 int  lang_eu_picture(int adv);                      /* the ADV.AFS picture is the European one (its title layout) */
 unsigned int* pc_lang_room_mes(unsigned int* mesp);  /* bhSetRoom: the room's message table in the language */
 void lang_frame(void);                              /* every frame: Subtitles changed in a room */

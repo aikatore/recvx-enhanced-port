@@ -380,8 +380,9 @@ static const char* row_help(const Row* r)
 {
     switch (r->kind) {
     case K_CAT: return cats[r->idx].help;
-    case K_GAME: return import_sources[r->idx].cat == IMPORT_CAT_LANGUAGES ? "Import the languages of your own disc image of this release."
-                                                                       : "Import from your own disc image of this game.";
+    case K_GAME: return import_sources[r->idx].help ? import_sources[r->idx].help
+                        : import_sources[r->idx].cat == IMPORT_CAT_LANGUAGES ? "Import the languages of your own disc image of this release."
+                                                                              : "Import from your own disc image of this game.";
     case K_PLAYERS: return "The playable characters and their costumes.";
     case K_NPCS: return "The other people of the game. Some have no names; they are listed by their file.";
     case K_DISC: return "Choose your disc image (.iso) in a file dialog.";
@@ -435,7 +436,8 @@ static void draw_page(void)
     pc_ui_rect(40, INFO_Y - 4.5f, 600, INFO_Y - 3.5f, 0x60FFFFFF, Z_RULE);
     if (im.page == P_OPTS && langs() >= 0) {
         char c[160];
-        snprintf(t, sizeof(t), tr("Needs a clean European disc image of %s: %s."), "Resident Evil Code: Veronica X", import_sources[im.src].serial);
+        if (import_sources[im.src].need) snprintf(t, sizeof(t), tr(import_sources[im.src].need), import_sources[im.src].serial);
+        else snprintf(t, sizeof(t), tr("Needs a clean European disc image of %s: %s."), "Resident Evil Code: Veronica X", import_sources[im.src].serial);
         pc_ui_text(ROW_X - 4, INFO_Y, tr("DISC"), SMALL_SC, 0xFFFFE080);
         pc_ui_text(ROW_X - 4, INFO_Y + 16, t, SMALL_SC, 0xFFFFFFFF);
         pc_ui_text(ROW_X - 4, INFO_Y + 36, tr("IMPORTED"), SMALL_SC, 0xFFFFE080);

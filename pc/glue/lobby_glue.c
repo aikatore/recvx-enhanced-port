@@ -75,7 +75,7 @@ enum { BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000
 /* UTF-8, the letters of the loaded font (lang.h pc_glyph_next: accents with a language's font) */
 static float adv(int c) { return c ? pc_glyph_w(c) : 11.0f; }   /* the font's space is a full cell */
 
-#define TRACK 0.88f                     /* a little tighter than the game's messages */
+#define TRACK (lang_font() == LANG_RU ? 1.0f : 0.88f)   /* a little tighter than the game's messages (the Russian widths are tight) */
 
 static float text_w(const char* s, float sc)
 {

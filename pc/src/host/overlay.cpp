@@ -808,6 +808,7 @@ static void import_window(void)
         SDL_snprintf(label, sizeof(label), "%s (%s)", src->title, src->serial);
         if (!ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen)) continue;
         ImGui::PushID(s);
+        if (src->help) ImGui::TextWrapped("%s", tr(src->help));   /* (the Russian translation's author) */
         ImGui::TextWrapped(tr("Disc image: %s"), g_import.iso[s][0] ? g_import.iso[s] : tr("(none chosen)"));
         ImGui::BeginDisabled(running != 0);
         if (ImGui::Button(tr("Choose Disc Image..."))) {

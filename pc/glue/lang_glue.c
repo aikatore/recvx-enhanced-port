@@ -30,6 +30,7 @@ int g_lang, g_subtitles;
 typedef struct Term { int tab, idx; char* s; } Term;
 typedef struct LangInfo {
     int ok, subs, nw, fpics, nterm;
+    int pageend[6], npageend;        /* the playing manual's hidden pages per stage of the story (PlayPageCheck) */
     char dir[1200];
     unsigned char w[256];
     unsigned int fstbl[24], fsheader[24];
@@ -124,6 +125,7 @@ void lang_scan(void)
                 else if (!strncmp(line, "fsheader|", 9)) nh = parse_list(line + 9, x->fsheader, 24);
                 else if (!strncmp(line, "subtitles|", 10)) x->subs = atoi(line + 10) > 0;
                 else if (!strncmp(line, "fpics|", 6)) x->fpics = atoi(line + 6);
+                else if (!strncmp(line, "pageend|", 8)) { x->npageend = parse_list(line + 8, v, 6); for (int i = 0; i < x->npageend; i++) x->pageend[i] = (int)v[i]; }
                 else exe_line(x, line);
             }
             fclose(f);
@@ -463,6 +465,13 @@ int pc_lang_file_page(float x, float y, int file, int page)
         njDrawPolygon2DM(&p2c, 4, -1.0f, 0x80000060);
     }
     return 1;
+}
+
+int pc_lang_page_end(int us)
+{
+    static const int stage[8] = { 0, 1, 2, -1, 3, -1, 4, 5 };   /* (the US values per stage: 0 1 2 4 6 7) */
+    const LangInfo* x = &info[mes_lang];
+    return us >= 0 && us < 8 && stage[us] >= 0 && stage[us] < x->npageend ? x->pageend[stage[us]] : us;
 }
 
 /* ---------------------------------------------------------------- room messages */
