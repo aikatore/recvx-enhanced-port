@@ -390,7 +390,7 @@ static const char* row_why(const Row* r)
         if (l) return l;
         if (biorand_opt_active(&bm.o, r->idx)) return NULL;
         for (int p = biorand_opt_find(biorand_opt[r->idx].parent); p >= 0; p = biorand_opt_find(biorand_opt[p].parent))
-            if (!biorand_opt_get(&bm.o, p)) { snprintf(why, sizeof(why), tr("Turn on \"%s\" first."), biorand_opt[p].label); break; }
+            if (!biorand_opt_get(&bm.o, p)) { snprintf(why, sizeof(why), tr("Turn on \"%s\" first."), tr(biorand_opt[p].label)); break; }
         return why;
     }
     }
@@ -887,7 +887,7 @@ static void dist(const BioSlice* s, int n, const int* id)
     }
     for (int k = 0; k < n; k++) {
         float w;
-        snprintf(t, sizeof(t), "%s %d%%", s[k].name, (int)(s[k].pct + 0.5));
+        snprintf(t, sizeof(t), "%s %d%%", tr(s[k].name), (int)(s[k].pct + 0.5));
         w = 13 + pc_ui_text_w(t, LEGEND_SC) + 12;
         if (lx + w > BAR_X1 + 12 && lx > BAR_X0) { lx = BAR_X0; ly += 15; }
         pc_ui_rect(lx - 1, ly + 1.5f, lx + 10, ly + 12.5f, 0xFF707078, Z_SWFRAME + id[k] * ID_DZ);

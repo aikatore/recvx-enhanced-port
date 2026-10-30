@@ -180,7 +180,7 @@ static bool settings_imgui(int page, bool all = true)
             }
         } else {   /* a number; a value name (tenths) is shown as the slider's text */
             char fmt[96];
-            const char* f = s->fmt ? s->fmt : "%d";
+            const char* f = s->fmt ? tr(s->fmt) : "%d";
             if (s->name) {
                 char* o = fmt;
                 for (const char* c = s->name(v, val, sizeof val); *c && o < fmt + sizeof fmt - 2; c++) { if (*c == '%') *o++ = '%'; *o++ = *c; }
@@ -299,13 +299,13 @@ static void settings_window(void)
     if (ImGui::CollapsingHeader(tr("Third Person"), ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= settings_imgui(SP_TPS);
         char key[96];
-        SDL_snprintf(key, sizeof key, tps_key_wait ? "Press a key (Esc cancels)" : "Camera Key: %s", SDL_GetScancodeName((SDL_Scancode)g_tps.key));
+        SDL_snprintf(key, sizeof key, tr(tps_key_wait ? "Press a key (Esc cancels)" : "Camera Key: %s"), SDL_GetScancodeName((SDL_Scancode)g_tps.key));
         if (ImGui::Button(key)) tps_key_wait = true;
-        ImGui::TextDisabled(g_tps.free_cam
+        ImGui::TextDisabled("%s", tr(g_tps.free_cam
                             ? "Move in the direction shown on screen; use the mouse to turn the camera.\n"
                               "Change action buttons under Controls; F1 releases the mouse."
                             : "Move forward or back and turn with your movement keys; use the mouse to look.\n"
-                              "Change action buttons under Controls; F1 releases the mouse.");
+                              "Change action buttons under Controls; F1 releases the mouse."));
         if (g_tps.pad_modern)
             ImGui::TextDisabled(tr("Left stick: move and run. Right stick: look and aim.\n"
                                 "Set aiming, action, inventory and camera buttons under Controls."));
