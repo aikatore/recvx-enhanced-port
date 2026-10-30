@@ -1032,6 +1032,46 @@ Co-op and the rest:
 
 Report any failure with `recvx.log` (the `biorand-cli:` and `biorand menu:` lines).
 
+### S8: the ENEMIES note, our randomizer on EXTRA OPTIONS (2026-10-30)
+
+The user's request: say on the ENEMIES page that BioRand cannot randomize enemies and that our randomizer should be
+used; put our randomizer's options on EXTRA OPTIONS.
+
+**BioRand's enemies do nothing for CVX** (nightly 3.3.2, checked in its source and in a generated pack's
+`log_pl0.txt`): `ReCvRandomiser.Generate` leaves `RandomEnemies` alone and the CLI runs "Randomizing enemies" /
+"Replacing enemies", but `EnemyRandomiser.RdtCanHaveEnemies` finds no room (CVX's enemies are a table in the room
+file, not the `SceEmSet` opcodes it reads), so the log says `ENEMY RDT ORDER:` (empty) and every count 0. Its RNG
+is its own (`baseSeed + 3`), so the option changes nothing else in the pack. One side effect: with Randomize Enemies
+on and every ratio None the CLI stops with "No enemy ratios set." (as the GUI would).
+
+- **Decided: the ENEMIES rows are read-only, not changed.** `row_why()` greys all 12 `BOG_ENEMIES` rows with
+  "BioRand cannot randomize enemies in this game. Use RANDOMIZER on the EXTRA OPTIONS page instead." (in orange
+  before the row's help; a change buzzes and says it). Their values stay what the seed string says: the string is not
+  rewritten, so a pasted GUI string copies back unchanged and the co-op pack comparison is as before.
+  `biorand_opts.c` is unchanged (its codec and ctest too; `biorand_enemy_dist` is now used only by the ctest).
+- Below the rows, the distribution bar is gone; the same sentence is shown there (wrapped, yellow).
+
+**RANDOMIZER on EXTRA OPTIONS** (`biorand_menu.c`, `bm.sub`): the page's first row, `K_RANDPG`, "RANDOMIZER" with
+the randomizer's On/Off and an arrow after it (as the lobby's page rows). Confirm or a click opens its sub-page:
+the page row says RANDOMIZER (L1/R1 and left/right on it still change page, closing it); the rows are the lobby's
+RANDOMIZER page (step 4) without the co-op-only parts and the cutscene cast (EXTRA OPTIONS has it): Enemy
+Randomizer, Randomizer Variety and Randomize Event Enemies (only while the randomizer is on), Enemy Seed, RANDOM
+SEED (`K_RSEED`), Extra Enemies, Rearranged Enemies; BACK. They are `K_SET` rows of the settings table
+(`settings_of(&g_enemy_opts.x)`, new in `settings.c`, also the lobby's `eset`), so labels, value names, help texts
+and the ini (`enemy_*`) are F1's and the lobby's. Enemy Seed is typed as BioRand's seed (`edit_begin(setting)`, 5
+digits, 0..99999); RANDOM SEED says "New seed: N". BACK, cancel and a right click go back to EXTRA OPTIONS on the
+RANDOMIZER row.
+
+**BioRand games and our randomizer**: nothing turns it off. The randomizer runs at every room load
+(`enemyopt_glue.c enemy_room_finished`, `enemy_opts()`), on the pack's room files as on the disc's; Quick Start is a
+co-op rule for the start kit and has nothing to do with it. Checked: START with seed 0's pack and the randomizer on
+gives "enemies: room 3050: 5 of 5 records randomized" and other zombies than the same START with it off.
+
+**Tests (2026-10-30, Linux; job dir `brenemy/`, not committed):** `t_menu.sh` (keyboard: the ENEMIES note and a
+refused row, EXTRA OPTIONS, the sub-page, randomizer on, the seed typed, RANDOM SEED, Extra Enemies, Rearranged
+Enemies, cancel back), `t_mp.sh` (from that save: the values after a restart; the gamepad and the mouse through
+the same), `t_gen.sh` (GENERATE with the nightly CLI) and `t_start.sh` (START, teleports; `game_3050.png`).
+
 ## Risks and open questions
 
 1. **Memory: the CLI peaked at 6.0 GB RSS** for one CVX pack. With the game running, 8 GB
@@ -1096,6 +1136,8 @@ Report any failure with `recvx.log` (the `biorand-cli:` and `biorand menu:` line
 - **S7 done** (2026-10-28): BioRand per game (START with the difficulty; NEW GAME always plain; saves keep it; the
   lobby rule for the lobby's new game), the free-space warning only when space is short, BIORAND in the title
   menu's new EXTRA. See "S7".
+- **S8 done** (2026-10-30): the ENEMIES rows read-only with a note (BioRand changes no CVX enemy), our randomizer's
+  options on EXTRA OPTIONS (RANDOMIZER sub-page). See "S8".
 - **STATUS: All steps done; open: Windows real-machine test list** ("S6", "Windows real-machine test list").
 - The job-dir tools (not committed): S5b's `s5b/` (`co.sh`, `scen.sh`, `mkpack.sh`, `build.sh`); S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
   encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").

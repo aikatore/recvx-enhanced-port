@@ -133,8 +133,9 @@ For now only with the `--dev` launch option. Without it, all of the following is
 BIORAND row in the title menu's EXTRA, the BIORAND screen, the lobby rule and the co-op offer.
 `mods/biorand/` is then not read, and nothing goes to GitHub.
 
-[BioRand](https://github.com/biorand/classic) randomizes items, the start inventory, enemies and,
-optionally, doors. It reads your disc image and writes a pack for this game into `mods/biorand/`,
+[BioRand](https://github.com/biorand/classic) randomizes items, the start inventory and, optionally,
+doors. It cannot randomize enemies in this game; the game's own randomizer does (RANDOMIZER on EXTRA
+OPTIONS). It reads your disc image and writes a pack for this game into `mods/biorand/`,
 with the spoiler log `log_pl0.txt`. You can make the pack in the game (below) or with BioRand's own
 program.
 
@@ -162,8 +163,8 @@ on the page row, or with L1/R1 (Q/W on the keyboard).
 | SEED | the seed number; RANDOM SEED; COPY / PASTE SEED STRING; **GENERATE**; **START**; CHECK FOR UPDATES. Below: the seed string |
 | DOORS | Randomize Doors, segments, segment size, cutscene rooms; the estimated play time |
 | ITEMS | Randomize Items, routes, hidden key items, the custom item pool, the random starting inventory, the weapons; the item distribution |
-| ENEMIES | Randomize Enemies, placements, difficulty, the enemy ratios; the enemy distribution |
-| EXTRA OPTIONS | the port's own options (not in the seed string): **Randomize Character Model**, which picks your Character Model for each seed; the cutscene cast |
+| ENEMIES | BioRand's enemy options, greyed: BioRand cannot randomize enemies in this game. They stay in the seed string as they are |
+| EXTRA OPTIONS | the port's own options (not in the seed string): **RANDOMIZER**, the game's enemy randomizer, extra enemies and rearranged enemies (the same settings as F1 and the co-op lobby; they apply to BioRand games too); **Randomize Character Model**, which picks your Character Model for each seed; the cutscene cast |
 
 - A greyed row says why in the help strip (for example "Randomize Doors sets this.").
 - Every change is saved at once as the **seed string** (recvx.ini `biorand_seed`). The string

@@ -48,6 +48,7 @@ extern const int g_settings_n;
 
 int  settings_get(const Setting* s);
 int  settings_hi(const Setting* s);
+const Setting* settings_of(const int* val);     /* the row that edits this variable, or NULL */
 void settings_set(const Setting* s, int v);     /* clamped; recvx.ini is written, apply runs on the main thread */
 void settings_step(const Setting* s, int dir);  /* left/right: by step, choices wrap */
 void settings_act(const Setting* s);            /* SET_ACTION */
