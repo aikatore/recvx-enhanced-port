@@ -710,6 +710,58 @@ int coop_trig_ops_ok(const uint8_t* d, int size, int then0, int then1, const uin
     return i == n;
 }
 
+/* the actions in [o, lim): enemy works and their control, enemy records, room flags, records off, events doing the
+   same (one level); 1 = only those, *en: an enemy was touched */
+static int wake_ops(const uint8_t* d, int size, int o, int lim, const uint32_t* evs, const uint32_t* eve, int nev, int depth, int* en)
+{
+    int n, work = 0;
+    for (; o < lim; o += n) {
+        int op = d[o];
+        if (o + 2 > size || (n = coop_insn_len_raw(d + o)) <= 0 || o + n > size) return 0;
+        if (op == 101) { if (d[o + 1] != 1) return 0; work = *en = 1; }                 /* LoadWork of an enemy */
+        else if (op == 103 || op == 105) { if (!work) return 0; }                       /* SubCtr, CommonCtr: on it */
+        else if (op == 36) { if (d[o + 1] != 1) return 0; *en = 1; }                     /* InitModelSet of an enemy record */
+        else if (op == 5) {                                                              /* Set: rm_flg, cb_flg, sp_flg 27 */
+            if (d[o + 1] != 4 && d[o + 1] != 10 && !(d[o + 1] == 6 && ((d[o + 2] | d[o + 3] << 8) & 0x3FF) == 27)) return 0;
+        } else if (op == 20) {                                                           /* EvtOn: an event doing the same */
+            int e = d[o + 3];
+            if (depth || e >= nev || !wake_ops(d, size, (int)evs[e], (int)eve[e], evs, eve, nev, 1, en)) return 0;
+        } else if (depth && (op == 255 || op == 0)) return 1;                            /* EvtEnd, End */
+        else if (op != 12 && !coop_op_cond(op) && !coop_op_flow(op)) return 0;           /* (12 FlrAtariSet) */
+    }
+    return 1;
+}
+
+int coop_wake_scan(const uint8_t* d, int size, int scd1, int scd1_end, const uint32_t* evs, const uint32_t* eve, int nev,
+                   CoopWake* out, int max)
+{
+    struct { uint8_t etc, ix, bad; } s[32];
+    int ns = 0, ne = 0, o, n, i, k, ends[32];
+    if (scd1 < 0 || scd1_end > size) return 0;
+    for (o = scd1; o < scd1_end; o += n) {
+        if (o + 2 > size || (n = coop_insn_len_raw(d + o)) <= 0 || o + n > size) break;
+        while (ne && ends[ne - 1] <= o) ne--;
+        if (d[o] == 1) {   /* IfelCk n: the then-part ends at o + 2 + n (an ElseCk there opens the else part) */
+            int then1 = o + 2 + d[o + 1], p = o + 2, en = 0, ok, m;
+            if (then1 > size || then1 < o + 4) return 0;
+            if (ne < 32) ends[ne++] = d[then1 - 2] == 2 ? then1 - 2 + d[then1 - 1] : then1;
+            while (p < then1 && coop_op_cond(d[p]) && (m = coop_insn_len_raw(d + p)) > 0) p += m;
+            ok = d[then1 - 2] != 2 && wake_ops(d, size, p, then1, evs, eve, nev, 0, &en) && en;
+            for (k = o + 2; k < p; k += coop_insn_len_raw(d + k)) {
+                int bit = (d[k + 2] | d[k + 3] << 8) & 0x3FF;
+                if (d[k] != 4 || d[k + 1] != 10 || (bit != 22 && bit != 23)) continue;
+                for (i = 0; i < ns && !(s[i].etc == (bit == 23) && s[i].ix == d[k + 4]); i++) {}
+                if (i == ns) { if (ns == 32) continue; s[ns].etc = bit == 23; s[ns].ix = d[k + 4]; s[ns++].bad = 0; }
+                if (!ok || d[k + 5]) s[i].bad = 1;   /* (a test of "not there" too) */
+            }
+        }
+        if (!ne && d[o] == 0) break;   /* scd1's End */
+    }
+    for (i = k = 0; i < ns && k < max; i++)
+        if (!s[i].bad) { out[k].etc = s[i].etc; out[k++].ix = s[i].ix; }
+    return k;
+}
+
 int coop_atr_set(const uint8_t* p, AtrSet* out)
 {
     if (p[0] != 37 && p[0] != 123 && p[0] != 124) return 0;   /* EtcAtariSet2 WalAtariSet2 FlrAtariSet2 (event.c) */

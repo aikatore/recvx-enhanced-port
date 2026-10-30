@@ -504,6 +504,16 @@ int coop_op_replay(const uint8_t* p);       /* an action a partner's world event
 /* the actions `ops` (script offsets) are instruction starts in [then0, then1) of script `d`
    (length `size`), in increasing order; 1 = fine */
 int coop_trig_ops_ok(const uint8_t* d, int size, int then0, int then1, const uint16_t* ops, int n);
+/* Spots of a room script that wake enemies (docs/COOP.md "Enemies a room script wakes"): the floor records
+   (scd1 test "player is at floor N", cb_flg bit 22) and triggers (bit 23) that every block of scd1 testing them
+   tests for "there", with no else part and a then-part that loads enemy works and controls them (LoadWork of an
+   enemy, then SubCtr / CommonCtr), shows or hides enemy records, sets room flags (rm_flg, cb_flg, sp_flg 27),
+   turns records off (FlrAtariSet), or starts events that do only that; at least one enemy touched. Script `d`
+   (`size` bytes), scd1 in [scd1, scd1_end), event k's code in [evs[k], eve[k]). Writes up to `max`, returns
+   how many. */
+typedef struct CoopWake { uint8_t etc, ix; } CoopWake;   /* etc: a trigger, else a floor record; its index */
+int coop_wake_scan(const uint8_t* d, int size, int scd1, int scd1_end, const uint32_t* evs, const uint32_t* eve, int nev,
+                   CoopWake* out, int max);
 /* EV_ATR: of the partner's room record (wall, trigger, floor) we take the on/off flag and the
    placement; its type, attr and prm only as one of our room script's own WalAtariSet2 /
    EtcAtariSet2 / FlrAtariSet2 writes them for that record (retail code indexes object, item and

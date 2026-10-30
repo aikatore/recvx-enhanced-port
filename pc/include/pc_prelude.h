@@ -158,6 +158,7 @@ void  coop_textures_released(void);
 void  coop_player_unload(void);                /* system.c bhSysCallMonitor: the player's textures go, another character loads (story switch, Battle Game rooms) */
 struct BH_PWORK;
 int   coop_enemy_begin(struct BH_PWORK* ep);   /* 1 = step done (client puppet) */
+int   coop_enemies_run(void);                  /* eneset.c bhControlEnemy: the host's enemies run although our examine paused them */
 void  coop_enemy_end(struct BH_PWORK* ep);
 int   coop_partner_step(void);                 /* 1 while an enemy's step runs against the partner's stand-in (plp) */
 void  coop_scd1(void);                         /* event.c bhControlEvent: runs the room's per-frame script */
