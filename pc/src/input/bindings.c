@@ -179,7 +179,7 @@ int bind_conflict(int row, int dev)
     return 0;
 }
 
-int g_dev_mode;   /* --dev: developer tools (the import window, F9) */
+int g_dev_mode = 1;   /* BioRand, the importers (EXTRA, F9): on for everyone since 2026-10-30 (was --dev); 0 hides them again */
 int bind_row_shown(int row, int dev)
 {
     if (row == B_IMPORT && !g_dev_mode) return 0;

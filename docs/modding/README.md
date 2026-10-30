@@ -129,10 +129,6 @@ Run from the repository root. The disc image is taken from `--iso`, `$RECVX_ISO`
 
 ## Randomizer (BioRand)
 
-For now only with the `--dev` launch option. Without it, all of the following is hidden: the
-BIORAND row in the title menu's EXTRA, the BIORAND screen, the lobby rule and the co-op offer.
-`mods/biorand/` is then not read, and nothing goes to GitHub.
-
 [BioRand](https://github.com/biorand/classic) randomizes items, the start inventory and, optionally,
 doors. It cannot randomize enemies in this game; the game's own randomizer does (RANDOMIZER on EXTRA
 OPTIONS). It reads your disc image and writes a pack for this game into `mods/biorand/`,
@@ -220,4 +216,3 @@ allows 60 such requests per hour from one address. Generating works offline.
   - The host sends its seed string. A partner whose pack differs is asked at the title or in the
     lobby whether to generate it. If it has no CLI yet, it is asked to download one first. If its CLI
     is not the host's build, it is offered the newest. Once the pack is generated, it joins.
-  - The partner needs `--dev` too. Without it, the partner leaves with a message.

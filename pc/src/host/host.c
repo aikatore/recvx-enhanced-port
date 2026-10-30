@@ -263,7 +263,7 @@ static void parse_args(int argc, char** argv)
         else if (!strcmp(argv[i], "--skip-intro")) g_config.skip_intro = 1;
         else if (!strcmp(argv[i], "--hd-textures") && i + 1 < argc) { SDL_strlcpy(g_config.hd_textures_dir, argv[++i], sizeof(g_config.hd_textures_dir)); }
         else if (!strcmp(argv[i], "--third-person")) g_tps.on = 1;
-        else if (!strcmp(argv[i], "--dev")) g_dev_mode = 1;
+        else if (!strcmp(argv[i], "--dev")) {}   /* (was: BioRand and the importers; now always shown; still accepted for old shortcuts) */
         else if (!strcmp(argv[i], "--quiet")) g_config.log_level = 0;
         else if (!strcmp(argv[i], "--coop-host") && i + 1 < argc) { g_coop.port = atoi(argv[++i]); g_coop.request = COOP_REQ_HOST; }
         else if (!strcmp(argv[i], "--coop-join") && i + 1 < argc) { SDL_strlcpy(g_coop.join, argv[++i], sizeof(g_coop.join)); g_coop.request = COOP_REQ_JOIN; }

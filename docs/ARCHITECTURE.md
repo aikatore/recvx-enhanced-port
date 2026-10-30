@@ -1038,7 +1038,6 @@ called by the game thread.
 | `--skip-intro` | boot straight into the title menu |
 | `--hd-textures DIR` | HD texture pack folder (default `mods/textures`) |
 | `--third-person` | start with the over-the-shoulder camera ([THIRDPERSON.md](THIRDPERSON.md)) |
-| `--dev` | developer tools: the import window (F9, [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)) and its row in the bindings, the title menu's EXTRA > IMPORT screen, and BioRand ([modding/README.md](modding/README.md#randomizer-biorand)); without it F9 does nothing, those rows are hidden and `mods/biorand/` is not read |
 | `--coop-host PORT`, `--coop-join HOST:PORT#CODE` or `ROOM`, `--coop-server ADDR`, `--coop-conn auto\|direct\|server`, `--coop-pw PASSWORD` | online co-op ([COOP.md](COOP.md#command-line)) |
 | `--log[=FILE]` | copy all output to a log file (default `recvx.log`), with a backtrace on a crash |
 | `--profile[=FILE]`, `--profile-samples=FILE` | performance measurements ([Profiling and logging](#profiling-and-logging)) |

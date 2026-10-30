@@ -45,7 +45,7 @@ void bind_set(int row, int dev, int slot, int code);   /* a code another row of 
 void bind_reset(int dev);                               /* defaults of one set */
 int  bind_conflict(int row, int dev);                   /* another row of the same context shares a code: that row + 1, else 0 */
 int  bind_row_shown(int row, int dev);                  /* the row exists for this device */
-extern int g_dev_mode;                                   /* --dev: developer tools (the import window, F9) */
+extern int g_dev_mode;                                   /* BioRand and the importers shown (bindings.c: on) */
 const char* bind_code_name(int dev, int code, char* buf, int n);   /* for menus, by the connected pad's type */
 const char* bind_row_label(int row, char* buf, int n);  /* game rows: the actions of the button under the key type */
 const char* bind_pad_desc(char* buf, int n);            /* the connected gamepad (its name in buf), or "No gamepad"; any thread */

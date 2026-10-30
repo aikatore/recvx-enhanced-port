@@ -813,7 +813,7 @@ entries the player checks in a list: SELECT ALL / DESELECT ALL, then a check box
 groups of the lobby's model page (`cast_custom_list`: the "You appear as" list's order, the zombies' one entry
 where their looks start, the imports last). Shared code `pc/glue/cast_list.c`, shown at two places: the lobby's
 CUTSCENE CAST page (CHOOSE MODELS, "12 of 16", opens it as step 8) and the BIORAND screen's EXTRA OPTIONS page
-(Choose Models; `--dev`); F1 shows the same list as check boxes under Model Selection
+(Choose Models); F1 shows the same list as check boxes under Model Selection
 (`overlay.cpp cast_custom_imgui`). OPTION > ENHANCED SETTINGS shows only the value.
 
 * Stored as the entries **not** checked (so a model imported later starts checked): `cast_off`, a bit per

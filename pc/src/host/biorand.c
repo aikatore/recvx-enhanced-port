@@ -31,7 +31,7 @@ static unsigned int fnv(unsigned int h, const void* p, size_t n)
 /* The identity: log_pl0.txt (the seed line with every option, the spoiler of every item and door) and the room
    files' names and sizes, not their bytes (ponytail: a pack is ~1.4 GB; hash the contents if two packs ever share
    a log). */
-extern int g_dev_mode;   /* --dev (bindings.c): BioRand is a developer option for now */
+extern int g_dev_mode;   /* (bindings.c) */
 int biorand_shown(void) { return g_dev_mode; }
 
 void biorand_scan(void)
@@ -41,7 +41,7 @@ void biorand_scan(void)
     int n = 0, i, rooms = 0, seed = -1, log = 0;
     unsigned int id = 2166136261u, sum = 0;
     FILE* f;
-    if (!g_dev_mode) {   /* without --dev: no pack, so nothing of BioRand is shown or read */
+    if (!g_dev_mode) {   /* hidden: no pack, so nothing of BioRand is shown or read */
         br.pack = 0, br.seed = -1, br.id = 0, br.text[0] = br.str[0] = 0;
         return;
     }

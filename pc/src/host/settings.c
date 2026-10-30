@@ -230,7 +230,7 @@ const unsigned char settings_calib[2][CALIB_STEPS] = { { 5, 10, 16, 24, 32 }, { 
 static void picture_reset(void) { g_config.brightness = 0; g_config.contrast = 100; g_config.gamma = 10; settings_save_later(); }
 /* Language: English and the installed languages (lang.h), in LANG_* order; Subtitles */
 static int lang_n(void) { int n = 0; for (int l = 0; l < LANG_COUNT; l++) n += lang_installed(l); return n; }
-static int lang_any(void) { return lang_n() > 1; }   /* the rows only with an imported language (the import is --dev only for now) */
+static int lang_any(void) { return lang_n() > 1; }   /* the rows only with an imported language */
 static int lang_at(int v) { for (int l = 0; l < LANG_COUNT; l++) if (lang_installed(l) && v-- == 0) return l; return LANG_EN; }
 static int lang_get(void) { int v = 0; for (int l = 0; l < g_lang && l < LANG_COUNT; l++) v += lang_installed(l); return lang_installed(g_lang) ? v : 0; }
 static void lang_set(int v) { g_lang = lang_at(v); }

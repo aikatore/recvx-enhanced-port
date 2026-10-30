@@ -42,7 +42,7 @@ void biorand_game(int on);            /* this game's state: 0 at each title menu
                                          the co-op host's lobby rule for the lobby's new game */
 int  biorand_next(void);              /* what co-op sends and shows: in a game biorand_active; at the title the game about to
                                          start (START's, a loaded save's, else the host's lobby rule BIORAND) */
-int  biorand_shown(void);            /* BioRand exists: only with --dev (g_dev_mode) */
+int  biorand_shown(void);            /* BioRand exists (g_dev_mode) */
 const char* biorand_locked(void);     /* why the lobby rule cannot change now (no pack, in game, a co-op guest), or NULL */
 int  biorand_setting(void);           /* the co-op host's lobby rule BIORAND (ini biorand), whether or not a pack is there */
 int  biorand_toggle(void);            /* the lobby rule's row: flips it; 0 when it is locked (biorand_locked) */

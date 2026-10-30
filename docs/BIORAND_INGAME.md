@@ -8,8 +8,8 @@ state document. The player's usage is in docs/modding/README.md "Randomizer (Bio
 The goal: a BIORAND entry on the title menu (since S7 in EXTRA) opens a native generator. It downloads the BioRand CLI
 when it is missing, offers BioRand's Code: Veronica options in the game's menu style, and runs the
 CLI into `mods/biorand/`, which the port already loads (`pc/src/host/biorand.c`,
-docs/modding/README.md "Randomizer (BioRand)"). It is `--dev` only, like BioRand now
-(`biorand_shown`).
+docs/modding/README.md "Randomizer (BioRand)"). It was `--dev` only until 2026-10-30; since then BioRand
+and the importers are shown to everyone (`g_dev_mode` on, the `--dev` option removed).
 
 The options, the seed string's codec and the menu's row table are `pc/src/host/biorand_opts.c/.h`
 (S4a), with no game data. S1's catalogue `biorand_options.json` was folded into it and deleted.

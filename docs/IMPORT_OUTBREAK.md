@@ -6,7 +6,7 @@ writes what it extracts to the user's mods folder (`mods/import/outbreak2/`, or 
 Goal: take the character models of *Resident Evil Outbreak File #2* (US, SLUS-20984) and use them
 as player models in this port ("Character Model", [ACTORS.md](ACTORS.md#you-appear-as)); later
 voices and the social-call ("ad-lib") animations for co-op. The title menu's EXTRA > IMPORT screen and the F9 window
-(both only with the `--dev` launch option) run the extraction; F9 also lists what was extracted. Both are built so
+run the extraction; F9 also lists what was extracted. Both are built so
 other games can be added as further sources.
 
 ## PROGRESS
@@ -412,7 +412,7 @@ the other while paging (all loaded, none refused).
 
 ## IMPORT screen
 
-The in-game version of the F9 window (`pc/glue/import_menu.c`), `--dev` only for now: title menu **EXTRA** >
+The in-game version of the F9 window (`pc/glue/import_menu.c`): title menu **EXTRA** >
 **IMPORT** (docs/BIORAND_INGAME.md "S7" for EXTRA). Drawn as the BIORAND screen, its boxes the shared dialog
 (`options_glue.c pc_ui_dialog`, RETURN TO TITLE's look). Keyboard, gamepad and mouse; cancel or a right click goes
 one page back, from the first to EXTRA.
@@ -441,7 +441,7 @@ one page back, from the first to EXTRA.
   restarts. Choosing one then shows the character you play: its `.cvxm` is missing, and the load is refused as for
   any unreadable file (`actor_set` remembers the failure). Importing again brings the files back under the same
   entries. A restart lists only what is there.
-- F9 stays for `--dev`; both use the same thread, one extraction at a time.
+- Both use the same thread, one extraction at a time.
 
 Tests (2026-10-28, Linux, headless; job dir `extramenu/imp.sh`): EXTRA > IMPORT > CHARACTERS > the game, the disc
 through the test aid, START IMPORT with both groups: 306 models, 0 failed, "30 playable characters and 238 NPCs can be

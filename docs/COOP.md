@@ -497,7 +497,7 @@ loot a partner who watched the event and got one too gives it back at once ("...
 
 ### BioRand
 
-With BioRand (only with `--dev`; [modding/README.md](modding/README.md#randomizer-biorand)) the host chooses in GAME RULES, row
+With BioRand ([modding/README.md](modding/README.md#randomizer-biorand)) the host chooses in GAME RULES, row
 **BIORAND** (the lobby's own rule, ini `biorand`; shown only when the host has a pack in `mods/biorand`): the game
 the host starts from the lobby is then a BioRand game. A game the host plays already (started with the BIORAND
 screen's START, or a loaded BioRand save) counts as it is. On, both play the host's pack:
@@ -514,7 +514,7 @@ screen's START, or a loaded BioRand save) counts as it is. On, both play the hos
   **No** (or cancel, or an error) leaves. Meanwhile the session stays (both keep sending their poses), the
   partner loads no game state (one sent meanwhile is asked for again afterwards), and the host's lobby shows
   "BioRand: asked to generate" or "BioRand: generating..." under the partner's model.
-* Without that (in a game, without `--dev`, a host that sent no seed string, or after generating) a partner
+* Without that (in a game, a host that sent no seed string, or after generating) a partner
   without the pack, or with another one, is refused when it joins (or when the host turns BIORAND on) with
   "Generate the host's BioRand seed N, or ask them to turn BioRand off." ("BioRand seed N differs. Match the
   host's options and BioRand version, ..." when its seed number is the host's); the host's status

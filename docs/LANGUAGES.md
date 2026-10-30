@@ -6,7 +6,7 @@ Nothing from any disc is in the repository: the importer reads the player's own 
 (**SLUS-20184**, patched: Russian) or of the Japanese release (**SLPM-65022**: Japanese) and writes what it needs to
 `<import_dir>/<source>/<code>/` (default `mods/import/sles50306/fr`, `de`, `es`, `mods/import/slus20184ru/ru`,
 `mods/import/slpm65022/ja`), as the Outbreak import does ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)). The import is
-`--dev` only (title menu EXTRA > IMPORT > LANGUAGES, or F9); the Language and Subtitles settings show once a language
+in the title menu's EXTRA > IMPORT > LANGUAGES, or F9; the Language and Subtitles settings show once a language
 is imported.
 
 ## PROGRESS
