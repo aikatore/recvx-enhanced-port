@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### New
+
+- **BioRand randomizer**: the title menu's EXTRA has BIORAND. It downloads BioRand's generator, sets
+  its options in the game's own menus, generates a randomized game from a seed and starts it. Saves
+  remember their seed, and in co-op the partner can generate the host's game with one click. Enemies
+  are randomized by the port's own randomizer, which BioRand's menu now offers too.
+- **Import from other discs**: EXTRA > IMPORT takes the playable characters and NPCs from your
+  Resident Evil Outbreak File 2 disc as Character Models, and languages from your other Code: Veronica
+  discs.
+- **Languages and subtitles**: import French, German and Spanish from the European disc, Japanese from
+  the Japanese disc, or Russian from the US disc with Brosko's fan translation. The game and our menus
+  then play in that language, and cutscene subtitles can be shown in any imported language.
+
 ### Gameplay
 
 - **Custom cutscene cast**: Model Selection has a new Custom choice. Check the models you want in a
