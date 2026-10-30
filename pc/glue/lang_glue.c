@@ -228,26 +228,16 @@ const char* pc_lang_file_dir(void) { return lang_dir(data_lang()); }
 
 /* ---------------------------------------------------------------- textures of our own
    A TIM2 in memory as one texture of a list of ours: drawn as a loaded texture is (Ps2TexLoad takes its TIM2 from
-   pSurface), outside the texture heap, so nothing releases it (the US plates, the subtitle font, a file page). On the
-   heap, outside the address window: its block is told to the DMA (ps2_dma_host), which uploads it. */
-void ps2_dma_host(int slot, const void* p, uint32_t len);
-enum { DMA_PLATES, DMA_SUBFONT, DMA_FPAGE };
-/* n bytes aligned to 64 (*raw: what to free), told to the DMA as `slot` */
-static unsigned char* dma_alloc(int slot, unsigned char** raw, uint32_t n)
-{
-    ps2_dma_host(slot, NULL, 0);
-    free(*raw);
-    if (!(*raw = malloc(n + 64))) return NULL;
-    unsigned char* p = *raw + (64 - ((uintptr_t)*raw & 63)) % 64;
-    ps2_dma_host(slot, p, n);
-    return p;
-}
+   pSurface), outside the texture heap, so nothing releases it (the US plates, the subtitle font, a file page). Outside
+   the address window, in memory the DMA reads as host memory (memory.c ps2_dma_alloc). */
 int adx_afs_locate(int ptid, int fid, uint32_t* lsn, uint32_t* size);
 int cdvd_read_sectors(uint32_t lsn, uint32_t count, void* dst);
 int Ps2CheckTextureAlpha(void* pp);
 void pc_tex_keep_original(int texno);
 extern int PatId[4];
 extern unsigned int Ps2_current_texbreak;
+void* ps2_dma_alloc(int slot, uint32_t len);
+enum { DMA_PLATES, DMA_SUBFONT, DMA_FPAGE };
 
 static void tex_set(NJS_TEXNAME* name, NJS_TEXMEMLIST* mem, void* tim)
 {
@@ -288,7 +278,7 @@ static int disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n)
 
 /* ---------------------------------------------------------------- the font */
 /* the subtitles' font when they are in another language than the game's: the first textures of that language's
-   SYSTEM.AFS/1 (as bhSetFontTexture finds them), on the heap */
+   SYSTEM.AFS/1 (as bhSetFontTexture finds them), outside the address window */
 static struct { int lang, n; unsigned char* d; NJS_TEXNAME name[4]; NJS_TEXMEMLIST mem[4]; NJS_TEXLIST list; } subf = { -1 };
 
 static int sub_font(int l)
@@ -296,23 +286,22 @@ static int sub_font(int l)
     char p[1300];
     FILE* f;
     long n = 0;
-    unsigned char *d, *dp, *tims[4];
+    unsigned char *dp, *tims[4];
     uint32_t sz;
     if (subf.lang == l) return subf.n > 0;
-    d = subf.d;
     memset(&subf, 0, sizeof(subf));
     subf.lang = l;
-    subf.d = d;
     if (!lang_dir(l)) return 0;
     snprintf(p, sizeof(p), "%s/SYSTEM.AFS/1", lang_dir(l));
     if ((f = pc_fopen(p, "rb"))) {
-        unsigned char* b;
+        unsigned char* b = NULL;
         if (fseek(f, 0, SEEK_END) || (n = ftell(f)) < 64 || n > (16 << 20) || fseek(f, 0, SEEK_SET) ||
-            !(b = dma_alloc(DMA_SUBFONT, &subf.d, (uint32_t)n)) || fread(b, 1, n, f) != (size_t)n) n = 0;
+            !(b = ps2_dma_alloc(DMA_SUBFONT, (uint32_t)n)) || fread(b, 1, n, f) != (size_t)n) n = 0;
+        subf.d = n ? b : NULL;
         fclose(f);
     }
-    if (n) {   /* (aligned as the game's buffer: the stream is aligned to 32 bytes from it) */
-        unsigned char* b = subf.d + (64 - ((uintptr_t)subf.d & 63)) % 64;
+    if (n) {   /* (page aligned as the game's buffer: the stream is aligned to 32 bytes from it) */
+        unsigned char* b = subf.d;
         dp = b + 4;
         sz = pc_rd32(b);
         for (int i = 0; ef_info[i].flg != (unsigned)-1 && dp < b + n; i++)
@@ -324,8 +313,13 @@ static int sub_font(int l)
     for (int i = 0; i < subf.n; i++) tex_set(&subf.name[i], &subf.mem[i], tims[i]);
     subf.list.textures = subf.name;
     subf.list.nbTexture = subf.n;
-    njSetTexture(&subf.list);
-    for (int i = 0; i < subf.n; i++) pc_tex_keep_original(i);   /* (its own letters, also with an HD pack's font) */
+    {
+        extern NJS_TEXLIST* Ps2_current_texlist;
+        NJS_TEXLIST* was = Ps2_current_texlist;
+        njSetTexture(&subf.list);
+        for (int i = 0; i < subf.n; i++) pc_tex_keep_original(i);   /* (its own letters, also with an HD pack's font) */
+        if (was) njSetTexture(was);
+    }
     host_log("lang: the font of %s for subtitles (%d textures)\n", lang_names[l], subf.n);
     return 1;
 }
@@ -394,7 +388,7 @@ void pc_glyphs_utf8(const unsigned short* g, char* out, int n)
    and language folders, as a one-texture list of our own. The global index of every language's copy is the same,
    so njLoadTexture would hand back the language's. */
 #define US_TIM (257 << 10)   /* the larger one: OPTION's, 1024x512 4-bit, 262528 bytes */
-static unsigned char *us_tim, *us_raw;
+static unsigned char* us_tim;
 static NJS_TEXMEMLIST us_mem;
 static NJS_TEXNAME us_name;
 static NJS_TEXLIST us_list = { &us_name, 1 };
@@ -407,7 +401,7 @@ int lang_us_plates(int adv)
         TIM2_PICTUREHEADER_EX* t;
         uint32_t lsn, size, res[3], lp[2], at, n = 0;
         us_adv = -2;
-        if (!us_tim && !(us_tim = dma_alloc(DMA_PLATES, &us_raw, US_TIM))) return 0;
+        if (!us_tim && !(us_tim = ps2_dma_alloc(DMA_PLATES, US_TIM))) return 0;
         t = (TIM2_PICTUREHEADER_EX*)us_tim;
         if (!adx_afs_locate(PatId[3], adv, &lsn, &size) || !disc_read(lsn, 0, res, 12) || res[2] > size - 8 ||
             !disc_read(lsn, res[2], lp, 8) || (at = res[2] + lp[1]) < res[2] || at > size - 0xD0 ||
@@ -428,7 +422,7 @@ int lang_us_plates(int adv)
 /* ---------------------------------------------------------------- file pages as pictures (Japanese)
    ITEM1.AFS / ITEM2.AFS (sys->itm_partid) entry fpics + fsheader[file] + page: a 512 x 512 picture of the page's
    text, as the Japanese release shows them; its first line where the text's first line is (64). */
-static struct { int entry, part; unsigned char* raw; NJS_TEXNAME name; NJS_TEXMEMLIST mem; NJS_TEXLIST list; } fpage = { -1, -1 };
+static struct { int entry, part; NJS_TEXNAME name; NJS_TEXMEMLIST mem; NJS_TEXLIST list; } fpage = { -1, -1 };
 
 int pc_lang_file_page(float x, float y, int file, int page)
 {
@@ -444,7 +438,7 @@ int pc_lang_file_page(float x, float y, int file, int page)
         fpage.part = (int)sys->itm_partid;
         fpage.list.nbTexture = 0;
         if (adx_afs_locate((int)sys->itm_partid, entry, &lsn, &size) && size > 64 && size < (2u << 20)) {
-            unsigned char* d = dma_alloc(DMA_FPAGE, &fpage.raw, size);
+            unsigned char* d = ps2_dma_alloc(DMA_FPAGE, size);
             if (d) {
                 if (disc_read(lsn, 0, d, size) && tim_chunks(d, size, tims, 1) == 1) {
                     tex_set(&fpage.name, &fpage.mem, tims[0]);
