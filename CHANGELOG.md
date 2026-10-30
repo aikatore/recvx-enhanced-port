@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Internal Resolution**: each setting now shows the real size the game is drawn at.
+
 ## 0.7.0 (2026-10-30)
 
 ### New
