@@ -4,6 +4,8 @@
 
 ### New
 
+These are bigger, experimental features: expect some parts not to work fully yet.
+
 - **BioRand randomizer**: the title menu's EXTRA has BIORAND. It downloads BioRand's generator, sets
   its options in the game's own menus, generates a randomized game from a seed and starts it. Saves
   remember their seed, and in co-op the partner can generate the host's game with one click. Enemies
@@ -13,7 +15,9 @@
   discs.
 - **Languages and subtitles**: import French, German and Spanish from the European disc, Japanese from
   the Japanese disc, or Russian from the US disc with Brosko's fan translation. The game and our menus
-  then play in that language, and cutscene subtitles can be shown in any imported language.
+  then play in that language, and cutscene subtitles can be shown in any imported language. Languages
+  with their own letters (Japanese, Russian) show ??? at first: leave the settings once after choosing
+  one, and the letters load.
 
 ### Gameplay
 
