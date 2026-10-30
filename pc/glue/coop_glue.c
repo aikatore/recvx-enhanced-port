@@ -891,6 +891,7 @@ _Static_assert(sizeof(BH_PWORK) == 1408 && ESTATE_SIZE <= 64 * (int)sizeof(((Coo
 _Static_assert(12288 / sizeof(MN_WORK) == COOP_MNW_MAX, "an enemy's motion set: 512 entries");
 static unsigned char owned[PC_ENE_SLOTS], owned_child[PC_ENE_SLOTS], estate[ESTATE_SIZE], estate_out[ESTATE_SIZE];   /* received / being sent */
 static unsigned short own_wait[PC_ENE_SLOTS];    /* host: the guest's frames in our room without a snapshot of a grab it runs */
+static unsigned int snap_at[PC_ENE_SLOTS];       /* guest: our frame at which the slot last took the host's state */
 static CoopXfer estate_x;               /* EV_ESTATE chunks into estate[] */
 static unsigned short xfer_tid;         /* our last transfer id (blob, estate) */
 static void queue_event(Event* e);
@@ -1295,7 +1296,12 @@ static void grab_failsafe(void)
     }
     safe.held = 1;
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++)
-        if ((ene[i].flg & 0x1) && (grips_us(&ene[i]) || linked_to(&ene[i]) == 1) && (!is_host || (!tgt[i] && !owned[i]))) {   /* on the host, a holder whose steps run on the partner's stand-in or the partner's game does not hold us; a larva holds us on our own motions */
+        /* (a zombie walking or standing - its Move, mode0 1 - holds nobody, whatever its hold bit says: a guest held by one zombie
+           and hit meanwhile by another's vomit, which went on when the host left mid-attack, was knocked out of the grab onto
+           the holder's motion set, where its frame stood still, and the holder walked off with the hold bit set: the player
+           stayed there for good) */
+        if ((ene[i].flg & 0x1) && (grips_us(&ene[i]) || linked_to(&ene[i]) == 1) && (!is_host || (!tgt[i] && !owned[i])) &&
+            !(ene[i].id == 1 && ene[i].mode0 == 1 && !linked_to(&ene[i]))) {   /* on the host, a holder whose steps run on the partner's stand-in or the partner's game does not hold us; a larva holds us on our own motions */
             if (ene[i].hp >= 0) held = 1;   /* hp 0 is alive: en01 sets a grabbing zombie shot below 0 to 0 */
             else dying = 1;   /* a crawler the player stomps to death (NG02): it lets go when the stomp ends */
         }
@@ -1383,6 +1389,18 @@ static int same_room(void) { return have_rx && (rx.flags & PF_IN_GAME) && partne
    for their motions (FrameCheck), which a puppet only shows as snapshots let it - they run here
    then and take the host's state again afterwards */
 static int puppets(void) { return !echo_delay && !is_host && same_room() && snap_n > 0 && !(sys->cb_flg & 0x5); }
+/* host: our examine - a trigger's message or close-up (hitchk.c: st_flg 0x2000 / 0x80) - stops the game's enemies
+   (sp_flg 0x2 off until it closes): in single player the world waits for the one player reading. The partner in our room
+   plays on, and our enemies stood still in its game (its puppets of ours), its shots on them taking effect only when we
+   closed the text. While the partner plays in our room (a target: proxy_ok) our enemies run during our examine (not in a
+   door, a cutscene, the trade screen); our player counts as busy for them meanwhile, as one paused: no enemy attacks it
+   (enemy_begin). */
+int coop_enemies_run(void)
+{
+    return is_host && !echo_delay && sys && plp && (sys->st_flg & 0x2080) && !(sys->cb_flg & 0x5) && !(sys->gm_flg & 0x9) && !frozen &&
+           proxy_ok && same_room();
+}
+static int examining;                   /* host: this enemy step runs although our examine paused the enemies */
 
 /* an event task works on this enemy (LoadWork): it runs here, as in a cutscene */
 extern BH_SCEWORK bhEtask[16];
@@ -1539,6 +1557,7 @@ static int enemy_begin(BH_PWORK* ep)
         }
         if (ep->mode0) fx_begin(1);   /* what its step starts goes to the guest (EV_FX); not its initialising step */
         h_mode0 = plp->mode0;
+        examining = !(sys->sp_flg & 0x2);   /* (coop_enemies_run) */
         if (ghost.slot == i && partner_held()) tgt[i] = 1;   /* its hold of the partner runs to its end */
         else if (linked_to(ep)) tgt[i] = linked_to(ep) == 2;   /* (the stand-in also while the partner is busy: it keeps its last pose) */
         else if (ep->id == 27 && !ep->mode0) {}   /* a larva's Init: the player its moth laid it on (larva_laid) */
@@ -1550,7 +1569,7 @@ static int enemy_begin(BH_PWORK* ep)
             float dx1 = ep->px - plp->px, dz1 = ep->pz - plp->pz, dx2 = ep->px - ply2.px, dz2 = ep->pz - ply2.pz;
             in.d[0] = dx1 * dx1 + dz1 * dz1;
             in.d[1] = dx2 * dx2 + dz2 * dz2;
-            in.busy[0] = ply_busy(plp) || coop_atk_cooling(&atk[i][0], frame_no);
+            in.busy[0] = ply_busy(plp) || coop_atk_cooling(&atk[i][0], frame_no) || examining;
             in.busy[1] = held || ply_busy(&ply2) || cool_p;
             in.front[0] = !in.busy[0] && in_front(ep, plp, in.d[0]);
             in.front[1] = !in.busy[1] && in_front(ep, &ply2, in.d[1]);
@@ -1581,13 +1600,16 @@ static int enemy_begin(BH_PWORK* ep)
             if (ghost.slot == i) { ghost.was = ghost.pw; plp = &ghost.pw; }   /* its hold of the partner goes on */
             /* the zombie picks its and the player's grab motions by sys->ply_id: the partner's */
             if (ep->id == 1 && rx.mfile >= 0) { swap_pid = sys->ply_id; sys->ply_id = rx.mfile & 3; }
-        } else if (coop_atk_cooling(&atk[i][0], frame_no) && !(plp->flg & 4)) {
-            plp->flg |= 4;   /* its loop guard on our player: busy for this step only */
+        } else if ((examining || coop_atk_cooling(&atk[i][0], frame_no)) && !(plp->flg & 4)) {
+            plp->flg |= 4;   /* its loop guard on our player, or our examine: busy for this step only */
             h_flg4 = 1;
         }
         return 0;
     }
     if (!puppets() || !ep->mode0 || event_driven(ep) || grips_us(ep) || runs_here(ep)) return 0;   /* mode0 0: the enemy's own initialising step */
+    if (trace && !(ep->flg & 0x80) && frame_no - snap_at[i] == 60)
+        fprintf(stderr, "coop: ORPHAN enemy %d (id %d) is a puppet without the host's state for 60 frames: modes %d %d %d %d flg %x\n", i, ep->id,
+                ep->mode0, ep->mode1, ep->mode2, ep->mode3, ep->flg);
     return puppet_step(ep);
 }
 
@@ -2028,10 +2050,10 @@ static void enemy_trace(BH_PWORK* ep, int i, int ran)
     if (coop_on && p2_seen_room == coop_room_key())
         dp = sqrtf((ep->px - ply2.px) * (ep->px - ply2.px) + (ep->pz - ply2.pz) * (ep->pz - ply2.pz));
     if (dh > lim && (dp < 0 || dp > lim)) return;
-    fprintf(stderr, "etr g=%u s=%d id=%d ty=%d t=%c dH=%.1f dP=%.1f m=%d.%d.%d.%d mtn=%u f=%d hp=%d pH=%d.%d pP=%d.%d bH=%d bP=%d x=%x %s e=%.0f,%.0f h=%.0f,%.0f\n", (unsigned)gs_frame_count(), i, ep->id, ep->type,
+    fprintf(stderr, "etr g=%u s=%d id=%d ty=%d t=%c dH=%.1f dP=%.1f m=%d.%d.%d.%d mtn=%u f=%d hp=%d pH=%d.%d pP=%d.%d bH=%d bP=%d x=%x %s e=%.0f,%.0f h=%.0f,%.0f fl=%x st=%x age=%u\n", (unsigned)gs_frame_count(), i, ep->id, ep->type,
             !coop_on || !is_host ? '-' : tgt[i] ? 'P' : proxy_ok ? 'H' : 'h', dh, dp, ep->mode0, ep->mode1, ep->mode2, ep->mode3, ep->mtn_no, ep->frm_no >> 16,
             ep->hp, plp->hp, plp->mode0, dp < 0 ? 0 : ply2.hp, dp < 0 ? 0 : ply2.mode0, ply_busy(plp), dp < 0 ? 0 : ply_busy(&ply2) || partner_held(),
-            ep->id == 1 && ep->exp0 ? *(int*)(ep->exp0 + 0x40) : 0, ran ? "run" : "pup", ep->px, ep->pz, plp->px, plp->pz);
+            ep->id == 1 && ep->exp0 ? *(int*)(ep->exp0 + 0x40) : 0, ran ? "run" : "pup", ep->px, ep->pz, plp->px, plp->pz, ep->flg, ep->stflg, ran || is_host ? 0 : frame_no - snap_at[i]);
 }
 
 void pc_enemy_watch(BH_PWORK* ep, int i, int ran)
@@ -2241,6 +2263,7 @@ static void apply_snapshots(void)
             continue;
         }
         if (!s->mode[0]) continue;   /* a new enemy there whose Init has not run: ours ran, it would run again (its children twice) */
+        snap_at[s->idx] = frame_no;
         mnw_set(ep, s->mnw);
         if (s->mdl >= 0 && ep->mdl[s->mdl].objP) ep->mlwP = &ep->mdl[s->mdl];
         if ((int)ep->mtn_no != s->mtn_no) { ep->hokan_count = s->hokan_count ? s->hokan_count + 1 : 0; ep->hokan_rate = s->hokan_rate; }
@@ -3673,6 +3696,67 @@ static void add_region(const Blk* b, int c, unsigned int o)
     if (r->nf < 12) r->flip[r->nf++] = o;
 }
 
+/* ---- enemies a room script wakes when a player steps on a spot: both players count
+   Some rooms keep enemies waiting, not hittable, until a player steps on a floor record or walks into a
+   trigger. 0/8 entered by its first door: its zombies stand with CommonCtr 46 0 (not hittable), and scd1 has
+   "IfelCk; Ck rm_flg 3 set; Ck player is at floor 6; LoadWork enemy 0; CommonCtr 46 1 (hittable);
+   SubCtr 143 1 0 0 0 (to its chase, type 0); ...; FlrAtariSet 6 off; Set rm_flg 3 clear; Endif" (likewise
+   0/14, 1/2, 1/3, 1/7, 2/3, 3/5, 3/7, 5/52, 5/61, 5/65, 5/67, 6/7). The test reads the player of the game that runs
+   the script, and the host's game runs the enemies: a guest who walked there woke only its own puppets,
+   which the host's state put back at once - the enemies stood there, shots went through them, until the
+   host walked by. Such a spot - every scd1 block that tests it has no else part and does nothing but this: it
+   loads enemy works and controls them, shows enemy records, starts events that do only that, sets room flags,
+   turns its floor off (coop_proto.c coop_wake_scan) - counts the partner too, in both games: while the partner
+   (in our room, in control, not hit or held) stands on it and our player stands on no such record, our scd1 runs
+   with the floor or trigger test set as if ours stood there (cb_flg 0x200 / 0x100, flr_idx / etc_idx), restored
+   right after. Both games run the
+   block once, whoever steps there first (the guest's run on its puppets is put back by the next snapshot,
+   and leaves its enemies' type and room flags as the host's). */
+#define MAX_WAKE 16
+static CoopWake wake[MAX_WAKE];
+static int nwake;
+static unsigned int wake_said;          /* the spots logged in this room (bit per entry) */
+static void wake_scan(const unsigned char* d, const unsigned int* tab, int ntab, int nev)
+{
+    static uint32_t evs[256], eve[256];
+    unsigned int end = code_end(tab, ntab, tab[1]);
+    int i;
+    for (i = 0; i < nev; i++) {
+        evs[i] = tab[i + 2];
+        eve[i] = code_end(tab, ntab, tab[i + 2]);
+        if (eve[i] > end) end = eve[i];
+    }
+    nwake = coop_wake_scan(d, (int)end, (int)tab[1], (int)code_end(tab, ntab, tab[1]), evs, eve, nev, wake, MAX_WAKE);
+    wake_said = 0;
+    for (i = 0; i < nwake; i++) host_log("coop: room %d/%d %s %d wakes enemies: the partner stepping there counts too\n", sys->stg_no, sys->rom_no, wake[i].etc ? "trigger" : "floor", wake[i].ix);
+}
+/* before our scd1: the partner stands on a wake spot (as hitchk.c tests our player: the record on, its floor,
+   inside it, and a floor's facing limits); 1 = the test set for this run, *keep: what to put back */
+static int wake_partner(unsigned int* keep)
+{
+    int i, ang = (rx.ay + 8192) & 0xC000, flr = rx.flr - 3;
+    if (!nwake || echo_delay || !have_rx || (rx.flags & (PF_IN_GAME | PF_VISIBLE)) != (PF_IN_GAME | PF_VISIBLE) || rx.busy || !rx.flr ||
+        (rx.pflg & 6) || !partner_here() || (sys->cb_flg & 0x5) || rom->evtp != reg_evtp || scd_sig() != reg_sig) return 0;
+    for (i = 0; i < nwake; i++) {
+        int ix = wake[i].ix, n = wake[i].etc ? rom->etc_n : rom->flr_n;
+        ATR_WORK* a = ix < n ? (wake[i].etc ? &rom->etcp[ix] : &rom->flrp[ix]) : ix < n + (wake[i].etc ? sys->metc_n : sys->mflr_n) ?
+                      (wake[i].etc ? &sys->metcp[ix - n] : &sys->mflrp[ix - n]) : NULL;
+        if (!a || !(a->flg & 0x1) || a->flr_no != flr || (sys->cb_flg & (wake[i].etc ? 0x100 : 0x200)) ||
+            rx.px < a->px || rx.px > a->px + a->w || rx.pz < a->pz || rx.pz > a->pz + a->d) continue;
+        if (!wake[i].etc && (a->type != 0 || (!(a->attr & 0x1) && (rx.py < a->py || rx.py > a->py + a->h)) ||
+                             (ang == 0x8000 && (a->attr & 0x400)) || (ang == 0x4000 && (a->attr & 0x800)) ||
+                             (ang == 0 && (a->attr & 0x1000)) || (ang == 0xC000 && (a->attr & 0x2000)))) continue;
+        keep[0] = sys->cb_flg & 0x300; keep[1] = sys->flr_idx; keep[2] = sys->etc_idx;
+        sys->cb_flg |= wake[i].etc ? 0x100 : 0x200;
+        if (wake[i].etc) sys->etc_idx = ix; else sys->flr_idx = ix;
+        if (!(wake_said >> i & 1)) host_log("coop: the partner stands on %s %d of %d/%d: the enemies it wakes wake here too\n",
+                                            wake[i].etc ? "trigger" : "floor", ix, sys->stg_no, sys->rom_no);
+        wake_said |= 1u << i;
+        return 1;
+    }
+    return 0;
+}
+
 /* at room entry: the world event blocks of scd1 */
 static void analyze(void)
 {
@@ -3763,6 +3847,7 @@ static void analyze(void)
             fprintf(stderr, "coop: world block %04x..%04x gate set %d bit %d %s, %d flips\n", reg[i].start, reg[i].then1,
                     reg[i].set, reg[i].bit, reg[i].val ? "set" : "clear", reg[i].nf);
     host_log("coop: room %d/%d case %d: %d world event blocks\n", sys->stg_no, sys->rom_no, sys->rcase, nreg);
+    wake_scan(d, tab, ntab, nev);
 }
 
 /* the gates of this room's own loops in flag word w */
@@ -4207,9 +4292,11 @@ static void send_block(const Region* r)
 void coop_scd1(void)
 {
     unsigned char* d = (unsigned char*)rom->evtp;
-    int i, k, j, fired[MAX_REG];
+    int i, k, j, fired[MAX_REG], woke;
+    unsigned int wkeep[3];
 
     if (rom->evtp != reg_evtp || scd_sig() != reg_sig) analyze();   /* a new room script */
+    woke = wake_partner(wkeep);   /* (enemies a room script wakes when a player steps on a spot) */
     memcpy(pre_flags, flag_block(), sizeof(pre_flags));
     ntrace = 0;
     bhScePtr = d + (int)(size_t)bhScd2Ptr;
@@ -4222,6 +4309,7 @@ void coop_scd1(void)
         bhScePtr = (unsigned char*)--G_Sp;
         bhIfelFlg--;
     }
+    if (woke) { sys->cb_flg = (sys->cb_flg & ~0x300u) | wkeep[0]; sys->flr_idx = wkeep[1]; sys->etc_idx = wkeep[2]; }
 
     /* which world blocks fired: the gate had its "before" value and a flip ran. A flip by an
        event comes later (the flag is still unchanged): at most once per 10 s then. */
@@ -6865,6 +6953,9 @@ void coop_frame(void)
         if (sys) session();
         if (sys && plp) gameover_frame();
         if (sys && plp) enemy_sync();
+        if (trace && is_host && sys && sys->ewk_n && tx_in_game && same_room() && (rx.flags & PF_VISIBLE) && !rx.busy && frame_no - enemy_frame == 30)
+            fprintf(stderr, "coop: STALL our enemies have not run for 30 frames while the partner plays in this room (sp %x st %x cb %x gm %x)\n",
+                    sys->sp_flg, sys->st_flg, sys->cb_flg, sys->gm_flg);
         if (sys && plp) trade_frame();
         if (sys && plp) ts_frame();
         {   /* the enemies stand still while both players are in the trade screen (the host's setting) */

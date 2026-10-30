@@ -266,6 +266,12 @@ loaded in a case it has (before, the load waited for a file that does not exist:
   that room's enemies itself. Re-entering the partner's room hands the enemies back to the host.
 * Enemies killed while the joiner ran them stay dead when the host's enemies take over again
   (within the visit; once both left, the room is loaded the game's way again, as in single player).
+* Enemies that wait for a player to walk by (zombies that stand still and take no hits until you come
+  close) wake for either of you. Before, they woke only when the host
+  walked there: for the joiner they stood still and its shots went through them.
+* The host reading a text (examining something, a close-up) does not stop the enemies for the joiner: they
+  keep going for the joiner meanwhile, leave the reading host alone, and take the joiner's shots at once. Before,
+  they stood still for the joiner until the host closed the text.
 
 ### Puzzles
 
@@ -906,7 +912,11 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   lets go.
 * **Safety nets**: a player in a grab state with no enemy holding it for 15 frames is let go (150
   frames when the holder is a dying zombie still holding it: a crawler's leg grab ends with the
-  player stomping it dead and lets go at the end of the stomp); a zombie let go this way, or by any
+  player stomping it dead and lets go at the end of the stomp); a zombie in its Move (`mode0` 1,
+  walking or standing) holds nobody, whatever its hold bit says (a joiner held by one zombie was hit by
+  another's vomit, which went on in its game after the host left mid-attack: knocked out of the grab onto
+  the holder's motion set, whose frame stood still, while the holder walked off with its hold bit set -
+  the player stayed there for good); a zombie let go this way, or by any
   other release, is put back to standing only when alive - a dead one stays dead; after
   a grab, a player more than 2.5 m from its last free position in that room is put back; a watchdog
   logs any living enemy whose state has not changed for 5 s and, in co-op or rooms with added
@@ -925,6 +935,31 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   family on that player for 30 frames, for 60 frames in a row (not in a door, event, cinema or the trade
   freeze), is cleared as the enemies clear it (a grab on its own motions is let go) and logged: "watchdog:
   our player was left busy ... set by enemy N (id, gone/dead/alive, ...): cleared".
+* **Enemies a room script wakes** (`coop_wake_scan`, `wake_partner`): some rooms keep enemies waiting, not
+  hittable, until a player steps on a floor record or into a trigger. 0/8 entered by its first door: its zombies
+  stand with `CommonCtr 46 0` (not hittable) in their waiting type 8, and scd1 has `Ck rm_flg 3 set; Ck player is
+  at floor 6; LoadWork enemy 0; CommonCtr 46 1; SubCtr 143 1 0 0 0; ...; FlrAtariSet 6 off; Set rm_flg 3 clear`
+  (hittable, to the chase as type 0; likewise 0/14, 1/2, 1/3, 1/7, 2/3, 3/5, 3/7, 5/52, 5/61, 5/65, 5/67, 6/7). The test reads the
+  player of the game that runs the script: a joiner walking there woke only its own puppets, which the host's
+  snapshots put back at once, so the zombies stood there for it, unhittable (the weapon code skips an enemy
+  without `flg` 0x20, no hit was even sent), until the host walked by; and where the host woke them, the joiner's
+  copies kept type 8 (not in the snapshot), which they would have run with had the joiner taken the room over.
+  At room entry (both sides) the sweep finds such spots: every scd1 block testing that floor or trigger tests for
+  "there", has no else part, and does nothing but load enemy works and control them, show or hide enemy records,
+  set room flags (`rm_flg`, `cb_flg`, `sp_flg` 27), turn records off, or start events that do only that. While
+  the partner (in our room, in control, not hit or held) stands on one and our player stands on no record of
+  that kind, our scd1 runs with the test set as if our player stood there (`cb_flg` 0x200 / 0x100, `flr_idx` /
+  `etc_idx`), put back right after it. Both games run the block once, whoever steps there first: the host's
+  enemies wake for either player, and the joiner's run on its puppets leaves their type and the room flags as
+  the host's (the next snapshot puts the rest back). Logged: "room 0/8 floor 6 wakes enemies", "the partner
+  stands on floor 6 of 0/8".
+* **The host's examine** (`coop_enemies_run`, `eneset.c bhControlEnemy`): a trigger's message or close-up
+  (`hitchk.c`: `st_flg` 0x2000 / 0x80) stops the game's enemies (`sp_flg` 0x2 off until it closes) - in single
+  player the world waits for the one player reading. The joiner played on against puppets that stood still,
+  its shots taking effect only when the host closed the text. While the partner is a target in the host's
+  room (`proxy_ok`; not in a door, a cutscene or the trade freeze), the host's enemies run during its examine,
+  and the host's player counts as busy for them (as the loop guard does: `flg` 4 for each step, and the
+  target rule leaves it for the partner), so none attacks the reading player.
 * **Kills while the joiner ran the room** (`EV_GONE`): when the host's enemies take over, the joiner
   names its dead enemies and the host hides its live copies of the same type and version.
 
@@ -1526,6 +1561,11 @@ the session's code. A takeover needs a non-zero tag that matches.
 * Only zombie (en01) grabs are handed over to the joiner's game; other grabbers reach the joiner as
   a hit. A larva the host's moth lays on the joiner rides on the joiner's stand-in in the host's game only
   (at most three; its bites reach the joiner as hp loss; it goes when the joiner leaves the room). A handover takes a few round trips during which that zombie stands still.
+* The host's own scenes (a cutscene, an item's scene, a text a room script shows) still stop its enemies, as in
+  single player: for a joiner in the room they stand still until the scene ends (only the host's examine of a
+  trigger lets them run, see "The host's examine"). When the host leaves, the joiner's game runs the room's enemies on
+  from the state it was shown; what the snapshots do not carry (counters, an enemy's private work) is the joiner's
+  own, so an enemy may change its course then.
 * The partner has no facial animation and no aim pitch.
 * Some effects are not mirrored: those whose caller sets a matrix or a pointer the record cannot
   name (e.g. Alexia's acid, shell casings) and blood pools.
@@ -1570,7 +1610,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 
 | Variable | Effect |
 |---|---|
-| `RECVX_COOP_TRACE=1` | Log poses, events, flags, enemies, world events, effects, sounds (stderr). |
+| `RECVX_COOP_TRACE=1` | Log poses, events, flags, enemies, world events, effects, sounds (stderr). Also the enemy owner checks: "STALL" (host: our enemies have not run for 30 frames while the partner plays in our room; expected during the host's own scenes and script texts, which stop them as in single player) and "ORPHAN" (guest: a puppet without the host's state for 60 frames). |
 | `RECVX_COOP_STATS=1` | Every 300 frames: datagrams, bytes, effects sent/dropped, ping. |
 | `RECVX_COOP_ECHO=n` | Show our own pose n frames late as the partner, without a network. |
 | `RECVX_COOP_CODE=CODE` | Fix the host's join code (logged as a warning). |
@@ -1600,7 +1640,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_TSCREEN="hostframe:act,..."` | Trade screen actions: `k` trade key, `s<cell>` select, `r` confirm, `l` leave, `d` Disconnect, `i` log inventory, `c<cell>` / `cp<cell>` cursor ours / partner's, `a` confirm on cursor, `b` cancel, `w<cell>` request (`w-1` withdraw), `o` offer the requested, `x<cell>` wrong request, `P<hex>` pad presses, `M<x>/<y>[l\|r]` mouse. |
 | `RECVX_COOP_TS_LOSE="s<n>"` / `"d<n>"` | Host's n-th `TS_SWAP` / joiner's n-th `TS_DONE` not sent. |
 | `RECVX_TRADE_TRACE=1` | Every 10 frames: enemies frozen?, a hash of their state. |
-| `RECVX_ENEMY_TRACE=dist` | One line per step of every living enemy within `dist` units of a player: type, target (`H`, `h` while the partner is no target, `P`), distances, modes, motion, whether each player counts as busy; on the host also an `atk` line per attack on the partner. |
+| `RECVX_ENEMY_TRACE=dist` | One line per step of every living enemy within `dist` units of a player: type, target (`H`, `h` while the partner is no target, `P`), distances, modes, motion, whether each player counts as busy, run here or puppet, its flags (`fl`: 0x20 hittable) and `stflg`, a guest puppet's frames since the host's state (`age`); on the host also an `atk` line per attack on the partner. |
 | `RECVX_TEST_JOIN="n,..."` / `RECVX_TEST_STOP="n,..."` | F3 Join / Disconnect at the n-th frame hand-off. |
 | `RECVX_TEST_TITLE=n` | Back to the title from a game (as game over "No"). |
 | `RECVX_TEST_SAVE="gameframe:slot,..."` | Write the game in progress as a save (with the partners file). |
@@ -1616,6 +1656,13 @@ General test aids used with these (`RECVX_TELEPORT`, `RECVX_WARP`, `RECVX_EQUIP`
 ctest `coop` (`pc/tests/test_coop.c`) checks every event type from the side that sends it and
 refused from the other, malformed variants of each (`EV_SKIP`: its op, its room, from the joiner; `EV_BRSEED`: the alphabet, case, length, the dashes, the digest, from the joiner), pose
 fields out of range and every pose flag and game rule (all eight bits of each are in use), datagram headers, every effect co-op sends against its rule (crafted ones refused: unknown effects, type 65535, modes, missing textures and models), the direct handshake (keys of every code character, replays, the backoff and its bounds), transfers, the event
-ring, join address parsing, world event actions, record merging, the target rule and the loop guard, then fuzzes
-200000 random and mutated datagrams. ctest `net` covers the socket (busy port, oversized datagrams,
-receive timestamps) and port mapping start/stop cycles.
+ring, join address parsing, world event actions, record merging, the spots a room script wakes enemies on
+(`coop_wake_scan`: 0/8's block, and the blocks it must not take: a door, the player's work, a world flag, a "not
+there" test, an else part, an event the script lacks, a block on the spot touching no enemy), the target rule and
+the loop guard, then fuzzes 200000 random and mutated datagrams. ctest `net` covers the socket (busy port,
+oversized datagrams, receive timestamps) and port mapping start/stop cycles.
+
+`pc/tools/coop_wake_check.sh OUT [PORT]` (needs the disc image, `RECVX_ISO`, and a build, `RECVX_BIN`; about two
+minutes, so not in ctest): two instances in 0/8, only the joiner steps onto the floor that wakes the zombies and
+fires; it fails unless the host logs the partner on that floor, its zombie turns hittable and goes for the joiner,
+the joiner's hits are applied, and neither side logs STALL or ORPHAN.

@@ -889,6 +889,50 @@ static void test_trig(void)
     CHECK(coop_insn_len_raw(d + 26) == 6 && coop_insn_len_raw(d + 14) == 8);
 }
 
+/* ---------------------------------------------------------------- spots that wake enemies (coop_wake_scan) */
+static int wakes(const unsigned char* d, int n, const CoopWake* want, int nw)
+{
+    static const uint32_t evs[1] = { 0 }, eve[1] = { 14 };   /* event 0: the first 14 bytes */
+    CoopWake w[8];
+    int k = coop_wake_scan(d, n, 14, n, evs, eve, 1, w, 8), i;
+    if (k != nw) return 0;
+    for (i = 0; i < k; i++) if (w[i].etc != want[i].etc || w[i].ix != want[i].ix) return 0;
+    return 1;
+}
+static void test_wake(void)
+{
+    /* event 0: LoadWork enemy 4, CommonCtr 46 1, SubCtr 143 1 0 0 0. scd1 from 14: 0/8's floor 6 block (14), a floor 8
+       block with a door (60), a floor 9 block starting event 0 (82), a floor 7 block touching no enemy (96), a block on
+       trigger 13 (112), End */
+    static const unsigned char d[] = {
+        101, 1, 4, 0,   105, 46, 1, 0,   103, 143, 1, 0, 0, 0,
+        1, 44,   4, 4, 3, 0, 0, 0,   4, 10, 22, 0, 6, 0,   101, 1, 0, 0,   105, 46, 1, 0,   103, 143, 1, 0, 0, 0,
+                 5, 10, 22, 0, 6, 1,   12, 6, 1, 0,   5, 4, 3, 0, 0, 1,   3, 0,
+        1, 20,   4, 10, 22, 0, 8, 0,   101, 1, 1, 0,   51, 0, 8, 0, 5, 62, 1, 67,   3, 0,
+        1, 12,   4, 10, 22, 0, 9, 0,   20, 0, 0, 0,   3, 0,
+        1, 14,   4, 10, 22, 0, 7, 0,   5, 4, 1, 0, 0, 0,   3, 0,
+        1, 16,   4, 10, 23, 0, 13, 0,   101, 1, 2, 0,   105, 46, 1, 0,   3, 0,
+        0, 0 };
+    static const CoopWake want[] = { { 0, 6 }, { 0, 9 }, { 1, 13 } }, w2[] = { { 0, 6 }, { 1, 13 } };
+    unsigned char e[sizeof(d)];
+    CHECK(sizeof(d) == 132 && wakes(d, sizeof(d), want, 3));
+    memcpy(e, d, sizeof(d)); e[29] = 0;    /* the floor 6 block loads the player: no wake */
+    CHECK(wakes(e, sizeof(e), want + 1, 2));
+    memcpy(e, d, sizeof(d)); e[43] = 1;    /* its Set writes a world flag (ev_flg): no wake */
+    CHECK(wakes(e, sizeof(e), want + 1, 2));
+    memcpy(e, d, sizeof(d)); e[27] = 1;    /* it tests "not on floor 6" */
+    CHECK(wakes(e, sizeof(e), want + 1, 2));
+    memcpy(e, d, sizeof(d)); e[58] = 2; e[59] = 2;   /* its Endif an ElseCk: an else part (empty) */
+    CHECK(wakes(e, sizeof(e), want + 1, 2));
+    memcpy(e, d, sizeof(d)); e[93] = 1;    /* the floor 9 block starts event 1, which the script has not */
+    CHECK(wakes(e, sizeof(e), w2, 2));
+    memcpy(e, d, sizeof(d)); e[102] = 6;   /* the floor 7 block tests floor 6: a block on floor 6 touching no enemy */
+    CHECK(wakes(e, sizeof(e), want + 1, 2));
+    memcpy(e, d, sizeof(d)); e[90] = 101; e[91] = 1;   /* LoadWork enemy 0 (and 0, 0) in place of the EvtOn */
+    CHECK(wakes(e, sizeof(e), want, 3));
+    CHECK(wakes(d, 40, want, 0));          /* scd1 past the script's end: nothing */
+}
+
 /* ---------------------------------------------------------------- fuzz */
 static unsigned int rng = 12345;
 static unsigned int rnd(void) { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng; }
@@ -1047,6 +1091,7 @@ int main(int argc, char** argv)
     test_direct();
     test_atr();
     test_trig();
+    test_wake();
     fuzz(iters);
     printf("%d checks, %d failed\n", checks, fails);
     return fails != 0;

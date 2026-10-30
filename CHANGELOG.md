@@ -25,6 +25,9 @@
 - **Co-op levers**: the submarine lever and the hangar bridge switch can't be used again right after
   your partner used them, which used to undo the trip or the bridge for both.
 - **Co-op airport bridge**: the hangar bridge now rises to the same height for both players.
+- **Co-op sleeping enemies**: enemies that wait until someone walks by now wake for either player, and
+  they keep moving while the host reads something; before, the joining player found them standing
+  still and couldn't hit them until the host came close.
 - **Co-op stairs after a scene**: stairs no longer stay blocked after your partner's scene in the
   palace main hall.
 - **Co-op security camera**: in the training facility only the player using the camera sees its view;
