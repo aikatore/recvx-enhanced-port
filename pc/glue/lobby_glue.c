@@ -777,9 +777,11 @@ static void title_font(void)
 static float ver_text(float x, float y, const char* s, float sc, unsigned int argb, int draw)
 {
     float x0 = x, dot = text_w(".", sc);
-    char c[2] = { 0 };
-    for (; *s; s++) {
-        c[0] = *s;
+    char c[8];
+    for (int n; *s; s += n) {   /* (a character at a time: "unknown" in another language is UTF-8) */
+        for (n = 1; n < 4 && (s[n] & 0xC0) == 0x80; n++) {}
+        memcpy(c, s, n);
+        c[n] = 0;
         if (draw) text(*s == '.' ? x - dot * 0.25f : x, y, c, sc, argb);
         x += *s == '.' ? dot * 0.5f : text_w(c, sc);
     }

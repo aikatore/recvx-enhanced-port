@@ -254,10 +254,15 @@ no subtitles.
   language's** message. Rooms of the mods folder keep their text; BioRand's are translated. `lang_frame` rebuilds
   the table when Subtitles changes in a room (also from or to the US table).
 - **Subtitles in another language**: a subtitle of another language than the loaded font's gets its codes moved to
-  `LANG_SUB_BASE` (0x8000; its space `0xFF01` becomes `LANG_SUB_BASE + LANG_SUB_SPACE`). `bhDispFont` /
-  `bhDispFontEx` ask `pc_font_glyph` for the cell to draw: such a code is drawn from the subtitle language's own
-  font, the first 1 (4: Japanese) textures of its `SYSTEM.AFS/1`, read as `bhSetFontTexture` finds them, with its
-  widths (`pc_font_width`). Two languages' `ROOMS.MES` are kept.
+  `LANG_OTHER(language, code)` (0x8000 + language << 12 + code; its space `0xFF01` becomes code
+  `LANG_OTHER_SPACE`). `bhDispFont` / `bhDispFontEx` ask `pc_font_glyph` for the cell to draw: such a code is
+  drawn from that language's own font, the first 1 (4: Japanese) textures of its `SYSTEM.AFS/1`, read as
+  `bhSetFontTexture` finds them, with its widths (`pc_font_width`). Two such fonts are kept (`other_font`: the
+  subtitles' and our texts' languages, each in its own `ps2_dma_alloc` slot). Their colours are the ones the game
+  shows (`font_colours`): the game draws its font with the palette bank (`palbuf`) its PLI chunk names, which a
+  later texture of the file can overwrite (the Russian fan translation's font is drawn with another texture's
+  palette, its own CLUT would show the letters black); that bank, as `bhSetMemPvpTexture` fills it, goes into our
+  copy's CLUT. Two languages' `ROOMS.MES` are kept.
 - Font: `message.c bhGetFontSize` and the direct `FontSz` reads (`adv.c` AdvEasyDispMessage,
   AutoSaveLoadEasyDispMessage; `system.c`) take the language font's widths while it is loaded (`pc_font_width`), a
   space (`0xFF01`) `pc_font_space` (Japanese 28).
@@ -293,9 +298,12 @@ own tables (teleport list, imported models), BioRand's seed strings, the co-op t
 lobby note), the games' titles. Test aid: `RECVX_TR_MISSES=file` writes the texts asked for that have no row.
 
 **Letters** (`pc/src/host/glyphs.c`, pure): our UTF-8 texts go to the game font through `pc_glyph_next` /
-`lang_glyph` for the loaded font: European accents at 95..149 (with the US font the letter without its accent:
-Français -> Francais), the Russian letters (table above), the Japanese kana and kanji at `LANG_JA_BASE` + cell
-(、 and , show as a space, 。 as ．), ASCII at its US code everywhere. The Japanese font has only the game's kanji:
+`lang_glyph` for the font of the text's language (`lang_font`): the loaded one, or, while the game's font is
+still another language's (the Language setting changed in OPTION: the game loads the new font with the next
+screen), that language's own font as `LANG_OTHER` codes (English texts: the loaded font, which has ASCII).
+European accents at 95..149 (with the US font the letter without its accent: Français -> Francais), the Russian
+letters (table above), the Japanese kana and kanji at `LANG_JA_BASE` + cell (、 and , show as a space, 。 as ．),
+ASCII at its US code everywhere. The Japanese font has only the game's kanji:
 our Japanese texts were reworded where a kanji was missing (kana, other kanji, katakana loanwords: 選ぶ -> えらぶ,
 字幕 -> サブタイトル, 難易度 -> 難しさ). **ctest `lang`** (`pc/tests/test_lang.c`) checks every translation against
 its language's font and lists the texts and letters a font lacks. `pc_glyphs_utf8` turns the game's text back into

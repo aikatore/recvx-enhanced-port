@@ -15,9 +15,7 @@ These are bigger, experimental features: expect some parts not to work fully yet
   discs.
 - **Languages and subtitles**: import French, German and Spanish from the European disc, Japanese from
   the Japanese disc, or Russian from the US disc with Brosko's fan translation. The game and our menus
-  then play in that language, and cutscene subtitles can be shown in any imported language. Languages
-  with their own letters (Japanese, Russian) show ??? at first: leave the settings once after choosing
-  one, and the letters load.
+  then play in that language, and cutscene subtitles can be shown in any imported language.
   Our own menus and settings were translated with AI and may not read naturally yet; once most
   features are done, help from the community with proper translations would be very welcome.
 
