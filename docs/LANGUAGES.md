@@ -287,17 +287,22 @@ NOVA PARTIDA, CARREGAR PARTIDA, the item box "baú", "Fita de Tinta".
 
 ## How the port uses it
 
-**Import** (`pc/src/import/lang.c`; `import_sources[]` entries `sles50306`, `slus20184ru`, `slpm65022`, category
-`IMPORT_CAT_LANGUAGES`): the sources table `lang_discs[]` names per disc its kind, its executable (checked in
-`SYSTEM.CNF`: another image is refused with "Use a European Resident Evil Code: Veronica X disc (SLES-50306).", "Use
-the US disc with the Russian fan translation by Brosko (SLUS-20184).", "Use a Japanese Biohazard Code: Veronica
-Kanzenban disc (SLPM-65022).") and per language its folder, the digit of its file names and its index in the
-executable's tables. The European disc's archives are compared with its own English, the other two discs' with the
-US disc's (`g_lang_us_iso`). Per language, into `<code>/`:
+**Import** (`pc/src/import/lang.c`; `import_sources[]` entries `sles50306`, `slus20184ru`, `slpm65022`,
+`sles50306tr`, `slus20184pt`, category `IMPORT_CAT_LANGUAGES`): the sources table `lang_discs[]` names per disc its
+kind, its executable (checked in `SYSTEM.CNF`: another image is refused with "Use a European Resident Evil Code:
+Veronica X disc (SLES-50306).", "Use the US disc with the Russian fan translation by Brosko (SLUS-20184).", "Use a
+Japanese Biohazard Code: Veronica Kanzenban disc (SLPM-65022).", "Use the European disc with the Turkish fan
+translation by Patriots Çeviri (SLES-50306).", "Use the US disc with the Brazilian Portuguese fan translation by
+gledson999 (SLUS-20184)."), for a fan translation the clean base disc's refusal (`fan_patched`: by the patched font or
+text, above) and per language its folder, the digit of its file names and its index in the executable's tables. The
+Turkish entry is the European kind with one language, Turkish in the Spanish folder and tables; the Brazilian
+Portuguese one is laid out as the Russian (its `exemes`, `term` and `SAVELOAD.MES` from the executable, its widths
+from `FontSz`: 108). The European discs' archives are compared with their own English, the others' with the US
+disc's (`g_lang_us_iso`). Per language, into `<code>/`:
 
 | File | From | How |
 |---|---|---|
-| `SYSMES.ALD` | European `<DIR>/SYSMES<d>.ALD`; `SYSMES.ALD` | European: rebuilt in the US order (`lang_sysmes`, "System messages"), the language's file pages appended; Russian: as it is (its layout checked); Japanese: its 0..279 and its load question at the US places, the US English elsewhere (`ja_sysmes`) |
+| `SYSMES.ALD` | European `<DIR>/SYSMES<d>.ALD`; `SYSMES.ALD` | European (and Turkish): rebuilt in the US order (`lang_sysmes`, "System messages"), the language's file pages appended; Russian, Brazilian Portuguese: as it is (its layout checked; the Brazilian Portuguese file, shorter than its table, padded and its last message ended after its last whole line: `ald_cut`); Japanese: its 0..279 and its load question at the US places, the US English elsewhere (`ja_sysmes`) |
 | `SYSTEM.AFS/1` (`/2`) | `SYSTEM<d>.AFS` entry 1; entries from 1 | the effect textures with the language's font and its game over picture; Russian: the computer's font |
 | `ADV.AFS/n`, `MRY.AFS/n`, `ITEM1.AFS/n`, `ITEM2.AFS/n` | the language's archives | the entries that differ from English; the Japanese title is its picture in the US file (the US plates: the title's layout reads them) |
 | `ROOMS.MES` | `RDX_LNK<d>.AFS` | every room's message table, by room index (`"RMES"`, version, count, offset/size pairs) |
@@ -332,8 +337,8 @@ no subtitles.
   language's** message. Rooms of the mods folder keep their text; BioRand's are translated. `lang_frame` rebuilds
   the table when Subtitles changes in a room (also from or to the US table).
 - **Subtitles in another language**: a subtitle of another language than the loaded font's gets its codes moved to
-  `LANG_OTHER(language, code)` (0x8000 + language << 12 + code; its space `0xFF01` becomes code
-  `LANG_OTHER_SPACE`). `bhDispFont` / `bhDispFontEx` ask `pc_font_glyph` for the cell to draw: such a code is
+  `LANG_OTHER(language, code)` (0x8000 + language << 11 + code, below 0xC000 for the eight languages; its space
+  `0xFF01` becomes code `LANG_OTHER_SPACE`, 0x7FF). `bhDispFont` / `bhDispFontEx` ask `pc_font_glyph` for the cell to draw: such a code is
   drawn from that language's own font, the first 1 (4: Japanese) textures of its `SYSTEM.AFS/1`, read as
   `bhSetFontTexture` finds them, with its widths (`pc_font_width`). Two such fonts are kept (`other_font`: the
   subtitles' and our texts' languages, each in its own `ps2_dma_alloc` slot). Their colours are the ones the game
@@ -363,7 +368,7 @@ no subtitles.
   the next screen: leaving OPTION reloads the title in the new language, a game start reads the system messages and
   the font, a room its messages. **Subtitles**: Off and every installed language with subtitles, whatever the game's
   language (default Off; locked "No language with subtitles is installed."); it applies at once, also in a room.
-  Ini `subtitles`: 0 Off, 2 + the language's index (`lang.h LANG_*`: fr 3, de 4, es 5, ja 6, ru 7); 1, an older
+  Ini `subtitles`: 0 Off, 2 + the language's index (`lang.h LANG_*`: fr 3, de 4, es 5, ja 6, ru 7, tr 8, pt-BR 9); 1, an older
   ini's On, means the game language's.
 
 **Our texts** (`pc/src/host/tr.c`, `tr_table.inc`): `tr(en)` looks the English text up (sorted table, binary search;
@@ -379,27 +384,31 @@ lobby note), the games' titles. Test aid: `RECVX_TR_MISSES=file` writes the text
 `lang_glyph` for the font of the text's language (`lang_font`): the loaded one, or, while the game's font is
 still another language's (the Language setting changed in OPTION: the game loads the new font with the next
 screen), that language's own font as `LANG_OTHER` codes (English texts: the loaded font, which has ASCII).
-European accents at 95..149 (with the US font the letter without its accent: Français -> Francais), the Russian
-letters (table above), the Japanese kana and kanji at `LANG_JA_BASE` + cell (、 and , show as a space, 。 as ．),
+European accents at 95..149 (with the US font the letter without its accent: Français -> Francais), the Turkish
+letters in the six redrawn cells (the European letters those cells lost show plain), the Brazilian Portuguese
+accents at 96..107 (Ç: code 108 and then the 24-wide blank 94, two codes for one letter as the patch writes it;
+capitals with accents plain, `[ ] ~` as `( ) -`), the Russian letters (table above), the Japanese kana and kanji at `LANG_JA_BASE` + cell (、 and , show as a space, 。 as ．),
 ASCII at its US code everywhere. The Japanese font has only the game's kanji:
 our Japanese texts were reworded where a kanji was missing (kana, other kanji, katakana loanwords: 選ぶ -> えらぶ,
 字幕 -> サブタイトル, 難易度 -> 難しさ). **ctest `lang`** (`pc/tests/test_lang.c`) checks every translation against
 its language's font and lists the texts and letters a font lacks. `pc_glyphs_utf8` turns the game's text back into
-UTF-8 for the overlay with the loaded font's letters. The overlay (ImGui's default font) has ASCII and Latin-1; for
-Japanese and Russian it merges a font of the system once such a language is chosen (Windows: Meiryo, MS Gothic, Yu
+UTF-8 for the overlay with the loaded font's letters. The overlay (ImGui's default font) has ASCII and Latin-1 (also
+Brazilian Portuguese); for Japanese, Russian and Turkish (ğ ı İ ş: Latin Extended-A) it merges a font of the system
+once such a language is chosen (Windows: Meiryo, MS Gothic, Yu
 Gothic / Segoe UI, Arial; Linux: Noto Sans CJK / DejaVu Sans), else those letters stay missing.
 
 **Address window** (docs/ARCHITECTURE.md "Data model and memory"): the imported data (`ROOMS.MES`, the merged
 tables, the executable's texts, the Japanese glyph index) and the importer's tables are on the heap; the textures
-of our own above the window (`ps2_dma_alloc`). The US plates' 257 KB buffer left the window; the five languages'
-strings of `tr_table.inc` and the Japanese cells (4 KB) are in it: `_end` 0x3FD27568, about 2.85 MB free (before:
-0x3FD5E608).
+of our own above the window (`ps2_dma_alloc`). The US plates' 257 KB buffer left the window; the seven languages'
+strings of `tr_table.inc` and the Japanese cells (4 KB) are in it: `_end` 0x3FD4C008, about 2.70 MB free (five
+languages: 0x3FD303A8; the Turkish and Brazilian Portuguese columns took about 110 KB).
 
 **Layout**: the European font is monospaced (16 units for most letters, the US font 10..24), so translated text is
 wider; the translations were kept short (labels at most about 15% longer, sentences 30%) and the long ones
 abbreviated (e.g. German ERW. EINSTELLUNGEN). Rows that still do not fit are scaled down by the menus as before
 (`text_fit`); help lines wrap to their 3 lines. Japanese: kana and kanji are 28 wide (twice a US letter) but the
 texts are short; Latin letters (titles, names, numbers) take their own widths. Russian: the patch's tight widths.
+Turkish: the European font and widths; Brazilian Portuguese: the US font's widths (as English), its accents 14-18.
 
 ## Verification
 
@@ -446,6 +455,33 @@ no space ..." and hung. After, imported again: the language's question, Yes / No
 language and English; with the older imports: the English question and answer, no hang. Also a full inventory
 ("You can't take any more items"), examining an item, the item box, the typewriter, the IMPORT note.
 
+Turkish and Brazilian Portuguese (2026-10-31, Linux, headless; job folder `lang3/`, scripts there, pictures in
+`lang3/img/`):
+
+- Import: both discs headless (Turkish 2 s, 202 rooms, 471 subtitles, 78 pictures; Brazilian Portuguese 1 s, 202
+  rooms, 489 subtitles, 42 pictures; `# recvx language 2`); refused: the clean European disc for the Turkish entry,
+  the clean US disc and the Russian disc for the Brazilian Portuguese one, the Turkish disc for the European entry
+  and the Brazilian Portuguese disc for the Russian one; the clean European disc still imports French, German,
+  Spanish byte for byte as before. IMPORT > LANGUAGES lists both entries with their texts.
+- Per language (`title.sh`, `menus.sh`, `ingame.sh`, `extra.sh`, `pickup/langs.sh`, `hires.sh`): the title (the
+  patches' pictures: the Turkish plates in their own layout with the credit, the Portuguese plates with
+  "TRADUZIDO POR GLEDSON999") with our English plate words, OPTION (AYARLAR words / OPÇÕES), every ENHANCED SETTINGS
+  page, the lobby, IMPORT, BIORAND, in a new game the cell's message, the opening and Rodrigo's subtitles, the
+  inventory (its words, item names, the help lines), the FILE page and manual, the map (Turkish: the English
+  pictures, as the patch has them), the typewriter, computer 1 (Portuguese lines in its computer font; Turkish:
+  English as for the European languages), the game over (ÖLDÜN with the English retry question; the Portuguese
+  picture with "Repetir? Sim Não"), the Ink Ribbon pickup in save 6 (the question with Evet / Hayır, Sim / Não, the
+  "taken" message).
+- Switching (`sw/switch.sh`): English to Turkish and to Brazilian Portuguese in ENHANCED SETTINGS (the page's
+  letters right at once, in the new language's font), Russian and Japanese to Brazilian Portuguese, then OPTION left
+  and entered again (the title and OPTION in the new language); F1 in both (Turkish letters from a merged DejaVu
+  Sans, added to the font list for the test run only: this machine has no system font).
+- Subtitles in another language (`scene.sh`): English with Turkish subtitles, Turkish with Brazilian Portuguese,
+  Brazilian Portuguese with Japanese (the new `LANG_OTHER` encoding).
+- ctest `lang` (every Turkish and Brazilian Portuguese translation against its font), the other ctests; French,
+  German, Spanish, Russian, Japanese again; `layout_check.sh` main build vs this build (English): identical; Windows
+  build.
+
 ## Not done, and why
 
 - **English subtitles**: the European English rooms have only the US placeholders; the Japanese disc has Japanese
@@ -464,6 +500,14 @@ language and English; with the older imports: the English question and answer, n
   picture has no green arrows (key configuration TYPE); the title's plates are the US ones (the Japanese plates are
   English and laid out otherwise); the computer is English, as on the Japanese disc.
 - **Italian**: planned by Capcom (the executable has its tables) but not on the disc.
+- **Turkish**: the patch's executable texts (the game over's retry question, the PRESS START line, one boot memory
+  card message) are written one byte off and read wrongly on the disc too: not taken (English, as for the other
+  European languages); the map's pictures are the English ones on the disc; the save / load screens' boot messages
+  stay English as for the European languages (the patch translated one of them, also one byte off). The letter ğ's
+  breve is faint in the patch's font at small sizes.
+- **Brazilian Portuguese**: the patch empties the pause line (`pause_mes`), so it shows nothing, as on the disc;
+  capitals with accents are drawn by the patch on the line above, and our texts write them plain (the font has
+  none).
 
 ## Notes for later
 

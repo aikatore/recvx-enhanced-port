@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New
+
+- **Turkish and Brazilian Portuguese**: import them from their fan-translated discs; our menus are translated too.
+
 ### Fixes
 
 - **Internal Resolution**: each setting now shows the real size the game is drawn at.
