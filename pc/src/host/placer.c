@@ -15,13 +15,16 @@ PlacerState g_placer = { .sel = -1 };
    The herbs are the potted plants as rooms show them: a herb pickup's item model is the plant with
    its pot (node 1 the plant, node 2 the pot), the same model in every room (only the picture differs
    by colour), with no object record beside it; no room has a mixed-herb pickup. Keys stay as they
-   were (existing files keep loading). */
+   were (existing files keep loading). The blue herb planter is object id 774, the same model and
+   picture in RM_6030, RM_7090, RM_9030 (and hidden in RM_9140); examined while poisoned it cures,
+   without limit (docs/DEV_PLACEMENTS.md). For PLK_OBJ, `item` is the record's object id. */
 const PlacerDef placer_defs[] = {
     { "item_box",     "Item Box",         1080, PLK_PIECE, { 50, -1 }, 4, 0 },
     { "typewriter",   "Typewriter",       1080, PLK_PIECE, { 35, 36, 43, 45, 47, 48, -1 }, -1, 0 },
     { "green_herb",   "Green Herb Pot",   1080, PLK_ITEM, { 6 }, -1, 21 },
     { "red_herb",     "Red Herb Pot",     3190, PLK_ITEM, { 3 }, -1, 22 },
     { "blue_herb",    "Blue Herb Pot",    3190, PLK_ITEM, { 5 }, -1, 23 },
+    { "blue_herb_bed", "Blue Herb Planter", 7090, PLK_OBJ, { 9 }, -1, 774 },
     { "handgun_ammo", "Handgun Bullets",  1080, PLK_ITEM, { 5 }, -1, 12 },
     { "first_aid",    "First Aid Spray",  3040, PLK_ITEM, { 1 }, -1, 20 },
     { "ink_ribbon",   "Ink Ribbon",       1080, PLK_ITEM, { 3 }, -1, 31 },
@@ -48,6 +51,7 @@ const char* placer_type_source(int t, char* buf, int n)
         k = snprintf(buf, n, "RM_%04d room model node", d->room);
         for (int i = 0; i < 8 && d->rec[i] >= 0 && k < n; i++) k += snprintf(buf + k, n - k, "%s%d", i ? "," : " ", d->rec[i]);
     }
+    if (d->kind == PLK_OBJ && d->item && k < n) k += snprintf(buf + k, n - k, " (id %d)", d->item);
     if (d->lid >= 0 && k < n) snprintf(buf + k, n - k, " + object record %d", d->lid);
     return buf;
 }

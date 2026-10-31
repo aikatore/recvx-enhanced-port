@@ -38,7 +38,7 @@ void host_log(const char* fmt, ...);
 const unsigned char* actor_room_file(int rm, int* len, unsigned char** scratch, int* cap);   /* actor_glue.c */
 void actor_tex_free(int* entries, int* heap);
 
-#define KEEP (160 << 10)                /* all models with their work (the eight: 109 KB); inside the address window */
+#define KEEP (160 << 10)                /* all models with their work (the nine: 131 KB); inside the address window */
 #define NODES 24
 #define TEXN 16
 #define TEX_MARGIN 32                   /* texture entries and heap left for the rooms to come (as actor_glue.c) */
@@ -400,6 +400,7 @@ static int load_type(int t)
     if (d->kind == PLK_PIECE) {
         if (!mlb_textured(rf + rd32(rf + mdltab)) || !build_piece(d, rf + rd32(rf + mdltab), rd32(rf + h->hed04 + 4), part[t][0], org)) goto fail;
     } else if (d->kind == PLK_OBJ) {
+        if (idx >= 4 && idx < rw->obj_n && d->item && obj[idx].id != d->item) { why = "the object record is another object"; goto fail; }
         if (idx < 4 || idx >= rw->obj_n || !build_record(rd32(rf + mdltab + 4 * (1 + idx - 4)), 1, LIST(idx), part[t][0])) goto fail;
     } else {
         if (idx < 0 || idx >= rw->itm_n || idx >= 32 || itm[idx].id != d->item) { why = "the item record is another item"; goto fail; }
@@ -559,12 +560,15 @@ void placer_draw(void)
     if (!g_dev_tools || !rom || !sys || !plp || !cam.mtx) return;
     sel = g_placer.sel;
     if (!(sys->st_flg & 0x20)) bhSetLight();
-    njCnkSetEasyMultiAmbient(rom->amb_r[(unsigned char)rom->amb_itm], rom->amb_g[(unsigned char)rom->amb_itm], rom->amb_b[(unsigned char)rom->amb_itm]);
-    njCnkSetSimpleMultiAmbient(rom->amb_r[(unsigned char)rom->amb_itm], rom->amb_g[(unsigned char)rom->amb_itm], rom->amb_b[(unsigned char)rom->amb_itm]);
     njControl3D(0x100);
     for (i = 0; i < PL_MAX; i++) {
         const Placement* p = &g_placer.p[i];
+        int amb;
         if (!here(p) || p->type < 0 || p->type >= placer_types() || g_placer.type_state[p->type] != 1) continue;
+        /* an object (the planter) with the objects' ambient, the rest with the items' (objitm.c bhDrawObjItm) */
+        amb = (unsigned char)(placer_defs[p->type].kind == PLK_OBJ ? rom->amb_obj : rom->amb_itm);
+        njCnkSetEasyMultiAmbient(rom->amb_r[amb], rom->amb_g[amb], rom->amb_b[amb]);
+        njCnkSetSimpleMultiAmbient(rom->amb_r[amb], rom->amb_g[amb], rom->amb_b[amb]);
         njSetMatrix(NULL, cam.mtx);   /* the second light as objitm.c bhDrawObjItm gives the items: the room's
                                          directional light (bhSetLight, st_flg 0x10000) or none */
         if (!(sys->st_flg & 0x10000)) {
