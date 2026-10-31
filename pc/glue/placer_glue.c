@@ -38,8 +38,8 @@ void host_log(const char* fmt, ...);
 const unsigned char* actor_room_file(int rm, int* len, unsigned char** scratch, int* cap);   /* actor_glue.c */
 void actor_tex_free(int* entries, int* heap);
 
-#define KEEP (320 << 10)                /* all models with their work (largest so far: the typewriter's 0.1 MB) */
-#define NODES 48
+#define KEEP (160 << 10)                /* all models with their work (the eight: 109 KB); inside the address window */
+#define NODES 24
 #define TEXN 16
 #define TEX_MARGIN 32                   /* texture entries and heap left for the rooms to come (as actor_glue.c) */
 #define HEAP_MARGIN (2 << 20)

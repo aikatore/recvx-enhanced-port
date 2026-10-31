@@ -70,8 +70,8 @@ highest floor level (`rom->grand`, the game's level rule) at or below it, or the
   item record's (a herb's origin is 2.9 above its pot's bottom).
 * Source rooms have no enemies, so the texture table index of an object or item follows from the
   objects and items alone (room model, then per object id, then per item id, as `bhSetRoom`).
-* Memory: one 320 KB buffer inside the address window holds all models and their work (all eight
-  use about 130 KB); the textures (a few dozen KB) stay loaded for the session and are read again
+* Memory: one 160 KB buffer inside the address window holds all models and their work (all eight
+  use about 110 KB); the textures (a few dozen KB) stay loaded for the session and are read again
   after `njReleaseTextureAll` (title, game over). Gindex values of these pictures are unique on
   the disc, so no other room's texture is mistaken for them.
 
@@ -129,6 +129,6 @@ work:
 | `RECVX_PLACE="f:op[:args],..."` | game frames counted in rooms (with `--dev`): `add:type[:dist]` (in front of the player, facing it, selected), `sel:i`, `move:dx:dy:dz`, `rot:ax:ay:az` (degrees), `snap`, `del`, `rings:0/1`, `log` (the room's entries and, with the F2 window open, the gizmo's screen place) |
 | `RECVX_PLACE_DRAG="f:handle:dx:dy,..."` | from presented frame f, the mouse grabs the selected entry's handle (`x y z free rx ry rz`) and moves by dx, dy window pixels over 20 presented frames (F2 open: `RECVX_SHOW_OVERLAY=2`) |
 
-Limits: the list holds 256 entries; at most 8 roots and 48 nodes per room-model piece and 16
+Limits: the list holds 256 entries; at most 8 roots and 24 nodes per model and 16
 pictures; no click-to-select in the picture (use the list). Q/E were not pressed in the headless
 tests (the offscreen driver gives letter keys no key code); arrows and Page Up/Down were.
