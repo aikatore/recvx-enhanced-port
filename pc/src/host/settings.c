@@ -445,6 +445,8 @@ const Setting g_settings[] = {
     { SP_CONTROLS, "Mouse In Menus", V(g_menu_mouse.on), 0, 1, 1, .help = "Point and left-click to select in menus. Right-click to go back." },
     { SP_CONTROLS, "Fixed Camera Controls", V(g_modern_on), 0, 2, 1, fixed_cam_names,
       .help = "Modern follows screen direction. Combined uses Modern movement with Classic gamepad D-pad controls." },
+    { SP_CONTROLS, "Weapon Shortcuts", V(g_config.weapon_shortcuts), 0, 1, 1,
+      .help = "Equip weapons with 1-8, or hold Weapon Shortcuts and press the D-pad. Assign them in the inventory." },
 
     { SP_TPS, "Over-the-shoulder Camera", V(g_tps.on), 0, 1, 1, .help = "Play with a controllable camera and free aim. Events, doors and menus keep their original cameras.", .group = "CAMERA" },
     { SP_TPS, "Mouse Camera Style", V(g_tps.free_cam), 0, 1, 1, free_cam_names,
