@@ -123,6 +123,7 @@ int pad_move_dir(float* x, float* y, int* dpad) { *x = move_x; *y = move_y; *dpa
 int pad_quickturn_held(void) { return quickturn_on; }
 int pad_free_aim(void) { return free_aim_on; }
 int reload_combo_ok(void);   /* reload_glue.c: our player in normal play */
+int wpn_hold_ok(void);       /* weapon_glue.c: the shortcut wheel may come up */
 static void set_move_dir(uint32_t b, uint32_t kb, Sint16 sx, Sint16 sy)
 {
     float x = sx / 32767.0f, y = -sy / 32767.0f, m = sqrtf(x * x + y * y);
@@ -158,6 +159,9 @@ static void build_report(unsigned char* r)
     kb_start = 0;
     free_aim_on = 0;
     k = bind_latch_frame(pc_menu_smooth(), bind_keys());   /* quick presses in menus (bindings.c) */
+    /* the weapon shortcut wheel (weapon_glue.c): up while its button is held in play; then the d-pad picks */
+    g_wpn_overlay = 0;
+    g_wpn_overlay = input_enabled && !g_lobby_io.text_on && pad_wpn_hold() && wpn_hold_ok();
     bind_combo_frame(input_enabled && !g_lobby_io.text_on, k, tps_mouse_buttons());   /* the reload combination first: it takes its presses from the rows */
     if (input_enabled) {
         int mouse = tps_mouse_buttons(), qt;
@@ -226,6 +230,26 @@ int pad_quick_knife(void)
            (gamepad && (bind_held(B_QUICKKNIFE, BIND_PAD, k, 0) || bind_held(B_TPS_KNIFE, BIND_PAD, k, 0)));
 }
 
+/* weapon shortcuts (pc/glue/weapon_glue.c), game thread: the hold row, the wheel's directions and page
+   buttons (also while it takes them), the shortcut rows; keyboard/mouse or the gamepad */
+static int wpn_row(int row, int through)
+{
+    const bool* k = bind_keys();
+    int m = tps_mouse_buttons();
+    if (!input_enabled || g_lobby_io.text_on) return 0;
+    if (through) return bind_held_through(row, BIND_KB, k, m) || (gamepad && bind_held_through(row, BIND_PAD, k, 0));
+    return bind_held(row, BIND_KB, k, m) || (gamepad && bind_held(row, BIND_PAD, k, 0));
+}
+int pad_wpn_hold(void) { return wpn_row(B_WPN_HOLD, 0); }
+int pad_wpn_key(int n) { return n >= 0 && n < 8 && wpn_row(B_WPN1 + n, 0); }
+int pad_wpn_dirs(void)
+{
+    static const int rows[6] = { B_UP, B_RIGHT, B_DOWN, B_LEFT, B_L1, B_R1 };
+    int r = 0;
+    for (int i = 0; i < 6; i++) if (wpn_row(rows[i], 1)) r |= 1 << i;
+    return r;
+}
+
 /* reload (pc/glue/reload_glue.c), game thread: its row is held on the keyboard/mouse or the gamepad, or in
    third person the third-person reload row (keyboard/mouse; the gamepad's in third-person play with the modern scheme);
    a binding shared with another row only as Aim + that button (bindings.c bind_combo) */
@@ -247,7 +271,7 @@ int pad_trade_held(void)
 }
 
 /* noclip cheat with free height (pc/glue/cheat_glue.c), game thread: +1 up, -1 down. Up: the
-   "noclip fly up" hotkeys (R, Page Up) or the R2 button (key 2, right trigger); down: "noclip
+   "noclip fly up" hotkeys (Page Up) or the R2 button (key 0); down: "noclip
    fly down" (F, Page Down) or L2 (key 1). R2 is unused by the game's key types,
    L2 only by type D; the stick clicks are not free (R3 = status). The gamepad's right trigger is
    the quick knife's by default, which is off while flying (knife_glue.c), so it flies up too; the

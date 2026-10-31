@@ -4,6 +4,7 @@
    and the choice of gamepad (two virtual pads, one reconnecting). */
 #include "../src/host/bindings.h"
 #include "../src/host/tps.h"
+#include "../src/host/weapons.h"
 #include <SDL3/SDL.h>
 #define CHECK(x) do { if (!(x)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); return 1; } } while (0)
 #include <stdio.h>
@@ -47,7 +48,10 @@ int main(void)
     CHECK(held(B_CROSS, SDL_SCANCODE_Z) && held(B_CIRCLE, SDL_SCANCODE_X) && held(B_SQUARE, SDL_SCANCODE_A));
     CHECK(held(B_TRIANGLE, SDL_SCANCODE_S) && held(B_L1, SDL_SCANCODE_Q) && held(B_R1, SDL_SCANCODE_W));
     CHECK(held(B_START, SDL_SCANCODE_RETURN) && held(B_SELECT, SDL_SCANCODE_BACKSPACE) && held(B_UP, SDL_SCANCODE_UP));
-    CHECK(held(B_L2, SDL_SCANCODE_1) && held(B_R2, SDL_SCANCODE_2) && !held(B_CROSS, SDL_SCANCODE_X));
+    CHECK(held(B_L2, SDL_SCANCODE_9) && held(B_R2, SDL_SCANCODE_0) && !held(B_CROSS, SDL_SCANCODE_X));
+    /* weapon shortcuts: 1-8 (L2 and R2's 1 and 2 before), held with C or the right stick click (R3's before) */
+    for (int n = 0; n < 8; n++) CHECK(held(B_WPN1 + n, SDL_SCANCODE_1 + n) && !bind_get(B_WPN1 + n, BIND_PAD, 0));
+    CHECK(held(B_WPN_HOLD, SDL_SCANCODE_C) && bind_get(B_WPN_HOLD, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_RIGHT_STICK && !bind_get(B_R3, BIND_PAD, 0));
     CHECK(held(B_TPS_RUN, SDL_SCANCODE_RSHIFT) && held(B_NOCLIP_UP, SDL_SCANCODE_PAGEUP));
     CHECK(bind_get(B_TPS_FIRE, BIND_KB, 0) == BIND_MOUSE + SDL_BUTTON_LEFT);
     for (int r = 0; r < B_COUNT; r++) CHECK(!bind_conflict(r, BIND_KB) && !bind_conflict(r, BIND_PAD));
@@ -73,6 +77,33 @@ int main(void)
     CHECK(bind_ini_line("key_l3", "E") && held(B_L3, SDL_SCANCODE_E) && !bind_get(B_FREEAIM, BIND_KB, 0) && !bind_conflict(B_L3, BIND_KB));
     CHECK(bind_ini_line("key_l3", "none"));
     bind_set(B_FREEAIM, BIND_KB, 0, SDL_SCANCODE_E);
+    /* a file from before the weapon shortcuts (bindings_version < 4): L2 and R2's 1 and 2, R3's right stick click are
+       dropped (now the shortcuts'); a key it gave another row keeps it (the shortcut's default gives way) */
+    CHECK(bind_ini_line("key_l2", "1") && bind_ini_line("key_r2", "2") && bind_ini_line("pad_r3", "rightstick"));
+    CHECK(held(B_L2, SDL_SCANCODE_9) && held(B_WPN1, SDL_SCANCODE_1) && held(B_WPN2, SDL_SCANCODE_2) && !bind_get(B_R3, BIND_PAD, 0));
+    CHECK(bind_ini_line("key_l3", "3") && held(B_L3, SDL_SCANCODE_3) && !bind_get(B_WPN3, BIND_KB, 0) && !bind_conflict(B_L3, BIND_KB));
+    CHECK(bind_ini_line("key_l3", "none"));
+    bind_set(B_WPN3, BIND_KB, 0, SDL_SCANCODE_3);
+    for (int r = 0; r < B_COUNT; r++) CHECK(!bind_conflict(r, BIND_KB) && !bind_conflict(r, BIND_PAD));
+    /* the slots: one per weapon (assigning moves it), by item id; the bag lookup skips word 0 (the equipped slot) */
+    {
+        unsigned int bag[16] = { 3, 0, 0x80001, 0x90000 | 15, 0x21000 | 20 };   /* knife, handgun, grenade launcher (acid rounds) */
+        wpn_assign(0, 0, 9); wpn_assign(0, 4, 2);
+        CHECK(wpn_slot_of(0, 9) == 0 && wpn_slot_of(1, 9) == -1 && wpn_slot_of(0, 0) == -1);
+        wpn_assign(0, 2, 9);
+        CHECK(g_wpn_slots[0][0] == 0 && wpn_slot_of(0, 9) == 2);
+        CHECK(wpn_bag_find(bag, 9, 9) == 3 && wpn_bag_find(bag, 9, 2) == 4 && !wpn_bag_find(bag, 9, 6) && !wpn_bag_find(bag, 9, 0) && !wpn_bag_find(bag, 9, 3));
+        FILE* f = tmpfile();
+        char line[128], k[64], v[64];
+        wpn_ini_write(f);
+        wpn_assign(0, 2, 0); wpn_assign(0, 4, 0);
+        rewind(f);
+        while (fgets(line, sizeof(line), f)) if (sscanf(line, " %63[a-z_0-9] = %63[^\r\n]", k, v) == 2) CHECK(wpn_ini_line(k, v));
+        fclose(f);
+        CHECK(g_wpn_slots[0][2] == 9 && g_wpn_slots[0][4] == 2 && !g_wpn_slots[1][2]);
+        CHECK(wpn_ini_line("weapon_slots_chris", "8 8 300 -1 5") && g_wpn_slots[1][1] == 8 && !g_wpn_slots[1][0] && !g_wpn_slots[1][2] && g_wpn_slots[1][4] == 5);
+        CHECK(!wpn_ini_line("weapon_slots_ada", "1"));
+    }
     /* third person on the gamepad (modern scheme): its own rows, which share buttons with the game rows on purpose */
     CHECK(bind_get(B_TPS_FIRE, BIND_PAD, 0) == BIND_AXIS + SDL_GAMEPAD_AXIS_RIGHT_TRIGGER * 2 && bind_get(B_TPS_AIM, BIND_PAD, 0) == BIND_AXIS + SDL_GAMEPAD_AXIS_LEFT_TRIGGER * 2);
     CHECK(bind_get(B_TPS_ACTION, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_SOUTH && bind_get(B_CROSS, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_SOUTH);
@@ -150,11 +181,11 @@ int main(void)
     CHECK(held(B_L1, SDL_SCANCODE_Q) && held(B_R1, SDL_SCANCODE_W) && held(B_SQUARE, SDL_SCANCODE_A) && held(B_TPS_FWD, SDL_SCANCODE_W));
     g_tps.on = 0;
     /* rebinding: the new key drives the row, the old one no longer does */
-    bind_set(B_CROSS, BIND_KB, 0, SDL_SCANCODE_C);
-    CHECK(held(B_CROSS, SDL_SCANCODE_C) && !held(B_CROSS, SDL_SCANCODE_Z) && !bind_swapped());
+    bind_set(B_CROSS, BIND_KB, 0, SDL_SCANCODE_V);
+    CHECK(held(B_CROSS, SDL_SCANCODE_V) && !held(B_CROSS, SDL_SCANCODE_Z) && !bind_swapped());
     /* a key of another game row swaps; a third-person key does not (they share on purpose) */
     bind_set(B_CROSS, BIND_KB, 0, SDL_SCANCODE_X);
-    CHECK(held(B_CROSS, SDL_SCANCODE_X) && held(B_CIRCLE, SDL_SCANCODE_C) && bind_swapped() && !strcmp(bind_swapped(), "Circle"));
+    CHECK(held(B_CROSS, SDL_SCANCODE_X) && held(B_CIRCLE, SDL_SCANCODE_V) && bind_swapped() && !strcmp(bind_swapped(), "Circle"));
     bind_set(B_TPS_ACTION, BIND_KB, 1, SDL_SCANCODE_X);
     CHECK(!bind_swapped() && held(B_CROSS, SDL_SCANCODE_X));
     /* hotkeys share with nobody; the toggle key's first slot is g_tps.key */
@@ -198,7 +229,8 @@ int main(void)
         while (fgets(line, sizeof(line), f))
             if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, v) == 2) n += bind_ini_line(k, v);
         fclose(f);
-        CHECK(n > 50 && held(B_CROSS, SDL_SCANCODE_X) && held(B_CIRCLE, SDL_SCANCODE_C) && g_tps.key == SDL_SCANCODE_F6);
+        CHECK(n > 50 && held(B_CROSS, SDL_SCANCODE_X) && held(B_CIRCLE, SDL_SCANCODE_V) && g_tps.key == SDL_SCANCODE_F6);
+        CHECK(held(B_WPN3, SDL_SCANCODE_3) && held(B_L2, SDL_SCANCODE_9) && held(B_WPN_HOLD, SDL_SCANCODE_C));   /* version 4: 1 and 2 stay */
         CHECK(bind_get(B_TPS_ACTION, BIND_KB, 1) == SDL_SCANCODE_X && bind_get(B_TPS_FIRE, BIND_KB, 0) == BIND_MOUSE + SDL_BUTTON_LEFT);
         CHECK(bind_get(B_TPS_RUN, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_DPAD_UP && bind_get(B_UP, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_DPAD_UP);
         CHECK(bind_get(B_TPS_RELOAD, BIND_KB, 0) == SDL_SCANCODE_R && bind_get(B_TPS_RELOAD, BIND_KB, 1) == SDL_SCANCODE_G);
@@ -253,6 +285,21 @@ int main(void)
         g_tps.pad_play = 1;
         CHECK(!bind_held(B_QUICKKNIFE, BIND_PAD, keys, 0) && !bind_held(B_TPS_FIRE, BIND_PAD, keys, 0));   /* held across the change: neither */
         CHECK(bind_held(B_UP, BIND_PAD, keys, 0));                                                         /* the d-pad (but the quick turn's back) stays the game's */
+        /* the weapon wheel up: the d-pad is its own, for game and third-person rows; its button reads on a third-person
+           button too (R3, Center Camera), which then does not */
+        SDL_SetJoystickVirtualButton(j, SDL_GAMEPAD_BUTTON_RIGHT_STICK, true);
+        SDL_SetJoystickVirtualButton(j, SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+        SDL_UpdateGamepads();
+        CHECK(bind_held(B_WPN_HOLD, BIND_PAD, keys, 0) && bind_held(B_TPS_QUICKTURN, BIND_PAD, keys, 0));
+        g_wpn_overlay = 1;
+        CHECK(!bind_held(B_UP, BIND_PAD, keys, 0) && !bind_held(B_TPS_QUICKTURN, BIND_PAD, keys, 0) && !bind_held(B_TPS_RECENTER, BIND_PAD, keys, 0));
+        CHECK(bind_held(B_WPN_HOLD, BIND_PAD, keys, 0) && bind_held_through(B_UP, BIND_PAD, keys, 0) && bind_held_through(B_DOWN, BIND_PAD, keys, 0));
+        CHECK(held(B_CROSS, SDL_SCANCODE_X) && !held(B_UP, SDL_SCANCODE_UP) && !held(B_L1, SDL_SCANCODE_Q));   /* the keyboard's arrows and Q/W too */
+        g_wpn_overlay = 0;
+        CHECK(bind_held(B_UP, BIND_PAD, keys, 0) && bind_held(B_TPS_RECENTER, BIND_PAD, keys, 0));
+        SDL_SetJoystickVirtualButton(j, SDL_GAMEPAD_BUTTON_RIGHT_STICK, false);
+        SDL_SetJoystickVirtualButton(j, SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
+        SDL_UpdateGamepads();
         SDL_SetJoystickVirtualAxis(j, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, -32768);
         SDL_UpdateGamepads();
         CHECK(!bind_held(B_TPS_FIRE, BIND_PAD, keys, 0));

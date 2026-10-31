@@ -20,6 +20,8 @@ enum {
     B_TRADE,                           /* co-op: trade request / accept with the partner next to you (coop_glue.c, trade_glue.c) */
     B_RELOAD,                          /* reload the weapon from the inventory's ammo, as on an empty trigger pull (reload_glue.c); R, Aim + Triangle */
     B_FREEAIM,                         /* fixed cameras: aim as the aim button, without the game's turn to a target (pad.c, modern_glue.c); E, LT */
+    B_WPN_HOLD,                        /* hold: the weapon shortcuts on the d-pad (weapon_glue.c); in the inventory: their screen. C, R3 */
+    B_WPN1, B_WPN2, B_WPN3, B_WPN4, B_WPN5, B_WPN6, B_WPN7, B_WPN8,   /* equip the weapon of shortcut n (weapon_glue.c); 1-8 */
     /* third person: keyboard and mouse; the gamepad set has its own (modern scheme, g_tps.pad_modern:
        run .. quick turn, knife, options, recenter; the classic scheme drives it through the DS2 rows) */
     B_TPS_FWD, B_TPS_BACK, B_TPS_LEFT, B_TPS_RIGHT, B_TPS_RUN, B_TPS_ACTION, B_TPS_CANCEL,
@@ -76,6 +78,13 @@ int  pad_reload(void);                 /* a reload row is held (pad.c) */
 int  pad_report_bits(void);            /* the DS2 buttons held in the last pad report (pad.c) */
 int  pad_free_aim(void);               /* the free-aim row raised the weapon in the last pad report (pad.c) */
 int  pad_kb_start(void);               /* Start's keyboard binding is down in the last pad report (pad.c) */
+/* weapon shortcuts (pc/glue/weapon_glue.c), game thread. While the wheel is up (the hold row held in play) its
+   button, the d-pad rows and L1 / R1 read as up for every other row: the d-pad picks a weapon, not a step */
+extern int g_wpn_overlay;              /* set by pad.c for each pad report */
+int  bind_held_through(int row, int dev, const bool* keys, int mouse);   /* bind_held, also what the wheel takes */
+int  pad_wpn_hold(void);               /* the hold row is held (pad.c) */
+int  pad_wpn_dirs(void);               /* through the wheel: up 1, right 2, down 4, left 8, L1 16, R1 32 (pad.c) */
+int  pad_wpn_key(int n);               /* shortcut row n (0..7) is held (pad.c) */
 
 /* Input source of this window (F1 Controls, ENHANCED SETTINGS -> CONTROLS; ini input_source, input_pad;
    docs/USER_GUIDE.md "Input source (per window)"). Auto: keyboard/mouse and the gamepad, while focused. Gamepad only:
