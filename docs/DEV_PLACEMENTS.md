@@ -279,7 +279,7 @@ All 12 as exported, none moved. No placement overlaps a door, a pickup or anothe
 its cases (checked against every trigger, wall and entry of the room files; the job's `check.py`), and every one
 is on floor 0. The only rooms with other cases are 0/3, 1/2 and 4/0 (RM_0031, RM_1021, RM_4001): the walls and
 triggers around each spot are the same there, so those placements have both cases; the others' rooms have case
-0 only. (The export was made as Claire; the rooms of Chris's part are other stages, so nothing there changes.)
+0 only. A placement goes by stage, room and case only, whoever plays there (the export was made as Claire).
 
 ### Adding placements
 
