@@ -56,7 +56,7 @@ typedef struct PlacerDef {
     signed char kind;                   /* PLK_PIECE: nodes of the room model (each with its subtree), PLK_OBJ / PLK_ITEM: a record */
     short rec[8];                       /* the nodes (-1 ends the list) or rec[0] the record */
     short lid;                          /* an object record drawn with it where it stands in that room (the item box's lid), -1 none */
-    short item;                         /* PLK_ITEM: the record's item id (checked at load) */
+    short item;                         /* the record's item id (PLK_ITEM) or object id (PLK_OBJ, 0 any): checked at load */
 } PlacerDef;
 extern const PlacerDef placer_defs[];
 
