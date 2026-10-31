@@ -19,6 +19,7 @@ extern NJS_TEXANIM* testset[23];
 int pad_game_input_enabled(void);
 int pc_trade_screen(void);
 int pc_save_screen(void);
+int pc_wpn_screen(void);
 
 enum { UP = 0x1, DOWN = 0x2, CONFIRM = 0xB00 /* like Cross, as tps_pad */, CANCEL = 0x1000, STATUS = 0x4000 };
 enum { NONE, STATUS_SCREEN, MAP_SCREEN, QUESTION };
@@ -207,7 +208,7 @@ unsigned int menu_pad(unsigned int pad)
     unsigned add;
 
     if (!was) trace = getenv("RECVX_MENU_TRACE") != NULL;
-    if (pc_trade_screen() || pc_save_screen()) return pad;   /* the co-op trade screen and the save/load screens take the mouse (trade_glue.c, save_glue.c) */
+    if (pc_trade_screen() || pc_save_screen() || pc_wpn_screen()) return pad;   /* the co-op trade screen, the save/load screens and the weapon shortcuts' take the mouse (trade_glue.c, save_glue.c, weapon_glue.c) */
     left =__atomic_exchange_n(&g_menu_mouse.left, 0, __ATOMIC_RELAXED);
     right = __atomic_exchange_n(&g_menu_mouse.right, 0, __ATOMIC_RELAXED);
     left_up = __atomic_exchange_n(&g_menu_mouse.left_up, 0, __ATOMIC_RELAXED);

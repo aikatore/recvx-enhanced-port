@@ -297,6 +297,12 @@ unsigned int trade_pad(unsigned int pad);   /* pad.c bhSetPad, after menu_pad: t
 void  trade_draw(void);                     /* game.c bhMainSequence, after the frame's drawing */
 int   pc_trade_screen(void);                /* the screen is open (menu_pad leaves the mouse to it) */
 void  trade_textures_released(void);        /* njReleaseTextureAll */
+/* weapon shortcuts (pc/glue/weapon_glue.c) */
+unsigned int wpn_pad(unsigned int pad);   /* pad.c bhSetPad, after trade_pad: keys, the wheel, the screen's input */
+void  wpn_draw(void);                     /* game.c bhMainSequence, after trade_draw: the wheel */
+void  wpn_menu_draw(void);                /* system.c bhSysCallItemselect, after StatusMain: the screen, the inventory's marks */
+void  wpn_game_exit(void);                /* cheat_game_exit (bhExitGame) */
+int   pc_wpn_screen(void);                /* their screen is open (StatusMain waits, menu_pad leaves the mouse to it) */
 /* quick knife (pc/glue/knife_glue.c) */
 unsigned int knife_pad(unsigned int pad);
 void knife_game_exit(void);   /* cheat_game_exit (bhExitGame): the knife's state of that game goes */

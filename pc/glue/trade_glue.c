@@ -89,15 +89,29 @@ static void icon_unload(void)
 
 void trade_textures_released(void) { icon_state = 0; }   /* njReleaseTextureAll freed them */
 
-/* the icon of item word w (sub1.c ItemSet), drawn at x, y */
-static void icon(unsigned int w, float x, float y)
+/* the icons are loaded while a user needs them: 1 this screen, 2 the weapon shortcuts (weapon_glue.c);
+   1 = they are there (else names only) */
+int pc_item_icons(int user, int on)
+{
+    static int users;
+    users = on ? users | user : users & ~user;
+    if (!users && icon_state) icon_unload();
+    if (users && !icon_state) {
+        icon_state = icon_load() ? 1 : -1;
+        host_log("item icons %s\n", icon_state > 0 ? "loaded" : "not loaded (names only)");
+    }
+    return icon_state == 1;
+}
+
+/* the icon of item word w (sub1.c ItemSet), drawn at x, y, scaled by sc, its colour times argb (white: as it is) */
+void pc_item_icon(unsigned int w, float x, float y, float sc, unsigned int argb)
 {
     static const struct { unsigned char from, to; } remap[] = { { 30, 13 }, { 63, 41 }, { 128, 41 }, { 129, 41 }, { 130, 35 }, { 136, 47 },
                                                                 { 138, 48 }, { 142, 128 }, { 143, 49 }, { 144, 102 }, { 145, 133 } };
     int id = (w >> 16) & 0xFF, no = id, item, two = (itemdata[id].type & 0x100) != 0, i;
     NJS_TEXANIM a;
     NJS_SPRITE s;
-    NJS_ARGB c = { 1.0f, 1.0f, 1.0f, 1.0f };
+    NJS_ARGB c = { (argb >> 24) / 255.0f, (argb >> 16 & 0xFF) / 255.0f, (argb >> 8 & 0xFF) / 255.0f, (argb & 0xFF) / 255.0f };
     if (icon_state != 1 || !id) return;
     for (i = 0; i < (int)(sizeof(remap) / sizeof(remap[0])); i++) if (remap[i].from == id) no = remap[i].to;
     item = no;
@@ -113,7 +127,7 @@ static void icon(unsigned int w, float x, float y)
     a.texid = item < 64 ? 1 : 0;
     memset(&s, 0, sizeof(s));
     s.p.x = x; s.p.y = y; s.p.z = -1.0f;
-    s.sx = s.sy = 1.0f;
+    s.sx = s.sy = sc;
     s.tlist = &icons;
     s.tanim = &a;
     njSetConstantMaterial(&c);
@@ -184,7 +198,7 @@ static void grid(int side)
         if (first) {
             int id = (wd >> 16) & 0xFF;
             char b[16];
-            if (icon_state == 1) icon(wd, x, y);
+            if (icon_state == 1) pc_item_icon(wd, x, y, 1.0f, 0xFFFFFFFF);
             else {   /* no icons (texture memory): the name in the cell */
                 snprintf(b, sizeof(b), "%.10s", coop_item_name(wd));
                 pc_ui_text(x + 4, y + 16, b, 0.4f, 0xFFE0E0E0);
@@ -290,14 +304,11 @@ static void draw_hint(void)
 
 void trade_draw(void)
 {
-    if (!coop_on || g_trade.phase != TRADE_OPEN) {
-        if (icon_state) icon_unload();
+    int open = coop_on && g_trade.phase == TRADE_OPEN;
+    pc_item_icons(1, open);
+    if (!open) {
         if (coop_on) draw_hint();
         return;
-    }
-    if (!icon_state) {
-        icon_state = icon_load() ? 1 : -1;
-        host_log("coop: trade screen icons %s\n", icon_state > 0 ? "loaded" : "not loaded (names only)");
     }
     draw_screen();
 }

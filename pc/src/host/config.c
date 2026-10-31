@@ -13,6 +13,7 @@
 #include "biorand_opts.h"
 #include "../import/import.h"
 #include "lang.h"
+#include "weapons.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
@@ -46,6 +47,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "skip_doors", &g_config.skip_doors, 0, 2 },     /* 0 off, 1 instant, 2 skippable */
     { "fast_loading", &g_config.fast_loading, 0, 1 },
     { "quick_knife", &g_config.quick_knife, 0, 1 },
+    { "weapon_shortcuts", &g_config.weapon_shortcuts, 0, 1 },
     { "auto_stairs", &g_config.auto_stairs, 0, 1 },
     { "head_blowoff", &g_config.head_blowoff, 0, 1 },
     { "model_cull", &g_config.model_cull, 0, 1 },
@@ -195,6 +197,7 @@ void config_load(void)
         else if (sscanf(line, " biorand_appear = %d", &g_biorand_appear) == 1) { g_biorand_appear = g_biorand_appear != 0; continue; }   /* "Randomize Played as" (biorand_opts.h) */
         else if (!strncmp(line, "cast_custom_off =", 17)) continue;   /* (below, once the imports are listed) */
         else if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, val) == 2 && bind_ini_line(k, trim(val))) continue;
+        else if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, val) == 2 && wpn_ini_line(k, val)) continue;   /* weapon shortcuts (weapons.h) */
         else if (sscanf(line, " %63[a-z_0-9] = %d", k, &v) == 2)
             for (size_t i = 0; i < SDL_arraysize(keys); i++)
                 if (!strcmp(k, keys[i].key) && v >= keys[i].lo && v <= keys[i].hi) *keys[i].val = v;
@@ -263,6 +266,7 @@ static int write_ini(FILE* f, void* ud)
     if (g_biorand_appear) fprintf(f, "biorand_appear = 1\n");   /* (like biorand_seed: only once set, in the --dev screen) */
     cast_off_write(off_line, f);
     bind_ini_write(f);
+    wpn_ini_write(f);
     return 0;
 }
 

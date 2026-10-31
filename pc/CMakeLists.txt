@@ -221,7 +221,7 @@ if(Python3_FOUND AND CMAKE_GENERATOR STREQUAL "Ninja")
 endif()
 
 # control bindings (pc/src/input/bindings.c): defaults, rebinding, ini, a virtual SDL gamepad
-add_executable(test_bindings tests/test_bindings.c src/input/bindings.c)
+add_executable(test_bindings tests/test_bindings.c src/input/bindings.c src/input/weapons.c)
 target_compile_options(test_bindings PRIVATE $<$<COMPILE_LANGUAGE:C>:-std=gnu11>)
 target_link_libraries(test_bindings PRIVATE SDL3::SDL3)
 add_test(NAME bindings COMMAND test_bindings)

@@ -33,6 +33,10 @@ static int at_rest(void)
 {
     return in_play() && plp->mode1 == 0 && ((plp->mode2 <= 11 && !(plp->flg & 0x10000)) || plp->mode2 == 13);
 }
+int pc_weapon_at_rest(void) { return sys && plp && at_rest(); }   /* also the weapon shortcuts' (weapon_glue.c) */
+
+/* the knife is drawn by its key or about to be given back: the weapon shortcuts wait (weapon_glue.c) */
+int knife_busy(void) { return state || (pc_quick_knife_on() && g_cheat.noclip != 2 && pad_quick_knife()); }
 
 static void equip(int slot)
 {

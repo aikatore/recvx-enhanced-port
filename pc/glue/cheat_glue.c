@@ -399,7 +399,7 @@ void cheat_warp_sound(int after)
    title, a co-op session closing) must not make the next ordinary door take the warp's music rule; a
    quick knife drawn when the game ended gives nothing back in the next one (knife_glue.c); the third-person
    camera of the game that ended no longer counts as on (tps_glue.c) */
-void cheat_game_exit(void) { warp_sound = 0; nsite = recording = 0; knife_game_exit(); tps_game_exit(); }
+void cheat_game_exit(void) { warp_sound = 0; nsite = recording = 0; knife_game_exit(); wpn_game_exit(); tps_game_exit(); }
 
 /* the game's own door transition (door type 255: no animation), for the teleport, the co-op
    follow and test aids. An enemy grab plays the player on the enemy's motion set (en01sub.c);

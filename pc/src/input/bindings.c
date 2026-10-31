@@ -31,6 +31,11 @@ const BindRow bind_rows[B_COUNT] = {
     [B_TRADE] = { "trade", "Trade (Co-op)", BG_GAME, 1 },
     [B_RELOAD] = { "reload", "Reload", BG_GAME, 1 },
     [B_FREEAIM] = { "freeaim", "Free Aim", BG_GAME, 1 },
+    [B_WPN_HOLD] = { "weapons", "Weapon Shortcuts (Hold)", BG_GAME, 1 },
+    [B_WPN1] = { "weapon1", "Weapon Shortcut 1", BG_GAME, 1 }, [B_WPN2] = { "weapon2", "Weapon Shortcut 2", BG_GAME, 1 },
+    [B_WPN3] = { "weapon3", "Weapon Shortcut 3", BG_GAME, 1 }, [B_WPN4] = { "weapon4", "Weapon Shortcut 4", BG_GAME, 1 },
+    [B_WPN5] = { "weapon5", "Weapon Shortcut 5", BG_GAME, 1 }, [B_WPN6] = { "weapon6", "Weapon Shortcut 6", BG_GAME, 1 },
+    [B_WPN7] = { "weapon7", "Weapon Shortcut 7", BG_GAME, 1 }, [B_WPN8] = { "weapon8", "Weapon Shortcut 8", BG_GAME, 1 },
     [B_TPS_FWD] = { "tps_forward", "Forward", BG_TPS, 0 },   [B_TPS_BACK] = { "tps_back", "Back", BG_TPS, 0 },
     [B_TPS_LEFT] = { "tps_left", "Turn Left", BG_TPS, 0 },   [B_TPS_RIGHT] = { "tps_right", "Turn Right", BG_TPS, 0 },
     [B_TPS_RUN] = { "tps_run", "Run", BG_TPS, 1 },           [B_TPS_ACTION] = { "tps_action", "Action / Confirm", BG_TPS, 1 },
@@ -54,6 +59,7 @@ const BindRow bind_rows[B_COUNT] = {
 const int bind_order[B_COUNT] = {
     B_UP, B_DOWN, B_LEFT, B_RIGHT, B_CROSS, B_SQUARE, B_CIRCLE, B_TRIANGLE, B_R1, B_L1, B_R2, B_L2,
     B_START, B_SELECT, B_R3, B_L3, B_FREEAIM, B_QUICKTURN, B_QUICKKNIFE, B_TRADE, B_RELOAD,
+    B_WPN_HOLD, B_WPN1, B_WPN2, B_WPN3, B_WPN4, B_WPN5, B_WPN6, B_WPN7, B_WPN8,
     B_TPS_FWD, B_TPS_BACK, B_TPS_LEFT, B_TPS_RIGHT, B_TPS_RUN, B_TPS_ACTION, B_TPS_CANCEL, B_TPS_STATUS,
     B_TPS_MAP, B_TPS_AIM, B_TPS_FIRE, B_TPS_RELOAD, B_TPS_QUICKTURN, B_TPS_KNIFE, B_TPS_OPTIONS, B_TPS_RECENTER,
     B_TPS_TOGGLE, B_SETTINGS, B_CHEATS, B_COOP, B_IMPORT, B_FULLSCREEN, B_NOCLIP_UP, B_NOCLIP_DOWN,
@@ -63,7 +69,7 @@ static const int defaults[2][B_COUNT][BIND_SLOTS] = {
     [BIND_KB] = {
         [B_SELECT] = { SC(BACKSPACE) }, [B_START] = { SC(RETURN) },
         [B_UP] = { SC(UP) }, [B_RIGHT] = { SC(RIGHT) }, [B_DOWN] = { SC(DOWN) }, [B_LEFT] = { SC(LEFT) },
-        [B_L2] = { SC(1) }, [B_R2] = { SC(2) }, [B_L1] = { SC(Q) }, [B_R1] = { SC(W) },
+        [B_L2] = { SC(9) }, [B_R2] = { SC(0) }, [B_L1] = { SC(Q) }, [B_R1] = { SC(W) },   /* 1 and 2 until the weapon shortcuts */
         [B_TRIANGLE] = { SC(S) }, [B_CIRCLE] = { SC(X) }, [B_CROSS] = { SC(Z) }, [B_SQUARE] = { SC(A) },
         [B_TPS_FWD] = { SC(W) }, [B_TPS_BACK] = { SC(S) }, [B_TPS_LEFT] = { SC(A) }, [B_TPS_RIGHT] = { SC(D) },
         [B_TPS_RUN] = { SC(LSHIFT), SC(RSHIFT) }, [B_TPS_ACTION] = { SC(E) }, [B_TPS_CANCEL] = { SC(Q) },
@@ -71,12 +77,16 @@ static const int defaults[2][B_COUNT][BIND_SLOTS] = {
         [B_TPS_FIRE] = { MB(SDL_BUTTON_LEFT) }, [B_TPS_RELOAD] = { SC(R) },
         [B_QUICKKNIFE] = { SC(SPACE) }, [B_TRADE] = { SC(T) }, [B_RELOAD] = { SC(R) },   /* R: no game key in any key type */
         [B_FREEAIM] = { SC(E) },   /* next to aim (W); E is third-person action, which takes it over there */
+        [B_WPN1] = { SC(1) }, [B_WPN2] = { SC(2) }, [B_WPN3] = { SC(3) }, [B_WPN4] = { SC(4) },
+        [B_WPN5] = { SC(5) }, [B_WPN6] = { SC(6) }, [B_WPN7] = { SC(7) }, [B_WPN8] = { SC(8) },
+        [B_WPN_HOLD] = { SC(C) },   /* no game, third-person or hotkey use */
         [B_TPS_TOGGLE] = { SC(F5) }, [B_SETTINGS] = { SC(F1) }, [B_CHEATS] = { SC(F2) }, [B_COOP] = { SC(F3) }, [B_IMPORT] = { SC(F9) },
         [B_FULLSCREEN] = { SC(F11) }, [B_NOCLIP_UP] = { SC(PAGEUP) }, [B_NOCLIP_DOWN] = { SC(F), SC(PAGEDOWN) },
     },
     [BIND_PAD] = {
-        /* L3 is no game action under any key type (R3 is the inventory in A-C): the left stick click trades */
-        [B_SELECT] = { GB(BACK) }, [B_TRADE] = { GB(LEFT_STICK) }, [B_R3] = { GB(RIGHT_STICK) }, [B_START] = { GB(START) },
+        /* L3 is no game action under any key type: the left stick click trades. R3 is a second inventory button in A-C
+           (Start is the first) and nothing in D: it holds the weapon shortcuts (it was R3's until them) */
+        [B_SELECT] = { GB(BACK) }, [B_TRADE] = { GB(LEFT_STICK) }, [B_WPN_HOLD] = { GB(RIGHT_STICK) }, [B_START] = { GB(START) },
         [B_UP] = { GB(DPAD_UP) }, [B_RIGHT] = { GB(DPAD_RIGHT) }, [B_DOWN] = { GB(DPAD_DOWN) }, [B_LEFT] = { GB(DPAD_LEFT) },
         /* L2 is no game action in key types A-C (OPTION in D), R2 in none: the left trigger aims without auto-aim, the
            right trigger is the quick knife */
@@ -398,6 +408,10 @@ int bind_ini_line(const char* key, const char* value)
     if (!strcmp(key, "bindings_version")) { combo_seen = 1; version = atoi(value); return 1; }
     /* a file from before free aim (bindings_version < 3): the left trigger, L2's default then, is free aim's now */
     if (version < 3 && !strcmp(key, "pad_l2") && !SDL_strcasecmp(value, "+lefttrigger")) return 1;
+    /* a file from before the weapon shortcuts (< 4): 1 and 2 (L2 and R2's then) are shortcuts 1 and 2 now, L2 and R2
+       get 9 and 0; the right stick click (R3's) holds the shortcuts */
+    if (version < 4 && ((!strcmp(key, "key_l2") && !strcmp(value, "1")) || (!strcmp(key, "key_r2") && !strcmp(value, "2")) ||
+                        (!strcmp(key, "pad_r3") && !SDL_strcasecmp(value, "rightstick")))) return 1;
     if (!combo_seen && (!strcmp(key, "key_reload") || !strcmp(key, "pad_reload")) && !SDL_strcasecmp(value, "none")) return 1;
     if (!strncmp(key, "key_quickknife", 14)) knife_seen = 1;
     /* a file from before the quick knife: Space was third-person action's default second key, now the quick knife's */
@@ -423,9 +437,11 @@ int bind_ini_line(const char* key, const char* value)
         if (code < 0) { host_log("recvx.ini: %s: unknown %s \"%s\"\n", key, dev ? "gamepad input" : "key", value); return 1; }
         init();
         put(r, dev, slot, code);
-        /* (and a key such a file gave another row keeps it: free aim's default gives way) */
+        /* (and a key such a file gave another row keeps it: the default of a row it did not know gives way) */
         if (version < 3 && code && r != B_FREEAIM && same_context(r, B_FREEAIM) && !may_share(r, B_FREEAIM) && bind_get(B_FREEAIM, dev, 0) == code)
             put(B_FREEAIM, dev, 0, 0);
+        for (int w = B_WPN_HOLD; w <= B_WPN8 && version < 4 && code; w++)
+            if (r != w && same_context(r, w) && !may_share(r, w) && bind_get(w, dev, 0) == code) put(w, dev, 0, 0);
         return 1;
     }
     return 0;
@@ -441,7 +457,7 @@ void bind_ini_write(void* fp)
                "# (Xbox A/B/X/Y, PlayStation Cross/Circle/Square/Triangle), back, start, leftshoulder, dpup, ...,\n"
                "# +lefttrigger, -lefty (left stick up). A second binding: <name>_2. none = unbound.\n"
                "# reload may share a button with a game row (third person: a third-person row): Aim + that button.\n"
-               "bindings_version = 3\n");
+               "bindings_version = 4\n");
     for (int dev = 0; dev < 2; dev++)
         for (int i = 0; i < B_COUNT; i++) {
             int r = bind_order[i];
@@ -574,6 +590,10 @@ const bool* bind_latch_frame(int on, const bool* keys)
 }
 void bind_latch_end(void) { latch_on = 0; }
 
+/* the weapon shortcut wheel (weapon_glue.c): while it is up its button, the d-pad rows and L1 / R1 are its own */
+int g_wpn_overlay;
+static int wpn_through;   /* bind_held_through: read them anyway */
+
 static int tps_uses(int dev, int code)
 {
     for (int r = B_TPS_FWD; r <= B_TPS_RECENTER; r++)
@@ -613,12 +633,22 @@ static int pad_row_reads(int row, int c)
         stale[c] = 0;
     }
     if (bind_rows[row].group == BG_TPS) return take;
+    if (row == B_WPN_HOLD || wpn_through) return 1;   /* also on third-person buttons (R3 Center Camera, d-pad down): the wheel takes them */
     return !(take && tps_uses(BIND_PAD, c));
+}
+
+static int wpn_takes(int dev, int c)
+{
+    static const int rows[] = { B_WPN_HOLD, B_UP, B_RIGHT, B_DOWN, B_LEFT, B_L1, B_R1 };
+    for (int i = 0; i < (int)(sizeof(rows) / sizeof(rows[0])); i++)
+        for (int s = 0; s < BIND_SLOTS; s++) if (bind_get(rows[i], dev, s) == c) return 1;
+    return 0;
 }
 
 /* code c of the row is down, for that row */
 static int code_down(int row, int dev, int c, const bool* keys, int mouse)
 {
+    if (g_wpn_overlay && !wpn_through && row != B_WPN_HOLD && wpn_takes(dev, c)) return 0;
     if (dev == BIND_KB) {
         if (!input_accept(g_input_source, 0, BIND_KB, 0)) return 0;   /* Gamepad only */
         /* third person takes the keys it uses over (W/A/S/Q by default), in a game outside OPTION (kb_play) */
@@ -710,6 +740,15 @@ int bind_held(int row, int dev, const bool* keys, int mouse)
         if (code_down(row, dev, c, keys, mouse)) return 1;
     }
     return 0;
+}
+
+int bind_held_through(int row, int dev, const bool* keys, int mouse)
+{
+    int r;
+    wpn_through = 1;
+    r = bind_held(row, dev, keys, mouse);
+    wpn_through = 0;
+    return r;
 }
 
 int bind_pad_raw(int row)
