@@ -21,7 +21,6 @@
 
 ### Fixes
 
-- **Mutated Steve in the Enemy Randomizer**: he now takes as many hits as a randomized Tyrant.
 - **Talking faces in the cutscene cast**: when Claire, Chris, Steve or Wesker takes someone's place in a
   cutscene, their mouth now moves with the lines, and Wesker, Alexia and Rodrigo no longer keep their mouths
   shut through some characters' lines.
