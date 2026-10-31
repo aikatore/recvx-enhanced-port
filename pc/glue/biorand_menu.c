@@ -325,6 +325,13 @@ static void add_set(const int* var)
     if (s && (!s->shown || s->shown())) add(K_SET, (int)(s - g_settings));
 }
 
+/* ... by its label (a g_config row, which the glue does not see) */
+static void add_label(const char* label)
+{
+    for (int i = 0; i < g_settings_n; i++)
+        if (!strcmp(g_settings[i].label, label)) { add(K_SET, i); return; }
+}
+
 static void build_rows(void)
 {
     nrows = 0;
@@ -346,6 +353,7 @@ static void build_rows(void)
         add_set(&g_enemy_opts.place);
     } else if (bm.page == PG_PORT) {
         add(K_RANDPG, 0);   /* (row 1: sub_open) */
+        add_label("Extra Item Boxes and Herbs");   /* (a GAMEPLAY setting; for the randomizers' games) */
         add(K_APPEAR, 0);
         add_set(&g_enemy_opts.cast);
         add_set(&g_enemy_opts.cast_all);

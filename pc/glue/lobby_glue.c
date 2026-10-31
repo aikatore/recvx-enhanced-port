@@ -837,10 +837,10 @@ enum { R_MODE, R_HOSTSTEP, R_JOINSTEP,
        R_NAME, R_CHAR,
        R_START, R_ITEMS, R_FOLLOW, R_RULES,
        R_BIORAND, R_LOOT, R_IMP, R_TFREEZE, R_SKIPS, R_RIBBON, R_GOVER, R_ENEMYPG, R_EVENTPG,
-       R_RAND, R_VARIETY, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTASSIGN, R_CASTIMP, R_QUICK, R_DETECTOR,
+       R_RAND, R_VARIETY, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTASSIGN, R_CASTIMP, R_QUICK, R_DETECTOR, R_EXTRAOBJ,
        R_HOST, R_GO, R_COPY, R_RCOPY, R_KICK, R_STOP, R_JOIN,
        R_BACK, R_N };
-static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6 };
+static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6 };
 _Static_assert(sizeof(row_group) == R_N, "row_group");
 enum { F_NONE, F_NAME, F_ADDR, F_PORT, F_SEED, F_SERVER, F_PW };
 
@@ -881,7 +881,7 @@ static int row_visible(int r)
     if (lb.step == 7)   /* the cutscene cast: its model and assignment rows while it is on; the imported models' while we have some */
         return r == R_CAST || ((r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP || r == R_CASTCUSTOM) && shown_eo()->cast &&
                                (r != R_CASTIMP || __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0) && (r != R_CASTCUSTOM || shown_eo()->cast_all == 2));
-    if (lb.step == 5) return (r == R_QUICK && !biorand_next()) || r == R_DETECTOR;   /* BioRand has its own start inventory */
+    if (lb.step == 5) return (r == R_QUICK && !biorand_next()) || r == R_DETECTOR || r == R_EXTRAOBJ;   /* BioRand has its own start inventory */
     switch (r) {
     case R_PORT: return host && !srv;
     case R_SERVER: case R_PW: case R_RELAY: return srv;   /* the co-op server (docs/SERVER.md) */
@@ -905,7 +905,7 @@ static int row_locked(int r)
     case R_MODE: case R_PORT: case R_LOOT: case R_IMP: case R_ADDR: case R_RELAY: case R_SERVER: case R_PW: return session_on();
     case R_HOSTSTEP: return joining();
     case R_JOINSTEP: return hosting();
-    case R_GOVER: case R_QUICK: case R_DETECTOR: case R_EXTRA: case R_PLACE: case R_RAND: case R_VARIETY: case R_EVENTS: case R_SEED: case R_BIORAND:
+    case R_GOVER: case R_QUICK: case R_DETECTOR: case R_EXTRAOBJ: case R_EXTRA: case R_PLACE: case R_RAND: case R_VARIETY: case R_EVENTS: case R_SEED: case R_BIORAND:
     case R_CAST: case R_CASTPOOL: case R_CASTCUSTOM: case R_CASTASSIGN: case R_CASTIMP: return lb.role != 0;   /* the host's choice */
     case R_RCOPY: return !g_coop.room[0];
     default: return 0;
@@ -1045,6 +1045,7 @@ static void change(int r, int dir)
     case R_BIORAND: if (!biorand_toggle()) { say(biorand_locked()); CallSystemSe(0, 1); return; } break;
     case R_DETECTOR: g_coop.skip_detector ^= 1; break;
     case R_RIBBON: settings_step(lset("Free Typewriter Saves"), dir); break;   /* the GAMEPLAY setting (g_config) */
+    case R_EXTRAOBJ: settings_step(lset("Extra Item Boxes and Herbs"), dir); break;   /* also a GAMEPLAY setting */
     case R_START: g_coop.start = step_choice(g_coop.start, dir, 0, 3, 3); break;
     case R_ITEMS: g_coop.items = step_choice(g_coop.items, dir, COOP_ITEMS_HOST, 2, 0); break;
     case R_FOLLOW: g_coop.follow ^= 1; break;   /* the joining player's own choice, also during a session */
@@ -1065,7 +1066,7 @@ static void change(int r, int dir)
 
 static int has_value(int r)
 {
-    return r == R_MODE || r == R_RELAY || r == R_BIORAND || r == R_LOOT || r == R_IMP || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON || r == R_GOVER || r == R_QUICK || r == R_DETECTOR || r == R_START || r == R_ITEMS || r == R_FOLLOW ||
+    return r == R_MODE || r == R_RELAY || r == R_BIORAND || r == R_LOOT || r == R_IMP || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON || r == R_GOVER || r == R_QUICK || r == R_DETECTOR || r == R_EXTRAOBJ || r == R_START || r == R_ITEMS || r == R_FOLLOW ||
            r == R_EXTRA || r == R_PLACE || r == R_RAND || r == R_VARIETY || r == R_EVENTS || r == R_CAST || r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP;
 }
 
@@ -1298,6 +1299,7 @@ static void row_text(int r, char* label, char* val, int n)
                                                        (lb.role ? coop_biorand() == 1 : biorand_setting()) ? biorand_seed_text()[0] ? biorand_seed_text() : "On" : "Off"); break;
     case R_QUICK: strcpy(label, "QUICK START"); snprintf(val, n, "%s", (lb.role ? coop_quick_start() : g_coop.quick_start) ? "On" : "Off"); break;
     case R_DETECTOR: strcpy(label, "METAL DETECTOR"); snprintf(val, n, "%s", (lb.role ? coop_skip_detector() : g_coop.skip_detector) ? "Skipped" : "Original"); break;
+    case R_EXTRAOBJ: strcpy(label, "EXTRA BOXES AND HERBS"); snprintf(val, n, "%s", (lb.role ? coop_extra_objects() : settings_get(lset("Extra Item Boxes and Herbs"))) ? "On" : "Off"); break;
     case R_RIBBON: strcpy(label, "INK RIBBONS"); snprintf(val, n, "%s", settings_get(lset("Free Typewriter Saves")) ? "Not needed" : "Needed"); break;
     case R_START: strcpy(label, "START"); start_label(val, n, g_coop.start); break;
     case R_RULES: strcpy(label, lb.role ? "HOST RULES" : "GAME RULES"); break;
@@ -1371,13 +1373,15 @@ static const char* row_help(int r)
                               : "View the host's game rules, enemy settings and extra events. Only the host can change them.";
     case R_ENEMYPG: return host ? "Set extra enemies, their positions and types, and cutscene models."
                                 : "View the host's enemy and cutscene model settings. Only the host can change them.";
-    case R_EVENTPG: return host ? "Set quick start and prison metal detector rules." : "View the host's quick start and metal detector rules. Only the host can change them.";
+    case R_EVENTPG: return host ? "Set quick start, the prison metal detector and extra item boxes and herbs."
+                                : "View the host's quick start, metal detector and extra item box rules. Only the host can change them.";
     case R_LOOT: return "Shared divides supplies and shares the item box; Individual gives separate copies and boxes. Keys go to both.";
     case R_TFREEZE: return eset(&g_coop.trade_freeze)->help;
     case R_BIORAND: return host ? "Play your generated BioRand game. Your partner needs the same seed, options and matching game data."
                                 : "Play the host's BioRand game with your matching generated game.";
     case R_QUICK: return "Start with the manual read and a knife in both players' inventories. No effect with BioRand.";
     case R_DETECTOR: return "Skipped lets you pass with weapons. Security boxes stay shut unless they hold your items.";
+    case R_EXTRAOBJ: return lset("Extra Item Boxes and Herbs")->help;
     case R_IMP: return "For Both gives each player weapons and ink ribbons. Shared gives one pickup to divide between you.";
     case R_SKIPS: return "Together skips shared cutscenes when both players choose to skip. Separately lets either player skip alone.";
     case R_RIBBON: return "Not Needed lets both players save at typewriters without using ink ribbons.";
