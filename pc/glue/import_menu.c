@@ -100,15 +100,18 @@ static int langs(void)
     }
     return n;
 }
-/* their names, "Fran\xC3\xA7ais, Deutsch" */
-static const char* lang_list(char* t, int n)
+/* their names, "Fran\xC3\xA7ais, Deutsch"; *old: one is an older import (lang.h lang_old_import) */
+static const char* lang_list(char* t, int n, int* old)
 {
     char d[1100], e[1200];
     t[0] = 0;
     import_source_dir(im.src, d, sizeof(d));
     for (int l = 1; l < LANG_COUNT; l++) {
         snprintf(e, sizeof(e), "%s/%s", d, lang_codes[l]);
-        if (lang_installed(l) && lang_dir(l) && !strcmp(lang_dir(l), e)) snprintf(t + strlen(t), n - strlen(t), "%s%s", t[0] ? ", " : "", lang_names[l]);
+        if (lang_installed(l) && lang_dir(l) && !strcmp(lang_dir(l), e)) {
+            snprintf(t + strlen(t), n - strlen(t), "%s%s", t[0] ? ", " : "", lang_names[l]);
+            *old |= lang_old_import(l);
+        }
     }
     return t;
 }
@@ -441,9 +444,11 @@ static void draw_page(void)
         pc_ui_text(ROW_X - 4, INFO_Y, tr("DISC"), SMALL_SC, 0xFFFFE080);
         pc_ui_text(ROW_X - 4, INFO_Y + 16, t, SMALL_SC, 0xFFFFFFFF);
         pc_ui_text(ROW_X - 4, INFO_Y + 36, tr("IMPORTED"), SMALL_SC, 0xFFFFE080);
-        if (langs() > 0) snprintf(t, sizeof(t), tr("Installed: %s."), lang_list(c, sizeof(c)));
+        int old = 0;
+        if (langs() > 0) snprintf(t, sizeof(t), tr("Installed: %s."), lang_list(c, sizeof(c), &old));
         else snprintf(t, sizeof(t), "%s", tr("Nothing imported yet."));
-        pc_ui_text(ROW_X - 4, INFO_Y + 52, t, SMALL_SC, 0xFFFFFFFF);
+        if (old) snprintf(t + strlen(t), sizeof(t) - strlen(t), " %s", tr("An older import: import again."));
+        pc_ui_text(ROW_X - 4, INFO_Y + 52, t, SMALL_SC, old ? 0xFFFFC060 : 0xFFFFFFFF);
     } else if (im.page == P_OPTS) {
         snprintf(t, sizeof(t), tr("Needs a clean US disc image of %s: %s."), title_of(im.src), import_sources[im.src].serial);
         pc_ui_text(ROW_X - 4, INFO_Y, tr("DISC"), SMALL_SC, 0xFFFFE080);

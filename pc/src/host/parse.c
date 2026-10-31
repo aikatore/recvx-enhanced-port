@@ -310,3 +310,26 @@ int pc_startkit_scan(const uint8_t* d, uint32_t n, uint32_t* at, int max, int (*
     }
     return k;
 }
+
+/* ---------------------------------------------------------------- message tables */
+uint32_t pc_mes_len(const uint8_t* t, uint32_t max)
+{
+    int choices = 0;
+    for (uint32_t k = 0; k < max; k++) {
+        uint16_t c = pc_rd16(t + 2 * k);
+        if (c == 0xFFFF) return k + 1;
+        if (c == 0xFF04 && ++choices > 16) return 0;
+        if (c == 0xFF02 || c == 0xFF03) k++;   /* (its operand) */
+    }
+    return 0;
+}
+
+uint32_t pc_mes_at(const uint8_t* t, uint32_t size, uint32_t i)
+{
+    uint32_t n, o, end = size;
+    if (size < 4 || i >= (n = pc_rd32(t)) || !pc_range_ok(4, 4ull * n, size)) return 0;
+    o = pc_rd32(t + 4 + 4 * i);
+    if (i + 1 < n && pc_rd32(t + 8 + 4 * i) > o && pc_rd32(t + 8 + 4 * i) < size) end = pc_rd32(t + 8 + 4 * i);   /* (its place: up to the next message) */
+    if ((o & 1) || o >= end) return 0;
+    return pc_mes_len(t + o, (end - o) / 2);
+}

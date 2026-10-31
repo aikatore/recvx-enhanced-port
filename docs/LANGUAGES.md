@@ -65,7 +65,12 @@ Entries that differ between the US disc and the European English but not between
 Text is u16 glyph codes (`message.c`): 0..107 the US font (ASCII - 32), `0xFF00` new line, `0xFF01` space,
 `0xFF02 n` wait n frames (timed text, then the next part), `0xFF03 id` an item name, `0xFF04` a choice,
 `0xFE00` show at once (no typing), `0xFE01..05` colours, `0xFE08` a page break of timed text, `0xFFFF` end.
-The US engine already handles every code the European text uses.
+The US engine already handles every code the European text uses. `0xFF02` and `0xFF03` take an operand, and
+`0xFF03 0xFFFF` (the current item's name: system messages 152 "You've filed the ...", 157 "Take the ...?", 158
+"You've taken the ...") is **not** the end: a reader of the tables goes by `pc_parse.h pc_mes_len` (ctest
+`parsers`, `import`). The imports before lang.txt version 2 cut those three messages at the operand: in French,
+German, Spanish and Japanese a pickup ran on into the next messages ("There's no space ...") without its Yes / No
+and hung or crashed; Russian (its system messages copied whole) and the rooms (no such operand) were not hit.
 
 **The font**: `SYSEFF`'s first texture, 512x512 4 bit, 18 x 18 cells of 28 px (code / 324 = texture,
 code % 18, code / 18 the cell). The European English font is the US one. French, German and Spanish share
@@ -229,7 +234,7 @@ US disc's (`g_lang_us_iso`). Per language, into `<code>/`:
 | `ADV.AFS/n`, `MRY.AFS/n`, `ITEM1.AFS/n`, `ITEM2.AFS/n` | the language's archives | the entries that differ from English; the Japanese title is its picture in the US file (the US plates: the title's layout reads them) |
 | `ROOMS.MES` | `RDX_LNK<d>.AFS` | every room's message table, by room index (`"RMES"`, version, count, offset/size pairs) |
 | `SAVELOAD.MES` | the executable | `SaveLoadMessage` (Russian, Japanese) |
-| `lang.txt` | the executable | written last (a folder without it is not offered): the font's widths (European 162, Russian 192, Japanese: the look-alikes' widths and `offsets`), the file tables, the number of subtitles; Japanese `fpics` (the file pictures' first entry), `pageend` (`PlayPageCheck`'s); Russian `exemes` (demo, PAL start, pause, retry lines as u16 hex), `term` (the computer's lines) |
+| `lang.txt` | the executable | written last (a folder without it is not offered), first line `# recvx language 2`: the font's widths (European 162, Russian 192, Japanese: the look-alikes' widths and `offsets`), the file tables, the number of subtitles; Japanese `fpics` (the file pictures' first entry), `pageend` (`PlayPageCheck`'s); Russian `exemes` (demo, PAL start, pause, retry lines as u16 hex), `term` (the computer's lines) |
 
 The Japanese text's glyph codes are moved up by `LANG_JA_BASE` (108): codes below it are the US font's, which the US
 engine writes itself (digits and times, the item counts, `cnt_mes`, our texts' Latin letters), and are drawn with the
@@ -249,6 +254,11 @@ no subtitles.
   US) file tables into `fileview.c fstbl / fsheader`; with the font it puts the language's `SAVELOAD.MES` into
   `adv.c SaveLoadMessage` and its computer lines into `comevt_message_*` (the US ones back for another language).
   `pc_lang_mes` gives `pad.c`, `system.c` and `gameover.c` the language's short lines.
+- System messages: after the game reads `SYSMES.ALD` (`system.c`, `bup_00.c`, `ranking.c`, TARGET_PC),
+  `pc_lang_sys_mes` checks every message of the language is whole in its place (`pc_mes_at`: it ends before the
+  next message starts) and the table has the US count; otherwise it gives the game a table with the US message
+  (read from the disc) for each one that is not, and logs it. An older import (lang.txt `# recvx language 1`,
+  not Russian: `lang_old_import`) is logged at start and noted in IMPORT ("An older import: import again.").
 - Rooms: `room.c bhSetRoom` (TARGET_PC) replaces `rom->mesp` with a merged table: per message the language's,
   the US one where the language has none, and where the US message shows nothing (a subtitle) the **Subtitles
   language's** message. Rooms of the mods folder keep their text; BioRand's are translated. `lang_frame` rebuilds
@@ -361,6 +371,12 @@ Russian and Japanese (2026-10-30, Linux, headless; job folder `lang2/`, screensh
 - French, German, Spanish again (`scene.sh`): unchanged. `pc/tools/layout_check.sh` main build vs this build
   (English): identical (vanilla 156, enhanced 311 dumps). ctest all passed (`lang`: every translation against its
   font; `import`); Windows build.
+
+The item pickups (2026-10-31, Linux; job folder `frpickup/`): the maintainer's save 6 (Claire, palace save
+room), the Ink Ribbon next to the typewriter. Before: French, Spanish, German and Japanese ran on into "There's
+no space ..." and hung. After, imported again: the language's question, Yes / No, "You've taken ..." in every
+language and English; with the older imports: the English question and answer, no hang. Also a full inventory
+("You can't take any more items"), examining an item, the item box, the typewriter, the IMPORT note.
 
 ## Not done, and why
 

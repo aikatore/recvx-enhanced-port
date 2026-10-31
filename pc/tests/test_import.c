@@ -40,7 +40,8 @@ static unsigned char* tim2(int* len)
 static unsigned char* ald(const uint16_t* t, int n, uint32_t* size)
 {
     uint32_t ni = 4 + 4 * 2 + 4 * 2, ns = 4 + 4 * n, o, k;
-    for (int i = 0; i < n; i++) ns += t[i] ? 4 : 2;
+    static const uint16_t take[] = { 0xFF03, 0xFFFF, 33, 0xFFFF };   /* t[i] 0xFF03: "<the item's name>A" */
+    for (int i = 0; i < n; i++) ns += t[i] == 0xFF03 ? 8 : t[i] ? 4 : 2;
     unsigned char* b = calloc(1, 8 + ni + ns);
     uint16_t name[2] = { 33, 0xFFFF };
     memcpy(b, &ni, 4);
@@ -53,8 +54,8 @@ static unsigned char* ald(const uint16_t* t, int n, uint32_t* size)
     for (int i = 0; i < n; i++) {
         uint16_t s[2] = { t[i], 0xFFFF };
         memcpy(m + 4 + 4 * i, &o, 4);
-        memcpy(m + o, t[i] ? s : s + 1, t[i] ? 4 : 2);
-        o += t[i] ? 4 : 2;
+        memcpy(m + o, t[i] == 0xFF03 ? take : t[i] ? s : s + 1, t[i] == 0xFF03 ? 8 : t[i] ? 4 : 2);
+        o += t[i] == 0xFF03 ? 8 : t[i] ? 4 : 2;
     }
     *size = 8 + ni + ns;
     return b;
@@ -103,9 +104,16 @@ int main(int argc, char** argv)
         uint32_t nus, n;
         for (int f = 0; f < 24; f++) { fstbl[f] = 0; fsheader[f] = f; hl[f] = f + (f > 0); }
         for (int i = 0; i < 311; i++) { us[i] = i < 306 || i > 307 ? 1000 + i : 0; l[i] = i == 307 ? 0 : 2000 + i; }
+        l[157] = us[157] = 0xFF03;   /* "Take the <item>?": 0xFF03 0xFFFF (the current item) is not its end */
         unsigned char *ub = ald(us, 311, &nus), *lb = ald(l, 311, &n), *o = lang_sysmes(ub, nus, lb, &n, fl, hl, ho);
         CHECK(o);
-        CHECK(ald_mes(o, 0) == 2000 && ald_mes(o, 279) == 2279);          /* the same up to the files */
+        CHECK(ald_mes(o, 0) == 2000 && ald_mes(o, 279) == 2279 && ald_mes(o, 156) == 2156 && ald_mes(o, 158) == 2158);   /* the same up to the files */
+        {   /* the item message whole: its text after the operand too */
+            uint32_t ni = rd(o), m = rd(o + 8 + ni + 4 + 4 * 157), m2 = rd(o + 8 + ni + 4 + 4 * 158);
+            uint16_t c[4];
+            memcpy(c, o + 8 + ni + m, 8);
+            CHECK(m2 - m == 8 && c[0] == 0xFF03 && c[1] == 0xFFFF && c[2] == 33 && c[3] == 0xFFFF);
+        }
         CHECK(ald_mes(o, 280) == 2280 && ald_mes(o, 281) == 2282 && ald_mes(o, 303) == 2304);   /* page 0 of each file */
         CHECK(ald_mes(o, 304) == 2305 && ald_mes(o, 305) == 2306);        /* the load question */
         CHECK(ald_mes(o, 306) == 0xFFFF && ald_mes(o, 307) == 0xFFFF);

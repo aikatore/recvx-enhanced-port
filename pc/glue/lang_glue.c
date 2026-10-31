@@ -29,7 +29,7 @@ int g_lang, g_subtitles;
 
 typedef struct Term { int tab, idx; char* s; } Term;
 typedef struct LangInfo {
-    int ok, subs, nw, fpics, nterm;
+    int ok, subs, nw, fpics, nterm, ver;   /* ver: lang.txt's "# recvx language" (1: item messages cut, lang_old_import) */
     int pageend[6], npageend;        /* the playing manual's hidden pages per stage of the story (PlayPageCheck) */
     char dir[1200];
     unsigned char w[256], ox[256];   /* widths; shifts + 32 (offsets|: Japanese; 0 none) */
@@ -118,7 +118,8 @@ void lang_scan(void)
             while (fgets(line, sizeof(line), f)) {
                 char* c = strpbrk(line, "\r\n");
                 if (c) *c = 0;
-                if (!strncmp(line, "widths|", 7)) {
+                if (!strncmp(line, "# recvx language ", 17)) x->ver = atoi(line + 17);
+                else if (!strncmp(line, "widths|", 7)) {
                     x->nw = parse_list(line + 7, v, 256);
                     for (int i = 0; i < x->nw; i++) x->w[i] = (unsigned char)(v[i] > 28 ? 28 : v[i]);
                 } else if (!strncmp(line, "offsets|", 8)) {
@@ -138,10 +139,12 @@ void lang_scan(void)
     }
     /* ponytail: the old lists' texts stay allocated (the game may still show one); a few KB per import or delete */
     memcpy(info, fresh, sizeof(info));   /* (the menus read it; the game thread takes a language at a game's start) */
-    for (int l = 1; l < LANG_COUNT; l++) if (info[l].ok) host_log("lang: %s installed (%s)\n", lang_names[l], info[l].dir);
+    for (int l = 1; l < LANG_COUNT; l++)
+        if (info[l].ok) host_log("lang: %s installed (%s)%s\n", lang_names[l], info[l].dir, lang_old_import(l) ? "; an older import: import it again" : "");
 }
 
 int lang_installed(int l) { return l >= 0 && l < LANG_COUNT && info[l].ok; }
+int lang_old_import(int l) { return l > 0 && l != LANG_RU && lang_installed(l) && info[l].ver < 2; }   /* (the Russian system messages were copied whole) */
 int lang_has_subtitles(int l) { return lang_installed(l) && info[l].subs; }
 int lang_sub(void)
 {
@@ -576,15 +579,12 @@ static const unsigned char* room_block(int l, int idx, uint32_t* size)
     return d + o;
 }
 
-/* message i of a table (count first, then offsets) of `size` bytes (0: trusted, the game's own); NULL if bad */
+/* message i of a table (count first, then offsets) of `size` bytes (0: trusted, the game's own); NULL if it is not
+   whole in its place (pc_parse.h: an older import's item messages) */
 static const unsigned short* mes_at(const unsigned char* t, uint32_t size, uint32_t i, uint32_t* len)
 {
-    uint32_t o = pc_rd32(t + 4 + 4 * i), k = 0;
-    if (size && (o & 1 || o >= size)) return NULL;
-    while ((!size || o + 2 * k + 1 < size) && pc_rd16(t + o + 2 * k) != 0xFFFF) k++;
-    if (size && o + 2 * k + 1 >= size) return NULL;
-    *len = k + 1;
-    return (const unsigned short*)(t + o);
+    *len = size ? pc_mes_at(t, size, i) : pc_mes_len(t + pc_rd32(t + 4 + 4 * i), 1u << 16);
+    return *len ? (const unsigned short*)(t + pc_rd32(t + 4 + 4 * i)) : NULL;
 }
 /* a message shows something: a glyph or an item name (0xFF02's operand is a wait, not a glyph) */
 static int shows(const unsigned short* t)
@@ -626,6 +626,7 @@ static unsigned int* build(unsigned int* us, int idx)
             const unsigned short* u = mes_at((const unsigned char*)us, 0, i, &ul);
             const unsigned short* t = NULL;
             int conv = 0;
+            if (!u) return us;   /* (the room's own table unreadable: kept as it is) */
             if (shows(u)) t = lb && i < ln ? mes_at(lb, size, i, &ll) : NULL;
             else if (sb && i < sn) { t = mes_at(sb, ssize, i, &ll); conv = other; }
             if (!t || !shows(t)) { t = u; ll = ul; conv = 0; }
@@ -670,4 +671,61 @@ unsigned int* pc_lang_room_mes(unsigned int* mesp)
 void lang_frame(void)
 {
     if (built_room >= 0 && built_sub != lang_sub() && rom->mesp == built_out) rom->mesp = build(built_us, built_room);   /* (also from or to the US table) */
+}
+
+/* ---------------------------------------------------------------- system messages
+   The table the game read (system.c, bup_00.c, ranking.c: SYSMES.ALD's second one, its size right before it). A
+   language's message that is not whole in its place (an import before lang.txt version 2 cut the item messages at
+   0xFF03 0xFFFF, the current item's name: "Take the ...?" ran on into "You've taken" and "There's no space", with no
+   choice to answer) or that the language lacks is the US one, read from the disc. */
+int cdvd_find_file(const char* path, uint32_t* lsn, uint32_t* size);
+static unsigned char* us_sys(uint32_t* size)   /* the disc's system messages (malloc'd), NULL if unreadable */
+{
+    uint32_t lsn, n, ni;
+    unsigned char* d;
+    if (!cdvd_find_file("\\SYSMES.ALD;1", &lsn, &n) || n < 12 || n > (1u << 20) || !(d = malloc(n))) return NULL;
+    if (disc_read(lsn, 0, d, n) && (ni = pc_rd32(d)) < n - 8 && (*size = pc_rd32(d + 4 + ni)) <= n - 8 - ni) {
+        memmove(d, d + 8 + ni, *size);
+        return d;
+    }
+    free(d);
+    return NULL;
+}
+
+static const unsigned char* sys_at(const unsigned char* t, uint32_t size, uint32_t i, uint32_t* len)
+{
+    return (*len = pc_mes_at(t, size, i)) ? t + pc_rd32(t + 4 + 4 * i) : NULL;
+}
+
+unsigned int* pc_lang_sys_mes(unsigned int* sp)
+{
+    static unsigned char* fixed[2];   /* (and the one before: a message may still show) */
+    static int k;
+    static const unsigned short none = 0xFFFF;
+    const unsigned char* t = (const unsigned char*)sp;
+    unsigned char* us;
+    uint32_t size = sp[-1], n = 0, nu, us_size, at, bad = 0, len;
+    if (mes_lang == LANG_EN) return sp;
+    if (size >= 4 && size < (1u << 20) && pc_range_ok(4, 4ull * pc_rd32(t), size)) n = pc_rd32(t);
+    for (uint32_t i = 0; i < n; i++) bad += !pc_mes_at(t, size, i);
+    if (!(us = us_sys(&us_size))) return sp;   /* (nothing to fall back on) */
+    nu = pc_range_ok(4, 4ull * pc_rd32(us), us_size) ? pc_rd32(us) : 0;
+    if (n < nu) { bad += nu - n; n = nu; }
+    if (!bad) { free(us); return sp; }
+    for (int pass = 0; pass < 2; pass++) {   /* its size, then the table */
+        at = 4 + 4 * n;
+        for (uint32_t i = 0; i < n; i++) {
+            const unsigned char* m = sys_at(t, size, i, &len);
+            if (!m && !(m = sys_at(us, us_size, i, &len))) { m = (const unsigned char*)&none; len = 1; }
+            if (pass) { memcpy(fixed[k] + 4 + 4 * i, &at, 4); memcpy(fixed[k] + at, m, 2 * len); }
+            at += 2 * len;
+        }
+        if (!pass) { free(fixed[k]); if (!(fixed[k] = malloc(at))) { free(us); return sp; } }
+    }
+    memcpy(fixed[k], &n, 4);
+    free(us);
+    host_log("lang: %u system messages of %s are not whole (an older import): the English ones; import the language again\n", bad, lang_names[mes_lang]);
+    t = fixed[k];
+    k ^= 1;
+    return (unsigned int*)t;
 }

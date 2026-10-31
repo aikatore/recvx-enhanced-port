@@ -318,6 +318,36 @@ static void mk_room(uint8_t* d)
     memcpy(d + SCRIPT, s, sizeof(s));
 }
 
+/* ---------------------------------------------------------------- message tables
+   The pickup question "Take the <item>?" (system message 157: 0xFF03 0xFFFF, the current item's name, then the
+   question and its choices): whole, also its end found past the 0xFFFF operand; the same text cut at that operand
+   (as the language import before the fix wrote it, the next message right behind) is not whole in its place. */
+static void test_mes(void)
+{
+    static const uint16_t take[] = { 52, 0xFF00, 0xFF03, 0xFFFF, 31, 0xFF00, 0xFF04, 57, 0xFF04, 46, 0xFFFF };
+    static const uint16_t cut[] = { 52, 0xFF00, 0xFF03, 0xFFFF, 57, 0xFFFF };   /* ("Take the <item>" cut, then "Y") */
+    uint8_t t[64];
+    uint16_t many[40];
+    CHECK(pc_mes_len((const uint8_t*)take, 11) == 11);
+    CHECK(pc_mes_len((const uint8_t*)take, 10) == 0);
+    CHECK(pc_mes_len((const uint8_t*)cut, 4) == 0);
+    for (int i = 0; i < 34; i++) many[i] = 0xFF04;
+    many[34] = 0xFFFF;
+    CHECK(pc_mes_len((const uint8_t*)many + 2 * 18, 17) == 17);   /* 16 choices */
+    CHECK(pc_mes_len((const uint8_t*)many, 35) == 0);             /* 34: more than the game keeps */
+    /* a table of 2: the whole question, then "Y" */
+    put32(t, 2); put32(t + 4, 12); put32(t + 8, 12 + sizeof(take));
+    memcpy(t + 12, take, sizeof(take)); memcpy(t + 12 + sizeof(take), cut + 4, 4);
+    CHECK(pc_mes_at(t, 12 + sizeof(take) + 4, 0) == 11 && pc_mes_at(t, 12 + sizeof(take) + 4, 1) == 2);
+    CHECK(pc_mes_at(t, 12 + sizeof(take) + 4, 2) == 0);
+    /* the old import's: the question cut at the operand, "Y" right behind: 0 (not whole in its place) */
+    put32(t + 8, 12 + 8); memcpy(t + 12, cut, sizeof(cut));
+    CHECK(pc_mes_at(t, 12 + sizeof(cut), 0) == 0 && pc_mes_at(t, 12 + sizeof(cut), 1) == 2);
+    CHECK(pc_mes_at(t, 12 + sizeof(cut) - 2, 1) == 0);           /* the table ends before its end */
+    put32(t, 1000); CHECK(pc_mes_at(t, 12 + sizeof(cut), 0) == 0);   /* its count past the table */
+    put32(t, 2); put32(t + 4, 13); CHECK(pc_mes_at(t, 12 + sizeof(cut), 0) == 0);   /* an odd offset */
+}
+
 static void test_startkit(void)
 {
     uint8_t d[0x100];
@@ -345,6 +375,7 @@ int main(void)
     test_cvxm();
     test_dds();
     test_startkit();
+    test_mes();
     if (!fails) printf("parsers: all passed\n");
     return fails != 0;
 }
