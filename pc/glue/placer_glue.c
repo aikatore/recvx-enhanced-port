@@ -51,6 +51,7 @@ typedef struct Part {
     NJS_TEXNAME tn[TEXN];
 } Part;
 static Part* part[PL_TYPES][2];         /* [1]: drawn with [0], linked to its node 0 (the item box's lid) */
+static int lid_ax0[PL_TYPES];           /* the lid's own ax where the room has it (closed) */
 static unsigned char keep[KEEP] __attribute__((aligned(64)));
 static int keep_used;
 
@@ -415,7 +416,7 @@ static int load_type(int t)
         w->lox = obj[d->lid].px - org[0];
         w->loy = obj[d->lid].py - org[1];
         w->loz = obj[d->lid].pz - org[2];
-        w->ax = obj[d->lid].ax; w->ay = obj[d->lid].ay; w->az = obj[d->lid].az;
+        w->ax = lid_ax0[t] = obj[d->lid].ax; w->ay = obj[d->lid].ay; w->az = obj[d->lid].az;
     }
     extent(t, g_placer.type_min[t], g_placer.type_max[t]);
     if (d->kind == PLK_PIECE) {   /* the origin: the bottom centre of its extent */
@@ -470,6 +471,7 @@ static void test_aid(void);
 void placer_frame(void)
 {
     int i, sel;
+    if (sys && plp && room_ready()) extras_load();   /* (not only --dev) */
     if (!g_dev_tools || !sys || !plp) return;
     g_placer.in_room = room_ready();
     if (!g_placer.in_room) return;
@@ -554,50 +556,67 @@ static void gizmo(const Placement* p)
     g_placer.gz_ok = 1;
 }
 
+int placer_ready(int t)
+{
+    if (t < 0 || t >= placer_types()) return 0;
+    if (!g_placer.type_state[t]) load_type(t);
+    return g_placer.type_state[t] == 1;
+}
+
+/* type t drawn at pos, turned by ang, with the items' lighting (an object, the planter: the objects' ambient;
+   objitm.c bhDrawObjItm); lid_ax turns its lid (the item box opening) */
+void placer_put(int t, const float* pos, const int* ang, int lid_ax)
+{
+    int k, amb;
+    if (t < 0 || t >= placer_types() || g_placer.type_state[t] != 1) return;
+    amb = (unsigned char)(placer_defs[t].kind == PLK_OBJ ? rom->amb_obj : rom->amb_itm);
+    njCnkSetEasyMultiAmbient(rom->amb_r[amb], rom->amb_g[amb], rom->amb_b[amb]);
+    njCnkSetSimpleMultiAmbient(rom->amb_r[amb], rom->amb_g[amb], rom->amb_b[amb]);
+    njSetMatrix(NULL, cam.mtx);   /* the second light as objitm.c bhDrawObjItm gives the items: the room's
+                                     directional light (bhSetLight, st_flg 0x10000) or none */
+    if (!(sys->st_flg & 0x10000)) {
+        njCnkSetEasyMultiLightColor(1, 0, 0, 0);
+        njCnkSetEasyMultiLightSwitch(1, 0);
+        njCnkSetSimpleMultiLightColor(1, 0, 0, 0);
+        njCnkSetSimpleMultiLightSwitch(1, 0);
+    } else {
+        njCnkSetEasyMultiLightColor(1, sys->lg_r, sys->lg_g, sys->lg_b);
+        njCnkSetEasyMultiLightVector(sys->lg_vx, sys->lg_vy, sys->lg_vz);
+        njCnkSetEasyMultiLightSwitch(1, 1);
+        njCnkSetEasyMultiLightMatrices();
+        njCnkSetSimpleMultiLightColor(1, sys->lg_r, sys->lg_g, sys->lg_b);
+        njCnkSetSimpleMultiLightVector(sys->lg_vx, sys->lg_vy, sys->lg_vz);
+        njCnkSetSimpleMultiLightSwitch(1, 1);
+        njCnkSetSimpleMultiLightMatrices();
+    }
+    for (k = 0; k < 2 && part[t][k]; k++) {
+        O_WRK* w = &part[t][k]->w;
+        if (!k) {
+            w->px = pos[0]; w->py = pos[1]; w->pz = pos[2];
+            w->ax = ang[0]; w->ay = ang[1]; w->az = ang[2];
+        } else w->ax = (lid_ax0[t] + lid_ax) & 0xFFFF;
+        bhCalcModel((BH_PWORK*)w);
+        bhPutModel((BH_PWORK*)w);
+    }
+}
+
 void placer_draw(void)
 {
-    int i, k, sel;
-    if (!g_dev_tools || !rom || !sys || !plp || !cam.mtx) return;
+    int i, sel, ex;
+    if (!rom || !sys || !plp || !cam.mtx) return;
+    ex = extras_here();
+    if (!g_dev_tools && !ex) return;
     sel = g_placer.sel;
     if (!(sys->st_flg & 0x20)) bhSetLight();
     njControl3D(0x100);
-    for (i = 0; i < PL_MAX; i++) {
+    if (ex) extras_draw();
+    for (i = 0; g_dev_tools && i < PL_MAX; i++) {
         const Placement* p = &g_placer.p[i];
-        int amb;
-        if (!here(p) || p->type < 0 || p->type >= placer_types() || g_placer.type_state[p->type] != 1) continue;
-        /* an object (the planter) with the objects' ambient, the rest with the items' (objitm.c bhDrawObjItm) */
-        amb = (unsigned char)(placer_defs[p->type].kind == PLK_OBJ ? rom->amb_obj : rom->amb_itm);
-        njCnkSetEasyMultiAmbient(rom->amb_r[amb], rom->amb_g[amb], rom->amb_b[amb]);
-        njCnkSetSimpleMultiAmbient(rom->amb_r[amb], rom->amb_g[amb], rom->amb_b[amb]);
-        njSetMatrix(NULL, cam.mtx);   /* the second light as objitm.c bhDrawObjItm gives the items: the room's
-                                         directional light (bhSetLight, st_flg 0x10000) or none */
-        if (!(sys->st_flg & 0x10000)) {
-            njCnkSetEasyMultiLightColor(1, 0, 0, 0);
-            njCnkSetEasyMultiLightSwitch(1, 0);
-            njCnkSetSimpleMultiLightColor(1, 0, 0, 0);
-            njCnkSetSimpleMultiLightSwitch(1, 0);
-        } else {
-            njCnkSetEasyMultiLightColor(1, sys->lg_r, sys->lg_g, sys->lg_b);
-            njCnkSetEasyMultiLightVector(sys->lg_vx, sys->lg_vy, sys->lg_vz);
-            njCnkSetEasyMultiLightSwitch(1, 1);
-            njCnkSetEasyMultiLightMatrices();
-            njCnkSetSimpleMultiLightColor(1, sys->lg_r, sys->lg_g, sys->lg_b);
-            njCnkSetSimpleMultiLightVector(sys->lg_vx, sys->lg_vy, sys->lg_vz);
-            njCnkSetSimpleMultiLightSwitch(1, 1);
-            njCnkSetSimpleMultiLightMatrices();
-        }
-        for (k = 0; k < 2 && part[p->type][k]; k++) {
-            O_WRK* w = &part[p->type][k]->w;
-            if (!k) {
-                w->px = p->pos[0]; w->py = p->pos[1]; w->pz = p->pos[2];
-                w->ax = p->ang[0]; w->ay = p->ang[1]; w->az = p->ang[2];
-            }
-            bhCalcModel((BH_PWORK*)w);
-            bhPutModel((BH_PWORK*)w);
-        }
+        if (!here(p) || p->type < 0 || p->type >= placer_types() || (ex && extras_covers(p))) continue;
+        placer_put(p->type, p->pos, p->ang, 0);
     }
     njControl3D(0x100);
-    if (g_placer.gizmo && sel >= 0 && sel < PL_MAX && here(&g_placer.p[sel]) && g_placer.type_state[g_placer.p[sel].type] == 1) gizmo(&g_placer.p[sel]);
+    if (g_dev_tools && g_placer.gizmo && sel >= 0 && sel < PL_MAX && here(&g_placer.p[sel]) && g_placer.type_state[g_placer.p[sel].type] == 1) gizmo(&g_placer.p[sel]);
     else g_placer.gz_ok = 0;
 }
 

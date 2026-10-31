@@ -58,6 +58,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "biorand", &g_config.biorand, 0, 1 },             /* BioRand's pack in mods/biorand served (biorand.h) */
     { "rifle_stack", &g_config.rifle_stack, 0, 1 },     /* rifle ammo stacks (forced on while BioRand is on) */
     { "no_ink_ribbon", &g_config.no_ink_ribbon, 0, 1 },   /* typewriters save without an ink ribbon (co-op: the host's) */
+    { "extra_objects", &g_config.extra_objects, 0, 1 },   /* extra item boxes and blue herb planters (co-op: the host's) */
     { "save_system", &g_config.save_system, 0, 1 },     /* 0 native files, 1 memory card */
     { "update_check", &g_config.update_check, 0, 1 },  /* the newest version from the update server, once per start (net/update.h) */
     { "native_3d", &g_config.native_3d, 0, 1 },

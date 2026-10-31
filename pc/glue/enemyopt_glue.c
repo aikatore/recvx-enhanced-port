@@ -18,6 +18,7 @@
 #include "../src/host/cast.h"
 #include "../src/host/enemies.h"
 #include "../src/host/variants.h"
+#include "../src/host/placer.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -465,6 +466,7 @@ void enemy_room_finished(void)
     const EnemyOpts* o;
     enemy_room_gen++;
     variant_room();   /* (the slots' enemy variants) */
+    extras_room();    /* "Extra Item Boxes and Herbs": their walls and triggers (extras_glue.c) */
     if (!rom || !sys) return;
     o = enemy_opts();
     cast_room(o);   /* the cutscene cast's models (cast_glue.c; it touches no record) */

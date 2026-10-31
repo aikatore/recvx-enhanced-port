@@ -181,6 +181,7 @@ void  coop_retry_point(void);                 /* room.c bhPushGameData: our cont
 int   pc_no_ink_ribbon(void);                 /* typewriters save without an ink ribbon (setting; in co-op the host's rule) */
 int   pc_cheat_save(void);                    /* the open save screen is the F2 cheat's (pc/glue/cheat_glue.c): saving uses no ink ribbon */
 int   pc_detector_skipped(void);              /* co-op rule "Metal detector: Skipped" (pc/glue/detector_glue.c): event.c bhPlItemCheck in 0/9 finds no metal */
+void  pc_extras_scd1(void);                   /* "Extra Item Boxes and Herbs" (pc/glue/extras_glue.c): event.c bhControlEvent before scd1 */
 void  pc_detector_scd1(void);                 /* ... event.c bhControlEvent before scd1: the empty security boxes rest */
 void  pc_quick_start(void);                   /* co-op rule "Quick start" (pc/glue/coop_glue.c): system.c bhSysCallMonitor after a new game's AllItemInit */
 int   pc_manual_in_bag(void);                 /* ... fileview.c FileExit01: our playing manual still in our bag (not read, whatever the shared flag says) */

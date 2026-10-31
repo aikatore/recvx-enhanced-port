@@ -1,4 +1,4 @@
-/* Online co-op wire format (protocol 32, docs/COOP.md "Protocol 32" and "Security") and
+/* Online co-op wire format (protocol 33, docs/COOP.md "Protocol 33" and "Security") and
    the checks every received packet passes before it may change anything. No game state here:
    pc/glue/coop_glue.c applies what passes; pc/tests/test_coop.c feeds malformed packets. */
 #ifndef RECVX_COOP_PROTO_H
@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 32                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 33                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -34,7 +34,8 @@ extern "C" {
                                            30: EV_BRSEED (the host's BioRand seed string and CLI digest: a guest can generate the pack);
                                            31: EV_CASTOFF, EV_EOPTS cast_all 2 (the cutscene cast's "Custom" models);
                                            32: the cutscene cast's pools without the player files that have a talking
-                                               cutscene model (other picks from the same seed, EV_CASTOFF's bits shifted) */
+                                               cutscene model (other picks from the same seed, EV_CASTOFF's bits shifted);
+                                           33: Pose.opts2 (more game rules): OPT2_EXTRA_OBJECTS */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
 #define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */
@@ -58,6 +59,8 @@ enum { OPT_INDIVIDUAL = 1, OPT_TRADE_FREEZE = 2,   /* Pose.opts: the host's sess
        OPT_SKIP_DETECTOR = 64,          /* the prison's metal detector (0/9) never goes off, its security boxes rest */
        OPT_QUICK_START = 128,           /* a new-game inventory starts with the manual read and the knife from the first room */
        OPT_ALL = 255 };
+enum { OPT2_EXTRA_OBJECTS = 1,          /* Pose.opts2 (protocol 33): extra item boxes and blue herb planters (pc/glue/extras_glue.c) */
+       OPT2_ALL = 1 };
 enum { BUSY_NONE, BUSY_EVENT, BUSY_MENU, BUSY_BOX, BUSY_TRADE };
 enum { MSET_OWN = -1, MSET_ROOM = -2, MSET_NONE = -3 };
 #define MNW_ROOM 0x7FFE
@@ -98,7 +101,8 @@ typedef struct Pose {
     uint8_t flr;                        /* the sender's floor (flr_no + 3); 0: not sent (a build before this field) */
     uint8_t use;                        /* the room trigger (etc record) the sender examined and is busy with + 1, 0 none:
                                            the partner may not examine it meanwhile (a puzzle, a terminal) */
-    uint8_t spare[3];
+    uint8_t opts2;                      /* host: OPT2_*, more game rules (protocol 33) */
+    uint8_t spare[2];
 } Pose;
 /* Pose.pflg's other bits (receivers before them read pflg & 6): the pitch the sender's upper body is bent by
    (third-person free aim; the fixed cameras' aim up/down is a motion), -31..31 steps of COOP_PITCH_STEP radians */

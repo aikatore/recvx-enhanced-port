@@ -58,6 +58,7 @@ int pc_weapon_shortcuts_on(void) { return g_config.weapon_shortcuts; }
 int pc_head_blowoff_on(void) { return g_config.head_blowoff; }
 int pc_auto_stairs_on(void) { return g_config.auto_stairs; }
 int pc_cfg_no_ink_ribbon(void) { return g_config.no_ink_ribbon; }   /* in co-op the host's counts (coop_glue.c pc_no_ink_ribbon) */
+int pc_cfg_extra_objects(void) { return g_config.extra_objects; }   /* ... (coop_glue.c pc_extra_objects) */
 /* the game tests a few joints of a model against the screen; with a wide or moving free
    camera that drops models that are partly visible, so third person never culls */
 extern int tps_cam_active;

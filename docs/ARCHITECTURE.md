@@ -850,6 +850,7 @@ options: [ENEMIES.md](ENEMIES.md#enemy-options); bindings: [Binding ini format](
 | Fast Loading, Battle Game Unlocked, Difficulty Select | `fast_loading`, `battle_unlocked`, `difficulty_select` |
 | Quick Knife, Auto-climb Stairs, Zombie Decapitation, Stack Rifle Ammo | `quick_knife`, `auto_stairs`, `head_blowoff`, `rifle_stack` |
 | (lobby GAME RULES) BIORAND, Save System, Free Typewriter Saves | `biorand`, `save_system` (0 Separate Files, 1 Memory Card), `no_ink_ribbon` |
+| Extra Item Boxes and Herbs | `extra_objects` ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md#extra-item-boxes-and-herbs)) |
 | Input Devices, Gamepad | `input_source` (0 Auto, 1 Keyboard and Mouse, 2 Gamepad Only), `input_pad` (0 Any, 1-4) |
 | Vibration Strength, Mouse In Menus, Fixed Camera Controls | `rumble_strength`, `menu_mouse`, `fixed_cam_controls` (0 Classic, 1 Modern, 2 Combined) |
 | Weapon Shortcuts; (no row) their slots | `weapon_shortcuts`; `weapon_slots_claire`, `_chris`, `_steve`, `_wesker` (eight item ids, 0 none; assigned in the inventory) |
@@ -1246,6 +1247,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_EFF_MODE1="f:id:type:mode1,..."` | set mode1 of every live effect of that id and type at game frame f (`40:263:0:1` in 5/82: the fires laid out in Alexia's hall burn, as in her fight) |
 | `RECVX_SPAWN="f:id[.mdlver][@dist],..."` | the F2 enemy spawner at game frame f, with traces ([ENEMIES.md](ENEMIES.md)) |
 | `RECVX_PLACE="f:op[:args],..."`, `RECVX_PLACE_DRAG="f:handle:dx:dy,..."` | `--dev` object placer: add, move, turn, snap entries; drag a gizmo handle with a scripted mouse ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md#test-aids)) |
+| `RECVX_EXTRAS="f:op[:arg],..."` | "Extra Item Boxes and Herbs": stand at a placement, poison the player, press pad bits, confirm messages, log ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md#extra-item-boxes-and-herbs)) |
 | `RECVX_SPAWN_SURVEY="stg:rom,..."`, `RECVX_SPAWN_SURVEY_ALL=1` | try every spawner entry in each room, log results and budgets, exit |
 | `RECVX_ENEMY_EXTRA=0..3`, `RECVX_ENEMY_PLACE=0/1`, `RECVX_ENEMY_RANDOM=0/1`, `RECVX_ENEMY_SEED=n`, `RECVX_ENEMY_VARIETY=0/1`, `RECVX_ENEMY_EVENTS=0/1` | enemy options over the settings |
 | `RECVX_CAST=0\|1[:all\|:custom][:random][:imports]`, `RECVX_CAST_TRACE=1` | the cutscene cast's options over the settings; log the game's state at each room load, each change between cutscene and gameplay, the hand pieces and head parts hidden, and the cast's faces ([ACTORS.md](ACTORS.md) "Cutscene cast") |

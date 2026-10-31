@@ -668,6 +668,22 @@ unsigned int* pc_lang_room_mes(unsigned int* mesp)
     return build(mesp, idx);
 }
 
+/* message i of room file `room` (RM_7090.RDX) in the game's language, *len u16 with its end; NULL: English, or the
+   language has none that shows something there (extras_glue.c: the blue herb planter's texts in a room without them) */
+const unsigned short* pc_lang_room_text(const char* room, uint32_t i, uint32_t* len)
+{
+    int l = data_lang(), idx;
+    uint32_t size = 0, n = 0;
+    const unsigned char* b;
+    const unsigned short* t;
+    if (l == LANG_EN) return NULL;
+    for (idx = 0; idx < rdx_image_data_max && strcmp(rdx_files[idx], room); idx++) {}
+    if (idx == rdx_image_data_max) return NULL;
+    b = room_block(l, idx, &size);
+    if (!(b = table_of(b, size, &n)) || i >= n || !(t = mes_at(b, size, i, len))) return NULL;
+    return shows(t) ? t : NULL;
+}
+
 /* every frame: Subtitles changed in this room */
 void lang_frame(void)
 {

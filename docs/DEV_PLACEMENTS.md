@@ -1,9 +1,10 @@
 # Object placer (`--dev`)
 
-A developer tool for putting extra item boxes, herbs and other objects into rooms by hand, as
-input for a later gameplay option ("Additional Boxes/Herbs", useful with the item and enemy
-randomizers). The placed models are **drawn only**: they cannot be used, they are not in the
-game's save, the scripts and collision never see them, and co-op does not send them. English only.
+A developer tool for putting extra item boxes, herbs and other objects into rooms by hand. Its export is
+the input of the gameplay option **Extra Item Boxes and Herbs** ([below](#extra-item-boxes-and-herbs)),
+useful with the item and enemy randomizers. The placer's own models are **drawn only**: they cannot be
+used, they are not in the game's save, the scripts and collision never see them, and co-op does not
+send them. English only.
 
 Code: `pc/src/host/placer.c` (catalogue, file), `pc/src/host/placer_ui.cpp` (window, gizmo,
 keys; render thread), `pc/glue/placer_glue.c` (loading, drawing, projection; game thread),
@@ -202,3 +203,103 @@ work:
 Limits: the list holds 256 entries; at most 8 roots and 24 nodes per model and 16
 pictures; no click-to-select in the picture (use the list). Q/E were not pressed in the headless
 tests (the offscreen driver gives letter keys no key code); arrows and Page Up/Down were.
+
+## Extra item boxes and herbs
+
+The GAMEPLAY setting **Extra Item Boxes and Herbs** (F1 / ENHANCED SETTINGS, BioRand's EXTRA OPTIONS, the co-op
+lobby's EXTRA EVENTS page; ini `extra_objects`, default off; in co-op the host's: `Pose.opts2`
+`OPT2_EXTRA_OBJECTS`, protocol 33, [COOP.md](COOP.md) "Extra item boxes and herbs") puts the placements of
+`pc/src/host/extras.c` into their rooms, working as the game's own objects. Code: `pc/src/host/extras.c`
+(the table, the shapes, the geometry; pure, ctest `placer`), `pc/glue/extras_glue.c` (the game's side), hooks
+`enemyopt_glue.c enemy_room_finished` (the room is set up), `event.c bhControlEvent` before scd1
+(`pc_extras_scd1`), the placer's `placer_frame` (loading) and `placer_draw` (drawing).
+
+### How it works
+
+* **Records of the game's own kinds.** When a room is set up (a door, a load, a retry) and the rule is on, each
+  placement of that stage, room and case gets a wall in `sys->mwalp` and a trigger in `sys->metcp`, after the
+  room's own (the lists the movable objects, enemies and co-op's event items add to; `bhInitRoomChangeSystem`
+  empties them at every room change). So the player, the partner, enemies and shots collide with the objects and
+  the action button finds them as any room trigger; nothing of the room file changes, so BioRand's and the mods
+  folder's rooms work the same, and the room's own scripts, doors, triggers and saves are untouched (scripts
+  address triggers by their room numbers, below these). With the rule off nothing is added; turned off in a room
+  the records are switched off (`flg` 0), turned on they are made then (or switched on again).
+* **Walls**: type 0 boxes (`extras.c` `extra_shapes`: the item box 12 x 9, height 9, as RM_1080's wall 22; the
+  planter 5.4 x 2.3, height 2, as RM_7090's wall 12), the model's rectangle turned by its `ay` (its box around
+  it, so up to 10 degrees off the axes), on its floor (`bhCheckFloorNum`, `rom->grand`). Turned further (the planter
+  in 1/2 at 45 degrees), a row of three cylinders (type 2) along it instead.
+* **Triggers**: usable only facing the object from its open side (the direction bits 0x400 .. 0x2000 of
+  `bhCheckExmAtari`; near 45 degrees both directions next to it), so not through a wall from the room behind.
+  * **Item box**: type 4, `attr` 0x2, the box in front of it (RM_1080's trigger 3: 11 x 5 from 1.5 in front of
+    the middle), `prm0` a spare object slot past the room's objects (`sys->obwp[rom->obj_n + k]`, a zeroed
+    `O_WRK` with `flg` 1). `hitchk.c bhCheckExmAtari` then does what it does for a real box: the player holds
+    still, the slot's type becomes 100, and `pc_extras_scd1` runs `objitm.c bhObjItmBox` on it every frame as
+    `bhControlObjItm` does for a real lid (the room's loop ends at `rom->obj_n`): the lid swings open with its
+    sound, `cb_flg` 0x40000 opens the item box screen (`sub1.c ItemBox`: the one box, `sys->itm[64..]`), the
+    player is let go. The drawn lid takes the slot's angle. A room with no spare slot (`sys->obwp` has
+    `39936 / sizeof(O_WRK)` slots) would get `prm0` 0xFF: the screen without the lid (none of these rooms).
+  * **Planter**: type 3, `attr` 0 (as RM_7090's trigger 10), from just in front of its middle to 2.7 behind it.
+    Its use (`cb_flg` 0x100 with `sys->etc_idx` on it, as a script's "player is at trigger") runs RM_7090's
+    event 60 in C: `sp_flg` 0x1, 0x2, 0x40 off, `st_flg` 0x4, `CineSet 3`; poisoned (`plp->stflg` 0x80000) the
+    question "Blue herb is growing here. Use blue herb?" Yes / No (`message.c`: the choice is `sys->mes_sel` once
+    `cb_flg` 0x1000 and `st_flg` 0x4000 are set), Yes clears the poison and says "You've used the blue herb.";
+    not poisoned "It's a planter containing the blue herb. I don't need to use this now."; the message closed
+    (`cb_flg` 0x2000), `CineSet 1`. Nothing is counted: it never runs out, heals no health, gives no item.
+    The texts are RM_7090's messages 14, 15, 16: the imported language's (`lang_glue.c pc_lang_room_text`, its
+    `ROOMS.MES`) or the disc's (US), shown through the game's message box from our own table (`say`: as
+    `bhSetMessage`), so no room's message list changes.
+* **Models**: the placer's loader and drawing (`placer_ready`, `placer_put`), loaded when first needed after a
+  frame (`placer_frame`, also without `--dev`) into the placer's buffer (box and planter: about 45 KB of its
+  160 KB), drawn after the room's objects and items. With `--dev` a placer entry at the same spot as an extra
+  of its type is not drawn twice.
+* **Nothing is saved**: the objects have no flags; a room set up again (a load, a retry, a door) gets them again.
+* **Co-op**: both games make the same records in the same order at the room's set-up, so the trigger numbers
+  match (the planter's "<name> is using this" lock goes by them, `coop_examine`). The box is the game's box
+  screen, so shared or individual loot apply as at every box (`box_frame`, `EV_BOX`); the planter's cure is the
+  local player's.
+
+### The placements
+
+| Room | Object | Cases | Notes |
+|---|---|---|---|
+| 0/3 (RM_0030, prison courtyard) | item box | 0, 1 | its back to the wall at z 59..61; case 1 (RM_0031) has the same walls there |
+| 0/3 | planter | 0, 1 | its back to the wall at z 160; case 1's wall 25 (z 160..166) is behind it too |
+| 0/9 (RM_0090, metal detector room) | planter | 0 | against the wall at z 20..21 (walls 72, 84: type 1, 0xc, partly under it; nothing walks there) |
+| 1/2 (RM_1020, main hall) | planter | 0, 1 | turned 45 degrees along the diagonal wall 36 by the stairs: a row of cylinders |
+| 4/0 (RM_4000) | item box | 0, 1 | its back to the wall at x 4..10 |
+| 4/0 | planter | 0, 1 | its back to the walls at z 0 |
+| 2/0 (RM_2000) | planter | 0 | its back to the wall at x 49..50 |
+| 2/5 (RM_2050) | item box | 0 | its back to the wall at x 50..53 |
+| 7/5 (RM_7050) | planter | 0 | against the wall at z 19..20 (wall 74: type 1, 0xc, partly under it) |
+| 7/12 (RM_7120) | planter | 0 | its back to the wall at x 0 |
+| 3/0 (RM_3000) | planter | 0 | its back to the wall at x 0 (the same spot as 7/12's) |
+| 3/8 (RM_3080) | item box | 0 | in the corner of the walls at x 0 and z 0 (a pillar, walls 25 and 37, touches its back corner) |
+
+All 12 as exported, none moved. No placement overlaps a door, a pickup or another trigger of its floor in any of
+its cases (checked against every trigger, wall and entry of the room files; the job's `check.py`), and every one
+is on floor 0. The only rooms with other cases are 0/3, 1/2 and 4/0 (RM_0031, RM_1021, RM_4001): the walls and
+triggers around each spot are the same there, so those placements have both cases; the others' rooms have case
+0 only. A placement goes by stage, room and case only, whoever plays there (the export was made as Claire).
+
+### Adding placements
+
+1. Place the objects with the `--dev` placer (above) and **Export**; only `item_box` and `blue_herb_bed` work
+   as extras (`extras.c extra_shapes`; another model needs a shape and a behaviour there).
+2. Paste each exported line into `lines[]` of `pc/src/host/extras.c` (the `ax_deg`, `ay_deg`, `az_deg` and
+   `file` keys may go). Add ` cases=0,1` when the room has other cases (`RM_SRR1.RDX` ...) in which the spot is
+   free and walkable; without it only the case the line was placed in gets it.
+3. Check the spot: no door, pickup or other trigger of that floor under the object or in front of it, its back
+   to a wall or nothing walkable behind it (the job's `check.py` lists the room's records near each line), and
+   update the count in ctest `placer` (`test_placer.c`) and the table above.
+4. Test in the game with `RECVX_EXTRAS` (below): the log lists each extra made (`extras: item_box in 0/3 case 0
+   at ...: wall 27, trigger 8`).
+
+Limits: 32 placements in all, 8 per room; each needs one wall (three when turned) and one trigger of the 64 the
+game keeps for its movable objects' extra records (a room that has them full gets none, logged).
+
+### Test aid
+
+`RECVX_EXTRAS="f:op[:arg],..."`, game frames: `goto:k[:d]` (stand in front of the k-th placement of this room
+and case, facing it, `d` units farther; also with the rule off), `poison`, `pad:hex` (game pad bits for one
+frame: `b00` the action button / confirm), `hold:hex:n` (for n frames: `21` forward, `1000` cancel), `ok` (confirm,
+only while a message shows), `log` (the room's extras, the player, poison, the box screen, the planter's state).

@@ -5,6 +5,9 @@
 ### New
 
 - **Anti-Aliasing**: a new display setting smooths the jagged edges of 3D scenes while text and menus stay sharp.
+- **Extra item boxes and herbs**: an optional setting adds item boxes and blue herb planters to some rooms. They
+  work like the game's own, the planters cure poison as often as you need, and in co-op the host decides. It is
+  meant to help with the randomizers, where blue herbs can be scarce early on and many items have to wait in a box.
 
 ### Cheats
 

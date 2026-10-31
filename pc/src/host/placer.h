@@ -69,8 +69,33 @@ int placer_type_item(int t);            /* the inventory item id an item pickup 
 
 /* game thread */
 void placer_frame(void);                /* cheat_frame: loads, requests, floors, test aid RECVX_PLACE */
-void placer_draw(void);                 /* game.c bhAllDrawModel, after the room's objects and items */
+void placer_draw(void);                 /* game.c bhAllDrawModel, after the room's objects and items (also the extras') */
 void placer_textures_released(void);    /* njReleaseTextureAll (actor_textures_released) */
+int placer_ready(int t);                /* type t's model is loaded (loads it the first time): 1 */
+void placer_put(int t, const float* pos, const int* ang, int lid_ax);   /* draw it there (placer_draw's lights set); lid_ax: the lid's turn */
+
+/* "Extra Item Boxes and Herbs" (pc/src/host/extras.c: the placements and shapes, pure; pc/glue/extras_glue.c: the game's) */
+typedef struct ExtraShape {
+    const char* key;                    /* placer type */
+    float wall[4];                      /* x0 x1 z0 z1 in the model's frame (angle 0): the wall over it */
+    float wall_h;
+    float trig[4];                      /* the trigger box, same frame */
+    int trig_type;                      /* 4: item box (attr 0x2, prm0 its lid's object slot), 3: examine (the planter) */
+    unsigned trig_attr;
+    int use;                            /* the side the player uses it from: +1 +z, -1 -z */
+} ExtraShape;
+extern const ExtraShape extra_shapes[];
+extern const int extra_shape_n;
+int extras_n(void);
+int extras_get(int i, Placement* p, unsigned* cases, const ExtraShape** shape);   /* 1: entry i, *cases the room cases (bits) */
+void extras_rect(const Placement* p, const float* r, float* out);   /* model-frame rectangle -> world box (x0 x1 z0 z1) */
+int extras_slanted(int ay);             /* more than 10 degrees off the axes */
+unsigned extras_facing(int ay, int use);   /* the trigger's attr direction bits: usable facing it from its use side */
+void extras_room(void);                 /* game thread: the room was set up (enemyopt_glue.c enemy_room_finished) */
+void extras_load(void);                 /* placer_frame: their models and texts, loaded when first needed */
+int extras_draw(void);                  /* placer_draw: the extras of this room (count drawn) */
+int extras_here(void);                  /* this room shows extras now */
+int extras_covers(const Placement* p);  /* a --dev entry where an extra of the same type stands (not drawn twice) */
 
 /* render thread (placer.c): <save dir>/dev_placements.ini */
 int placer_load(const char* path);      /* entries read, -1 no file */
