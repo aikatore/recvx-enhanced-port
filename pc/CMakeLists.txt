@@ -257,6 +257,12 @@ add_executable(test_ntex tests/test_ntex.c src/gs/textures.c)
 target_compile_options(test_ntex PRIVATE -std=gnu11)
 add_test(NAME ntex COMMAND test_ntex)
 
+# SMAA's lookup textures computed at start (src/gs/smaa_tables.h): the bytes of SMAA's own tables
+add_executable(test_aa_tables tests/test_aa_tables.c)
+target_compile_options(test_aa_tables PRIVATE -std=gnu11 -msse2 -mfpmath=sse -ffp-contract=off)
+target_link_libraries(test_aa_tables PRIVATE m)
+add_test(NAME aa_tables COMMAND test_aa_tables)
+
 # "You appear as" list (pc/src/host/actors.c): event doubles hidden, indices kept
 add_executable(test_appear tests/test_appear.c src/host/actors.c)
 add_test(NAME appear COMMAND test_appear)

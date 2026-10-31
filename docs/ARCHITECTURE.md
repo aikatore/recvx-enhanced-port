@@ -357,6 +357,48 @@ Picture calibration (`brightness`, `contrast`, `gamma`) is applied in the presen
 and the overlay drawn afterwards does not. At the neutral values the shader skips it and the
 output is bit-identical; `gs_picture` is the same formula on the CPU (F1's test pattern).
 
+The present shader also does the scaling to the window: enlarging, one bilinear tap per window
+pixel (as before); reducing (an Internal Resolution above the window), an even grid of
+`ceil(texels per pixel)` bilinear taps per axis (at most 8) over the pixel's footprint, averaged.
+A single bilinear tap at 3x and more read only the texels next to each sample point and skipped
+the rest, so 6x on a 1280x960 window looked hardly smoother than 2x; now every texel counts
+(supersampling). At 1x per pixel or below the output is unchanged.
+
+**Anti-aliasing** (`anti_aliasing`: Off, FXAA, SMAA; `gs/aa.c`) filters the 3D scene only, not the
+finished picture: text, menus and other 2D stay as drawn. It runs mid-frame on the scene's render
+target at internal resolution, before the picture is scaled to the window: the filters find the
+steps where they are one pixel wide (after bilinear enlarging they are soft ramps the edge
+detection misses or smears; after reducing they are partly blended already), and the result is
+then supersampled with the rest. Where it runs is found in the frame's GS stream
+(`stream.c aa_split`, once per executed frame): after the last 3D draw before the first 2D draw on
+the target the first native 3D strip draws to. 3D: native strips with a depth (w != 1), particles
+(points/lines/sprites from 3D `Ps2AddPrim`, `NATIVE_RAW_3D`), and GS-path draws under a mesh or
+effect tag. 2D: native strips with w = 1 and 2D sprites (`Ps2AddPrim2D`: the font, messages,
+menus, letterbox, our boxes), except those covering the whole screen (fades, the camera vignette,
+the under-water distortion: layers of the scene, drawn over the filtered 3D). Untagged GS-path
+draws (clears, the shadow composite, the display copy, movies) count as neither. The game draws
+its opaque 3D, then the ordering table: translucent 3D and effects by depth, its 2D at the front
+priorities, so the split is clean; in the rooms, cutscenes, third person, the under-water view and
+with the weapon shortcut screen open measured with `RECVX_AA_TRACE=1` (one line per executed
+frame: the split, and how many 3D draws came after the first 2D, which stay unfiltered) none was
+left out. No 3D (title, menus, inventory, files, map, movies): no filter, the picture is
+bit-identical to Off. 2D drawn before the scene's 3D (under it): no filter rather than blurring
+it (the inventory's CHECK view: the item's 3D model over the 2D panels). Without Hardware 3D Rendering the game's 2D is GS-path drawing like the rest, so there is no
+anti-aliasing. The filter writes into a spare texture of the target's size that then becomes the
+target (`gs_gl.c gs_scene_aa`, swapped as the replay targets are), so nothing is copied; pixels
+it leaves alone, and alpha everywhere, are copied exactly. In-between images run it at the same
+stream event (`RECVX_REPLAY_CHECK` stays exact), so real and in-between images match; frame
+dumps include it. FXAA is our own implementation of the published FXAA 3.11 quality algorithm
+(edge threshold 0.125, minimum 0.0312, sub-pixel 0.75); SMAA is SMAA 1x (luma edges, ULTRA
+preset: threshold 0.05 for the dark rooms, 32 search steps, diagonals and corners), its area and
+search textures computed at start by a C port of SMAA's generator scripts (`gs/smaa_tables.h`,
+the 160x80 slice SMAA 1x reads; `ctest aa_tables` checks them against SMAA's own) instead of
+shipped as data. Off costs nothing (no stream scan, no pass). The cost grows with the internal
+resolution, not the window (Ryzen 9800X3D iGPU, main hall, GPU time per executed frame / in-between
+image): 2x +0.3 / +1.1 ms FXAA, +0.8 / +1.8 ms SMAA; 4x +3 / +2 ms, +6 / +5 ms; 6x +7 / +9 ms,
++15 ms (in-between images then no longer fit). With an Internal Resolution well above the window
+the supersampled picture hardly needs it.
+
 `glGetError` is read only every 64th executed frame (reading it after every flush made the
 render thread wait for the driver's GL thread).
 
@@ -1221,6 +1263,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_TRACE_HD=1`, `RECVX_HD_DUMP=dir` | log every HD texture lookup and check; write each looked-up original as PNG under its PCSX2 name |
 | `RECVX_INTERP_T=t` | the first refresh after each game frame shows the in-between image at t (comparable dumps) |
 | `RECVX_INTERP_STATS=1` | per-frame interpolation matching statistics |
+| `RECVX_AA_TRACE=1` | with Anti-Aliasing on: per executed frame where the filter runs (`stream.c aa_split`), or why not, and how many 3D draws came after the first 2D |
 | `RECVX_REPLAY_CHECK=1` (or `=n`), `RECVX_REPLAY_CHECK_DIR=dir` | replay each interpolated frame at t = 1, which must reproduce it; log and save differing frames |
 | `RECVX_REPLAY_RTSTART=0` | in-between images start from the executed frame's display image (old behaviour) |
 | `RECVX_DISPLAY_HZ=n` | assume an n Hz display (e.g. 1000 with vsync off: present as fast as possible) |

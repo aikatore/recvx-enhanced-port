@@ -257,7 +257,8 @@ widescreen, no intro or door animations, fast loading); turn them off for a PS2-
 | Frame Rate Limit | Display Rate | 30 to 144 frames shown per second; the game runs at 30 anyway |
 | Show Frame Rate | On | counter at the top right |
 | Aspect Ratio | Widescreen | 3D fills the window, 2D and menus stay 4:3. Or Original (4:3), Stretch |
-| Internal Resolution | Auto | Auto follows the window, or 1x to 8x of 640x448 |
+| Internal Resolution | Auto | Auto follows the window, or 1x to 8x of 640x448. Above the window's size the picture is scaled down smoothly (supersampling) |
+| Anti-Aliasing | Off | smooths the jagged edges of the 3D scene. SMAA keeps textures sharper, FXAA smooths more (also fine texture detail). Text, menus, the inventory, map and movies are never touched. Needs Hardware 3D Rendering. Costs more the higher the Internal Resolution; well above the window it is hardly needed |
 | Smoother Motion | On | smooth in-between frames up to your monitor's rate; gameplay stays at 30 FPS. Off: "vanilla" |
 | Smooth Menus | On | menus at the display rate too, quicker to react |
 | Motion Trails | Off | the PS2's motion trail. Auto: only in vanilla |
