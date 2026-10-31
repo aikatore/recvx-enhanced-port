@@ -22,9 +22,9 @@ void host_log(const char* fmt, ...);
 static EnemyVariant table[VARIANT_MAX] = {
     { .id = 1, .name = "Mutated Steve", .type = 17, .mdlver = 0, .model = -1,
       .attach_n = 2, .attach = { { 3, 9 }, { 4, 13 } },   /* his claw and his axe arm on the posed model (en17.c bhEne17_SetLinkWork) */
-      .hp = 3.4f, .armour = 1.0f, .damage = 1.25f, .speed = 1.0f, .scale = 1.0f,
+      .hp = 2.0f, .armour = 1.0f, .damage = 1.25f, .speed = 1.0f, .scale = 1.0f,
       .donor_type = 19, .donor_mdlver = 0, .death_n = 2, .death = { 18, 2 },
-      .wild = 0, .mild = 0, .heavy = 1, .big = 1, .stages = VARIANT_STAGES_ALL },   /* (not drawn by the randomizer for now; the F2 spawner and enemies.ini keep him) */
+      .wild = 1, .mild = 0, .heavy = 1, .big = 1, .stages = VARIANT_STAGES_ALL },   /* (hp x2: his 250 make 500, a randomized Tyrant's on Normal: en19.c En19HpTbl, type 0) */
 };
 static int builtin_n = 1, n = 1;
 
