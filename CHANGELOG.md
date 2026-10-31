@@ -5,6 +5,7 @@
 ### Fixes
 
 - **Internal Resolution**: each setting now shows the real size the game is drawn at.
+- **Playing Manual glitch**: in co-op, reading the manual from FILE takes it out of your bag again even after your partner read theirs, so the original game's manual glitch (such as the endless explosive arrows) works there too.
 
 ## 0.7.0 (2026-10-30)
 

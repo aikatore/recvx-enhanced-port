@@ -2484,6 +2484,19 @@ static void quick_start(void)
     host_log("coop: quick start: the manual read, the knife in the bag (its spot in 0/0 taken)\n");
 }
 
+/* fileview.c FileExit01: the first FILE read of the manual takes it out of the bag (the original's "manual glitch"
+   rests on that: the equipped slot is not moved along, so it points at the item after the weapon). "First" is
+   ic_flg[15] bit 31, in the item flags that shared loot and a join's state give both players: the partner's read set
+   ours, and our manual stayed. Our manual still in our bag is "not read" (in a single-player game the bit is never
+   set while it is there, so nothing changes there). */
+int pc_manual_in_bag(void)
+{
+    const unsigned int* inv = &sys->itm[(sys->ply_id & 3) * 16];
+    int i;
+    for (i = 1; i < 12 && inv[i] != QS_MANUAL; i++);
+    return i < 12;
+}
+
 /* system.c bhSysCallMonitor: the host's new game has its items (AllItemInit); the guest's: own_restore */
 void pc_quick_start(void)
 {

@@ -1290,6 +1290,12 @@ slot, sets `ic_flg[15]` bit 31 and `it_flg` bit 120 and clears `ic_flg` bit 120,
   `imp_restore`: its knife spot stays taken by it, and `last` is taken after it, so nothing of it goes out as a flag
   change. Saved or kept items are not touched.
 
+`ic_flg[15]` bit 31 is one player's state in the item flags that shared loot and a join's state give both: after
+one player read the manual, the other's stayed in the bag when read from FILE, and the original's manual glitch
+(the equipped slot left pointing at the item after the weapon) could not be done. `FileExit01` (TARGET_PC) also
+takes our manual out when it is still in our bag (`pc_manual_in_bag`); in a single-player game the bit is never
+set while the manual is in the bag, so nothing changes there.
+
 ### Ping and name tag timing
 
 Each datagram's arrival time comes from the network: Linux `SO_TIMESTAMPNS`; Windows a small thread

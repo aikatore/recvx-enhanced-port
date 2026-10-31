@@ -696,6 +696,18 @@ static void scripted(unsigned int* inv)
         for (eq += n, c = 3; c < 12 && sscanf(eq, ",%d:%d%n", &a, &b, &n) == 2; eq += n) inv[c++] = (unsigned int)a << 16 | b;
         eq = *eq == ';' ? eq + 1 : NULL;   /* "...;frame:item:count": equip another later (a weapon switch) */
     }
+    {   /* RECVX_BAG="frame:eq:item:count,item:count,...": the bag from slot 2 on and the equipped slot eq, as they are
+           (after RECVX_EQUIP put the weapon in the hand: e.g. the weapon after other items, as the item box can arrange) */
+        static const char* bag = (const char*)-1;
+        if (bag == (const char*)-1) bag = getenv("RECVX_BAG");
+        int slot;
+        if (bag && sscanf(bag, "%d:%d%n", &f, &slot, &n) == 2 && clock >= f) {
+            printf("test: bag set at game frame %d, equipped slot %d\n", clock, slot);
+            for (bag += n, c = 2; c < 12 && sscanf(bag, "%*[:,]%d:%d%n", &a, &b, &n) == 2; bag += n) inv[c++] = (unsigned int)a << 16 | b;
+            inv[0] = slot;
+            bag = NULL;
+        }
+    }
 }
 
 /* RECVX_ITEM_TRACE=1: the inventory (equipped index, lighter slot, slots) and the two security
