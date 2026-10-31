@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Cheats
+
+- **Remove items**: the F2 inventory list has an X next to each item to take it out of your inventory,
+  so you don't need an item box while testing.
+
 ## 0.7.1 (2026-10-31)
 
 ### New

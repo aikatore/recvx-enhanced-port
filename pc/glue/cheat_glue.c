@@ -494,6 +494,15 @@ static void scripted(unsigned int* inv)
                    plp->px, plp->py, plp->pz, plp->flr_no);
         lx = plp->px; lz = plp->pz; lroom = coop_room_key();
     }
+    {   /* RECVX_DROP="frame:slot,...": the F2 inventory's X on that slot (CHEAT_DROP) at that game frame */
+        static const char* dr = (const char*)-1;
+        if (dr == (const char*)-1) dr = getenv("RECVX_DROP");
+        if (dr && sscanf(dr, "%d:%d%n", &f, &a, &n) == 2 && clock >= f) {
+            g_cheat.drop_slot = a;
+            __atomic_or_fetch(&g_cheat.request, CHEAT_DROP, __ATOMIC_ACQ_REL);
+            dr = dr[n] == ',' ? dr + n + 1 : NULL;
+        }
+    }
     if (nc && sscanf(nc, "%d:%d%n", &f, &a, &n) == 2 && clock >= f) {
         printf("test: noclip %d at game frame %d (%.1f %.1f %.1f)\n", a, clock, plp->px, plp->py, plp->pz);
         g_cheat.noclip = a;
@@ -777,6 +786,19 @@ void cheat_frame(void)
                 g_cheat.result = "Item added.";
                 break;
             }
+    }
+    if (req & CHEAT_DROP) {   /* the inventory's X: the slot emptied, as the item box leaves it; the weapon in hand first put away
+                                 the inventory's way (WeaponSet on its own slot unequips), only with the weapon down as the quick knife */
+        int s = g_cheat.drop_slot;
+        if (s < 1 || s >= 2 + slots || !(inv[s] >> 16)) g_cheat.result = "Item removed.";
+        else if ((int)inv[0] == s && !(sys->mn_mode0 == 0 && pc_in_play(plp, 0) && plp->mnwP == plp->mnwPb && plp->mode1 == 0))
+            g_cheat.result = "Cannot remove the weapon in hand now. Lower it first.";
+        else {
+            if ((int)inv[0] == s) { swork.pip = inv; WeaponSet(s, s); }
+            inv[s] = 0;
+            g_cheat.result = "Item removed.";
+        }
+        if (getenv("RECVX_DROP")) printf("test: drop slot %d: %s (equipped %u, weapon %d; mn_mode0 %d play %d mot %d mode1 %d)\n", s, g_cheat.result, inv[0], plp->wpnr_no, sys->mn_mode0, pc_in_play(plp, 0), plp->mnwP == plp->mnwPb, plp->mode1);
     }
     if (req & CHEAT_SPAWN) g_cheat.result = spawn_enemy(g_cheat.spawn_idx);
     if (req & CHEAT_TELEPORT) {

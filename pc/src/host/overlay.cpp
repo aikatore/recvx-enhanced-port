@@ -450,6 +450,11 @@ static void cheat_window(void)
         char nm[16];
         if (!id) continue;
         if (id >= CHEAT_ITEMS || !c->names[id][0]) SDL_snprintf(nm, sizeof nm, tr("item %u"), id);
+        ImGui::PushID(i);
+        if (ImGui::SmallButton("X")) { c->drop_slot = i; __atomic_or_fetch(&c->request, CHEAT_DROP, __ATOMIC_ACQ_REL); }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("Remove from the inventory"));
+        ImGui::PopID();
+        ImGui::SameLine();
         ImGui::Text("%s %-24s %u", (unsigned)i == c->inv[0] ? tr("equipped") : "        ", id < CHEAT_ITEMS && c->names[id][0] ? c->names[id] : nm, c->inv[i] & 0xFFFF);
     }
 
