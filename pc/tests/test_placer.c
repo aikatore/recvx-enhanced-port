@@ -20,6 +20,7 @@ int main(int argc, char** argv)
     CHECK(placer_format(buf, sizeof buf) > 0);
     CHECK(strstr(buf, "type=item_box stage=1 room=8 case=0 player=0 x=-22.50 y=0.00 z=5.25 ax=0 ay=49152 az=0 ax_deg=0.0 ay_deg=-90.0"));
     CHECK(strstr(buf, "file=RM_1080.RDX") && strstr(buf, "file=RM_5121.RDX"));
+    CHECK(strstr(buf, "; blue_herb     Blue Herb Pot: RM_3190 item record 5, item 23\n"));   /* the potted plant, key kept */
     CHECK(placer_save(path) == 0);
     memset(g_placer.p, 0, sizeof g_placer.p);
     CHECK(placer_load(path) == 2);

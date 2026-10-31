@@ -565,11 +565,23 @@ void placer_draw(void)
     for (i = 0; i < PL_MAX; i++) {
         const Placement* p = &g_placer.p[i];
         if (!here(p) || p->type < 0 || p->type >= placer_types() || g_placer.type_state[p->type] != 1) continue;
-        njSetMatrix(NULL, cam.mtx);   /* (as the items: no second light) */
-        njCnkSetEasyMultiLightColor(1, 0, 0, 0);
-        njCnkSetEasyMultiLightSwitch(1, 0);
-        njCnkSetSimpleMultiLightColor(1, 0, 0, 0);
-        njCnkSetSimpleMultiLightSwitch(1, 0);
+        njSetMatrix(NULL, cam.mtx);   /* the second light as objitm.c bhDrawObjItm gives the items: the room's
+                                         directional light (bhSetLight, st_flg 0x10000) or none */
+        if (!(sys->st_flg & 0x10000)) {
+            njCnkSetEasyMultiLightColor(1, 0, 0, 0);
+            njCnkSetEasyMultiLightSwitch(1, 0);
+            njCnkSetSimpleMultiLightColor(1, 0, 0, 0);
+            njCnkSetSimpleMultiLightSwitch(1, 0);
+        } else {
+            njCnkSetEasyMultiLightColor(1, sys->lg_r, sys->lg_g, sys->lg_b);
+            njCnkSetEasyMultiLightVector(sys->lg_vx, sys->lg_vy, sys->lg_vz);
+            njCnkSetEasyMultiLightSwitch(1, 1);
+            njCnkSetEasyMultiLightMatrices();
+            njCnkSetSimpleMultiLightColor(1, sys->lg_r, sys->lg_g, sys->lg_b);
+            njCnkSetSimpleMultiLightVector(sys->lg_vx, sys->lg_vy, sys->lg_vz);
+            njCnkSetSimpleMultiLightSwitch(1, 1);
+            njCnkSetSimpleMultiLightMatrices();
+        }
         for (k = 0; k < 2 && part[p->type][k]; k++) {
             O_WRK* w = &part[p->type][k]->w;
             if (!k) {

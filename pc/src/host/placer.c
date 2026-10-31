@@ -11,13 +11,17 @@ PlacerState g_placer = { .sel = -1 };
 
 /* Sources (rooms without enemies, so their texture lists follow the objects directly). The item box's
    body and the typewriter are pieces of the room model (each room has its own copy); the box's lid
-   is an object record that opens. Item ids: as in the inventory (the F2 item list shows the names). */
+   is an object record that opens. Item ids: as in the inventory (the F2 item list shows the names).
+   The herbs are the potted plants as rooms show them: a herb pickup's item model is the plant with
+   its pot (node 1 the plant, node 2 the pot), the same model in every room (only the picture differs
+   by colour), with no object record beside it; no room has a mixed-herb pickup. Keys stay as they
+   were (existing files keep loading). */
 const PlacerDef placer_defs[] = {
     { "item_box",     "Item Box",         1080, PLK_PIECE, { 50, -1 }, 4, 0 },
     { "typewriter",   "Typewriter",       1080, PLK_PIECE, { 35, 36, 43, 45, 47, 48, -1 }, -1, 0 },
-    { "green_herb",   "Green Herb",       1080, PLK_ITEM, { 6 }, -1, 21 },
-    { "red_herb",     "Red Herb",         3190, PLK_ITEM, { 3 }, -1, 22 },
-    { "blue_herb",    "Blue Herb",        3190, PLK_ITEM, { 5 }, -1, 23 },
+    { "green_herb",   "Green Herb Pot",   1080, PLK_ITEM, { 6 }, -1, 21 },
+    { "red_herb",     "Red Herb Pot",     3190, PLK_ITEM, { 3 }, -1, 22 },
+    { "blue_herb",    "Blue Herb Pot",    3190, PLK_ITEM, { 5 }, -1, 23 },
     { "handgun_ammo", "Handgun Bullets",  1080, PLK_ITEM, { 5 }, -1, 12 },
     { "first_aid",    "First Aid Spray",  3040, PLK_ITEM, { 1 }, -1, 20 },
     { "ink_ribbon",   "Ink Ribbon",       1080, PLK_ITEM, { 3 }, -1, 31 },
@@ -68,7 +72,7 @@ int placer_format(char* buf, int cap)
     PUT("; one line per object: position in game units (y up), angles in game units (65536 = 360 degrees,\n");
     PUT("; njRotateXYZ order; ay 0 faces -z) and in degrees, floor = bhCheckFloorNum(y)\n");
     for (t = 0; t < NDEFS; t++) {
-        PUT("; %-13s %s", placer_type_key(t), placer_type_source(t, src, sizeof(src)));
+        PUT("; %-13s %s: %s", placer_type_key(t), placer_type_name(t), placer_type_source(t, src, sizeof(src)));
         if (placer_type_item(t)) PUT(", item %d", placer_type_item(t));
         if (g_placer.type_state[t] == 1)
             PUT(", extent x %.1f..%.1f y %.1f..%.1f z %.1f..%.1f", g_placer.type_min[t][0], g_placer.type_max[t][0],

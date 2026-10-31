@@ -53,9 +53,9 @@ highest floor level (`rom->grand`, the game's level rule) at or below it, or the
 |---|---|---|
 | `item_box` | Item Box (body and lid) | RM_1080: room model node 50 with its subtree (the body), object record 4 (the lid, id 376) |
 | `typewriter` | Typewriter | RM_1080: room model nodes 35, 36, 43, 45, 47, 48 |
-| `green_herb` | Green Herb (item 21) | RM_1080 item record 6 |
-| `red_herb` | Red Herb (item 22) | RM_3190 item record 3 |
-| `blue_herb` | Blue Herb (item 23) | RM_3190 item record 5 |
+| `green_herb` | Green Herb Pot (item 21) | RM_1080 item record 6 |
+| `red_herb` | Red Herb Pot (item 22) | RM_3190 item record 3 |
+| `blue_herb` | Blue Herb Pot (item 23) | RM_3190 item record 5 |
 | `handgun_ammo` | Handgun Bullets (item 12) | RM_1080 item record 5 |
 | `first_aid` | First Aid Spray (item 20) | RM_3040 item record 1 |
 | `ink_ribbon` | Ink Ribbon (item 31) | RM_1080 item record 3 |
@@ -67,7 +67,18 @@ highest floor level (`rom->grand`, the game's level rule) at or below it, or the
   (lock plate) faces +z at `ay` 0, its lid hinges at the back (-z).
 * Object and item records are realized as `room.c bhSetObjMdl` / `bhSetItmMdl` do, with their
   texture lists uploaded whole. Origin: the model's own, so a position is directly usable as an
-  item record's (a herb's origin is 2.9 above its pot's bottom).
+  item record's (a herb's origin is 2.9 above its pot's bottom). They are lit as the room's items
+  (`objitm.c bhDrawObjItm`: item ambient, and the room's directional light where it has one), so
+  a placed herb looks like a real one next to it.
+* **Herbs** are the potted plants as the rooms show them. The game has no separate pot: a herb
+  pickup is one item record whose model is the plant in its pot (3 nodes: node 0 an empty root at y
+  -2.9, node 1 the plant, node 2 the pot as its child, about 1.5 wide and 1.4 high), and taking the
+  herb removes the whole item, pot included. All 121 herb records on the disc (91 green, 11 red, 19
+  blue) use this same geometry; only the one 256x256 picture differs by colour, and it is the same
+  picture (same gindex, same bytes) in the rooms compared. No object record, room model node or effect
+  belongs to a herb, and no room has a mixed-herb pickup (no item record of the disc is one of the
+  mixed herbs, items 24 .. 29). The keys stayed `green_herb`, `red_herb`, `blue_herb`, so older
+  files load as before.
 * Source rooms have no enemies, so the texture table index of an object or item follows from the
   objects and items alone (room model, then per object id, then per item id, as `bhSetRoom`).
 * Memory: one 160 KB buffer inside the address window holds all models and their work (all eight
@@ -95,8 +106,8 @@ their extent around the origin (x, y, z at angle 0).
 Example:
 
 ```
-; item_box      RM_1080 room model node 50 + object record 4, extent x -6.0..6.0 y 0.0..9.0 z -4.7..4.7
-; blue_herb     RM_3190 item record 5, item 23, extent x -2.0..1.6 y -2.9..2.3 z -0.9..1.3
+; item_box      Item Box: RM_1080 room model node 50 + object record 4, extent x -6.0..6.0 y 0.0..9.0 z -4.7..4.7
+; blue_herb     Blue Herb Pot: RM_3190 item record 5, item 23, extent x -2.0..1.6 y -2.9..2.3 z -0.9..1.3
 type=item_box stage=1 room=8 case=0 player=0 x=-5.37 y=0.00 z=20.00 ax=0 ay=16392 az=0 ax_deg=0.0 ay_deg=90.0 az_deg=0.0 floor=0 file=RM_1080.RDX
 type=blue_herb stage=1 room=8 case=0 player=0 x=-10.37 y=10.58 z=21.00 ax=0 ay=8 az=0 ax_deg=0.0 ay_deg=0.0 az_deg=0.0 floor=1 file=RM_1080.RDX
 ```
@@ -107,6 +118,17 @@ Everything per entry is in the line: the room (stage, room, and the case and cha
 placed in, to decide which cases get it), position, angles and floor number. To make an entry
 work:
 
+* **Potted herbs**: exactly a retail herb (every retail one is this): an item record with `flg` 1,
+  `id` 21 / 22 / 23, `type` 0, `mdlver` 0, `wrk_no` 0, `prm1` 0, `aspd` 0 (119 of 121), `ax` = `az`
+  = 0, `ay` from the entry, `hide` = -1 x 4, `flr_no` = `floor`, position = the entry's (the item
+  origin is 2.9 above the pot's bottom: Snap to Floor gives that, retail herbs stand at floor +
+  2.8..3.0). Model: that item record's own MLB (pot included) with its one-picture texture list,
+  e.g. the source in the table. Trigger: type 4, `attr` 0x1 (picked up crouching; without 0x1 mostly
+  for a herb up on a table or shelf, picked up standing; some add the direction limits
+  0x400..0x2000), a box of `w` x `d` about 5 x 5 (4.99 .. 6.99) with its corner about 2.5 .. 3 below
+  the herb's x and z, `prm0` = the item slot, `flr_no` = `floor`. The pickup gives `id` (or `type`
+  when non-zero, see [modding/ROOM_FORMAT.md](modding/ROOM_FORMAT.md) "Generated pickups"); the
+  general rules below apply.
 * **Herb / item pickups**: an item record (`ETTY_WORK`: `id` = item, `flr_no` = `floor`, position,
   `ax/ay/az`) with its model, plus a type 4 trigger (`etcp`, `prm0` = the item slot, a box of
   about 5 x 5 around the position, `flr_no` = `floor`) and a persistent `it_flg` bit (script op 35
