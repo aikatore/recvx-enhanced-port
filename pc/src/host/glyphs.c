@@ -5,6 +5,10 @@
      French, German, Spanish  the European font: ASCII, accents at 95..149
      Russian  the fan translation's font: ASCII, the Cyrillic letters that look Latin are the Latin ones, the others at
               95..150 (lang.c reads its widths from the patched executable)
+     Turkish  the European font with six cells redrawn: Ğ 102, İ 107, Ş 109, ş 124, ı 126, ğ 140 (in place of
+              Ê Ï Ó ë í ñ)
+     Brazilian Portuguese  the US font with õ ó ô â ã á à ê é í ú ç at 96..107, Ç 108 (no width: the patch writes
+              the 24-wide blank 94 after it), ° 59; no capitals with accents (the patch writes them plain)
      Japanese the Japanese font's 1296 cells (4 textures of 324) at LANG_JA_BASE + cell: kana, the kanji the game
               uses, full-width Latin, digits and signs; the codes below LANG_JA_BASE (the US font's, which the US
               engine writes) are drawn with the look-alike cells */
@@ -28,6 +32,7 @@ static const struct { unsigned short u, code; char plain; } accents[] = {
     { 0xA1, 142, '!' }, { 0xBF, 143, '?' }, { 0xE6, 144, 'a' }, { 0x152, 145, 'O' }, { 0x153, 146, 'o' },
     { 0xAE, 147, 0 }, { 0x2122, 148, 0 }, { 0xB0, 149, 0 }, { 0xAB, 0, '"' }, { 0xBB, 0, '"' }, { 0x2019, 0, '\'' },
     { 0x2026, 0, '.' }, { 0x2013, 0, '-' }, { 0x2014, 0, '-' }, { 0xA0, 0, ' ' },
+    { 0x11E, 0, 'G' }, { 0x11F, 0, 'g' }, { 0x130, 0, 'I' }, { 0x131, 0, 'i' }, { 0x15E, 0, 'S' }, { 0x15F, 0, 's' },
 };
 #define N_ACCENTS (int)(sizeof(accents) / sizeof(accents[0]))
 
@@ -41,6 +46,15 @@ static const unsigned char ru_lower[32] = {   /* а .. я */
 static const struct { unsigned short u, code; } ru_signs[] = {
     { 0x401, 105 }, { 0x451, 129 }, { 0xAB, 100 }, { 0xBB, 101 }, { 0x2116, 98 }, { 0xAE, 95 }, { 0xB0, 96 }, { 0x2013, 97 }, { 0x2014, 97 },
 };
+
+/* the Turkish font: its letters in the European font's cells, and the European letters those cells lost */
+static const struct { unsigned short u, code; } tr_letters[] = { { 0x11E, 102 }, { 0x130, 107 }, { 0x15E, 109 }, { 0x15F, 124 }, { 0x131, 126 }, { 0x11F, 140 } };
+static const unsigned short tr_lost[] = { 0xCA, 0xCF, 0xD3, 0xEB, 0xED, 0xF1 };
+/* the Brazilian Portuguese font (the US one's ASCII but [ ] ~, which are ° and blanks) */
+static const struct { unsigned short u, code; } pt_letters[] = {
+    { 0xF5, 96 }, { 0xF3, 97 }, { 0xF4, 98 }, { 0xE2, 99 }, { 0xE3, 100 }, { 0xE1, 101 }, { 0xE0, 102 }, { 0xEA, 103 },
+    { 0xE9, 104 }, { 0xED, 105 }, { 0xFA, 106 }, { 0xE7, 107 }, { 0xC7, 108 }, { 0xB0, 59 }, { 0xAE, 95 } };
+#define PT_SPACER 94   /* the blank after Ç (108: no width) */
 
 /* the Japanese font's cells in order (\001: a sign without a character: S. T. A. R. W. B. O., the biohazard sign,
    crown, heart, spade, Umbrella, "AA") */
@@ -139,6 +153,7 @@ int lang_cell(int l, int code)
 /* the code of character c in language l's font; -1 none (*plain: the letter to show instead, 0 none) */
 static int code_of(int l, unsigned c, unsigned* plain)
 {
+    int lost = 0;
     *plain = 0;
     if (c == ' ' || c == 0x3000 || (l == LANG_JA && (c == 0x3001 || c == ','))) return 0;   /* (Japanese: 、 and , as a space, as the game's text) */
     if (l == LANG_JA) {
@@ -150,7 +165,15 @@ static int code_of(int l, unsigned c, unsigned* plain)
         for (int i = 0; i < N_ACCENTS; i++) if (accents[i].u == c) *plain = (unsigned char)accents[i].plain;
         return -1;
     }
+    if (l == LANG_PT) {
+        for (size_t i = 0; i < sizeof(pt_letters) / sizeof(pt_letters[0]); i++) if (pt_letters[i].u == c) return pt_letters[i].code;
+        if (c == '[' || c == ']' || c == '~') { *plain = c == '[' ? '(' : c == ']' ? ')' : '-'; return -1; }
+    }
     if (c > 32 && c < 127) return (int)c - 32;
+    if (l == LANG_TR) {
+        for (size_t i = 0; i < sizeof(tr_letters) / sizeof(tr_letters[0]); i++) if (tr_letters[i].u == c) return tr_letters[i].code;
+        for (size_t i = 0; i < sizeof(tr_lost) / sizeof(tr_lost[0]); i++) lost |= tr_lost[i] == c;   /* (its cell is a Turkish letter: plain) */
+    }
     if (l == LANG_RU) {
         if (c >= 0x410 && c < 0x430) return ru_upper[c - 0x410];
         if (c >= 0x430 && c < 0x450) return ru_lower[c - 0x430];
@@ -158,7 +181,7 @@ static int code_of(int l, unsigned c, unsigned* plain)
     }
     for (int i = 0; i < N_ACCENTS; i++) {
         if (accents[i].u != c) continue;
-        if ((l == LANG_FR || l == LANG_DE || l == LANG_ES) && accents[i].code) return accents[i].code;
+        if ((l == LANG_FR || l == LANG_DE || l == LANG_ES || (l == LANG_TR && !lost)) && accents[i].code) return accents[i].code;
         if (c == 0xAE && l == LANG_EN) return 95;   /* (the US font's ®) */
         *plain = (unsigned char)accents[i].plain;
         return -1;
@@ -171,7 +194,11 @@ int lang_glyph(int l, const char** s)
     unsigned c, plain;
     int k;
     if (!**s) return -1;
+    /* ponytail: Brazilian Portuguese Ç is two codes (108, then the blank PT_SPACER): the first call stops on Ç's second
+       byte, the next one gives the blank */
+    if (l == LANG_PT && (unsigned char)**s == 0x87 && (unsigned char)(*s)[-1] == 0xC3) { (*s)++; return PT_SPACER; }
     c = utf8_next(s);
+    if (l == LANG_PT && c == 0xC7) { (*s)--; return 108; }
     if ((k = code_of(l, c, &plain)) >= 0) return k;
     if (plain && (k = code_of(l, plain, &plain)) >= 0) return k;
     return code_of(l, '?', &plain) >= 0 ? code_of(l, '?', &plain) : 0;
@@ -201,12 +228,18 @@ unsigned lang_char(int l, int code)
         for (int c = 0; c <= code - LANG_JA_BASE && *s; c++) u = utf8_next(&s);
         return u == 1 ? '?' : u;
     }
+    if (l == LANG_PT) {   /* (the blanks: 61 thin, 94 after Ç; 109..112 the accents the patch sets over capitals) */
+        for (size_t i = 0; i < sizeof(pt_letters) / sizeof(pt_letters[0]); i++) if (pt_letters[i].code == code) return pt_letters[i].u;
+        if (code == 61 || code == PT_SPACER || (code > 108 && code <= 112)) return code == 61 ? ' ' : 0;
+    }
     if (code < 95) return code ? (unsigned)code + 32 : ' ';
     if (l == LANG_RU) {
         for (int i = 0; i < 32; i++) { if (ru_upper[i] == code) return 0x410 + i; if (ru_lower[i] == code) return 0x430 + i; }
         for (size_t i = 0; i < sizeof(ru_signs) / sizeof(ru_signs[0]); i++) if (ru_signs[i].code == code) return ru_signs[i].u;
         return '?';
     }
+    if (l == LANG_PT) return '?';
+    if (l == LANG_TR) for (size_t i = 0; i < sizeof(tr_letters) / sizeof(tr_letters[0]); i++) if (tr_letters[i].code == code) return tr_letters[i].u;
     if (l == LANG_EN || l == LANG_JA) return code == 95 ? 0xAE : '?';   /* (the US codes) */
     for (int i = 0; i < N_ACCENTS; i++) if (accents[i].code == code) return accents[i].u;
     return '?';

@@ -910,8 +910,8 @@ static void import_window(void)
     ImGui::End();
 }
 
-/* our texts in other languages (lang.h): the default font has ASCII and Latin-1 (French, German, Spanish); the
-   letters of Japanese and Russian come from a font of the system, merged in once such a language is chosen
+/* our texts in other languages (lang.h): the default font has ASCII and Latin-1 (French, German, Spanish, Portuguese); the
+   letters of Japanese, Russian and Turkish come from a font of the system, merged in once such a language is chosen
    (none found: they stay missing) */
 static void lang_fonts(void)
 {
@@ -922,7 +922,7 @@ static void lang_fonts(void)
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf", NULL };
     static bool done[LANG_COUNT];
     int l = lang_installed(g_lang) ? g_lang : LANG_EN;
-    if ((l != LANG_JA && l != LANG_RU) || done[l]) return;
+    if ((l != LANG_JA && l != LANG_RU && l != LANG_TR) || done[l]) return;   /* (Turkish: ğ ı İ ş, Latin Extended-A) */
     done[l] = true;
     ImGuiIO& io = ImGui::GetIO();
     if (io.Fonts->Fonts.empty()) io.Fonts->AddFontDefault();

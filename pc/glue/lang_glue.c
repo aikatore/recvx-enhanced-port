@@ -112,7 +112,7 @@ void lang_scan(void)
             FILE* f;
             if (x->ok) continue;
             import_source_dir(s, base, sizeof(base));
-            snprintf(x->dir, sizeof(x->dir), "%s/%.3s", base, lang_codes[l]);
+            snprintf(x->dir, sizeof(x->dir), "%s/%.5s", base, lang_codes[l]);
             snprintf(p, sizeof(p), "%s/lang.txt", x->dir);
             if (!(f = pc_fopen(p, "r"))) continue;
             while (fgets(line, sizeof(line), f)) {
@@ -150,7 +150,7 @@ int lang_sub(void)
 }
 const char* lang_dir(int l) { return l > 0 && lang_installed(l) ? info[l].dir : NULL; }
 int lang_picture(int adv) { return adv >= 0 && adv < 64 ? adv_lang[adv] : LANG_EN; }
-int lang_eu_picture(int adv) { int l = lang_picture(adv); return l == LANG_FR || l == LANG_DE || l == LANG_ES; }
+int lang_eu_picture(int adv) { int l = lang_picture(adv); return l == LANG_FR || l == LANG_DE || l == LANG_ES || l == LANG_TR; }
 static int data_lang(void) { return lang_installed(g_lang) ? g_lang : LANG_EN; }
 
 /* ---------------------------------------------------------------- the executable's texts */
@@ -392,9 +392,9 @@ static float space_of(int l) { return l == LANG_JA ? 28 : 14; }
 /* a code of another language's font (lang.h LANG_OTHER): its language, *code its own code; -1 none */
 static int other_of(int* code)
 {
-    int l = *code >= LANG_OTHER_BASE && *code < 0xFE00 ? (*code - LANG_OTHER_BASE) >> 12 : LANG_COUNT;
+    int l = *code >= LANG_OTHER_BASE && *code < 0xFE00 ? (*code - LANG_OTHER_BASE) >> 11 : LANG_COUNT;
     if (l >= LANG_COUNT) return -1;
-    *code &= 0xFFF;
+    *code &= 0x7FF;
     return l;
 }
 
@@ -442,6 +442,7 @@ void pc_glyphs_utf8(const unsigned short* g, char* out, int n)
         if (c == 0xFF01 || c == 0xFF00) u = ' ';
         else if (c >= 0xFE00) continue;
         else u = lang_char(font_lang, (int)c);
+        if (!u) continue;   /* (nothing: Brazilian Portuguese's blank after Ç, its accents over capitals) */
         if (u < 0x80) out[k++] = (char)u;
         else if (u < 0x800) { out[k++] = (char)(0xC0 | u >> 6); out[k++] = (char)(0x80 | (u & 0x3F)); }
         else { out[k++] = (char)(0xE0 | u >> 12); out[k++] = (char)(0x80 | (u >> 6 & 0x3F)); out[k++] = (char)(0x80 | (u & 0x3F)); }

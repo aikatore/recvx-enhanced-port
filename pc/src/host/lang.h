@@ -7,8 +7,8 @@
 extern "C" {
 #endif
 
-enum { LANG_EN, LANG_FR, LANG_DE, LANG_ES, LANG_JA, LANG_RU, LANG_COUNT };
-extern const char* const lang_codes[LANG_COUNT];   /* en fr de es ja ru (folder names, ini language) */
+enum { LANG_EN, LANG_FR, LANG_DE, LANG_ES, LANG_JA, LANG_RU, LANG_TR, LANG_PT, LANG_COUNT };
+extern const char* const lang_codes[LANG_COUNT];   /* en fr de es ja ru tr pt-BR (folder names, ini language) */
 extern const char* const lang_names[LANG_COUNT];   /* in the language itself (UTF-8) */
 
 /* Glyph codes. The Japanese font's cell c is code LANG_JA_BASE + c (the importer moves the Japanese text up);
@@ -18,8 +18,8 @@ extern const char* const lang_names[LANG_COUNT];   /* in the language itself (UT
    language's font; LANG_OTHER(l, LANG_OTHER_SPACE) is its space (0xFF01). */
 #define LANG_JA_BASE 108
 #define LANG_OTHER_BASE 0x8000
-#define LANG_OTHER(l, c) (LANG_OTHER_BASE + ((l) << 12) + (c))
-#define LANG_OTHER_SPACE 0xFFF
+#define LANG_OTHER(l, c) (LANG_OTHER_BASE + ((l) << 11) + (c))   /* (8 languages below 0xC000: clear of the control codes) */
+#define LANG_OTHER_SPACE 0x7FF
 
 /* the setting (ini language, LANG_*; English when the language is not installed) and Subtitles (ini subtitles:
    0 Off, 1 the game language's (older ini files), 2 + LANG_* that language's) */

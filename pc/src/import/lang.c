@@ -9,7 +9,9 @@
      lang.txt                        written last: the language, the font's widths, the file tables, the
                                      executable's other texts
    Sources (lang_discs[]): the European disc (French, German, Spanish; its English is the US text), the US disc
-   with the Russian fan translation by Brosko (told from the clean US disc by its patched font), the Japanese disc.
+   with the Russian fan translation by Brosko (told from the clean US disc by its patched font), the Japanese disc,
+   the European disc with the Turkish fan translation (Patriots Çeviri; in the Spanish folder) and the US disc with
+   the Brazilian Portuguese fan translation (gledson999).
    The Japanese text's glyph codes are moved up by LANG_JA_BASE (lang.h): codes below it are the US font's, as the
    US engine writes them (digits, times), drawn with the Japanese font's look-alikes. */
 #include "import.h"
@@ -30,29 +32,36 @@ extern unsigned int wallpaper[24];               /* decomp fileview.c: the files
 extern void* comevt_message_tab[8];              /* decomp sp_evt.c: the computer events' texts */
 char g_lang_us_iso[1024];                        /* the US image (lang_extract reads its SYSMES.ALD; host.c sets it) */
 
-const char* const lang_codes[LANG_COUNT] = { "en", "fr", "de", "es", "ja", "ru" };
+const char* const lang_codes[LANG_COUNT] = { "en", "fr", "de", "es", "ja", "ru", "tr", "pt-BR" };
 const char* const lang_names[LANG_COUNT] = { "English", "Fran\xC3\xA7" "ais", "Deutsch", "Espa\xC3\xB1ol",
-                                             "\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E", "\xD0\xA0\xD1\x83\xD1\x81\xD1\x81\xD0\xBA\xD0\xB8\xD0\xB9" };
+                                             "\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E", "\xD0\xA0\xD1\x83\xD1\x81\xD1\x81\xD0\xBA\xD0\xB8\xD0\xB9",
+                                             "T\xC3\xBCrk\xC3\xA7" "e", "Portugu\xC3\xAAs (Brasil)" };
 
 /* a disc's languages: its folder, the digit of its file names, its index in the executable's tables */
 typedef struct LangDisc { int lang; const char* dir; int digit; int exe; } LangDisc;
-enum { LS_EU, LS_RU, LS_JA };   /* the European disc; a disc laid out as the US one (one language at its root) */
+enum { LS_EU, LS_RU, LS_JA, LS_PT };   /* the European disc; a disc laid out as the US one (one language at its root) */
 typedef struct LangSource {
     int src, kind;           /* import_sources[], LS_* */
     const char* exe;         /* the executable (SYSTEM.CNF names it) */
     const char* refuse;      /* another disc */
+    const char* clean;       /* the base disc without the fan translation (NULL: none) */
     const char* eng_dir;     /* the European disc's English (its pictures are compared with it) */
     int eng_digit;
     int n;
     LangDisc langs[3];
 } LangSource;
 static const LangSource lang_discs[] = {
-    { IMPORT_SLES50306, LS_EU, "SLES_503.06", "Use a European Resident Evil Code: Veronica X disc (%s).", "ENG", 1,
+    { IMPORT_SLES50306, LS_EU, "SLES_503.06", "Use a European Resident Evil Code: Veronica X disc (%s).", NULL, "ENG", 1,
       3, { { LANG_FR, "FRA", 2, 1 }, { LANG_DE, "GER", 5, 4 }, { LANG_ES, "SPA", 4, 3 } } },
-    { IMPORT_SLUS20184RU, LS_RU, "SLUS_201.84", "Use the US disc with the Russian fan translation by Brosko (%s).", NULL, 0,
-      1, { { LANG_RU, "", 0, 0 } } },
-    { IMPORT_SLPM65022, LS_JA, "SLPM_650.22", "Use a Japanese Biohazard Code: Veronica Kanzenban disc (%s).", NULL, 0,
+    { IMPORT_SLUS20184RU, LS_RU, "SLUS_201.84", "Use the US disc with the Russian fan translation by Brosko (%s).",
+      "This is the US disc without the Russian translation.", NULL, 0, 1, { { LANG_RU, "", 0, 0 } } },
+    { IMPORT_SLPM65022, LS_JA, "SLPM_650.22", "Use a Japanese Biohazard Code: Veronica Kanzenban disc (%s).", NULL, NULL, 0,
       1, { { LANG_JA, "", 0, 0 } } },
+    /* the Turkish patch replaces the Spanish (its folder, its tables in the executable) */
+    { IMPORT_SLES50306TR, LS_EU, "SLES_503.06", "Use the European disc with the Turkish fan translation by Patriots \xC3\x87" "eviri (%s).",
+      "This is the European disc without the Turkish translation.", "ENG", 1, 1, { { LANG_TR, "SPA", 4, 3 } } },
+    { IMPORT_SLUS20184PT, LS_PT, "SLUS_201.84", "Use the US disc with the Brazilian Portuguese fan translation by gledson999 (%s).",
+      "This is the US disc without the Brazilian Portuguese translation.", NULL, 0, 1, { { LANG_PT, "", 0, 0 } } },
 };
 
 #define MES_FILES 280            /* the first file page in the system messages (every release) */
@@ -162,6 +171,28 @@ static unsigned char* ald_write(const Mes* items, const Mes* sys, uint32_t* n)
     mes_write(sys, o + 8 + ni);
     *n = 8 + ni + ns;
     return o;
+}
+
+/* a SYSMES.ALD that ends inside its last message (the Brazilian Portuguese one: the file is shorter than its table
+   says) as long as its table says, that message cut after its last whole line; malloc'd, NULL: not such a file */
+static unsigned char* ald_cut(const unsigned char* d, uint32_t* n)
+{
+    uint32_t ni, ns, want, cnt, o, k;
+    unsigned char* x;
+    if (*n < 12 || (ni = pc_rd32(d)) > *n - 8 || (ni & 3) || (ns = pc_rd32(d + 4 + ni)) > (1u << 20) || (want = 8 + ni + ns) <= *n ||
+        want > *n + 4096 || !(x = malloc(want))) return NULL;
+    memcpy(x, d, *n);
+    memset(x + *n, 0xFF, want - *n);
+    cnt = pc_rd32(x + 8 + ni);
+    if (!cnt || cnt > MES_MAX || !pc_range_ok(12ull + ni, 4ull * cnt, want) || (o = pc_rd32(x + 12 + ni + 4 * (cnt - 1))) >= ns || (o & 1)) { free(x); return NULL; }
+    for (k = 8 + ni + o; k + 1 < *n && pc_rd16(x + k) != 0xFFFF; k += 2) {}
+    if (k + 1 >= *n) {   /* (no end: cut after its last new line) */
+        while (k > 8 + ni + o && pc_rd16(x + k - 2) != 0xFF00) k -= 2;
+        if (k > 8 + ni + o) k -= 2;   /* (the new line too) */
+        x[k] = x[k + 1] = 0xFF;
+    }
+    *n = want;
+    return x;
 }
 
 /* the language's system messages in the US order (docs/LANGUAGES.md "System messages"): the same up to the
@@ -539,7 +570,7 @@ static int one_lang(FILE* f, const LangSource* s, const LangDisc* ld, const char
     return 1;
 }
 
-/* the executable's other texts of the Russian translation (lang.txt "exemes", "term"; docs/LANGUAGES.md): the
+/* the executable's other texts of the Russian and Brazilian Portuguese translations (lang.txt "exemes", "term"): the
    demo, PAL start and pause lines, the game over question (pad.c, system.c, gameover.c; at the US addresses or where
    the patched code points), the computer events' lines (sp_evt.c, rewritten in place) */
 static char* ru_texts(const unsigned char* x, uint32_t n)
@@ -573,7 +604,7 @@ static char* ru_texts(const unsigned char* x, uint32_t n)
     return o;
 }
 
-/* a disc laid out as the US one, with one language at its root (the Russian translation, the Japanese release):
+/* a disc laid out as the US one, with one language at its root (the Russian, Brazilian Portuguese translations, the Japanese release):
    its files compared with the US disc's (uf) */
 static int one_disc(FILE* f, FILE* uf, const LangSource* s, const char* outdir, const char* iso,
                     const unsigned char* us, uint32_t nus, const unsigned char* exe, uint32_t nexe)
@@ -593,7 +624,7 @@ static int one_disc(FILE* f, FILE* uf, const LangSource* s, const char* outdir, 
     memcpy(hl, fsheader, sizeof(hl));
     if (ja && !exe_files_before_wallpaper(exe, nexe, fl, hl)) { host_log("lang: %s: the file tables are not in %s\n", lname, s->exe); return 0; }
     if (!ja) {   /* the patched font's widths (bhGetFontSize) */
-        if (!exe_font(exe, nexe, &count, &table) || count <= 126 || count > 256) { host_log("lang: %s: the font's widths are not in %s\n", lname, s->exe); return 0; }
+        if (!exe_font(exe, nexe, &count, &table) || count < 108 || count > 256) { host_log("lang: %s: the font's widths are not in %s\n", lname, s->exe); return 0; }
         memcpy(w, table, count);
         nw = (int)count;
     }
@@ -604,6 +635,8 @@ static int one_disc(FILE* f, FILE* uf, const LangSource* s, const char* outdir, 
         free(b);
     } else {   /* the US layout (checked) */
         Ald *a = malloc(sizeof(Ald)), *b = malloc(sizeof(Ald));
+        unsigned char* c = ald_cut(d, &n);
+        if (c) { free(d); d = c; }
         ok = a && b && ald_read(us, nus, a) && ald_read(d, n, b) && a->items.n == b->items.n && a->sys.n == b->sys.n && put(dir, "SYSMES.ALD", d, n);
         free(a); free(b);
     }
@@ -654,6 +687,39 @@ static int one_disc(FILE* f, FILE* uf, const LangSource* s, const char* outdir, 
     return 1;
 }
 
+/* a fan translation's disc, told from its clean base disc by what the patch changed (docs/LANGUAGES.md): 1 patched,
+   0 the clean base disc, -1 another disc. Russian: bhGetFontSize counts more glyphs than the US 108; Brazilian
+   Portuguese: the US count, with the accents' widths at 96..107 (the US font: 28); Turkish (the Spanish folder): its
+   text never writes the Spanish font's inverted marks (codes 142, 143) */
+static int fan_patched(FILE* f, const LangSource* s, const unsigned char* exe, uint32_t nexe)
+{
+    unsigned count = 0;
+    const unsigned char* t = NULL;
+    if (s->kind == LS_RU) return !(exe_font(exe, nexe, &count, &t) && count == 108);
+    if (s->kind == LS_PT) {
+        if (!exe_font(exe, nexe, &count, &t) || count != 108) return -1;
+        for (int c = 96; c < 108; c++) if (t[c] != 28) return 1;
+        return 0;
+    }
+    {
+        char p[64];
+        uint32_t n = 0;
+        int hits = 0, ok;
+        Ald* a = malloc(sizeof(Ald));
+        unsigned char* d;
+        snprintf(p, sizeof(p), "%s/SYSMES%d.ALD", s->langs[0].dir, s->langs[0].digit);
+        d = read_file(f, p, 1u << 20, &n);
+        ok = a && d && ald_read(d, n, a);
+        for (int i = 0; ok && i < a->sys.n; i++)
+            for (const uint16_t* q = a->sys.t[i]; *q != 0xFFFF; q++) {
+                if ((*q == 0xFF02 || *q == 0xFF03) && q[1] != 0xFFFF) q++;   /* (a wait, an item: not a glyph) */
+                else hits += *q == 142 || *q == 143;
+            }
+        free(a); free(d);
+        return ok ? !hits : -1;
+    }
+}
+
 int lang_extract(int src, const char* iso, const char* outdir)
 {
     const LangSource* s = NULL;
@@ -673,11 +739,11 @@ int lang_extract(int src, const char* iso, const char* outdir)
         return -1;
     }
     exe = read_file(f, s->exe, 32u << 20, &nexe);
-    if (exe && s->kind == LS_RU) {   /* the clean US disc: its font has the US glyph count (FontSz's 108) */
-        unsigned count = 0;
-        const unsigned char* table;
-        if (exe_font(exe, nexe, &count, &table) && count == 108) {
-            snprintf(pg->phase, sizeof(pg->phase), "%s", tr("This is the US disc without the Russian translation."));
+    if (exe && s->clean) {   /* a fan translation: not its clean base disc */
+        int p = fan_patched(f, s, exe, nexe);
+        if (p <= 0) {
+            if (p) snprintf(pg->phase, sizeof(pg->phase), tr(s->refuse), import_sources[src].serial);
+            else snprintf(pg->phase, sizeof(pg->phase), "%s", tr(s->clean));
             free(exe); fclose(f);
             return -1;
         }
