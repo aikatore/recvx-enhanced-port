@@ -1237,6 +1237,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_EFFECT="f:effno:type:mode1"` | spawn effect effno at the player (e.g. `60:110:0:1`: full-screen distortion) |
 | `RECVX_EFF_MODE1="f:id:type:mode1,..."` | set mode1 of every live effect of that id and type at game frame f (`40:263:0:1` in 5/82: the fires laid out in Alexia's hall burn, as in her fight) |
 | `RECVX_SPAWN="f:id[.mdlver][@dist],..."` | the F2 enemy spawner at game frame f, with traces ([ENEMIES.md](ENEMIES.md)) |
+| `RECVX_PLACE="f:op[:args],..."`, `RECVX_PLACE_DRAG="f:handle:dx:dy,..."` | `--dev` object placer: add, move, turn, snap entries; drag a gizmo handle with a scripted mouse ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md#test-aids)) |
 | `RECVX_SPAWN_SURVEY="stg:rom,..."`, `RECVX_SPAWN_SURVEY_ALL=1` | try every spawner entry in each room, log results and budgets, exit |
 | `RECVX_ENEMY_EXTRA=0..3`, `RECVX_ENEMY_PLACE=0/1`, `RECVX_ENEMY_RANDOM=0/1`, `RECVX_ENEMY_SEED=n`, `RECVX_ENEMY_VARIETY=0/1`, `RECVX_ENEMY_EVENTS=0/1` | enemy options over the settings |
 | `RECVX_CAST=0\|1[:all\|:custom][:random][:imports]`, `RECVX_CAST_TRACE=1` | the cutscene cast's options over the settings; log the game's state at each room load, each change between cutscene and gameplay, and the cast's faces ([ACTORS.md](ACTORS.md) "Cutscene cast") |
