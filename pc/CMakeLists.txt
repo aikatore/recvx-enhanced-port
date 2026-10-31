@@ -290,6 +290,9 @@ add_test(NAME variants COMMAND test_variants)
 # the cutscene cast randomizer's picks (pc/src/host/cast.c): deterministic, never the model itself, distinct per room
 add_executable(test_cast tests/test_cast.c src/host/cast.c src/host/actors.c)
 add_test(NAME cast COMMAND test_cast)
+# the --dev object placer's file (pc/src/host/placer.c): written and read back
+add_executable(test_placer tests/test_placer.c src/host/placer.c src/host/fileio.c)
+add_test(NAME placer COMMAND test_placer ${CMAKE_CURRENT_BINARY_DIR})
 
 # co-op networking (pc/src/net): a busy port, the port mapping started and stopped again
 add_executable(test_net tests/test_net.c src/net/net.c src/net/portmap.c)

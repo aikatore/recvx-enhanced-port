@@ -587,7 +587,7 @@ void placer_draw(void)
 /* ---------------------------------------------------------------- test aid */
 /* RECVX_PLACE="frame:op[:args],...", game frames counted from the first in a room:
    add:type[:dist] (in front of the player, selected), sel:i, move:dx:dy:dz, rot:ax:ay:az (degrees), snap, del,
-   gizmo (the selected entry's gizmo projected without the F2 window), log (the entries in this room) */
+   log (the entries in this room; the gizmo's place while the F2 window shows it: RECVX_SHOW_OVERLAY=2) */
 static void test_aid(void)
 {
     static const char* s = (const char*)-1;
@@ -628,7 +628,6 @@ static void test_aid(void)
         else if (!strcmp(op, "rot")) for (n = 0; n < 3; n++) p->ang[n] = (p->ang[n] + (int)lroundf(a[n] * 65536.0f / 360.0f)) & 0xFFFF;
         else if (!strcmp(op, "snap")) g_placer.request |= PL_SNAP;
         else if (!strcmp(op, "del")) { p->used = 0; g_placer.sel = -1; }
-        else if (!strcmp(op, "gizmo")) g_placer.gizmo = 1;
     }
     if (!strcmp(op, "log") && g_placer.gz_ok)
         printf("test: placer gizmo at %.0f %.0f, x tip %.0f %.0f, y tip %.0f %.0f, z tip %.0f %.0f (length %.1f)\n", g_placer.gz_o[0], g_placer.gz_o[1],

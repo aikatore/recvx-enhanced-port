@@ -34,6 +34,7 @@ extern "C" {
 #include <stdio.h>
 
 extern "C" void pad_set_game_input_enabled(int on);
+extern "C" void placer_poll(int f2_open), placer_overlay(void);   /* --dev object placer (placer_ui.cpp, English only) */
 
 static SDL_Window* win;
 static bool ready, visible, cheats_visible, coop_visible, import_visible;
@@ -944,6 +945,7 @@ void overlay_render(void)
     if (!ready) return;
     lang_fonts();
     coop_status_get(&cs);
+    placer_poll(cheats_visible);
     bool windows = visible || cheats_visible || coop_visible || import_visible;
     pad_set_game_input_enabled(!windows);
     tps_update_mouse_mode(win, windows);
@@ -966,6 +968,7 @@ void overlay_render(void)
     ImGui::NewFrame();
     if (visible) settings_window();
     if (cheats_visible) cheat_window();
+    if (cheats_visible) placer_overlay();
     if (coop_visible) coop_window();
     if (import_visible) import_window();
     if (crosshair) {   /* third person: the screen centre is where the shot goes (tps_glue.c) */
