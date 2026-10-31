@@ -151,6 +151,8 @@ static void play_frame(unsigned int key_press)
     } else page = 0;
     if (pc_weapon_shortcuts_on() && pc_in_play(plp, 0))
         for (n = 0; n < WPN_SLOTS; n++) if (key_press & 1u << n) request(n, "key");
+    if (key_press && pc_weapon_shortcuts_on() && !pc_in_play(plp, 0) && !(sys->ts_flg & 0x80))
+        host_log("weapons: shortcut key ignored (not in play: event, door, menu or first person)\n");
     if (pending < 0) return;
     if (!pc_weapon_shortcuts_on() || !pc_in_play(plp, 0) || --pending_t < 0) {
         host_log("weapons: shortcut %d dropped (%s)\n", pending + 1, pending_t < 0 ? "not at rest in time" : "no longer in play");
@@ -202,9 +204,9 @@ static void assign(int slot, int id)
 #define LY 96.0f
 #define LH 30.0f
 #define LGAP 16.0f                      /* between slots 4 and 5 (the second page) */
-#define OK_Y 392.0f                     /* CLOSE */
-#define OK_X0 284.0f
-#define OK_X1 356.0f
+#define OK_Y 392.0f                     /* CLOSE, as wide as its word */
+#define OK_X0 (320.0f - ok_w())
+#define OK_X1 (320.0f + ok_w())
 enum { SIDE_BAG, SIDE_SLOTS, SIDE_CLOSE };
 
 static struct {
@@ -215,6 +217,8 @@ static struct {
 
 int pc_wpn_screen(void) { return ms.open; }
 
+static float ok_w(void) { float w = pc_ui_text_w("CLOSE", 0.6f) / 2 + 10; return w > 36 ? w : 36; }
+int pc_ui_text_wrap(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines);
 static float row_y(int s) { return LY + s * LH + (s >= 4 ? LGAP : 0); }
 static float cell_x(int c) { return GX + (c & 1) * CW; }
 static float cell_y(int c) { return GY + (c >> 1) * CH; }
@@ -468,9 +472,9 @@ static void draw_screen(void)
     frame(OK_X0, OK_Y - 4, OK_X1, OK_Y + 22, 1, 0xFF6080A0, Z_UI);
     text_c(320, OK_Y, "CLOSE", 0.6f, 0xFFFFFFFF);
     if (ms.side == SIDE_CLOSE) frame(OK_X0 + 2, OK_Y - 2, OK_X1 - 2, OK_Y + 20, 2, pulse(0xFFFFFF), Z_CUR);
-    note_line(422);
-    if (note_t <= 0 && (ms.pick_cell >= 0 || ms.pick_slot >= 0)) text_c(320, 426, ms.pick_cell >= 0 ? "Now choose a shortcut." : "Now choose a weapon.", 0.5f, 0xFFF0C060);
-    text_fit(320, 448, "Confirm: a weapon, then a shortcut. Cancel on a shortcut clears it. 1-8: the weapon under the cursor.", 0.4f, 620, 0xFFA0A0A0, 1);
+    note_line(418);
+    if (note_t <= 0 && (ms.pick_cell >= 0 || ms.pick_slot >= 0)) text_c(320, 422, ms.pick_cell >= 0 ? "Now choose a shortcut." : "Now choose a weapon.", 0.5f, 0xFFF0C060);
+    pc_ui_text_wrap(24, 442, 592, "Confirm: a weapon, then a shortcut. Cancel on a shortcut clears it. 1-8: the weapon under the cursor.", 0.4f, 0xFFA0A0A0, 2);
 }
 
 /* the inventory: each weapon's slot in a corner of its cell (CursorSet: cell n's 68x48 inside at
