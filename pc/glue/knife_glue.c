@@ -8,6 +8,7 @@
 #include "../../decomp/include/ps2/veronica/prog/main.h"
 #include "../../decomp/include/ps2/veronica/prog/sub1.h"
 #include "../src/host/cheat.h"
+#include "../src/host/bindings.h"   /* g_wpn_overlay */
 #include <stdlib.h>
 
 int pad_quick_knife(void);
@@ -37,6 +38,7 @@ int pc_weapon_at_rest(void) { return sys && plp && at_rest(); }   /* also the we
 
 /* the knife is drawn by its key or about to be given back: the weapon shortcuts wait (weapon_glue.c) */
 int knife_busy(void) { return state || (pc_quick_knife_on() && g_cheat.noclip != 2 && pad_quick_knife()); }
+int knife_drawn(void) { return state != 0; }   /* (the wheel, once up, minds only this) */
 
 static void equip(int slot)
 {
@@ -93,7 +95,7 @@ unsigned int knife_pad(unsigned int pad)
         host_log("knife: weapon changed elsewhere, nothing to give back\n");   /* inventory, script, game over */
         state = 0;
     }
-    held = pc_quick_knife_on() && g_cheat.noclip != 2 && pad_quick_knife();
+    held = pc_quick_knife_on() && g_cheat.noclip != 2 && !g_wpn_overlay && pad_quick_knife();   /* not while the weapon wheel is up */
     if (held) trace();
     if (held && state == 2) state = 1;
     if (held && !state && at_rest()) {

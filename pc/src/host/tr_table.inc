@@ -1327,7 +1327,7 @@
 { "BAG", { "INVENTAIRE", "INVENTAR", "INVENTARIO", "アイテム", "ИНВЕНТАРЬ", "ENVANTER", "INVENTARIO" } },
 { "SHORTCUTS", { "RACCOURCIS", "SCHNELLWAHL", "ATAJOS", "ショートカット", "СЛОТЫ", "KISAYOLLAR", "ATALHOS" } },
 { "CLOSE", { "FERMER", "SCHLIESSEN", "CERRAR", "閉じる", "ЗАКРЫТЬ", "KAPAT", "FECHAR" } },
-{ "Second page: %s / %s", { "Page 2 : %s / %s", "Seite 2: %s / %s", "Página 2: %s / %s", "2ページ目: %s / %s", "Страница 2: %s / %s", "2. sayfa: %s / %s", "Página 2: %s / %s" } },
+{ "Second page: %s", { "Page 2 : %s", "Seite 2: %s", "Página 2: %s", "2ページ目: %s", "Страница 2: %s", "2. sayfa: %s", "Página 2: %s" } },
 { " (not in the bag)", { " (pas dans l'inventaire)", " (nicht im Inventar)", " (no está en el inventario)", "（持っていません）", " (нет в инвентаре)", " (envanterde yok)", " (fora do inventário)" } },
 { "Now choose a shortcut.", { "Choisissez maintenant un raccourci.", "Jetzt eine Schnellwahl wählen.", "Ahora elige un atajo.", "次にショートカットをえらんでください。", "Теперь выберите слот.", "Şimdi bir kısayol seçin.", "Agora escolha um atalho." } },
 { "Now choose a weapon.", { "Choisissez maintenant une arme.", "Jetzt eine Waffe wählen.", "Ahora elige un arma.", "次に武器をえらんでください。", "Теперь выберите оружие.", "Şimdi bir silah seçin.", "Agora escolha uma arma." } },
@@ -1345,3 +1345,4 @@
 { "Weapon Shortcut 6", { "Raccourci d'arme 6", "Waffen-Schnellwahl 6", "Atajo de arma 6", "武器ショートカット6", "Слот оружия 6", "Silah kısayolu 6", "Atalho de arma 6" } },
 { "Weapon Shortcut 7", { "Raccourci d'arme 7", "Waffen-Schnellwahl 7", "Atajo de arma 7", "武器ショートカット7", "Слот оружия 7", "Silah kısayolu 7", "Atalho de arma 7" } },
 { "Weapon Shortcut 8", { "Raccourci d'arme 8", "Waffen-Schnellwahl 8", "Atajo de arma 8", "武器ショートカット8", "Слот оружия 8", "Silah kısayolu 8", "Atalho de arma 8" } },
+{ "Weapon Shortcuts: Page", { "Raccourcis d'armes : page", "Waffen-Schnellwahl: Seite", "Atajos de armas: página", "武器ショートカット: ページ切替", "Слоты оружия: страница", "Silah kısayolları: sayfa", "Atalhos de armas: página" } },

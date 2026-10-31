@@ -52,6 +52,9 @@ int main(void)
     /* weapon shortcuts: 1-8 (L2 and R2's 1 and 2 before), held with C or the right stick click (R3's before) */
     for (int n = 0; n < 8; n++) CHECK(held(B_WPN1 + n, SDL_SCANCODE_1 + n) && !bind_get(B_WPN1 + n, BIND_PAD, 0));
     CHECK(held(B_WPN_HOLD, SDL_SCANCODE_C) && bind_get(B_WPN_HOLD, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_RIGHT_STICK && !bind_get(B_R3, BIND_PAD, 0));
+    /* the wheel's other page: E and RB, which free aim / R1 (and third-person action / reload) keep outside the wheel */
+    CHECK(held(B_WPN_PAGE, SDL_SCANCODE_E) && held(B_FREEAIM, SDL_SCANCODE_E) && bind_get(B_WPN_PAGE, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    CHECK(bind_get(B_R1, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER && bind_get(B_L1, BIND_PAD, 0) == 1 + SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
     CHECK(held(B_TPS_RUN, SDL_SCANCODE_RSHIFT) && held(B_NOCLIP_UP, SDL_SCANCODE_PAGEUP));
     CHECK(bind_get(B_TPS_FIRE, BIND_KB, 0) == BIND_MOUSE + SDL_BUTTON_LEFT);
     for (int r = 0; r < B_COUNT; r++) CHECK(!bind_conflict(r, BIND_KB) && !bind_conflict(r, BIND_PAD));
@@ -84,6 +87,12 @@ int main(void)
     CHECK(bind_ini_line("key_l3", "3") && held(B_L3, SDL_SCANCODE_3) && !bind_get(B_WPN3, BIND_KB, 0) && !bind_conflict(B_L3, BIND_KB));
     CHECK(bind_ini_line("key_l3", "none"));
     bind_set(B_WPN3, BIND_KB, 0, SDL_SCANCODE_3);
+    /* ... and before the page row (< 5): it gets E / RB, unless such a file gave a hotkey E */
+    CHECK(bind_ini_line("key_settings", "E") && !bind_get(B_WPN_PAGE, BIND_KB, 0) && bind_get(B_WPN_PAGE, BIND_PAD, 0));
+    CHECK(bind_ini_line("key_settings", "F1") && bind_ini_line("key_l3", "none"));
+    bind_set(B_WPN_PAGE, BIND_KB, 0, SDL_SCANCODE_E);
+    bind_set(B_FREEAIM, BIND_KB, 0, SDL_SCANCODE_E);
+    CHECK(held(B_FREEAIM, SDL_SCANCODE_E) && held(B_WPN_PAGE, SDL_SCANCODE_E) && held(B_SETTINGS, SDL_SCANCODE_F1));
     for (int r = 0; r < B_COUNT; r++) CHECK(!bind_conflict(r, BIND_KB) && !bind_conflict(r, BIND_PAD));
     /* the slots: one per weapon (assigning moves it), by item id; the bag lookup skips word 0 (the equipped slot) */
     {
@@ -294,7 +303,20 @@ int main(void)
         g_wpn_overlay = 1;
         CHECK(!bind_held(B_UP, BIND_PAD, keys, 0) && !bind_held(B_TPS_QUICKTURN, BIND_PAD, keys, 0) && !bind_held(B_TPS_RECENTER, BIND_PAD, keys, 0));
         CHECK(bind_held(B_WPN_HOLD, BIND_PAD, keys, 0) && bind_held_through(B_UP, BIND_PAD, keys, 0) && bind_held_through(B_DOWN, BIND_PAD, keys, 0));
-        CHECK(held(B_CROSS, SDL_SCANCODE_X) && !held(B_UP, SDL_SCANCODE_UP) && !held(B_L1, SDL_SCANCODE_Q));   /* the keyboard's arrows and Q/W too */
+        CHECK(held(B_CROSS, SDL_SCANCODE_X) && !held(B_UP, SDL_SCANCODE_UP) && !held(B_FREEAIM, SDL_SCANCODE_E));   /* the keyboard's arrows and E too */
+        CHECK(held(B_L1, SDL_SCANCODE_Q) && held(B_R1, SDL_SCANCODE_W));   /* L1 / R1 not (Q/W paged it before the page row) */
+        SDL_SetJoystickVirtualButton(j, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, true);   /* LB: the third-person knife's still */
+        SDL_SetJoystickVirtualButton(j, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, true);   /* RB: the page, not reload */
+        SDL_UpdateGamepads();
+        CHECK(bind_held(B_TPS_KNIFE, BIND_PAD, keys, 0));
+        CHECK(bind_held_through(B_WPN_PAGE, BIND_PAD, keys, 0) && !bind_held(B_TPS_RELOAD, BIND_PAD, keys, 0));
+        SDL_SetJoystickVirtualButton(j, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, false);
+        SDL_SetJoystickVirtualButton(j, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, false);
+        SDL_UpdateGamepads();
+        g_tps.kb_play = 1;   /* the page key in third person, where E is action: the wheel's */
+        held(B_TPS_ACTION, SDL_SCANCODE_E);
+        CHECK(bind_held_through(B_WPN_PAGE, BIND_KB, keys, 0) && !bind_held(B_TPS_ACTION, BIND_KB, keys, 0));
+        g_tps.kb_play = 0;
         g_wpn_overlay = 0;
         CHECK(bind_held(B_UP, BIND_PAD, keys, 0) && bind_held(B_TPS_RECENTER, BIND_PAD, keys, 0));
         SDL_SetJoystickVirtualButton(j, SDL_GAMEPAD_BUTTON_RIGHT_STICK, false);

@@ -231,7 +231,7 @@ int pad_quick_knife(void)
 }
 
 /* weapon shortcuts (pc/glue/weapon_glue.c), game thread: the hold row, the wheel's directions and page
-   buttons (also while it takes them), the shortcut rows; keyboard/mouse or the gamepad */
+   row (also while it takes them), the shortcut rows; keyboard/mouse or the gamepad */
 static int wpn_row(int row, int through)
 {
     const bool* k = bind_keys();
@@ -244,9 +244,9 @@ int pad_wpn_hold(void) { return wpn_row(B_WPN_HOLD, 0); }
 int pad_wpn_key(int n) { return n >= 0 && n < 8 && wpn_row(B_WPN1 + n, 0); }
 int pad_wpn_dirs(void)
 {
-    static const int rows[6] = { B_UP, B_RIGHT, B_DOWN, B_LEFT, B_L1, B_R1 };
+    static const int rows[5] = { B_UP, B_RIGHT, B_DOWN, B_LEFT, B_WPN_PAGE };
     int r = 0;
-    for (int i = 0; i < 6; i++) if (wpn_row(rows[i], 1)) r |= 1 << i;
+    for (int i = 0; i < 5; i++) if (wpn_row(rows[i], 1)) r |= 1 << i;
     return r;
 }
 
