@@ -710,9 +710,10 @@ static int fan_patched(FILE* f, const LangSource* s, const unsigned char* exe, u
         d = read_file(f, p, 1u << 20, &n);
         ok = a && d && ald_read(d, n, a);
         for (int i = 0; ok && i < a->sys.n; i++)
-            for (const uint16_t* q = a->sys.t[i]; *q != 0xFFFF; q++) {
-                if ((*q == 0xFF02 || *q == 0xFF03) && q[1] != 0xFFFF) q++;   /* (a wait, an item: not a glyph) */
-                else hits += *q == 142 || *q == 143;
+            for (uint32_t k = 0; k + 1 < a->sys.len[i]; k++) {
+                uint16_t c = a->sys.t[i][k];
+                if (c == 0xFF02 || c == 0xFF03) k++;   /* (a wait, an item: not a glyph) */
+                else hits += c == 142 || c == 143;
             }
         free(a); free(d);
         return ok ? !hits : -1;
