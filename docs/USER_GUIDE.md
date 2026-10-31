@@ -316,9 +316,10 @@ voices and what happens stay as they are.
   character who stays in the room afterwards keeps the new look.
 * **Model Selection**: *Cutscene Models* picks among the characters' cutscene models: their mouths
   move with the lines and their eyes look where the original character's do (the voice stays the
-  original character's). *All Models* also uses the player models, the creatures and the zombies
+  original character's). *All Models* also uses the creatures and the zombies
   (all zombie looks count as one choice, so zombies do not crowd out the rest); most of those keep a
-  still face. A model with hands of its own shows them instead of the character's gloves. Claire's
+  still face. Claire, Chris, Steve and Wesker always come as their cutscene models, so they talk;
+  Claire's second costume has none and keeps a still face. A model with hands of its own shows them instead of the character's gloves. Claire's
   and Chris's looks are never given to someone else: how they look is up to "Character Model".
   *Custom* uses only the models you check in a list of the *All Models* ones (with SELECT ALL and
   DESELECT ALL): in F1 under Model Selection, or in the co-op lobby (GAME RULES, RANDOMIZER, CUTSCENE

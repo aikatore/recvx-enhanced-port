@@ -14,7 +14,10 @@ int main(void)
     static const int own[CAST_CHARACTERS] = { 0, 1, 3, 5, 8, 12, 13 };   /* each character's cutscene model */
     CHECK(nc == CAST_CHARACTERS - 2 && na > 12 && na < 30);          /* the cutscene models but Claire's and Chris's; all models with the zombies as one entry */
     CHECK(cine[0] == 3 && cine[2] == 8 && cine[4] == 13);            /* Steve's, Alfred's, Rodrigo's cutscene models */
-    CHECK(!in(all, na, 10) && !in(all, na, 2) && in(all, na, ACTOR_PART + 2) && in(all, na, 17));   /* no wounded Alfred, no twin; player files, Tyrant */
+    CHECK(!in(all, na, 10) && !in(all, na, 2) && in(all, na, 17));   /* no wounded Alfred, no twin; the Tyrant */
+    for (int i = 0; i < 4; i++) CHECK(!in(all, na, ACTOR_PART + i));   /* the player files with a still face: their talking twins */
+    CHECK(in(all, na, 3) && in(all, na, 5));                          /* (Steve's and Wesker's cutscene models) */
+    for (int i = 0; i < na; i++) for (int j = 0; j < i; j++) CHECK(all[i] != all[j]);   /* each look once */
     for (int i = 0; i < 5; i++) CHECK(!in(cine, nc, i < 2 ? i : -1) && !in(all, na, i < 2 ? i : -1));   /* never Claire's or Chris's look: */
     CHECK(!in(all, na, ACTOR_PART + 0) && !in(all, na, ACTOR_PART + 1) && !in(all, na, ACTOR_PART + 4));   /* their player files neither */
     for (int i = 0; i < na; i++) CHECK(all[i] >= ACTOR_PART || actor_models[all[i]].anim != ANIM_IDLE);   /* humanoids only */
@@ -48,7 +51,7 @@ int main(void)
             CHECK(a != 1 && a != 2 && a != 5 && a != COOP_CHR_ACTOR + 0 && a != COOP_CHR_ACTOR + 1);   /* never Claire's or Chris's own looks */
             kinds += !seen[a]; seen[a] = 1;
         }
-        CHECK(kinds >= na - 1);   /* every pool entry (the zombie entry as several looks) */
+        CHECK(kinds >= na + 1 && seen[3] && seen[4]);   /* every pool entry (the zombie entry as several looks), Steve's and Wesker's player files too */
         CHECK(cast_appear_pick(123456, 0) != cast_appear_pick(654321, 0));
         printf("played as: seed 123456 -> %s, 654321 -> %s (%d looks over 2000 seeds)\n", appear_name(cast_appear_pick(123456, 0)),
                appear_name(cast_appear_pick(654321, 0)), kinds);
@@ -66,7 +69,7 @@ int main(void)
             for (int d = 0; d < c; d++) same += got[d] == got[c];
             CHECK(same <= 1);
             int a = cast_model((unsigned)s, 0, c, 1, 0, NULL);   /* all models: none of the character's own looks */
-            CHECK((in(all, na, a) || a == cast_zombie_look((unsigned)s, 0, c)) && a != own[c] && (c > 3 || a != ACTOR_PART + c));
+            CHECK((in(all, na, a) || a == cast_zombie_look((unsigned)s, 0, c)) && a != own[c] && (a < ACTOR_PART || a >= ACTOR_PART + 4));
         }
         for (scene = 1; scene < 20; scene++) {   /* random per cutscene: again in each room, the same for the same room */
             int m = cast_model((unsigned)s, (unsigned)scene * 10 + 1, 2, 0, 0, NULL);
@@ -91,7 +94,10 @@ int main(void)
         short pos[128];
         int mdl[128], nl = cast_custom_list(0, pos, mdl, 128), seen[128] = { 0 }, total, tyrant = -1, steve = -1, zomb = -1, cust[128];
         int nf = cast_pool(2, 0, cust, 128, off), claire = 0;
-        CHECK(nl == nf && nf == na + 5);   /* (Claire's, Chris's cutscene models; their player files, Claire's second costume) */
+        CHECK(nl == nf && nf == na + 3);   /* (Claire's, Chris's cutscene models; Claire's second costume; no player file with a talking twin) */
+        for (int i = 0; i < 4; i++) CHECK(!in(cust, nf, ACTOR_PART + i));
+        CHECK(in(cust, nf, 0) && in(cust, nf, 1) && in(cust, nf, ACTOR_PART + 4));
+        for (int i = 0; i < nf; i++) for (int j = 0; j < i; j++) CHECK(cust[i] != cust[j]);
         for (int j = 0; j < na; j++) CHECK(cust[j] == all[j]);
         for (int j = 0; j < nf; j++)   /* recvx.ini keys: one per entry */
             for (int i = 0; i < j; i++) { char x[128], y[128]; CHECK(strcmp(cast_entry_key(cust[i], x, sizeof x), cast_entry_key(cust[j], y, sizeof y))); }
@@ -99,29 +105,31 @@ int main(void)
             CHECK(pos[k] >= 0 && pos[k] < nf && !seen[pos[k]] && cust[pos[k]] == mdl[k] && cast_entry_name(mdl[k])[0] && cast_entry_group(mdl[k])[0]);
             seen[pos[k]] = 1;
             if (mdl[k] == 17) tyrant = pos[k];
-            if (mdl[k] == ACTOR_PART + 2) steve = pos[k];
+            if (mdl[k] == 3) steve = pos[k];
             if (mdl[k] == CAST_ZOMBIES) zomb = pos[k];
-            claire += mdl[k] == ACTOR_PART + 0;
+            claire += mdl[k] == 0;
         }
         CHECK(tyrant >= 0 && steve >= 0 && zomb >= 0 && claire == 1 && cast_custom_count(off, 0, &total) == nf && total == nf);
         for (int j = na; j < nf; j++) cast_off_put(off, j, 1);
         for (s = 0; s < 50; s++) for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 2, 0, off) == cast_model((unsigned)s, 0, c, 1, 0, NULL));
-        for (int j = 0; j < nf; j++) cast_off_put(off, j, j != tyrant && j != steve && j != zomb);   /* Tyrant, Steve's player file, the zombies */
+        for (int j = 0; j < nf; j++) cast_off_put(off, j, j != tyrant && j != steve && j != zomb);   /* Tyrant, Steve's cutscene model, the zombies */
         CHECK(cast_custom_count(off, 0, NULL) == 3 && cast_pool(2, 0, all + 64, 64, off) == 3);
         for (s = 0; s < 200; s++)
             for (c = 0; c < CAST_CHARACTERS; c++) {
                 int a = cast_model((unsigned)s, (unsigned)s % 3, c, 2, 0, off);
-                CHECK(a == 17 || (a == ACTOR_PART + 2 && c != 2) || a == cast_zombie_look((unsigned)s, (unsigned)s % 3, c));
+                CHECK(a == 17 || (a == 3 && c != 2) || a == cast_zombie_look((unsigned)s, (unsigned)s % 3, c));
             }
         for (int j = 0; j < nf; j++) cast_off_put(off, j, j != steve);   /* only Steve's look: Steve stays himself */
-        for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model(7, 0, c, 2, 0, off) == (c == 2 ? -1 : ACTOR_PART + 2));
+        for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model(7, 0, c, 2, 0, off) == (c == 2 ? -1 : 3));
         cast_off_put(off, steve, 1);   /* none */
         for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model(7, 0, c, 2, 0, off) == -1);
-        /* recvx.ini: by key; unknown keys ignored */
+        /* recvx.ini: by key; unknown keys ignored, so are the player files' with a talking twin (an older list's) */
         {
             char k[128];
             memset(cast_off, 0, sizeof(cast_off));
-            CHECK(cast_off_key("Tyrant") && cast_off_key("Zombies") && cast_off_key(cast_entry_key(ACTOR_PART + 3, k, sizeof(k))) && !cast_off_key("No Such Model") && !cast_off_key("import:gone"));
+            CHECK(cast_off_key("Tyrant") && cast_off_key("Zombies") && cast_off_key(cast_entry_key(5, k, sizeof(k))) && !cast_off_key("No Such Model") && !cast_off_key("import:gone"));
+            CHECK(!cast_off_key("Claire") && !cast_off_key("Chris") && !cast_off_key("Steve") && !cast_off_key("Wesker") && cast_off_key("Claire (Alternate Costume)"));
+            for (int j = 0; j < nf; j++) if (cust[j] == ACTOR_PART + 4) cast_off_put(cast_off, j, 0);   /* (Claire's costume: checked again) */
             CHECK(cast_off_at(cast_off, tyrant) && cast_off_at(cast_off, zomb) && !cast_off_at(cast_off, steve) && cast_custom_count(cast_off, 0, NULL) == nf - 3);
             memset(cast_off, 0, sizeof(cast_off));
         }
@@ -145,7 +153,7 @@ int main(void)
         CHECK(cast_import_id() != id);
         {   /* "Custom" with imports: after the built-in ones, by their folder in recvx.ini; unchecked, never picked */
             short pos[128];
-            int mdl[128], nl = cast_custom_list(3, pos, mdl, 128), nimp = 0, nb = na + 5;   /* (the built-in ones: Claire's and Chris's too) */
+            int mdl[128], nl = cast_custom_list(3, pos, mdl, 128), nimp = 0, nb = na + 3;   /* (the built-in ones: Claire's and Chris's too) */
             char k[128];
             actor_import_file[0] = "mods/import/outbreak2/kevin01/kevin01.cvxm";
             actor_import_file[1] = "mods/import/outbreak2/cindy01/cindy01.cvxm";

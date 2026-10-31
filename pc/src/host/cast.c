@@ -41,24 +41,31 @@ int cast_zombie_look(unsigned seed, unsigned scene, int c)
     return -1;
 }
 
-/* Claire's and Chris's looks (their cutscene models, their player files, Claire's second costume) are not in the pools (only "Custom" lists them): they
+/* Claire's and Chris's looks (their cutscene models, their player files, Claire's second costume) are not in the pools (only "Custom" lists them, the files with a twin as that twin, twin_of): they
    are the characters the story is played as, whose look "You appear as" decides. Picked for someone else they read as
    the player character: Steve at the end of Claire's part (6100, just before the switch to Chris) shown as Chris's
    cutscene model looked like Chris's part starting with a random Chris instead of the chosen model. */
 static int protagonist(int m) { return m == cine[0] || m == cine[1] || m == ACTOR_PART + 0 || m == ACTOR_PART + 1 || m == ACTOR_PART + 4; }
 
-/* "All models" without the imports: every humanoid look the menus list, the player files too; not the wounded Alfred
-   (a special state). "Custom" (custom 1) lists Claire's and Chris's looks too, after these: there a player who checks
-   them wants them */
+/* the talking twin of a look whose face stays still (-1 none): Claire's, Chris's, Steve's and Wesker's player files have no
+   face mask, the same character's cutscene model has one (its mouth moves with the lines). The cast lists only the
+   twin (the file would also double that character's chance); "Character Model" keeps the files (their hands, the
+   costume). Claire's second costume has no twin: one cutscene model per character, the costume is only in her file */
+static int twin_of(int m) { return m >= ACTOR_PART && m < ACTOR_PART + 4 ? cine[m - ACTOR_PART] : -1; }
+
+/* "All models" without the imports: every humanoid look the menus list, the player files too (but those with a talking
+   twin, above); not the wounded Alfred (a special state). "Custom" (custom 1) lists Claire's and Chris's looks too, after
+   these: there a player who checks them wants them. custom -1: the looks "Randomize Played as" picks from (the
+   player files with a twin too: the player's own look talks in cutscenes as "Cutscene doubles" have it) */
 static int builtins_of(int* out, int custom)
 {
     int n = 0, i;
-    for (i = 0; i < 5; i++) if (!protagonist(ACTOR_PART + i)) out[n++] = ACTOR_PART + i;
+    for (i = 0; i < 5; i++) if (!protagonist(ACTOR_PART + i) && (custom < 0 || twin_of(ACTOR_PART + i) < 0)) out[n++] = ACTOR_PART + i;
     for (i = 0; i < ACTOR_MODELS; i++)
         if (actor_models[i].anim != ANIM_IDLE && appear_canon(COOP_CHR_ACTOR + i) == COOP_CHR_ACTOR + i && i != 10 && i != 14 && !zombie(i) && !protagonist(i)) out[n++] = i;   /* (14 the man in the hazmat suit: no moving mouth) */
     out[n++] = CAST_ZOMBIES;   /* the zombie looks: one entry (cast_model picks the look) */
-    if (custom) {
-        for (i = 0; i < 5; i++) if (protagonist(ACTOR_PART + i)) out[n++] = ACTOR_PART + i;
+    if (custom > 0) {
+        for (i = 0; i < 5; i++) if (protagonist(ACTOR_PART + i) && twin_of(ACTOR_PART + i) < 0) out[n++] = ACTOR_PART + i;
         for (i = 0; i < ACTOR_MODELS; i++)
             if (protagonist(i) && actor_models[i].anim != ANIM_IDLE && appear_canon(COOP_CHR_ACTOR + i) == COOP_CHR_ACTOR + i) out[n++] = i;
     }
@@ -140,10 +147,10 @@ static int chr_of(int m)
 
 int cast_appear_pick(unsigned seed, int imports)
 {
-    int n = cast_pool(1, imports, pool, POOL_MAX, NULL), m;
+    int n = builtins_of(pool, -1), m, i;
     unsigned h = seed * 0x9E3779B1u + 0x632BE5ABu;
     h ^= h >> 16; h *= 0x85EBCA6Bu; h ^= h >> 13; h *= 0xC2B2AE35u; h ^= h >> 16;
-    if (!n) return 0;
+    for (i = 0; i < imports_n(imports); i++) pool[n++] = ACTOR_MODELS + i;
     m = pool[h % (unsigned)n];
     if (m == CAST_ZOMBIES) m = cast_zombie_look(seed, 0, CAST_CHARACTERS);   /* (as a character of its own) */
     return chr_of(m);

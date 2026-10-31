@@ -9,6 +9,9 @@
 
 ### Fixes
 
+- **Talking faces in the cutscene cast**: when Claire, Chris, Steve or Wesker takes someone's place in a
+  cutscene, their mouth now moves with the lines, and Wesker, Alexia and Rodrigo no longer keep their mouths
+  shut through some characters' lines.
 - **Smoother Motion under water**: the views from the water at the airport's submarine dock now move as
   smoothly as the rest of the game, wavy water effect included.
 

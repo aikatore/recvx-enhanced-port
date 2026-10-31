@@ -17,7 +17,8 @@ extern "C" {
 int cast_character(int id, int ver);
 /* the models a character may be drawn as (all: 0 "Cutscene models", 1 "All models", 2 "Custom": the "All models"
    entries whose bit in off is clear; imports: the imported models 0..imports-1 too), as actor indices (catalogue
-   entries, ACTOR_PART + n player files, imports ACTOR_MODELS + k, CAST_ZOMBIES for every zombie look together); the count */
+   entries, ACTOR_PART + 4 Claire's second costume (the other player files have no face mask: their characters' cutscene
+   models stand for them), imports ACTOR_MODELS + k, CAST_ZOMBIES for every zombie look together); the count */
 int cast_pool(int all, int imports, int* out, int max, const unsigned char* off);
 #define CAST_ZOMBIES 10100   /* cast_pool's one entry for all the zombie looks ("All models"); past ACTOR_PART + 9 */
 
@@ -51,7 +52,7 @@ int cast_model(unsigned seed, unsigned scene, int c, int all, int imports, const
    have the same; 0 with none */
 unsigned cast_import_id(void);
 /* "Randomize Played as" (BioRand, docs/BIORAND_INGAME.md S5a): the "You appear as" chr for BioRand seed number
-   seed, from it alone: an entry of the "All models" pool (zombies one entry, then a look of them; imports
+   seed, from it alone: an entry of the "All models" pool with Steve's and Wesker's player files too (zombies one entry, then a look of them; imports
    0..imports-1 too) */
 int cast_appear_pick(unsigned seed, int imports);
 

@@ -1917,6 +1917,20 @@ static void face_init(Disguise* d, int idx)
     else d->fail = idx;
 }
 
+/* bank b of our face table (6 mouth shapes, bhLipSet) cannot move the mouth: no jaw angle in any of its faces and the
+   same lip muscles (those fmSetLipSyncParam sets, 12..25) in all six. Bank 1 of Wesker's and Alexia's tables is all
+   zero, Rodrigo's six times one face: many lines of others use it (Alfred's in 1020), and on those models the mouth
+   stayed still */
+static int bank_still(const Disguise* d, int b)
+{
+    const PARAM_WORK* t = (const PARAM_WORK*)((const int*)d->w.exp0)[267] + b * 6;
+    for (int f = 0; f < 6; f++) {
+        if (*(const int*)&t[f].jawang) return 0;   /* (an angle, as fmCnkSetParamLip reads it) */
+        for (int k = 12; k < 26; k++) if (t[f].muscle[k] != t[0].muscle[k]) return 0;
+    }
+    return 1;
+}
+
 /* the double's lip sync on our face (coop_control_remote, after the enemies' bhControlMask) */
 static void face_step(Disguise* d, const BH_PWORK* ep)
 {
@@ -1933,7 +1947,8 @@ static void face_step(Disguise* d, const BH_PWORK* ep)
         d->lip = e[268];
         for (d->lip_max = k = 0; k < 4096 && p[k] != 0xFF; k += 2) if (p[k] > d->lip_max) d->lip_max = p[k];
     }
-    if (e[4] < 0 || e[4] * 6 + d->lip_max >= d->face) { e[0] &= ~0x4; ((LIP_WORK*)d->w.exp2)->flag = 0; }   /* mouth shapes past our face table: none */
+    if (e[4] < 0 || e[4] * 6 + d->lip_max >= d->face || bank_still(d, e[4])) e[4] = 0;   /* a bank past our face table or still: our first */
+    if (d->lip_max >= d->face || bank_still(d, 0)) { e[0] &= ~0x4; ((LIP_WORK*)d->w.exp2)->flag = 0; }   /* (not even that one: no mouth shapes) */
     bhControlMask(&d->w);
     if (ep->mlwP && ep->mlwP->obj_num > 13 && d->w.mlwP->obj_num > 13) {   /* the eyes look where the double's do (its expression's eye
         angles, which bhControlMask puts on the pivots 9 and 13 of every cast mask; the muscles are its own face's) */

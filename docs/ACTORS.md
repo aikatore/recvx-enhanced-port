@@ -655,8 +655,12 @@ weapon of a hand the model lacks floated at the invisible source's hand.
   op `bhLipSet` starts a line of phonemes from the model's face table). With the option a cast
   model shown for the double gets its own mask (`face_init`, ~55 KB of its slot's 128 KB in `face_mem`)
   and the double's lip state is copied onto it every tick (`face_step`), and so are its eye angles
-  (pivots 9 and 13 of every cast mask: the eyes look where the double's expression has them). Lines
-  past the model's face table are not shown; the expressions' muscles are not copied (each face has
+  (pivots 9 and 13 of every cast mask: the eyes look where the double's expression has them). A line
+  names a bank of 6 mouth shapes in the speaker's face table (`bhLipSet`); where the model's table has
+  no such bank or a still one (`bank_still`: no jaw angle, the same lip muscles in all six; bank 1 of
+  Wesker's, Alexia's and Rodrigo's tables, which many of the others' lines use) the model's first bank
+  is played instead, so its mouth moves with every line (before, Wesker's, Alexia's and Rodrigo's
+  stayed shut through all of Alfred's lines in 1020). The expressions' muscles are not copied (each face has
   its own). A player file chosen as the appearance is shown
   on the double as the same character's cutscene model. `face_src` copies rest meshes to 64-byte
   boundaries (the morph reads them with `lq`). A mask that does not fit leaves the model without.
@@ -802,9 +806,29 @@ with where the cast records are.
 | Model Selection | Pool |
 |---|---|
 | *Cutscene Models* | the cutscene models with a face mask: Steve (catalogue 3), Wesker (5), Alfred (8), Alexia (12), Rodrigo (13) |
-| *All Models* | the five player files (`ACTOR_PART + n`) and every listed humanoid catalogue model (`anim` not `ANIM_IDLE`, not a hidden twin): the cast, Alexia's first form, Nosferatu, the Tyrant, Monster Steve, the Hunters, the Bandersnatch, the anatomist, and **the zombies as one entry** (`CAST_ZOMBIES`): a character that draws it gets one of the 27 zombie looks, from (seed, scene, character) (`cast_zombie_look`: Per Character, the same look everywhere; Per Cutscene, per room). As 27 entries they were more than half of the pool, and most characters became zombies. Not "Alfred Ashford (Wounded)" (a special state). No other family is large: each player character has two or three looks (its player files and its cutscene model), Hunter and Sweeper two; the event models and Tyrant 2 are hidden twins already |
+| *All Models* | every listed humanoid catalogue model (`anim` not `ANIM_IDLE`, not a hidden twin): the cast, Alexia's first form, Nosferatu, the Tyrant, Monster Steve, the Hunters, the Bandersnatch, the anatomist, and **the zombies as one entry** (`CAST_ZOMBIES`): a character that draws it gets one of the 27 zombie looks, from (seed, scene, character) (`cast_zombie_look`: Per Character, the same look everywhere; Per Cutscene, per room). As 27 entries they were more than half of the pool, and most characters became zombies. Not "Alfred Ashford (Wounded)" (a special state). No other family is large: Hunter and Sweeper two; the event models and Tyrant 2 are hidden twins already. No player file but Claire's second costume (*Custom* only): each has a talking twin ("Talking twins" below) |
 | *Custom* | the *All Models* entries and Claire's and Chris's looks the player checked ("Custom" below) |
 | with imported models | the imported models after them (playable characters and NPCs, `IMPORT_OFFERED`: people with jaw and lid bones, [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md) "Faces", so they count as cutscene models: their jaw follows the record's mask, `imp_face`) |
+
+### Talking twins
+
+The player files (`ACTOR_PART + n`) have no face mask: a character drawn as one kept its mouth still through
+every line. Claire's, Chris's, Steve's and Wesker's files have a twin with a face mask, the same character's
+cutscene model (catalogue 0, 1, 3, 5), as the cutscene doubles use it ("Cutscene doubles", `actor_doubles`). So
+the cast lists only the twin (`cast.c twin_of`): picking that character's look gives the cutscene model, and its
+mouth moves with the record's lines. The file is no entry of its own, in no pool and not in *Custom*'s list (as
+two entries the character had twice the chance). Claire's second costume has no twin (one cutscene model per
+character; the costume exists only as her player file and has no face mask) and stays as it is, in *Custom* only.
+Every other look with a face is its only entry already: the event models and Alfred's other uniforms are hidden
+twins of the cutscene models; Monster Steve and Alexia's first form are other looks. Wesker's, Alexia's and
+Rodrigo's cutscene models also kept their mouths shut through lines whose bank of mouth shapes is still in their
+face table (all of Alfred's in 1020); they now play their first bank there ("Cutscene doubles", talking faces). "Randomize Played as" (BioRand)
+still picks from the files too: it sets the player's own look, and that one talks through the doubles.
+
+* `recvx.ini`: an older *Custom* list's lines for the files (`cast_custom_off = Steve`, `Chris`, ...) name no
+  entry now and are ignored (dropped at the next save); the cutscene models' own lines (`Steve (Cutscene Model)`)
+  keep counting, so a look unchecked under that name stays unchecked.
+* Co-op: protocol 32 ([COOP.md](COOP.md) "Protocol 32"): the positions of the `EV_CASTOFF` bits and the picks from a seed changed.
 
 ### Custom
 
@@ -812,7 +836,7 @@ with where the cast records are.
 entries the player checks in a list: SELECT ALL / DESELECT ALL, then a check box per entry, in the order and
 groups of the lobby's model page (`cast_custom_list`: the "You appear as" list's order, the zombies' one entry
 where their looks start, the imports last). Shared code `pc/glue/cast_list.c`, shown at two places: the lobby's
-CUTSCENE CAST page (CHOOSE MODELS, "12 of 16", opens it as step 8) and the BIORAND screen's EXTRA OPTIONS page
+CUTSCENE CAST page (CHOOSE MODELS, "12 of 17", opens it as step 8) and the BIORAND screen's EXTRA OPTIONS page
 (Choose Models); F1 shows the same list as check boxes under Model Selection
 (`overlay.cpp cast_custom_imgui`). OPTION > ENHANCED SETTINGS shows only the value.
 
@@ -822,16 +846,16 @@ CUTSCENE CAST page (CHOOSE MODELS, "12 of 16", opens it as step 8) and the BIORA
   `Zombies`), an import by its folder, `cast_custom_off = import:HN01` (names repeat). Read after the imports are
   listed (`config_load`); a key no entry has (an import deleted since) is ignored and dropped at the next save.
 * **Nothing checked**: nothing to swap; every character keeps its own look (`cast_model` returns -1; the list
-  says "0/16" in amber). One checked: every character but that model's own is drawn as it (a character whose
-  only choices are its own looks stays itself, e.g. Steve with only Steve's player file checked).
+  says "0/17" in amber). One checked: every character but that model's own is drawn as it (a character whose
+  only choices are its own looks stays itself, e.g. Steve with only Steve's cutscene model checked).
 * Co-op: the host's list goes to the guest (`EV_CASTOFF`, protocol 31: the bit list in 64-byte chunks, each
   chunk that changed, all to a new partner, before `EV_EOPTS`), so both pick from the host's; the guest's own
   list stays in its `recvx.ini`. Imported entries count only while both sides have the same imports, as before.
 
 ### The picks
 
-Never in a pool but *Custom*'s: Claire's and Chris's looks (their cutscene models 0 and 1, their player files, Claire's
-second costume). They are the characters the story is played as, whose look "Character Model" decides; on
+Never in a pool but *Custom*'s: Claire's and Chris's looks (their cutscene models 0 and 1, which stand for their
+player files, and Claire's second costume). They are the characters the story is played as, whose look "Character Model" decides; on
 someone else they read as the player character (Steve at the end of Claire's part, 6100, just before the
 switch to Chris, was drawn as Chris's cutscene model: it looked as if Chris's part began with a random
 Chris instead of the chosen model). Claire and Chris themselves are still cast when they appear as the
@@ -898,8 +922,8 @@ the same in Claire's part and in Chris's.
   hand pieces are the record's (Rodrigo's gloves on Claire), sized for the record's hands; on one with
   hands a piece that holds a prop in its own mesh is shown with its hand.
 * Records drawn as the same model share its face mask: the one posed last talks.
-* Mouth shapes past the model's face table are not shown (as for the double); expressions keep the
-  model's neutral face, only the eyes follow.
+* A line whose bank of mouth shapes the model lacks (or has still) is played with the model's first bank
+  (as for the double); expressions keep the model's neutral face, only the eyes follow.
 * Each model is read from its room file during the room load (as the enemy spawner reads one), at most
   six per room.
 * Test aids: `RECVX_CAST=0|1[:all][:random][:imports]` sets the options; `RECVX_CAST_TRACE=1` logs the

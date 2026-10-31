@@ -1,4 +1,4 @@
-/* Online co-op wire format (protocol 31, docs/COOP.md "Protocol 31" and "Security") and
+/* Online co-op wire format (protocol 32, docs/COOP.md "Protocol 32" and "Security") and
    the checks every received packet passes before it may change anything. No game state here:
    pc/glue/coop_glue.c applies what passes; pc/tests/test_coop.c feeds malformed packets. */
 #ifndef RECVX_COOP_PROTO_H
@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 31                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 32                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -32,7 +32,9 @@ extern "C" {
                                                generic EV_FX only for the effects in coop_fx_rules, each field checked;
                                            29: EV_EOPTS cast, cast_all, cast_assign, cast_imports (the cutscene cast), PoseExt.imp_id;
                                            30: EV_BRSEED (the host's BioRand seed string and CLI digest: a guest can generate the pack);
-                                           31: EV_CASTOFF, EV_EOPTS cast_all 2 (the cutscene cast's "Custom" models) */
+                                           31: EV_CASTOFF, EV_EOPTS cast_all 2 (the cutscene cast's "Custom" models);
+                                           32: the cutscene cast's pools without the player files that have a talking
+                                               cutscene model (other picks from the same seed, EV_CASTOFF's bits shifted) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
 #define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */
