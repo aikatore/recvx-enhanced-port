@@ -10,7 +10,7 @@ static const TrRow rows[] = {
 #include "../src/host/tr_table.inc"
 };
 
-static const char* const codes[LANG_COUNT] = { "en", "fr", "de", "es", "ja", "ru" };
+static const char* const codes[LANG_COUNT] = { "en", "fr", "de", "es", "ja", "ru", "tr", "pt-BR" };
 
 int main(void)
 {

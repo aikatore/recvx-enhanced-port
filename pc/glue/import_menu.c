@@ -432,7 +432,9 @@ static void draw_page(void)
     const char* head = im.page == P_GAMES ? tr(cats[im.cat].name) : heads[im.page] ? tr(heads[im.page]) : title_of(im.src);
     char t[320];
     unsigned int col = 0xFFA0D0FF;
-    pc_ui_text(320 - pc_ui_text_w(head, 0.72f) / 2, PAGE_Y - 2, head, 0.72f, 0xFFE8E0C0);
+    float hs = 0.72f, hw = pc_ui_text_w(head, hs);
+    if (hw > 600) { hs *= 600 / hw; hw = 600; }   /* (a long title: scaled down to fit) */
+    pc_ui_text(320 - hw / 2, PAGE_Y - 2, head, hs, 0xFFE8E0C0);
     if (im.state != IS_MENU) return;   /* (text is drawn over any box: a dialog shows the heading only) */
     pc_ui_rect(40, 94.5f, 600, 95.5f, 0x60FFFFFF, Z_RULE);
     for (int i = 0; i < nrows; i++) draw_row(i);

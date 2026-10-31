@@ -2,7 +2,9 @@
    game (languages; docs/LANGUAGES.md). The user's own disc image is read in place; what is extracted goes to
    <dir>/<source>/ (default mods/import), never into the repository. Sources: Resident Evil Outbreak File #2
    (SLUS-20984, characters); languages from Resident Evil Code: Veronica X European (SLES-50306), the US disc with
-   the Russian fan translation by Brosko (SLUS-20184) and Biohazard Code: Veronica Kanzenban (SLPM-65022). */
+   the Russian fan translation by Brosko (SLUS-20184), Biohazard Code: Veronica Kanzenban (SLPM-65022), the European
+   disc with the Turkish fan translation by Patriots Çeviri (SLES-50306) and the US disc with the Brazilian Portuguese
+   fan translation by gledson999 (SLUS-20184). */
 #pragma once
 #include <stdint.h>
 #include <stdio.h>
@@ -10,7 +12,7 @@
 extern "C" {
 #endif
 
-enum { IMPORT_OUTBREAK2, IMPORT_SLES50306, IMPORT_SLUS20184RU, IMPORT_SLPM65022, IMPORT_SOURCES };
+enum { IMPORT_OUTBREAK2, IMPORT_SLES50306, IMPORT_SLUS20184RU, IMPORT_SLPM65022, IMPORT_SLES50306TR, IMPORT_SLUS20184PT, IMPORT_SOURCES };
 enum { IMPORT_CAT_CHARACTERS, IMPORT_CAT_LANGUAGES };   /* what a source gives (the IMPORT screen's categories) */
 
 /* the groups of models (F9 lists them by group), and what to extract: bits 1 << group (F9 checkboxes,
