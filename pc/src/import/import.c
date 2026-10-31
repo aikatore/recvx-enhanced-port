@@ -28,7 +28,7 @@ const ImportSource import_sources[IMPORT_SOURCES] = {
       "Turkish fan translation by Patriots \xC3\x87" "eviri, with cutscene subtitles. Import it from your own disc image of the European release (SLES-50306) with the Turkish patch.",
       "Needs the European disc image with the Turkish fan translation by Patriots \xC3\x87" "eviri: %s." },
     { "slus20184pt", "Resident Evil Code: Veronica X (Brazilian Portuguese fan translation)", "SLUS-20184", IMPORT_CAT_LANGUAGES,
-      "Brazilian Portuguese fan translation by gledson999. Import it from your own disc image of the US release (SLUS-20184) with the patch.",
+      "Brazilian Portuguese fan translation by gledson999, with cutscene subtitles. Import it from your own disc image of the US release (SLUS-20184) with the patch.",
       "Needs the US disc image with the Brazilian Portuguese fan translation by gledson999: %s." },
 };
 

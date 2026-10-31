@@ -1,6 +1,6 @@
 /* Our own texts in the language of the setting (lang.h tr(); docs/LANGUAGES.md "Our texts"): a table keyed by the
-   English text (tr_table.inc: French, German, Spanish, Japanese, Russian; UTF-8). A text without a row, or a
-   language without a column (""), stays English. ImGui labels keep their "##id" (looked up without it). */
+   English text (tr_table.inc: French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese; UTF-8). A
+   text without a row, or a language without a column (""), stays English. ImGui labels keep their "##id" (looked up without it). */
 #include "lang.h"
 #include <stdio.h>
 #include <stdlib.h>
