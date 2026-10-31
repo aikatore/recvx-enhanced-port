@@ -36,6 +36,7 @@ void coop_test_press(unsigned int bits);   /* coop_glue.c: test aid, pad bits fo
 int bhCheckFloorNum(float py);          /* pwksub.h */
 void bhObjItmBox(O_WRK* op);            /* objitm.h */
 extern int enemy_room_gen;              /* enemyopt_glue.c: room set-ups so far */
+uint64_t gs_frame_count(void);
 
 #define OBW_N (39936 / (int)sizeof(O_WRK))   /* sys->obwp's slots (objitm.c bhInitObjItm) */
 enum { EX_MAX = 32, HERE_MAX = 8, WAL_MAX = 3 };
@@ -214,35 +215,48 @@ static void planter_frame(void)
 }
 
 /* ---------------------------------------------------------------- test aid */
-/* RECVX_EXTRAS="frame:op[:arg],...", game frames: goto:k (stand at extra k of this room, facing it), poison,
-   pad:hex (those pad bits pressed for one frame, e.g. b00 the action button / confirm, 8 right), log */
+/* RECVX_EXTRAS="frame:op[:arg],...", game frames: goto:k[:d] (stand at extra k of this room, facing it, d units
+   farther), poison,
+   pad:hex (those pad bits pressed for one frame, e.g. b00 the action button / confirm, 8 right), hold:hex:n (for n
+   frames, e.g. 21 forward), ok (confirm, only while a message shows), log */
 static void test_aid(void)
 {
     static const char* s = (const char*)-1;
-    static int clock;
+    static int clock, hold_n;
+    static unsigned hold;
+    const char* s0;
     char op[16];
-    int f, n = 0, a = 0;
+    int f, n = 0, a = 0, e, k;
     if (s == (const char*)-1) s = getenv("RECVX_EXTRAS");
+    if (hold_n > 0 && hold_n--) coop_test_press(hold);
     if (!s || !*s) return;
     clock++;
     if (sscanf(s, "%d:%15[a-z]%n", &f, op, &n) != 2 || clock < f) return;
     s += n;
+    s0 = s;
     if (!strcmp(op, "pad")) sscanf(s, ":%x", (unsigned*)&a);
+    else if (!strcmp(op, "hold")) sscanf(s, ":%x:%d", &hold, &hold_n);
     else sscanf(s, ":%d", &a);
     s = strchr(s, ',') ? strchr(s, ',') + 1 : NULL;
-    if (!strcmp(op, "goto") && a >= 0 && a < here_n) {
-        const Placement* p = &ex[here[a].e];
-        const ExtraShape* sh = ex_shape[here[a].e];
-        float spot[4], r[4];
+    for (e = 0, k = a; e < (table(), ex_n); e++)   /* goto's: this room's k-th placement (also with the rule off) */
+        if (ex[e].stg == sys->stg_no && ex[e].rom == sys->rom_no && (ex_cases[e] >> (sys->rcase & 15) & 1) && !k--) break;
+    if (!strcmp(op, "goto") && a >= 0 && e < ex_n) {
+        const Placement* p = &ex[e];
+        const ExtraShape* sh = ex_shape[e];
+        float spot[4], r[4], far = 0;
+        sscanf(s0, ":%*d:%f", &far);
         spot[0] = spot[1] = 0;
-        spot[2] = spot[3] = sh->use > 0 ? sh->wall[3] + 2.5f : sh->wall[2] - 2.0f;
+        spot[2] = spot[3] = sh->use > 0 ? sh->wall[3] + 2.5f + far : sh->wall[2] - 2.0f - far;
         extras_rect(p, spot, r);
         plp->px = r[0]; plp->pz = r[2];
+        plp->flr_no = (char)bhCheckFloorNum(p->pos[1] + 0.5f);   /* (on its floor: an entry upstairs) */
+        plp->py = rom->grand[plp->flr_no + 2];
         plp->ay = (p->ang[1] + (sh->use > 0 ? 0 : 0x8000)) & 0xFFFF;
     } else if (!strcmp(op, "poison")) plp->stflg |= 0x80000;
     else if (!strcmp(op, "pad")) coop_test_press((unsigned)a);
-    printf("test: extras %s %d at game frame %d in %d/%d case %d: %d here%s, player %.1f %.1f %.1f ay %d, %spoisoned, box screen %d, planter %d\n", op, a,
-           clock, sys->stg_no, sys->rom_no, sys->rcase, here_n, made ? "" : " (none made)", plp->px, plp->py, plp->pz, plp->ay,
+    else if (!strcmp(op, "ok") && (sys->st_flg & 0x200)) coop_test_press(0xB00);   /* only a message's confirm */
+    printf("test: extras %s %d at game frame %d (presented %u) in %d/%d case %d: %d here%s, player %.1f %.1f %.1f ay %d, %spoisoned, box screen %d, planter %d\n", op, a,
+           clock, (unsigned)gs_frame_count(), sys->stg_no, sys->rom_no, sys->rcase, here_n, made ? "" : " (none made)", plp->px, plp->py, plp->pz, plp->ay,
            plp->stflg & 0x80000 ? "" : "not ", (sys->cb_flg & 0x40000) != 0, ev);
     fflush(stdout);
 }

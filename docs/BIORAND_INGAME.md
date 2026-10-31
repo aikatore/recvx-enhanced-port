@@ -1064,6 +1064,12 @@ and the ini (`enemy_*`) are F1's and the lobby's. Enemy Seed is typed as BioRand
 digits, 0..99999); RANDOM SEED says "New seed: N". BACK, cancel and a right click go back to EXTRA OPTIONS on the
 RANDOMIZER row.
 
+**Extra Item Boxes and Herbs on EXTRA OPTIONS** (2026-10-31): the page's second row, the GAMEPLAY setting
+(`K_SET` by its label, `add_label`; F1's row, ini `extra_objects`), since its extra boxes and blue herb planters are
+meant for randomized games ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md#extra-item-boxes-and-herbs)). It works on the
+pack's rooms as on the disc's (records added at the room's set-up, the room files unchanged). Quick Start stays
+off with BioRand (its own start inventory) and the metal detector rule is co-op's; neither is on this page.
+
 **BioRand games and our randomizer**: nothing turns it off. The randomizer runs at every room load
 (`enemyopt_glue.c enemy_room_finished`, `enemy_opts()`), on the pack's room files as on the disc's; Quick Start is a
 co-op rule for the start kit and has nothing to do with it. Checked: START with seed 0's pack and the randomizer on

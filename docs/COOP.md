@@ -5,7 +5,7 @@ over the internet or a LAN (UDP). Co-op is an optional addon: with it off the ga
 as without it (every hook is `#ifdef TARGET_PC` and `if (coop_on)`).
 
 Part 1 is for players: how to host, join and play. Part 2 is the reference: architecture,
-protocol 32, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
+protocol 33, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
 [USER_GUIDE.md](USER_GUIDE.md) (settings, controls), [ACTORS.md](ACTORS.md) (models and voices),
 [ENEMIES.md](ENEMIES.md) (enemy options), [ARCHITECTURE.md](ARCHITECTURE.md),
 [BUILDING.md](BUILDING.md).
@@ -82,7 +82,7 @@ of their own (an arrow after them; RANDOMIZER also shows On or Off):
 | Entry | Its page |
 |---|---|
 | **RANDOMIZER** | The enemy options: **RANDOMIZER**, **VARIETY** (Wild / Mild) and **EVENT ENEMIES** (both shown only with the randomizer on), **SEED**, **RANDOM SEED**, then **EXTRA ENEMIES**, **LAYOUT**, and **CUTSCENE CAST** (it shows On or Off), which opens a page of its own: **RANDOMIZE CAST** (On / Off), **MODELS** (Cutscene Models / All Models / Custom; with Custom, **CHOOSE MODELS** opens the list of models to check, with SELECT ALL and DESELECT ALL; a joining player sees how many the host checked) and **ASSIGN** (Per Character / Per Cutscene; both while on), and **IMPORTED MODELS** (On / Off; while on, shown only to a player who has imported models). BACK returns to the RANDOMIZER page. See [ACTORS.md](ACTORS.md) "Cutscene cast". |
-| **EXTRA EVENTS** | Rules for single events: **QUICK START** (On / Off, see "Quick start"; hidden and off while BioRand is on), **METAL DETECTOR** (Skipped / Original, see "Metal detector"). |
+| **EXTRA EVENTS** | Rules for single events: **QUICK START** (On / Off, see "Quick start"; hidden and off while BioRand is on), **METAL DETECTOR** (Skipped / Original, see "Metal detector"), **EXTRA BOXES AND HERBS** (On / Off, see "Extra item boxes and herbs"). |
 
 Confirm or a click opens a page; BACK (or cancel, or a right click) returns to GAME RULES on its
 entry. The joiner sees the host's GAME OVER rule and both pages read-only (HOST RULES) once
@@ -575,6 +575,20 @@ with the shutters down) is released at its switch, as in the original.
 
 **Original**: as in single player. Outside a session the rule plays no part.
 
+### Extra item boxes and herbs
+
+**Extra Item Boxes and Herbs** (lobby GAME RULES, EXTRA EVENTS **EXTRA BOXES AND HERBS**; F1 / ENHANCED SETTINGS
+GAMEPLAY and BioRand's EXTRA OPTIONS "Extra Item Boxes and Herbs"; ini `extra_objects`, default off): four more item
+boxes and eight blue herb planters in some rooms ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md) "Extra item boxes and
+herbs"), useful with the randomizers. In single player it is your own setting; in co-op the host's counts for both
+players (the joiner's lobby shows it read-only), and it can change during a session (the objects come or go in the
+room you are in).
+
+Both players see and use the same objects. An extra box is a box like every other: with shared loot it is the one
+shared box (both may have it open at the same time, as at any box; see "Shared item box"), with individual loot each
+player's own. A planter cures only the player who uses it, as often as you like; while one player is at it, the
+other is told "<name> is using this", as at a puzzle.
+
 ### Saving without ink ribbons
 
 **Free Typewriter Saves** (lobby INK RIBBONS *Not needed*, F3 and
@@ -753,6 +767,7 @@ CO-OP page of OPTION > ENHANCED SETTINGS and F1 (plus F3 and the lobby). Setting
 | Host Port, locked | `coop_port` | 1..65535 (7140) |
 | Automatic Port Forwarding, locked | `coop_upnp` | 0/1 (1) |
 | Free Typewriter Saves (GAMEPLAY page; co-op: host) | `no_ink_ribbon` | 0/1 (0) |
+| Extra Item Boxes and Herbs (GAMEPLAY page; co-op: host) | `extra_objects` | 0/1 (0); see "Extra item boxes and herbs" |
 | Extra Enemies (GAMEPLAY page; co-op: host) | `enemy_extra` | 0..3 (0); see [ENEMIES.md](ENEMIES.md) |
 
 Kept in `recvx.ini` without a menu row of their own: `coop_join` (last address or room code),
@@ -801,7 +816,8 @@ also without co-op), and the title menu in
 (`detector_glue.c`, see below), `system.c bhSysCallMonitor` after a new game's `AllItemInit` (`pc_quick_start`,
 see "Quick start" below). Not co-op only: `event.c
 bhPlItemCheck` and `ps2_McSaveFile.c mcWriteStartSaveFile` ask `pc_no_ink_ribbon()` (the setting,
-in co-op the host's rule) whether a typewriter needs and uses an ink ribbon.
+in co-op the host's rule) whether a typewriter needs and uses an ink ribbon, and `extras_glue.c` asks
+`pc_extra_objects()` (`OPT2_EXTRA_OBJECTS`, the same way) whether the rooms get the extra boxes and planters.
 
 ### How the game represents the player
 
@@ -1310,10 +1326,10 @@ send time minus the echoed datagram's arrival. Sample = arrival - our clock - th
 smoothed (EWMA 0.1). The name tag's point goes with the recorded frame (`stream_point`) and is
 interpolated with the in-between frames; it snaps on camera cuts and in vanilla mode.
 
-## Protocol 32
+## Protocol 33
 
-`COOP_VERSION` is **32**; both players need builds with the same version (a mismatch is reported,
-e.g. "The host uses co-op compatibility version 31; yours is 32. Use matching game builds."). The co-op server does not
+`COOP_VERSION` is **33**; both players need builds with the same version (a mismatch is reported,
+e.g. "The host uses co-op compatibility version 32; yours is 33. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
 tag, `EV_OWN`; 17 trade requests; 18 voices; 19 the game rules `OPT_IMPORTANT`, `OPT_NO_RIBBON`,
@@ -1326,7 +1342,9 @@ make other enemies from the same seed); 21 `COOP_HIT_PRECISE` in `EV_ENE_HIT` (t
 and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid` (see "Game over",
 "Metal detector"); 23 the game rule `OPT_QUICK_START` (see "Quick start"; it takes the last free bit of
 `Pose.opts`, so a further rule needs a field of its own); 24 enemy slots 0..254 (`COOP_ENE_SLOTS`, the PC's
-255 slots) in every slot field, and `EV_FX` marks its `FX_*` references in `refs` (the bytes 253..255 are slots now); 25 `Pose.use`, the trigger the sender is using (one player at a puzzle at a time, see "Puzzles"; the pose grew to 112 bytes); 26 `EneSnap.id`, the enemy type in the slot: a snapshot applies only to a slot holding the same type (`hokan_count` is 16 bits now; the snapshot stays 100 bytes); 27 `PoseExt.br`, `br_seed`, `br_id` (BioRand: the host's choice and each side's pack; `Pose.opts` has no free bit, so a field of its own; the extension grew to 104 bytes); 28 direct sessions are encrypted after a handshake bound to the whole join code (`PKT_HELLO`, `PKT_HELLO_ACK`, see "Security"), so `Pose.auth`, the 32-bit join-code proof, is gone (`rsv`, zero), the goodbye's `COOP_REJ_STATE`, and a generic `EV_FX` only for the effects co-op sends, each field checked (see "Effects and voices"); 29 the cutscene cast: `EV_EOPTS` carries `cast`, `cast_all`, `cast_assign`, `cast_imports` (the event stays 88 bytes) and `PoseExt.imp_id`, the sender's imported models (the extension grew to 108 bytes); 30 `EV_BRSEED`, the host's BioRand seed string and CLI checksum (a guest can generate the host's pack, see "BioRand"; the pose and extension are unchanged); 31 `EV_CASTOFF`, the host's cutscene cast "Custom" list, and `EV_EOPTS` `cast_all` 2 (Custom); 32 the cutscene cast's pools without the player files that have a talking twin (Claire's, Chris's, Steve's, Wesker's: their cutscene models stand for them, [ACTORS.md](ACTORS.md) "Talking twins"), so the same seed picks other models and the `EV_CASTOFF` bits name other entries (the event is unchanged). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+255 slots) in every slot field, and `EV_FX` marks its `FX_*` references in `refs` (the bytes 253..255 are slots now); 25 `Pose.use`, the trigger the sender is using (one player at a puzzle at a time, see "Puzzles"; the pose grew to 112 bytes); 26 `EneSnap.id`, the enemy type in the slot: a snapshot applies only to a slot holding the same type (`hokan_count` is 16 bits now; the snapshot stays 100 bytes); 27 `PoseExt.br`, `br_seed`, `br_id` (BioRand: the host's choice and each side's pack; `Pose.opts` has no free bit, so a field of its own; the extension grew to 104 bytes); 28 direct sessions are encrypted after a handshake bound to the whole join code (`PKT_HELLO`, `PKT_HELLO_ACK`, see "Security"), so `Pose.auth`, the 32-bit join-code proof, is gone (`rsv`, zero), the goodbye's `COOP_REJ_STATE`, and a generic `EV_FX` only for the effects co-op sends, each field checked (see "Effects and voices"); 29 the cutscene cast: `EV_EOPTS` carries `cast`, `cast_all`, `cast_assign`, `cast_imports` (the event stays 88 bytes) and `PoseExt.imp_id`, the sender's imported models (the extension grew to 108 bytes); 30 `EV_BRSEED`, the host's BioRand seed string and CLI checksum (a guest can generate the host's pack, see "BioRand"; the pose and extension are unchanged); 31 `EV_CASTOFF`, the host's cutscene cast "Custom" list, and `EV_EOPTS` `cast_all` 2 (Custom); 32 the cutscene cast's pools without the player files that have a talking twin (Claire's, Chris's, Steve's, Wesker's: their cutscene models stand for them, [ACTORS.md](ACTORS.md) "Talking twins"), so the same seed picks other models and the `EV_CASTOFF` bits name other entries (the event is unchanged); 33 `Pose.opts2`, more game rules
+in the first of the pose's spare bytes (`OPT2_EXTRA_OBJECTS` 1, see "Extra item boxes and herbs"; unknown bits refused; the pose stays 112
+bytes). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1365,7 +1383,7 @@ over its datagrams.
 | 32-39 | `chr`, `costume`, `stg`, `rom`, `pos` (room entry point), `opts` (host's game rules: `OPT_INDIVIDUAL` 1, `OPT_TRADE_FREEZE` 2, `OPT_IMPORTANT` 4, `OPT_NO_RIBBON` 8, `OPT_SKIP_SYNC` 16, `OPT_GAMEOVER_BOTH` 32, `OPT_SKIP_DETECTOR` 64, `OPT_QUICK_START` 128), `regroup` (host counter), `mfile` (sender's own part file - 10) |
 | 40-91 | position (3 floats), angles (3 ints), `mtn_no`, `frm_no` (the frame shown, before the step's advance: `actor_frame`), `mtn_md`, `hokan_count`, `hokan_rate`, `wpnr_no`, `hp`, `mode0`, `mode1`, `nev`, `nene` |
 | 92-107 | `stflg`, `ev_ack` (highest event id applied from the peer), `mset` (`MSET_OWN` -1, `MSET_ROOM` -2, `MSET_NONE` -3, or an enemy slot 0..254), `busy` (`BUSY_NONE/EVENT/MENU/BOX/TRADE`), `reject` (`PKT_BYE`, `PKT_REJECT`) or, in `PKT_POSE`, `rcase` (the room case of the room the sender is in + 1, 0 not sent; same room means the same case too, and the follow loads it), `voice_n`, `voice`, `pflg` (`flg & 6`: hit / held; bits 0 and 3-7 the aim pitch, -31..31 steps of 60/31 degrees, 0 straight or not sent: `coop_pitch_get`), `flr` (`flr_no + 3`, 0 not sent) |
-| 108-111 | `use` (the room trigger the sender examined and is held by + 1, 0 none: the partner does not take it meanwhile), 3 spare bytes (zero, else refused) |
+| 108-111 | `use` (the room trigger the sender examined and is held by + 1, 0 none: the partner does not take it meanwhile), `opts2` (host's further game rules: `OPT2_EXTRA_OBJECTS` 1; other bits refused), 2 spare bytes (zero, else refused) |
 
 `flags`: `PF_IN_GAME` 1, `PF_VISIBLE` 2, `PF_ROOM_MTN` 4, `PF_WANT_BLOB` 8 (joiner asks for the
 game state), `PF_EXT` 16 (a `PoseExt` follows), `PF_CINE` 32 (in a cutscene its skip button could

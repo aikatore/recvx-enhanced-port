@@ -294,6 +294,7 @@ until the right square on the white strip is.
 | Save System | Separate Files | see [Saves](#saves) |
 | Import Memory Card Saves | | copies the card's saves into save files |
 | Free Typewriter Saves | Off | typewriters save without an ink ribbon |
+| Extra Item Boxes and Herbs | Off | four more item boxes and eight blue herb planters in some rooms (helps with the randomizers); in co-op the host's |
 | Extra Enemies | Off | up to 1, 2 or 3 more per room, of kinds the room has |
 | Rearranged Enemies | Off | free-roaming enemies start elsewhere in their room |
 | Enemy Randomizer | Off | enemies become other kinds; bosses stay |
