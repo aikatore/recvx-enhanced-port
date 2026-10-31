@@ -9,6 +9,8 @@
   hangs or crashes. Import the language again to see those messages in it (until then they are English).
 - **Playing Manual glitch in co-op**: reading the manual from FILE removes it from your bag again even
   after your partner read theirs, so the original game's endless explosive arrows glitch works in co-op too.
+- **Gold Lugers in co-op**: skipping the scene where Steve swaps the sub machine guns for the Gold Lugers now
+  gives you the Lugers even when your partner has the sub machine guns, and your partner gets them too.
 
 ## 0.7.0 (2026-10-30)
 

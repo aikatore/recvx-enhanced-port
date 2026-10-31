@@ -495,6 +495,12 @@ An item that is the triggering player's alone: nothing goes on the partner's flo
 loot a partner who watched the event and got one too gives it back at once ("... belongs to your partner
 (shared loot).").
 
+Steve's swap in the training facility (3/10: he takes the sub machine guns, Claire gets the Gold Lugers): the
+full scene gives the Lugers whatever the bag holds, but its skip only turns the sub machine guns in the bag into
+them, and in co-op the player who walks into it often has none (the partner took them). In co-op the skip gives
+the Lugers then too, and it sends them to the partner as the full scene does (`event.c bhPlItemChangeM`; single
+player keeps the original game's skip).
+
 ### BioRand
 
 With BioRand ([modding/README.md](modding/README.md#randomizer-biorand)) the host chooses in GAME RULES, row
@@ -1672,3 +1678,7 @@ oversized datagrams, receive timestamps) and port mapping start/stop cycles.
 minutes, so not in ctest): two instances in 0/8, only the joiner steps onto the floor that wakes the zombies and
 fires; it fails unless the host logs the partner on that floor, its zombie turns hittable and goes for the joiner,
 the joiner's hits are applied, and neither side logs STALL or ORPHAN.
+
+`pc/tools/coop_lugers_check.sh OUT [PORT]` (the same needs, about three minutes): the host, without sub machine
+guns, skips Steve's swap in 3/10 while the joiner, holding them, waits in 3/9; it fails unless the host gets the
+Gold Lugers and sends them, and the joiner keeps them for 3/10 and finds them there.
