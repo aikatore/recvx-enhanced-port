@@ -1082,8 +1082,21 @@ static void rt_touch(const RenderTarget* rt)
     if (!gs_replaying && rt && first[rt - rts].how == FIRST_NONE) first[rt - rts].how = FIRST_READ;
 }
 
+/* An in-between image captures its own target where the executed frame did (the full-screen
+   distortion of the under-water views, effect 110, draws the whole picture back from it), and
+   its draws bind that capture in place of the executed frame's: bound to the executed frame's
+   capture, every in-between image showed the executed frame (30 FPS motion). Kept textures,
+   valid for the current replay only (gs_replay_begin). */
+static struct { GLuint exec, tex, fbo; int pw, ph, live; } rcap[2];   /* ponytail: 2 captures per frame; more fall back to the executed frame's */
+static GLuint replay_capture_for(GLuint t)
+{
+    for (int k = 0; k < 2; k++) if (rcap[k].live && rcap[k].exec == t) return rcap[k].tex;
+    return t;
+}
+
 void gs_replay_begin(void)
 {
+    rcap[0].live = rcap[1].live = 0;
     RenderTarget* disp = start_valid ? rt_find(start_fbp, start_fbw) : NULL;
     if (disp && (disp->pw != img[sti].pw || disp->ph != img[sti].ph)) disp = NULL;
     for (int i = 0; i < nreloads; i++) reloads[i].applied = 0;
@@ -1249,7 +1262,7 @@ void gs_flush(void)
             float ascale;
             if (srt == cur_rt) host_log("gs: feedback texture (RT samples itself) at TBP=%u\n", tbp);
             GLuint t;
-            if (replay_memo && replay_memo->rt < 0 && replay_memo->tex) { t = replay_memo->tex; w = replay_memo->w; h = replay_memo->h; ascale = replay_memo->ascale; }
+            if (replay_memo && replay_memo->rt < 0 && replay_memo->tex) { t = replay_capture_for(replay_memo->tex); w = replay_memo->w; h = replay_memo->h; ascale = replay_memo->ascale; }
             else {
                 t = tex_get(tex0, st->texa, &w, &h, &ascale);
                 if (record_memo && record_memo->rt < 0) { record_memo->tex = t; record_memo->w = w; record_memo->h = h; record_memo->ascale = ascale; }
@@ -1747,15 +1760,15 @@ void gs_rt_to_mem(uint32_t bp, uint32_t bw, uint32_t psm, uint32_t x, uint32_t y
    there is no such target (transparent black). wide (hor+): GS x w/2 -+ w/2 * gs_hor_scale(),
    the view the game drew with its widened clip volume, into a texture as many times wider
    (the full-screen render texture, drawn back over the widened view) */
-unsigned int gs_capture_rt(uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, int wide)
+static void capture_rt(GLuint* tex, GLuint* fbo, int* cw, int* ch, uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, int wide)
 {
     RenderTarget* rt = rt_find(fbp, fbw ? fbw : 1);
-    GLuint tex = 0, fbo = 0;
     float gw = wide && g_margin_x ? w * gs_hor_scale() : (float)w;   /* GS pixels captured across */
-    int cw = 0, ch = 0, pw = (int)(gw * g_scale), ph = (int)(h * g_scale);
+    int pw = (int)(gw * g_scale), ph = (int)(h * g_scale);
     gs_flush();
     rt_touch(rt);
-    ensure_target(&tex, &fbo, &cw, &ch, pw, ph);
+    ensure_target(tex, fbo, cw, ch, pw, ph);
+    glBindFramebuffer(GL_FRAMEBUFFER, *fbo);   /* (ensure_target binds it only when it makes it) */
     glDisable(GL_SCISSOR_TEST);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glClearColor(0, 0, 0, 0);
@@ -1766,8 +1779,24 @@ unsigned int gs_capture_rt(uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, i
         glBlitFramebuffer(sx, 0, sx + sw, sh, 0, 0, sw, sh, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+unsigned int gs_capture_rt(uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, int wide)
+{
+    GLuint tex = 0, fbo = 0;
+    int cw = 0, ch = 0;
+    capture_rt(&tex, &fbo, &cw, &ch, fbp, fbw, w, h, wide);
     glDeleteFramebuffers(1, &fbo); fb_forget();
     return tex;
+}
+
+/* an in-between image's StoreRenderTex (rcap) */
+void gs_replay_capture(unsigned int exec_tex, uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, int wide)
+{
+    int k = 0;
+    while (k < 2 && rcap[k].live && rcap[k].exec != exec_tex) k++;
+    if (!exec_tex || k == 2) return;
+    capture_rt(&rcap[k].tex, &rcap[k].fbo, &rcap[k].pw, &rcap[k].ph, fbp, fbw, w, h, wide);
+    rcap[k].exec = exec_tex; rcap[k].live = 1;
 }
 
 /* ---------------- movies (pc/src/movie) ---------------- */

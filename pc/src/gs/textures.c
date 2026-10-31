@@ -214,6 +214,12 @@ void ntex_define_capture(uint32_t id, unsigned int gl_tex, int w, int h)
     d->valid = 1;
 }
 
+unsigned int ntex_capture_tex(uint32_t id)
+{
+    const Def* d = def_find(id);
+    return d ? d->capture : 0;
+}
+
 /* run ops [a, b) of a definition on the current GS memory, transfers rebased from the
    definition's addresses to tbp/cbp */
 static void run_ops(const Def* d, int a, int b, uint32_t tbp, uint32_t cbp)

@@ -314,6 +314,14 @@ shows in-between images at the display rate:
   duration, so the executed frame's targets are never drawn over. Only the parts a frame reads
   before overwriting are copied in. The display target's start image is the previous final
   image (the two swap roles instead of being copied).
+- **Render textures in replays**: a replay takes its own `StoreRenderTex` capture where the
+  executed frame took one (`gs_gl.c gs_replay_capture`, one kept texture, a blit) and its draws
+  bind it in place of the executed frame's. The full-screen distortion (effect 110: the
+  under-water views of the submarine dock 4/3 and 8/5, the type 0 wave) draws the whole picture
+  back from that capture, so bound to the executed frame's every in-between image was a copy of
+  the executed frame: 0 of 1050 in-between images in 4/3's under-water cuts showed motion of
+  their own, 30 FPS motion with the fixed camera (third person turns the distortion off). The
+  ripple grid is the executed frame's. Also redrawn: the command room's monitor (7/3, effect 111).
 - **Static strips**: a matched native strip whose blended fields are bitwise identical in both
   frames is drawn unblended from a per-frame vertex buffer instead of being clipped, converted and
   uploaded again.

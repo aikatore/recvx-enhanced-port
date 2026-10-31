@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Smoother Motion under water**: the camera views from the water at the airport's submarine dock now move as smoothly as the rest of the game, wavy water effect included.
+
 ## 0.7.1 (2026-10-31)
 
 ### New
