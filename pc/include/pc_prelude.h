@@ -182,6 +182,7 @@ int   pc_no_ink_ribbon(void);                 /* typewriters save without an ink
 int   pc_detector_skipped(void);              /* co-op rule "Metal detector: Skipped" (pc/glue/detector_glue.c): event.c bhPlItemCheck in 0/9 finds no metal */
 void  pc_detector_scd1(void);                 /* ... event.c bhControlEvent before scd1: the empty security boxes rest */
 void  pc_quick_start(void);                   /* co-op rule "Quick start" (pc/glue/coop_glue.c): system.c bhSysCallMonitor after a new game's AllItemInit */
+int   pc_manual_in_bag(void);                 /* ... fileview.c FileExit01: our playing manual still in our bag (not read, whatever the shared flag says) */
 int   pc_biorand_save_differs(const void* save);   /* BioRand (pc/glue/biorand_glue.c): ps2_LoadScreen.c, a save made with another pack asks */
 void  pc_biorand_save_accept(void* save);          /* ... loaded anyway */
 void  pc_biorand_load_text(void);                  /* ... the question's lines */
