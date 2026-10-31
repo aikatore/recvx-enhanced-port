@@ -195,8 +195,8 @@ static int build_piece(const PlacerDef* d, const unsigned char* mlb, unsigned in
     for (i = 0; i < nobj; i++)
         for (j = (int)rd32(RAW(i) + 44); j != -1; j = (int)rd32(RAW(raw_idx(j)) + 48)) par[raw_idx(j)] = (short)i;
     for (r = 0; r < 8 && d->rec[r] >= 0; r++) {
-        int k = d->rec[r], s = subtree(k);
-        if (k >= nobj || n + s > NODES) { why = "too many nodes"; return 0; }
+        int k = d->rec[r], s = k < nobj ? subtree(k) : NODES + 1;
+        if (n + s > NODES) { why = "too many nodes"; return 0; }
         for (j = 0; j < s; j++) list[n++] = (short)(k + j);
         roots++;
     }
@@ -233,8 +233,8 @@ static int build_piece(const PlacerDef* d, const unsigned char* mlb, unsigned in
             if (m + 24 > end) { why = "bad node"; return 0; }
             vo = (int)rd32(m);
             po = (int)rd32(m + 4);
-            vl = vo == -1 ? 0 : vlist_len(base + vo, end);
-            pl = po == -1 ? 0 : plist_len(base + po, end, &idn, ids);
+            vl = vo == -1 ? 0 : vo < 0 ? -1 : vlist_len(base + vo, end);
+            pl = po == -1 ? 0 : po < 0 ? -1 : plist_len(base + po, end, &idn, ids);
             if (vl < 0 || pl < 0) { why = "bad node data (or more than 16 pictures)"; return 0; }
             nm = (NJS_CNK_MODEL*)keep_take(24, 0);
             if (!nm) { why = "out of model memory"; return 0; }
