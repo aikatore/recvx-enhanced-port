@@ -126,13 +126,16 @@ static DrawState batch_state;
 static int batch_valid;
 
 static GLuint vao, vbo, present_prog, present_vao, svao, svbo;
-/* the GS program in two variants: [1] with the alpha test, [0] without it (no discard in the
-   shader, so the GPU tests depth before shading: hidden pixels cost nothing). Draws whose alpha
-   test cannot discard take [0]; the arithmetic is the same, only the dead branch is gone. */
+/* the GS program in variants, compiled at start: the shader with only the branches a draw takes
+   (V_ATEST alpha test, V_TEX texture, V_REGION region clamp/repeat, V_FOG fog). Without the alpha
+   test the shader has no discard, so the GPU tests depth before shading (hidden pixels cost
+   nothing); the others save the work and registers of the branches. The arithmetic of a taken
+   branch is the same in every variant. */
+enum { V_ATEST = 1, V_TEX = 2, V_REGION = 4, V_FOG = 8, NPROG = 16 };
 typedef struct { GLint rt_size, rt_margin, tme, tfx, tcc, fst, texsize, fge, fogcol, ate, atst, aref,
                  tex, tex_alpha_scale, texofs, premul, zscale, clamp_mode, clamp_vals, afail_pass, rt16; } ProgUni;
-static GLuint progs[2];
-static ProgUni pu[2], *pcur = &pu[0];
+static GLuint progs[NPROG];
+static ProgUni pu[NPROG], *pcur = &pu[0];
 static GLint up_tex, up_rect, up_pic, up_ss;
 
 static const char* vs_src =
@@ -156,7 +159,7 @@ static const char* vs_src =
     "  v_stq = a_stq; v_col = a_col; v_fog = a_fog;\n"
     "}\n";
 
-static const char* fs_src =   /* (after "#version" and "#define ATEST n") */
+static const char* fs_src =   /* (after "#version" and the variant's #defines) */
     "in vec3 v_stq; in vec4 v_col; in float v_fog;\n"
     "uniform sampler2D u_tex;\n"
     "uniform int u_tme, u_tfx, u_tcc, u_fst, u_fge, u_ate, u_atst, u_premul, u_afail_pass;\n"
@@ -166,15 +169,18 @@ static const char* fs_src =   /* (after "#version" and "#define ATEST n") */
     "layout(location=0) out vec4 o_col;\n"
     "vec2 wrap(vec2 tc){\n"
     "  vec2 t = tc;\n"
+    "#if REGION\n"
     "  if (u_clamp_mode.x == 2) t.x = clamp(t.x, u_clamp_vals.x, u_clamp_vals.y + 0.999);\n"
     "  if (u_clamp_mode.y == 2) t.y = clamp(t.y, u_clamp_vals.z, u_clamp_vals.w + 0.999);\n"
     "  if (u_clamp_mode.x == 3) t.x = float((int(floor(t.x)) & int(u_clamp_vals.x)) | int(u_clamp_vals.y)) + fract(t.x);\n"
     "  if (u_clamp_mode.y == 3) t.y = float((int(floor(t.y)) & int(u_clamp_vals.z)) | int(u_clamp_vals.w)) + fract(t.y);\n"
+    "#endif\n"
     "  return t;\n"
     "}\n"
     "void main(){\n"
     "  vec4 c = v_col * 255.0;\n"     /* GS 0..255 integer domain */
-    "  if (u_tme != 0) {\n"
+    "#if TEX\n"
+    "  {\n"
     "    vec2 tc = (u_fst != 0) ? v_stq.xy : (v_stq.xy / v_stq.z) * u_texsize;\n"
     "    tc = wrap(tc);\n"
     "    vec4 t = texture(u_tex, tc * u_texofs.xy + u_texofs.zw);\n"
@@ -190,7 +196,10 @@ static const char* fs_src =   /* (after "#version" and "#define ATEST n") */
     "    else { r.rgb = t.rgb * c.rgb / 128.0 + c.a; r.a = (u_tcc != 0) ? t.a : c.a; }\n"
     "    c = min(r, vec4(255.0));\n"
     "  }\n"
-    "  if (u_fge != 0) { float f = clamp(v_fog, 0.0, 255.0); c.rgb = (f * c.rgb + (255.0 - f) * u_fogcol.rgb) / 256.0; }\n"
+    "#endif\n"
+    "#if FOG\n"
+    "  { float f = clamp(v_fog, 0.0, 255.0); c.rgb = (f * c.rgb + (255.0 - f) * u_fogcol.rgb) / 256.0; }\n"
+    "#endif\n"
     "  c = floor(c + 0.0001);\n"
     "#if ATEST\n"
     "  if (u_ate != 0) {\n"
@@ -288,9 +297,11 @@ void gs_renderer_init(void)
     if (!gs_mem_selftest()) host_fatal("Graphics setup failed. Restart the game.");
     gs_reset();
 
-    for (int v = 0; v < 2; v++) {
+    for (int v = 0; v < NPROG; v++) {
         static char fs[8192];
-        SDL_snprintf(fs, sizeof(fs), "#version 330 core\n#define ATEST %d\n%s", v, fs_src);
+        if ((v & V_REGION) && !(v & V_TEX)) continue;
+        SDL_snprintf(fs, sizeof(fs), "#version 330 core\n#define ATEST %d\n#define TEX %d\n#define REGION %d\n#define FOG %d\n%s",
+                     !!(v & V_ATEST), !!(v & V_TEX), !!(v & V_REGION), !!(v & V_FOG), fs_src);
         progs[v] = compile(vs_src, fs);
 #define U(n) pu[v].n = glGetUniformLocation(progs[v], "u_" #n)
         U(rt_size); U(rt_margin); U(tme); U(tfx); U(tcc); U(fst); U(texsize); U(fge); U(fogcol); U(ate); U(atst); U(aref);
@@ -787,8 +798,8 @@ static void apply_blend(const DrawState* st, int* premul)
 
 /* the GS programs' uniforms are set only when their value changes (program object state: kept
    across program switches, and only gs_flush sets theirs), per variant */
-static uint32_t ucache[2][64][4];
-static uint8_t uknown[2][64];
+static uint32_t ucache[NPROG][64][4];
+static uint8_t uknown[NPROG][64];
 static int uni_changed(GLint loc, const void* v, int n)
 {
     int p = (int)(pcur - pu);
@@ -1214,8 +1225,13 @@ void gs_flush(void)
         glScissor((GLint)((x0 + g_margin_x) * g_scale), (GLint)(y0 * g_scale),
                   (GLsizei)((x1 - x0 + 1) * g_scale), (GLsizei)((y1 - y0 + 1) * g_scale));
     }
-    {   /* the alpha test can discard: not off, not ALWAYS */
-        int v = (st->ctx.test & 1) && ((st->ctx.test >> 1) & 7) != 1;
+    {   /* the branches the draw takes; the alpha test where it can discard: not off, not ALWAYS */
+        static int notex = -1;   /* RECVX_DBG_NOTEX, below */
+        int t, cl = (int)(st->ctx.clamp & 15);
+        if (notex < 0) notex = SDL_getenv("RECVX_DBG_NOTEX") != NULL;
+        t = (st->prim >> 4) & 1 && !notex;
+        int v = ((st->ctx.test & 1) && ((st->ctx.test >> 1) & 7) != 1 ? V_ATEST : 0) | (t ? V_TEX : 0) |
+                (t && ((cl & 3) >= 2 || (cl >> 2) >= 2) ? V_REGION : 0) | ((st->prim >> 5) & 1 ? V_FOG : 0);
         pcur = &pu[v];
         glUseProgram(progs[v]);
     }
