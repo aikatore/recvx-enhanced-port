@@ -34,7 +34,7 @@ enum {
     BRDL_GENERATED,                                              /* generate: exit 0 */
 };
 /* error: in BRDL_ERROR. pct, msg: the CLI's last "Progress:" line; warn: its last "Warning:" line (any state) */
-typedef struct { int state, done, total, pct; char error[160], msg[96], warn[160]; } BrdlStatus;
+typedef struct { int state, done, total, pct; char error[400], msg[96], warn[160]; } BrdlStatus;
 
 extern char g_biorand_cli_digest[BRDL_DIGEST_CAP];   /* ini biorand_cli_digest: the installed archive's digest, "" unknown */
 const char* biorand_cli_exe(void);   /* <game folder>/biorand-cli[.exe], whether or not it is there; NULL if the folder is unknown */

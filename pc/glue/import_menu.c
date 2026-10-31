@@ -148,7 +148,7 @@ static void look(void)
 static const char* counts(char* t, int n)
 {
     if (im.players && im.npcs) snprintf(t, n, tr("%d playable characters and %d NPCs can be played."), im.players, im.npcs);
-    else if (im.players || im.npcs) snprintf(t, n, tr("%d %s can be played."), im.players + im.npcs, im.players ? "playable characters" : "NPCs");
+    else if (im.players || im.npcs) snprintf(t, n, tr("%d %s can be played."), im.players + im.npcs, tr(im.players ? "playable characters" : "NPCs"));
     else snprintf(t, n, tr("No models can be played."));
     return t;
 }

@@ -15,6 +15,8 @@
   after your partner read theirs, so the original game's endless explosive arrows glitch works in co-op too.
 - **Gold Lugers in co-op**: skipping the scene where Steve swaps the sub machine guns for the Gold Lugers now
   gives you the Lugers even when your partner has the sub machine guns, and your partner gets them too.
+- **Translations**: a few menu texts that stayed English are now translated, among them the co-op messages
+  and the BioRand download errors.
 
 ## 0.7.0 (2026-10-30)
 

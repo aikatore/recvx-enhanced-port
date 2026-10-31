@@ -288,11 +288,11 @@ const char* bind_pad_choice(int want, char* buf, int n)
 {
     int cnt = 0;
     SDL_JoystickID* ids = SDL_GetGamepads(&cnt);
-    const char* name = "not connected";
-    if (!want) snprintf(buf, n, "Any");
+    const char* name = tr("not connected");
+    if (!want) snprintf(buf, n, "%s", tr("Any"));
     else {
         for (int i = 0; ids && i < cnt; i++)
-            if (SDL_GetGamepadPlayerIndexForID(ids[i]) == want - 1) name = SDL_GetGamepadNameForID(ids[i]) ? SDL_GetGamepadNameForID(ids[i]) : "Gamepad";
+            if (SDL_GetGamepadPlayerIndexForID(ids[i]) == want - 1) name = SDL_GetGamepadNameForID(ids[i]) ? SDL_GetGamepadNameForID(ids[i]) : tr("Gamepad");
         snprintf(buf, n, "%d: %.24s", want, name);
     }
     SDL_free(ids);
@@ -316,7 +316,8 @@ const char* bind_code_name(int dev, int code, char* buf, int n)
     const char* s = NULL;
     if (!code) return "-";
     if (dev == BIND_KB) {
-        ini_name(dev, code, buf, n);
+        if (code >= BIND_MOUSE && code - BIND_MOUSE < 6) snprintf(buf, n, tr("Mouse %s"), tr(mouse_names[code - BIND_MOUSE]));
+        else ini_name(dev, code, buf, n);
         return buf;
     }
     if (code >= BIND_AXIS) {
@@ -325,10 +326,12 @@ const char* bind_code_name(int dev, int code, char* buf, int n)
         else if (a == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) s = ps ? "R2" : xb ? "RT" : nin ? "ZR" : "Right trigger";
         else {
             static const char* dir[4][2] = { { "right", "left" }, { "down", "up" }, { "right", "left" }, { "down", "up" } };
-            snprintf(buf, n, "%s stick %s", a < 2 ? "Left" : "Right", dir[a & 3][neg]);
+            char st[24];
+            snprintf(st, sizeof(st), "%s stick %s", a < 2 ? "Left" : "Right", dir[a & 3][neg]);
+            snprintf(buf, n, "%s", tr(st));   /* ("Left stick up": a row each) */
             return buf;
         }
-        snprintf(buf, n, "%s", s);
+        snprintf(buf, n, "%s", tr(s));
         return buf;
     }
     switch (code - 1) {
@@ -355,16 +358,16 @@ const char* bind_code_name(int dev, int code, char* buf, int n)
     case SDL_GAMEPAD_BUTTON_TOUCHPAD: s = "Touchpad"; break;
     default: snprintf(buf, n, "%s", ini_name(dev, code, buf, n)); return buf;
     }
-    snprintf(buf, n, "%s", s);
+    snprintf(buf, n, "%s", tr(s));
     return buf;
 }
 
 const char* bind_pad_desc(char* d, int n)
 {
-    if (g_input_source == INPUT_KBM) return "Gamepads disabled. Change Input Devices to use one.";
+    if (g_input_source == INPUT_KBM) return tr("Gamepads disabled. Change Input Devices to use one.");
     if (pad_info_get(NULL, d, n)) return d;
-    if (g_input_pad) { snprintf(d, n, "Gamepad %d not connected", g_input_pad); return d; }
-    return "No gamepad connected";
+    if (g_input_pad) { snprintf(d, n, tr("Gamepad %d not connected"), g_input_pad); return d; }
+    return tr("No gamepad connected");
 }
 
 /* game rows: what the DS2 button does under the game's key type (pad.c bhSetPad's virtual

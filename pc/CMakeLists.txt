@@ -147,6 +147,9 @@ FetchContent_Declare(bcdec GIT_REPOSITORY https://github.com/iOrange/bcdec.git G
 FetchContent_MakeAvailable(xxhash bcdec)
 target_include_directories(recvx_platform PRIVATE ${xxhash_SOURCE_DIR} ${bcdec_SOURCE_DIR})
 set_property(SOURCE src/host/host.c src/host/overlay.cpp src/net/update.c APPEND PROPERTY COMPILE_DEFINITIONS "RECVX_VERSION=\"${RECVX_VERSION}\"")
+# our texts' table: its text goes into the executable as it is, outside the address window (tr.c, res/recvx.rc)
+set_property(SOURCE src/host/tr.c APPEND PROPERTY COMPILE_DEFINITIONS "TR_TABLE_INC=\"${CMAKE_CURRENT_SOURCE_DIR}/src/host/tr_table.inc\"")
+set_property(SOURCE src/host/tr.c APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/host/tr_table.inc)
 target_include_directories(recvx_platform PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/sdk
@@ -174,8 +177,9 @@ if(RECVX_LAYOUT_PAD)
 endif()
 if(WIN32)
     enable_language(RC)
-    set(RECVX_RES res/recvx.rc)   # the program icon
-    set_source_files_properties(res/recvx.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/res/recvx-enhanced.ico)
+    set(RECVX_RES res/recvx.rc)   # the program icon, our texts' table
+    set_source_files_properties(res/recvx.rc PROPERTIES OBJECT_DEPENDS
+                                "${CMAKE_CURRENT_SOURCE_DIR}/res/recvx-enhanced.ico;${CMAKE_CURRENT_SOURCE_DIR}/src/host/tr_table.inc")
 endif()
 add_executable(recvx ${LAYOUT_PAD_SRC} ${RECVX_RES} $<TARGET_OBJECTS:recvx_game> $<TARGET_OBJECTS:recvx_platform>
                $<$<TARGET_EXISTS:glibc_compat>:$<TARGET_OBJECTS:glibc_compat>>)
@@ -191,7 +195,8 @@ if(WIN32)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Place the image inside the PS2 address window (see docs/ARCHITECTURE.md, "Data model and memory").
-    target_link_options(recvx PRIVATE -no-pie -Wl,-Ttext-segment=0x30000000 -static-libgcc -static-libstdc++)
+    # Our texts' table (tr.c, section .trtab) right above the window: not game memory.
+    target_link_options(recvx PRIVATE -no-pie -Wl,-Ttext-segment=0x30000000 -Wl,--section-start=.trtab=0x40000000 -static-libgcc -static-libstdc++)
     set_target_properties(recvx PROPERTIES POSITION_INDEPENDENT_CODE OFF)
 endif()
 
@@ -262,7 +267,8 @@ target_link_libraries(test_import PRIVATE SDL3::SDL3 m)
 add_test(NAME import COMMAND test_import ${CMAKE_CURRENT_BINARY_DIR})
 
 # our translations (src/host/tr_table.inc) against their languages' game fonts (src/host/glyphs.c): no missing letter
-add_executable(test_lang tests/test_lang.c src/host/glyphs.c)
+# ... and tr() reads them from the executable as the game does (src/host/tr.c: the same rows)
+add_executable(test_lang tests/test_lang.c src/host/glyphs.c src/host/tr.c ${RECVX_RES})
 add_test(NAME lang COMMAND test_lang)
 
 # checked file reading (include/pc_parse.h): PRS against the game's decoder, crafted AFS tables, .cvxm

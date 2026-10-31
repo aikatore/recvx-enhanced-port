@@ -68,9 +68,10 @@ Windows `-mno-ms-bitfields`.
   literal scratchpad addresses.
 - **The window is 256 MB**: all static game memory (room arena, texture heap, spawn pool, ...)
   is the image's `.bss` and must end below `0x40000000`; `ps2/memory.c` checks this at start.
-  Host allocations (SDL, OpenGL, caches) can live anywhere. The PC raises several PS2 budgets
-  within this window (see [ENEMIES.md](ENEMIES.md) and
-  [modding/ROOM_FORMAT.md](modding/ROOM_FORMAT.md#limits-and-budgets)).
+  Host allocations (SDL, OpenGL, caches) can live anywhere, and host data built into the executable
+  can stay out of it too (our texts' table: the Linux section `.trtab` at `0x40000000`, a Windows
+  resource, which the check leaves out). The PC raises several PS2 budgets within this window
+  (see [ENEMIES.md](ENEMIES.md) and [modding/ROOM_FORMAT.md](modding/ROOM_FORMAT.md#limits-and-budgets)).
 - String literals are writable (the game writes into them; the EE has no MMU protection).
 - File paths are UTF-8 everywhere (`pc_fopen` in `host/fileio.c` uses `_wfopen` on Windows; the
   Windows build rebuilds `argv` from the UTF-16 command line). Settings are saved by writing a

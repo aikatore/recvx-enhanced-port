@@ -14,6 +14,7 @@
 static int fails, saves;
 #define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); fails++; } } while (0)
 
+const char* tr(const char* en) { return en; }   /* (host/tr.c: the game's language) */
 void host_log(const char* fmt, ...) { va_list ap; va_start(ap, fmt); vprintf(fmt, ap); va_end(ap); }
 void crash_thread_init(void) {}
 void settings_save_later(void) { saves++; }

@@ -105,8 +105,8 @@ void ps2_memory_init(void)
         uint8_t* base = (uint8_t*)GetModuleHandleA(NULL);
         IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)(base + ((IMAGE_DOS_HEADER*)base)->e_lfanew);
         IMAGE_SECTION_HEADER* sh = IMAGE_FIRST_SECTION(nt);
-        for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; i++, sh++)   /* not .reloc, .debug_* */
-            if (!(sh->Characteristics & IMAGE_SCN_MEM_DISCARDABLE) && (uintptr_t)base + sh->VirtualAddress + sh->Misc.VirtualSize > end)
+        for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; i++, sh++)   /* not .reloc, .debug_*, nor the resources */
+            if (!(sh->Characteristics & IMAGE_SCN_MEM_DISCARDABLE) && memcmp(sh->Name, ".rsrc", 6) && (uintptr_t)base + sh->VirtualAddress + sh->Misc.VirtualSize > end)
                 end = (uintptr_t)base + sh->VirtualAddress + sh->Misc.VirtualSize;
 #else
         extern char _end;

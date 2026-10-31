@@ -16,6 +16,7 @@
 
 /* the client's network and clock (rendezvous.c), all fake */
 static uint32_t clk = 1000;
+const char* tr(const char* en) { return en; }   /* (host/tr.c: the game's language) */
 void host_log(const char* fmt, ...) { (void)fmt; }
 uint32_t net_ms(void) { return clk; }
 int net_local_ip(char* out, int cap) { (void)out; (void)cap; return 0; }

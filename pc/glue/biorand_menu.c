@@ -237,7 +237,7 @@ static int gen_end(const BrdlStatus* s)
     if (s->state == BRDL_GENERATED) {
         host_log("biorand menu: generated %s; the pack says seed %d\n", bm.str, biorand_seed());
         snprintf(m, sizeof(m), tr("BioRand seed %d is ready. Choose START to play it.%s%s"), bm.gen_seed,
-                 s->warn[0] ? " Warning: " : "", s->warn);
+                 s->warn[0] ? tr(" Warning: ") : "", s->warn);
         result(m, 0);
     } else if (s->state == BRDL_ERROR) result(s->error, 1);
     else { to_menu(); say("Generation cancelled.", 0); }
@@ -673,8 +673,8 @@ static const char* pick_text(void)
 {
     static char t[240];
     const char* ps = biorand_seed_string();
-    snprintf(t, sizeof(t), tr("Choose the difficulty.%s"), ps[0] && strcmp(ps, bm.str) ? " Your option changes are not generated yet: "
-             "this plays the generated game. GENERATE first to play them." : "");
+    snprintf(t, sizeof(t), tr("Choose the difficulty.%s"), ps[0] && strcmp(ps, bm.str) ? tr(" Your option changes are not generated yet: "
+             "this plays the generated game. GENERATE first to play them.") : "");
     return t;
 }
 static const char* pick_head(void)

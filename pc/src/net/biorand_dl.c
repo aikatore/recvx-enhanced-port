@@ -12,6 +12,7 @@
 #endif
 
 void host_log(const char* fmt, ...);
+const char* tr(const char* en);   /* the player's texts in the game's language (host/tr.c; test_biorand_dl: en) */
 void crash_thread_init(void);
 void settings_save_later(void);
 
@@ -21,7 +22,7 @@ void settings_save_later(void);
 char g_biorand_cli_digest[BRDL_DIGEST_CAP];
 
 static SDL_AtomicInt st_state, st_done, st_total, busy, cancel;
-static char st_error[160];   /* written before st_state turns BRDL_ERROR (SDL's atomics are full barriers) */
+static char st_error[400];   /* written before st_state turns BRDL_ERROR (SDL's atomics are full barriers) */
 static int job_install;      /* set before the thread starts */
 static int job_gen;          /* the CLI runs (gen below); set before the thread starts */
 static char gen_seed[96], gen_iso[1100], gen_mods[1100], gen_cfg[1100];
@@ -36,11 +37,15 @@ static int cancelled(void) { return SDL_GetAtomicInt(&cancel); }
 /* 0, the error text kept for the UI (biorand_cli_status) */
 static int fail(const char* fmt, ...)
 {
-    va_list ap;
+    char log[400];
+    va_list ap, aq;
     va_start(ap, fmt);
-    SDL_vsnprintf(st_error, sizeof(st_error), fmt, ap);
+    va_copy(aq, ap);
+    SDL_vsnprintf(st_error, sizeof(st_error), tr(fmt), ap);   /* (shown in the language; the log in English) */
+    SDL_vsnprintf(log, sizeof(log), fmt, aq);
+    va_end(aq);
     va_end(ap);
-    host_log("biorand-cli: %s\n", st_error);
+    host_log("biorand-cli: %s\n", log);
     return 0;
 }
 
@@ -516,7 +521,7 @@ static int gen(void)
     if (code == -2) return fail("cancelled");
     if (strstr(line, "eed version")) return fail("%s Update the game or use an older BioRand CLI.", line);
     if (code == 2 && line[0]) return fail("%s", line);
-    if (code == 3) return fail("BioRand failed: %s", line[0] ? line : "No details available.");
+    if (code == 3) return fail("BioRand failed: %s", line[0] ? line : tr("No details available."));
     return fail("BioRand stopped (error %d)%s%s", code, line[0] ? ": " : "", line);
 }
 

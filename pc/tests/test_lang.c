@@ -11,6 +11,8 @@ static const TrRow rows[] = {
 };
 
 static const char* const codes[LANG_COUNT] = { "en", "fr", "de", "es", "ja", "ru", "tr", "pt-BR" };
+int g_lang;                                        /* (lang_glue.c) */
+int lang_installed(int l) { return l >= 0 && l < LANG_COUNT; }
 
 int main(void)
 {
@@ -26,5 +28,13 @@ int main(void)
             bad++;
         }
     if (bad) printf("%d translations use letters their game font lacks: reword them (docs/LANGUAGES.md \"Letters\")\n", bad);
+    /* tr() reads the table from the executable's copy of the file (src/host/tr.c): the same rows as compiled here */
+    tr_init();
+    for (g_lang = 1; g_lang < LANG_COUNT; g_lang++)
+        for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++) {
+            const char* t = rows[i].t[g_lang - 1];
+            const char* want = t && *t ? t : rows[i].en;
+            if (strcmp(tr(rows[i].en), want)) { printf("%s: tr(\"%s\") is \"%s\", the table says \"%s\"\n", codes[g_lang], rows[i].en, tr(rows[i].en), want); bad++; }
+        }
     return bad != 0;
 }

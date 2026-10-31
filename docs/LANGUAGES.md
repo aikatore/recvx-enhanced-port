@@ -19,7 +19,7 @@ is imported.
 | 2. Importer: IMPORT > LANGUAGES, F9, `pc/src/import/lang.c` | done: French, German, Spanish in about 7 s, 18-47 MB each; Russian 2 s, 22 MB; Japanese 3 s, 7.5 MB; Turkish 2 s, 18 MB; Brazilian Portuguese 1 s, 15 MB |
 | 3. Runtime: the language's files, room messages, font (widths, cells, space), file pages (Japanese: pictures), the title and OPTION pictures, the executable's texts, Language setting | done |
 | 4. Cutscene subtitles, Subtitles setting: a language of its own, in its own font | done (French, German, Spanish, Russian, Japanese, Turkish, Brazilian Portuguese; English has none on any disc) |
-| 5. Our own texts: `tr()`, the table (French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese), the game fonts' letters (glyphs.c, ctest `lang`), the overlay's fonts | done (about 1150 texts) |
+| 5. Our own texts: `tr()`, the table (French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese), the game fonts' letters (glyphs.c, ctest `lang`), the overlay's fonts | done (about 1320 texts) |
 | 6. Verification | done: runs per language (below), layout check identical, Linux and Windows builds, ctest |
 
 Resume notes: research scripts (Python, capstone in a venv), the translation pipeline and the runs are in the job
@@ -399,9 +399,12 @@ Gothic / Segoe UI, Arial; Linux: Noto Sans CJK / DejaVu Sans), else those letter
 
 **Address window** (docs/ARCHITECTURE.md "Data model and memory"): the imported data (`ROOMS.MES`, the merged
 tables, the executable's texts, the Japanese glyph index) and the importer's tables are on the heap; the textures
-of our own above the window (`ps2_dma_alloc`). The US plates' 257 KB buffer left the window; the seven languages'
-strings of `tr_table.inc` and the Japanese cells (4 KB) are in it: `_end` 0x3FD4C008, about 2.70 MB free (five
-languages: 0x3FD303A8; the Turkish and Brazilian Portuguese columns took about 110 KB).
+of our own above the window (`ps2_dma_alloc`). The US plates' 257 KB buffer left the window, and so did our texts'
+table: `tr_table.inc` is not compiled, its text is in the executable outside the window (Linux: the section
+`.trtab`, linked at 0x40000000; Windows: a resource, after the image's game memory, which `memory.c`'s check leaves
+out) and `tr_init` reads its rows into the heap (the same sorted table; ctest `lang` checks the rows read are the
+compiled ones). The Japanese cells (4 KB) are in the window: `_end` 0x3FCE79E8, about 3.1 MB free (with the table
+in the window: 0x3FD4C008; Windows: the end 0x3FC38864, before 0x3FD11A90 with the table and the icon counted).
 
 **Layout**: the European font is monospaced (16 units for most letters, the US font 10..24), so translated text is
 wider; the translations were kept short (labels at most about 15% longer, sentences 30%) and the long ones

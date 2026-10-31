@@ -295,7 +295,7 @@ static const char* tp_room_nm(int v, char* b, int n)
 {
     int k, f = tp_stage_first(g_cheat.tp_stg, &k);
     if (k && v >= 0 && v < k) { cut(b, area_len(tp_room_name(f + v, 0, b, n))); return b; }
-    snprintf(b, n, "%d%s", g_cheat.tp_rom, tp_reading() ? " (loading...)" : "");
+    snprintf(b, n, "%d%s", g_cheat.tp_rom, tp_reading() ? tr(" (loading...)") : "");
     return b;
 }
 static int tp_pos_n(void) { int i = tp_find(g_cheat.tp_stg, g_cheat.tp_rom); return i >= 0 ? tp_entries(i) : 32; }

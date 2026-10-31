@@ -6,6 +6,7 @@
 #include "../../include/pc_parse.h"
 #include "../net/biorand_dl.h"
 #include "biorand_opts.h"
+#include "lang.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -90,7 +91,13 @@ void biorand_scan(void)
 int biorand_pack(void) { return br.pack; }
 int biorand_seed(void) { return br.seed; }
 unsigned int biorand_id(void) { return br.id; }
-const char* biorand_seed_text(void) { return br.text; }
+const char* biorand_seed_text(void)   /* (shown: in the language) */
+{
+    static char t[64];
+    if (br.seed < 0) return "";
+    snprintf(t, sizeof(t), tr("seed %d"), br.seed);
+    return t;
+}
 const char* biorand_seed_string(void) { return br.str; }
 
 /* this game's state; a co-op guest follows the host (coop_biorand: the host's choice, checked against our pack) */

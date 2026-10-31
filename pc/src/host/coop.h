@@ -41,7 +41,7 @@ typedef struct CoopState {
     int trade_near, trade_slots;    /* the partner stands next to us; inventory slots */
     unsigned int trade_inv[12];     /* our inventory: [0] equipped slot, [2..] (id << 16) | count */
     unsigned int trade_out, trade_in;   /* our open offer / the partner's to us (0 = none) */
-    char trade_msg[96];
+    char trade_msg[256];
     /* lobby screen and name tag (pc/glue/lobby_glue.c) */
     char name[COOP_NAME_MAX];       /* our name, as the partner sees it (ini coop_name) */
     int nametag;                    /* show the partner's name above its head (ini coop_nametag) */
@@ -98,7 +98,7 @@ typedef struct CoopStatus {
     char status[400];
     int trade_near, trade_slots;
     unsigned int trade_inv[12], trade_out, trade_in;
-    char trade_msg[96];
+    char trade_msg[256];
     char peer_name[COOP_NAME_MAX];
     int peer_lobby, peer_lchr;
     char peer_note[40];
@@ -127,10 +127,10 @@ typedef struct TradeView {
     unsigned int want_w[2];         /* ... and the item word there when asked (a request ends when it changes) */
     int ready[2];
     int waiting;                    /* a swap is on its way */
-    char why[96];                   /* why the selected pair does not swap, "" when it does */
-    char msg[96];                   /* the last result or notice ... */
+    char why[256];                  /* why the selected pair does not swap, "" when it does */
+    char msg[256];                  /* the last result or notice ... */
     unsigned int msg_until;         /* ... shown until then (net_ms) */
-    char hint[96];                  /* request phase: the line at the bottom of the screen */
+    char hint[256];                 /* request phase: the line at the bottom of the screen */
     char name[COOP_NAME_MAX];       /* the partner's */
     char key[48];                   /* the trade request binding(s), for hints */
 } TradeView;

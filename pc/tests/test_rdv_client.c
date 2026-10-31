@@ -23,6 +23,7 @@ static int fails;
 /* ---------------------------------------------------------------- the fake network */
 static uint32_t clk = 1000;
 static int quiet = 1;
+const char* tr(const char* en) { return en; }   /* (host/tr.c: the game's language) */
 void host_log(const char* fmt, ...) { va_list a; if (quiet) return; va_start(a, fmt); vprintf(fmt, a); va_end(a); }
 uint32_t net_ms(void) { return clk; }
 int net_local_ip(char* out, int cap) { (void)out; (void)cap; return 0; }

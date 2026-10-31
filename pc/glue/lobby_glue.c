@@ -1294,7 +1294,7 @@ static void row_text(int r, char* label, char* val, int n)
     case R_IMP: strcpy(label, "GEAR"); snprintf(val, n, "%s", g_coop.important ? "For both" : "Shared"); break;
     case R_SKIPS: strcpy(label, "CUTSCENE SKIP"); snprintf(val, n, "%s", g_coop.skip_sync ? "Together" : "Separately"); break;
     case R_GOVER: strcpy(label, "GAME OVER"); snprintf(val, n, "%s", (lb.role ? coop_host_gameover_both() : g_coop.gameover_both) ? "Both" : "Each player"); break;
-    case R_BIORAND: strcpy(label, "BIORAND"); snprintf(val, n, (lb.role ? coop_biorand() == 1 : biorand_setting()) && biorand_seed_text()[0] ? "On (%s)" : "%s",
+    case R_BIORAND: strcpy(label, "BIORAND"); snprintf(val, n, tr((lb.role ? coop_biorand() == 1 : biorand_setting()) && biorand_seed_text()[0] ? "On (%s)" : "%s"),
                                                        (lb.role ? coop_biorand() == 1 : biorand_setting()) ? biorand_seed_text()[0] ? biorand_seed_text() : "On" : "Off"); break;
     case R_QUICK: strcpy(label, "QUICK START"); snprintf(val, n, "%s", (lb.role ? coop_quick_start() : g_coop.quick_start) ? "On" : "Off"); break;
     case R_DETECTOR: strcpy(label, "METAL DETECTOR"); snprintf(val, n, "%s", (lb.role ? coop_skip_detector() : g_coop.skip_detector) ? "Skipped" : "Original"); break;
@@ -1698,7 +1698,7 @@ static void draw_previews(void)
     scene_end();
     if (g_coop.state == COOP_CONNECTED && g_coop.peer_in_game) {
         char t[64];
-        snprintf(t, sizeof(t), tr("%s is playing"), g_coop.peer_name[0] ? g_coop.peer_name : "Your partner");
+        snprintf(t, sizeof(t), tr("%s is playing"), g_coop.peer_name[0] ? g_coop.peer_name : tr("Your partner"));
         text_c(232, 210, t, 0.5f, 0xFFFFE0A0);
     } else if (!partner) text_c(232, 210, joining() ? "Waiting for the host" : hosting() ? "Waiting for a partner" : "", 0.5f, 0xFFA0A0A0);
     else if (!g_coop.peer_lobby) text_c(222, 372, "(in the title menu)", 0.45f, 0xFFA0A0A0);

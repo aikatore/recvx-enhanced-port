@@ -12,6 +12,7 @@
 #endif
 
 void host_log(const char* fmt, ...);
+const char* tr(const char* en);   /* the player's texts in the game's language (host/tr.c; the test clients: en) */
 
 const NetAddr rdv_peer = { 0, 0xFFFF };
 
@@ -36,7 +37,7 @@ static uint32_t kick_seq;               /* host: the member we removed (its KICK
 static uint64_t req_id;
 static uint8_t cookie[16], token[16], sk[32], pk[32], salt[16], pw_key[32], peer_pk[32];
 static RdvAddr my_pub;
-static char room[RDV_CODE_LEN + 1], status[200], err[200];
+static char room[RDV_CODE_LEN + 1], status[400], err[400];
 static RdvSession ses;
 static NetAddr path, cand[4];
 static NetResolve* dns;
@@ -87,8 +88,8 @@ static void fail(const char* why)
 {
     if (room_id && st != RDV_ST_FAILED) send_close();   /* the server need not wait for the time-out */
     room_id = 0;
-    snprintf(err, sizeof(err), "%s", why);
-    snprintf(status, sizeof(status), "%s", why);
+    snprintf(err, sizeof(err), "%s", tr(why));
+    snprintf(status, sizeof(status), "%s", tr(why));
     st = RDV_ST_FAILED;
     forget_secrets();
     host_log("rdv: %s\n", why);
@@ -185,7 +186,7 @@ static void begin_hello(void)
     st = RDV_ST_HELLO;
     t_start = net_ms();
     t_sent = t_start - RETRY_MS;
-    snprintf(status, sizeof(status), "Contacting co-op server %s...", net_addr_str(&cfg.server));
+    snprintf(status, sizeof(status), tr("Contacting co-op server %s..."), net_addr_str(&cfg.server));
 }
 
 /* the server name: "host" or "host:port"; 1 with host and port split off */
@@ -247,7 +248,7 @@ void rdv_start(const RdvConfig* c)
         if (!(dns = net_resolve_start(host, port))) { fail("Cannot look up the co-op server. Try restarting the game."); return; }
         st = RDV_ST_RESOLVE;
         t_start = now;
-        snprintf(status, sizeof(status), "Looking up co-op server %s...", host);
+        snprintf(status, sizeof(status), tr("Looking up co-op server %s..."), host);
         return;
     }
     begin_hello();
@@ -291,7 +292,7 @@ void rdv_kick(void)
     st = RDV_ST_WAITING;
     t_ack = net_ms();
     t_ka = t_ack - KA_WAIT_MS;
-    snprintf(status, sizeof(status), "Room %s is open.", fmt_code(room));
+    snprintf(status, sizeof(status), tr("Room %s is open."), fmt_code(room));
     host_log("rdv: partner (member %u) removed from room %s\n", kick_seq, fmt_code(room));
 }
 
@@ -306,15 +307,15 @@ static void reregister(void)
     room[0] = 0;
     if (!fresh_keys()) return;
     begin_hello();
-    snprintf(status, sizeof(status), "Server lost your room. Opening a new one...");
+    snprintf(status, sizeof(status), "%s", tr("Server lost your room. Opening a new one..."));
 }
 
 static void set_path_status(void)
 {
-    snprintf(status, sizeof(status), "%s%s%s%s", st == RDV_ST_DIRECT ? (path_lan ? "Connected directly (local network)" : "Connected directly")
-             : st == RDV_ST_RELAY ? "Connected via server relay" : "Connecting to partner...",
-             !e2e ? "" : keys_ok ? ", encrypted, check code " : ", encrypted (securing connection...)", e2e && keys_ok ? ses.verify : "",
-             orphan ? " - the co-op server lost the room" : "");
+    snprintf(status, sizeof(status), "%s%s%s%s", tr(st == RDV_ST_DIRECT ? (path_lan ? "Connected directly (local network)" : "Connected directly")
+             : st == RDV_ST_RELAY ? "Connected via server relay" : "Connecting to partner..."),
+             !e2e ? "" : tr(keys_ok ? ", encrypted, check code " : ", encrypted (securing connection...)"), e2e && keys_ok ? ses.verify : "",
+             orphan ? tr(" - the co-op server lost the room") : "");
 }
 
 static void confirm(const NetAddr* a)
@@ -425,7 +426,7 @@ static void on_error(const RdvMsg* m)
     static const char* msgs[] = { "", "", "Room not found. Check the code.", "This room needs a password", "Wrong password",
                                   "The room is full", "Too many attempts. Wait a minute.", "", "The co-op server is full or busy",
                                   "Too many rooms from your address" };
-    char b[120];
+    char b[400];
     switch (m->err) {
     case RDV_E_COOKIE: st = RDV_ST_HELLO; t_sent = net_ms() - RETRY_MS; return;   /* a new cookie */
     case RDV_E_NEED_PW:
@@ -441,8 +442,8 @@ static void on_error(const RdvMsg* m)
         fail(m->err == RDV_E_NEED_PW ? "Enter the room password in PASSWORD." : msgs[m->err]);
         return;
     case RDV_E_VERSION:
-        snprintf(b, sizeof(b), "Server compatibility version: %d. Game: %d. Update the %s.", m->version, RDV_VERSION,
-                 m->version > RDV_VERSION ? "game" : "server");
+        snprintf(b, sizeof(b), tr(m->version > RDV_VERSION ? "Server compatibility version: %d. Game: %d. Update the game."
+                 : "Server compatibility version: %d. Game: %d. Update the server."), m->version, RDV_VERSION);
         fail(b);
         return;
     default: fail(msgs[m->err]); return;
@@ -477,8 +478,8 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
     if (magic == RDV_MAGIC) {
         if ((t = rdv_parse(buf, n, &m)) < 0) {
             if (t == RDV_BAD_VERSION && same(from, &cfg.server) && st >= RDV_ST_HELLO && st < RDV_ST_WAITING) {
-                char b[120];
-                snprintf(b, sizeof(b), "Server compatibility version: %d. Game: %d. Use compatible versions.", m.version, RDV_VERSION);
+                char b[400];
+                snprintf(b, sizeof(b), tr("Server compatibility version: %d. Game: %d. Use compatible versions."), m.version, RDV_VERSION);
                 fail(b);
             }
             return -1;
@@ -505,7 +506,7 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
             memcpy(cookie, m.cookie, 16);
             my_pub = m.pub;
             st = RDV_ST_REQUEST;
-            snprintf(status, sizeof(status), cfg.host ? "Opening a room on the co-op server..." : "Looking for room %s...", fmt_code(cfg.code));
+            snprintf(status, sizeof(status), tr(cfg.host ? "Opening a room on the co-op server..." : "Looking for room %s..."), fmt_code(cfg.code));
             send_request();
             return -1;
         case RDV_ROOM:
@@ -515,7 +516,7 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
             memcpy(room, m.code, sizeof(room));
             st = RDV_ST_WAITING;
             t_ka = t_ack = net_ms();
-            snprintf(status, sizeof(status), "Room %s is open.", fmt_code(room));
+            snprintf(status, sizeof(status), tr("Room %s is open."), fmt_code(room));
             host_log("rdv: room %s\n", fmt_code(room));
             return -1;
         case RDV_INTRO:
@@ -585,10 +586,10 @@ void rdv_frame(void)
             dns_cache.ok = 1;
             begin_hello();
         } else if (r < 0 || now - t_start > RESOLVE_MS) {
-            char b[200];
+            char b[400];
             if (!r) net_resolve_cancel(dns);
             dns = NULL;
-            snprintf(b, sizeof(b), "Cannot find co-op server %s%s. Check the address.", dns_name, r ? "" : " (lookup timed out)");
+            snprintf(b, sizeof(b), tr("Cannot find co-op server %s%s. Check the address."), dns_name, r ? "" : tr(" (lookup timed out)"));
             fail(b);
         }
         return;
@@ -596,9 +597,9 @@ void rdv_frame(void)
     case RDV_ST_HELLO:
     case RDV_ST_REQUEST:
         if (now - t_start > GIVE_UP_MS) {
-            char b[160];
-            snprintf(b, sizeof(b), "No reply from co-op server %s. Check port %d and your connection.%s", net_addr_str(&cfg.server),
-                     ntohs(cfg.server.port), cfg.host ? " - direct joins still work" : "");
+            char b[400];
+            snprintf(b, sizeof(b), tr("No reply from co-op server %s. Check port %d and your connection.%s"), net_addr_str(&cfg.server),
+                     ntohs(cfg.server.port), cfg.host ? tr(" - direct joins still work") : "");
             fail(b);
             return;
         }

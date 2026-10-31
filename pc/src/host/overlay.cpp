@@ -173,7 +173,7 @@ static bool settings_imgui(int page, bool all = true)
             }
             if (s->val == &g_enemy_opts.cast_all && v == 2) {   /* "Custom": its list below (its tooltip stays the row's) */
                 bool hover = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
-                if (hover && s->help) ImGui::SetTooltip("%s", s->help);
+                if (hover && s->help) ImGui::SetTooltip("%s", tr(s->help));
                 ImGui::EndDisabled();
                 changed |= cast_custom_imgui();
                 continue;
@@ -267,7 +267,7 @@ static void controls_section(void)
                 ImGui::TableSetColumnIndex(1 + k);
                 char b[96];
                 if (cap_row == r && cap_slot == k) SDL_snprintf(b, sizeof b, tr("press... %ds##%d_%d"), (bind_capture_left_ms() + 999) / 1000, r, k);
-                else SDL_snprintf(b, sizeof b, "%s%s##%d_%d", bind_combo(r, dev, k) ? "Aim + " : "", bind_code_name(dev, bind_get(r, dev, k), nm, sizeof nm), r, k);
+                else SDL_snprintf(b, sizeof b, "%s%s##%d_%d", bind_combo(r, dev, k) ? tr("Aim + ") : "", bind_code_name(dev, bind_get(r, dev, k), nm, sizeof nm), r, k);
                 if (ImGui::Button(b, ImVec2(-FLT_MIN, 0))) { cap_row = r; cap_slot = k; msg[0] = 0; bind_capture_start(dev); }
                 if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { bind_set(r, dev, k, 0); settings_save_later(); }
             }
@@ -331,7 +331,7 @@ static void settings_window(void)
                 for (int c = 0; c < PROF_COUNT; c++) avg[c] += h[i].ms[c] / m;
             }
             ImGui::Text(tr("game frame %.2f ms avg, %.2f ms worst (target 33.37 ms = 29.97 Hz)"), avg_total, worst);
-            ImGui::PlotLines("##ft", total, n, 0, "frame time (ms)", 0.0f, 66.7f, ImVec2(-1, 60));
+            ImGui::PlotLines("##ft", total, n, 0, tr("frame time (ms)"), 0.0f, 66.7f, ImVec2(-1, 60));
             for (int c = 0; c < PROF_COUNT; c++) {
                 ImGui::Text(tr("%-8s %6.2f ms"), prof_names[c], avg[c]);
                 ImGui::SameLine(160);
@@ -362,7 +362,7 @@ static void teleport_pick(CheatState* c)
         if (ImGui::BeginCombo(tr("Room"), cur >= 0 ? tp_room_name(cur, 1, b, sizeof b) : "-", ImGuiComboFlags_HeightLarge)) {
             if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
             ImGui::SetNextItemWidth(-1);
-            ImGui::InputTextWithHint("##filter", "type to search every location", filter, sizeof filter);
+            ImGui::InputTextWithHint("##filter", tr("type to search every location"), filter, sizeof filter);
             for (int i = 0; i < n; i++) {
                 const TpRoom* r = tp_room(i);
                 tp_room_name(i, 1, b, sizeof b);
@@ -450,7 +450,7 @@ static void cheat_window(void)
         char nm[16];
         if (!id) continue;
         if (id >= CHEAT_ITEMS || !c->names[id][0]) SDL_snprintf(nm, sizeof nm, tr("item %u"), id);
-        ImGui::Text("%s %-24s %u", (unsigned)i == c->inv[0] ? "equipped" : "        ", id < CHEAT_ITEMS && c->names[id][0] ? c->names[id] : nm, c->inv[i] & 0xFFFF);
+        ImGui::Text("%s %-24s %u", (unsigned)i == c->inv[0] ? tr("equipped") : "        ", id < CHEAT_ITEMS && c->names[id][0] ? c->names[id] : nm, c->inv[i] & 0xFFFF);
     }
 
     ImGui::SeparatorText(tr("Spawn Enemy"));
@@ -471,7 +471,7 @@ static void cheat_window(void)
     if (ImGui::Button(tr("Use Current Room"))) { c->tp_stg = c->stg; c->tp_rom = c->rom; c->tp_pos = c->pos; }
     ImGui::SameLine();
     if (ImGui::Button(tr("Go"))) __atomic_or_fetch(&c->request, CHEAT_TELEPORT, __ATOMIC_ACQ_REL);
-    if (c->result) ImGui::TextDisabled("%s", c->result);
+    if (c->result) ImGui::TextDisabled("%s", tr(c->result));
     ImGui::End();
 }
 
@@ -516,7 +516,7 @@ static void coop_trade(void)
             for (int s = 2; s < 2 + slots; s++) {
                 if (!(cs.trade_inv[s] >> 16)) continue;
                 char lb[80];
-                snprintf(lb, sizeof(lb), "%s%s##%d", coop_item(cs.trade_inv[s], b, sizeof(b)), (int)cs.trade_inv[0] == s ? " (equipped)" : "", s);
+                snprintf(lb, sizeof(lb), "%s%s##%d", coop_item(cs.trade_inv[s], b, sizeof(b)), (int)cs.trade_inv[0] == s ? tr(" (equipped)") : "", s);
                 if (ImGui::Selectable(lb, c->trade_slot == s)) { c->trade_slot = s; c->trade_count = cs.trade_inv[s] & 0xFFFF; }
             }
             ImGui::EndCombo();
@@ -896,7 +896,7 @@ static void import_window(void)
                         ImGui::TableNextColumn();
                         if (!x->ok) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), tr("failed"));
                         else if (x->player) ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), tr("yes"));
-                        else ImGui::TextDisabled(x->female < 0 ? "glTF only" : "no");
+                        else ImGui::TextDisabled("%s", tr(x->female < 0 ? "glTF only" : "no"));
                         ImGui::TableNextColumn(); ImGui::TextUnformatted(x->note[0] ? x->note : x->ok ? "glTF + PNG" : "");
                         if (x->note[0] && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", x->note);
                     }

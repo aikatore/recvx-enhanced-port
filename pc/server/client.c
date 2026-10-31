@@ -19,6 +19,7 @@
 #include <string.h>
 #include <time.h>
 
+const char* tr(const char* en) { return en; }   /* (host/tr.c: the game's language) */
 void host_log(const char* fmt, ...)
 {
     va_list a;

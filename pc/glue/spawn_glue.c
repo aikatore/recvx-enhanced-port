@@ -29,6 +29,7 @@
 #include "../src/host/cheat.h"
 #include "../src/host/enemies.h"
 #include "../src/host/variants.h"
+#include "../src/host/lang.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -153,7 +154,7 @@ static int empty_set(const MN_WORK* m)
 static const char* tex_full(int entries, int heap)
 {
     static char m[96];
-    snprintf(m, sizeof(m), "Not enough texture memory (%d available textures, %d KB free).", entries, heap >> 10);
+    snprintf(m, sizeof(m), tr("Not enough texture memory (%d available textures, %d KB free)."), entries, heap >> 10);
     return m;
 }
 
@@ -320,22 +321,22 @@ const char* spawn_at(const ActorModel* am, const SpawnNote* n, int want, int mod
     for (k = 0; k < PC_ENE_SLOTS; k++)   /* (helper code: each type's parts run its own, eneset.c pc_call_enemy) */
         if (!(ene[k].flg & 0x1)) { free_n++; if (slot < 0) slot = k; }
     if (want >= 0) {
-        if (want >= PC_ENE_SLOTS || (ene[want].flg & 0x1)) { snprintf(msg, sizeof(msg), "Enemy position %d is already occupied.", want); return msg; }
+        if (want >= PC_ENE_SLOTS || (ene[want].flg & 0x1)) { snprintf(msg, sizeof(msg), tr("Enemy position %d is already occupied."), want); return msg; }
         slot = want;
     }
     if (free_n < spawn_slots_needed(am->id) + SPAWN_SLOTS_FREE) {
-        snprintf(msg, sizeof(msg), "Not enough enemy capacity: %d free; %s needs %d, with %d reserved.", free_n, am->name, spawn_slots_needed(am->id),
+        snprintf(msg, sizeof(msg), tr("Not enough enemy capacity: %d free; %s needs %d, with %d reserved."), free_n, am->name, spawn_slots_needed(am->id),
                  SPAWN_SLOTS_FREE);
         return msg;
     }
     if (!actor_find(am, &a)) return "Enemy data not found on the disc.";
     need = 12288 + 64 * 1024 + 256 * 1024 + room_tex_push() + 512 * 1024;   /* MN_WORKs, O_WORKs, the AI's work, the screens' copy, margin */
     if (sys->endp - sys->memp < need) {
-        snprintf(msg, sizeof(msg), "Not enough room memory: %d KB free, %d KB needed.", (int)(sys->endp - sys->memp) >> 10, need >> 10);
+        snprintf(msg, sizeof(msg), tr("Not enough room memory: %d KB free, %d KB needed."), (int)(sys->endp - sys->memp) >> 10, need >> 10);
         return msg;
     }
     if (POOL_SIZE - pool_n < a.mlen + a.nlen + 128) {
-        snprintf(msg, sizeof(msg), "Not enough spawn memory: %d KB free, %d KB needed.", (POOL_SIZE - pool_n) >> 10, (a.mlen + a.nlen + 128) >> 10);
+        snprintf(msg, sizeof(msg), tr("Not enough spawn memory: %d KB free, %d KB needed."), (POOL_SIZE - pool_n) >> 10, (a.mlen + a.nlen + 128) >> 10);
         return msg;
     }
     actor_tex_free(&tex_free, &heap_free);
@@ -512,7 +513,7 @@ static const char* spawn(int i, float dist, int* slot_out)
     n.ay = (short)((plp->ay + 0x8000) & 0xFFFF);
     n.flr = plp->flr_no;
     if ((r = spawn_add(am, &n, slot_out))) return r;
-    snprintf(msg, sizeof(msg), "Spawned %s.", v ? v->name : am->name);
+    snprintf(msg, sizeof(msg), tr("Spawned %s."), v ? v->name : am->name);
     return msg;
 }
 

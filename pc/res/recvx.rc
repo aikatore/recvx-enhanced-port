@@ -1,2 +1,4 @@
 // Windows resources: the program icon (Explorer, taskbar; SDL uses the first icon for the window too)
 1 ICON "recvx-enhanced.ico"
+// our texts' table (src/host/tr.c reads it at start): after the image's game memory, outside the address window
+TR_TABLE RCDATA "../src/host/tr_table.inc"
