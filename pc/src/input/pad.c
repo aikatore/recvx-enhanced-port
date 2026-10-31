@@ -271,7 +271,7 @@ int pad_trade_held(void)
 }
 
 /* noclip cheat with free height (pc/glue/cheat_glue.c), game thread: +1 up, -1 down. Up: the
-   "noclip fly up" hotkeys (R, Page Up) or the R2 button (key 2, right trigger); down: "noclip
+   "noclip fly up" hotkeys (Page Up) or the R2 button (key 0); down: "noclip
    fly down" (F, Page Down) or L2 (key 1). R2 is unused by the game's key types,
    L2 only by type D; the stick clicks are not free (R3 = status). The gamepad's right trigger is
    the quick knife's by default, which is off while flying (knife_glue.c), so it flies up too; the
