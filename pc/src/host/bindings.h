@@ -30,6 +30,7 @@ enum {
     B_TPS_STATUS, B_TPS_MAP, B_TPS_AIM, B_TPS_FIRE, B_TPS_RELOAD, B_TPS_QUICKTURN, B_TPS_KNIFE, B_TPS_OPTIONS, B_TPS_RECENTER,
     /* port hotkeys (keyboard) */
     B_TPS_TOGGLE, B_SETTINGS, B_CHEATS, B_COOP, B_IMPORT, B_FULLSCREEN, B_NOCLIP_UP, B_NOCLIP_DOWN,
+    B_CHEAT_SAVE, B_CHEAT_BOX,         /* the F2 cheats Save Now / Open Item Box (CHEAT_SAVE, CHEAT_BOX); no default key */
     B_COUNT
 };
 enum { BIND_KB, BIND_PAD };            /* device sets */

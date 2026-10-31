@@ -4555,6 +4555,9 @@ static void box_send(int type, const unsigned int* rm, int nrm, const unsigned i
     }
 }
 
+/* cheat_glue.c, F2 "Open Item Box": the partner has the shared box open (its box screen, BUSY_BOX) */
+int coop_box_busy(void) { return coop_on && have_rx && box_shared() && rx.busy == BUSY_BOX; }
+
 /* at the hand-off: the box screen opened (remember the box) or closed (send the difference) */
 static void box_frame(void)
 {
