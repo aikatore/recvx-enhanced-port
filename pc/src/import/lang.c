@@ -747,6 +747,10 @@ int lang_extract(int src, const char* iso, const char* outdir)
             free(exe); fclose(f);
             return -1;
         }
+    } else if (exe && s->kind == LS_EU && fan_patched(f, &lang_discs[3], exe, nexe) == 1) {   /* (its Spanish is Turkish) */
+        snprintf(pg->phase, sizeof(pg->phase), "%s", tr("This disc has the Turkish translation: import it with its own entry."));
+        free(exe); fclose(f);
+        return -1;
     }
     uf = pc_fopen(g_lang_us_iso, "rb");
     us = malloc(sizeof(Ald));
