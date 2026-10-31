@@ -363,6 +363,8 @@ const Setting g_settings[] = {
     { SP_DISPLAY, "Show Frame Rate", V(g_config.show_fps), 0, 1, 1 },
     { SP_DISPLAY, "Aspect Ratio", V(g_config.aspect), 0, 2, 1, aspects, .help = "Widescreen shows more at the sides. Menus and 2D artwork stay centered at 4:3.", .group = "PICTURE" },
     { SP_DISPLAY, "Internal Resolution", V(g_config.scale), 0, 8, 1, .name = scale_name, .help = "Set how sharply the game is drawn. Auto adjusts to your window size." },
+    { SP_DISPLAY, "Anti-Aliasing", V(g_config.anti_aliasing), 0, 2, 1, (const char* const[]){ "Off", "FXAA", "SMAA" },
+      .help = "Smooth the jagged edges of 3D scenes. Text and menus stay sharp. SMAA keeps more detail than FXAA. Requires Hardware 3D Rendering." },
     { SP_DISPLAY, "Smoother Motion", V(g_config.interpolate), 0, 1, 1, .help = "Smooth motion between game frames. Adds a small input delay." },
     { SP_DISPLAY, "Smooth Menus", V(g_config.menu_smooth), 0, 1, 1, .locked = interp_off,
       .help = "Smooth menu movement and improve menu response. Off keeps the original menu frame rate." },

@@ -259,5 +259,5 @@ uint32_t pc_native_prim_raw(unsigned int prim, const unsigned int* dp, int n, in
         if ((prim & 7) == 6) for (int i = 0; i + 1 < n; i += 2) clip_sprite(&v[i], &v[i + 1], (prim >> 4) & 1);
         else if ((prim & 7) == 0) for (int i = 0; i < n; i++) v[i].adc |= v[i].x < CLIP_X0 * 16.0f || v[i].x >= CLIP_X1 * 16.0f;
     }
-    return native_defer_raw(prim, v, n, tag);
+    return native_defer_raw(prim | (clip_3d_on ? NATIVE_RAW_3D : 0), v, n, tag);
 }

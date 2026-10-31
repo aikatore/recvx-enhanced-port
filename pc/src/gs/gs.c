@@ -54,6 +54,7 @@ static void make_vertex(GsVertex* v, uint32_t x, uint32_t y, uint32_t z, uint32_
 void gs_draw_raw(unsigned int prim, const NativeRawVertex* in, int n)
 {
     const GsContext* c = &gs.ctx[(prim >> 9) & 1];
+    prim &= 0x7FF;   /* (NATIVE_RAW_3D) */
     uint32_t ofx = c->xyoffset & 0xFFFF, ofy = (c->xyoffset >> 32) & 0xFFFF;
     int type = (int)(prim & 7), q = 0;
     GsVertex qv[3];

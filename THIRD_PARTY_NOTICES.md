@@ -35,3 +35,36 @@ with any binary release.
 | Component | Path | Source | License |
 |---|---|---|---|
 | BioRand option labels, help texts, defaults and seed-string format (written anew in C from RandoConfig.cs and MainWindow.xaml; no game data) | `pc/src/host/biorand_opts.c` | https://github.com/biorand/classic (commit c8df994) | MIT, Copyright (c) 2022-2026 Ted John |
+| SMAA shader functions (SMAA.hlsl expanded for GLSL 3.30, the parts SMAA 1x uses) and its area/search texture generators (Scripts/AreaTex.py, Scripts/SearchTex.py, ported to C; the textures are computed at start, not shipped) | `pc/src/gs/aa.c`, `pc/src/gs/smaa_tables.h` | https://github.com/iryoku/smaa | MIT, Copyright (C) 2013 Jorge Jimenez, Jose I. Echevarria, Belen Masia, Fernando Navarro, Diego Gutierrez |
+
+FXAA (`pc/src/gs/aa.c`) is our own implementation of the published FXAA 3.11 algorithm (Timothy
+Lottes, NVIDIA); it contains no NVIDIA code, so NVIDIA's FXAA header license does not apply.
+
+SMAA's license:
+
+```
+Copyright (C) 2013 Jorge Jimenez (jorge@iryoku.com)
+Copyright (C) 2013 Jose I. Echevarria (joseignacioechevarria@gmail.com)
+Copyright (C) 2013 Belen Masia (bmasia@unizar.es)
+Copyright (C) 2013 Fernando Navarro (fernandn@microsoft.com)
+Copyright (C) 2013 Diego Gutierrez (diegog@unizar.es)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software. As clarification, there is no
+requirement that the copyright notice and permission be included in binary
+distributions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```

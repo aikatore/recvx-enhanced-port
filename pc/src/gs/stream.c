@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #define NOEV 0xFFFFFFFFu
 #define NATIVE_KEY (1ull << 63)   /* Group.key0 of a native 3D strip (v0 = its event) */
@@ -60,6 +61,7 @@ struct Frame {
     uint8_t clut_start[GS_CLUT_STATE_SIZE];
     uint8_t ntex_start[NTEX_STATE_SIZE];
     int new_group;
+    uint32_t aa_ev, aa_fbp, aa_fbw;          /* anti-aliasing before event aa_ev (NOEV: none) of target FBP/FBW (aa_split) */
 };
 
 #define POOL 4
@@ -398,6 +400,99 @@ void stream_note_upload(const uint64_t* pages)
     ntex_note_upload(pages);
 }
 
+/* Anti-aliasing (the "Anti-Aliasing" setting, gs_gl.c gs_scene_aa) runs where the frame's 3D scene is
+   complete and its 2D not yet drawn: after the last 3D draw before the first 2D draw, both on the
+   scene's target (the one the frame's first native 3D strip draws to). The game draws its 3D first,
+   then the ordering table: translucent 3D and effects by depth, its 2D (messages, the font, menus,
+   letterbox, fades; our boxes and texts) at the front priorities, so after them.
+   - 3D: native strips with a depth (w != 1), 3D points/lines/sprites (particles, NATIVE_RAW_3D), and
+     GS-path draws under a mesh or effect tag (stream_tag, EV_TAGLAST).
+   - 2D: the native path's other strips and sprites (Ps2AddPrim2D), unless they cover the whole
+     screen: fades, the camera vignette and the under-water distortion are layers of the scene,
+     drawn over the anti-aliased 3D.
+   - Neither: GS-path draws without a tag (clears, the shadow composite, the display copy, movies).
+   No 3D (title, menus, inventory, files, map, movies): none. 2D under the 3D (drawn before it):
+   none, rather than blurring it. 3D after the first 2D stays as it is (none in the scenes measured,
+   RECVX_AA_TRACE=1 counts it). Needs the native 3D path (Hardware 3D Rendering): without
+   it the game's 2D is plain GS-path drawing and there is no native 3D, so no anti-aliasing.
+   Computed once per executed frame; its replays (in-between images) run it at the same event. */
+static void aa_split(Frame* f)
+{
+    uint64_t fr[2], ofs[2], prim = gs.prim;
+    uint32_t scene = NOEV, fbw = 0, last = NOEV, kick = NOEV, stop = NOEV;
+    int tagged = 0, def = 0, n3 = 0, after = 0;
+    static int trace = -1;
+    f->aa_ev = NOEV;
+    if (!g_config.anti_aliasing) return;
+    if (trace < 0) trace = SDL_getenv("RECVX_AA_TRACE") != NULL;
+    for (int pass = 0; pass < 2; pass++) {
+        fr[0] = gs.ctx[0].frame; fr[1] = gs.ctx[1].frame; ofs[0] = gs.ctx[0].xyoffset; ofs[1] = gs.ctx[1].xyoffset;
+        prim = gs.prim; tagged = def = 0;
+        for (uint32_t i = 0; i < f->nev; i++) {
+            const Ev* e = &f->ev[i];
+            int ctx, d3 = 0, full = 0;
+            if (e->kind == EV_TEXDEF) def = 1;
+            else if (e->kind == EV_TEXDEF_END) def = 0;
+            if (def) continue;   /* (texture definitions: recorded, not drawn) */
+            if (e->kind == EV_TAG) { tagged = e->v && !MENU_TAG(e->v); continue; }
+            if (e->kind == EV_TAGLAST) {   /* the GS-path polygon just drawn was an effect's */
+                if (pass && kick != NOEV && stop == NOEV && !MENU_TAG(e->v)) { last = kick; n3++; }
+                continue;
+            }
+            if (e->kind == EV_REG) {
+                if (e->reg == 0x00) prim = e->v;
+                else if (e->reg == 0x4C || e->reg == 0x4D) fr[e->reg - 0x4C] = e->v;
+                else if (e->reg == 0x18 || e->reg == 0x19) ofs[e->reg - 0x18] = e->v;
+                if (!pass || (e->reg != 0x04 && e->reg != 0x05)) continue;   /* drawing kicks: XYZF2, XYZ2 */
+                ctx = (int)(prim >> 9) & 1;
+                if ((fr[ctx] & 0x1FF) != scene) continue;
+                kick = tagged ? NOEV : i;
+                if (!tagged) continue;
+                d3 = 1;
+            } else if (e->kind == EV_NATIVE || e->kind == EV_RAW) {
+                float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, ox, oy;
+                ctx = (int)(e->v >> 41) & 1;
+                if (e->kind == EV_NATIVE) {
+                    const NativeVertex* v = native_verts(f, i);
+                    for (uint32_t k = 0; k < e->len && k < 64; k++) {
+                        if (v[k].w != 1.0f) { d3 = 1; break; }
+                        x0 = fminf(x0, v[k].x); x1 = fmaxf(x1, v[k].x); y0 = fminf(y0, v[k].y); y1 = fmaxf(y1, v[k].y);
+                    }
+                    if (!pass) {
+                        if (d3) { scene = (uint32_t)(fr[ctx] & 0x1FF); fbw = (uint32_t)(fr[ctx] >> 16) & 0x3F; break; }
+                        continue;
+                    }
+                } else {
+                    const NativeRawVertex* v = raw_verts(f, i);
+                    if (!pass) continue;
+                    d3 = (e->v >> 32 & NATIVE_RAW_3D) != 0;
+                    for (uint32_t k = 0; k < e->len; k++) {
+                        x0 = fminf(x0, v[k].x / 16.0f); x1 = fmaxf(x1, v[k].x / 16.0f); y0 = fminf(y0, v[k].y / 16.0f); y1 = fmaxf(y1, v[k].y / 16.0f);
+                    }
+                }
+                if ((fr[ctx] & 0x1FF) != scene) continue;
+                ox = (float)(ofs[ctx] & 0xFFFF) / 16.0f; oy = (float)((ofs[ctx] >> 32) & 0xFFFF) / 16.0f;
+                full = x0 <= ox + 8.0f && x1 >= ox + 632.0f && y0 <= oy + 8.0f && y1 >= oy + 440.0f;
+            } else continue;
+            if (stop != NOEV) { after += d3; continue; }   /* (RECVX_AA_TRACE: the 3D left out) */
+            if (d3) { last = i; n3++; continue; }
+            if (full) continue;
+            stop = i;   /* the first 2D */
+            if (!trace) break;
+        }
+        if (scene == NOEV) break;   /* no native 3D */
+    }
+    if (scene != NOEV && last != NOEV) {
+        f->aa_ev = last + 1;
+        f->aa_fbp = scene;
+        f->aa_fbw = fbw ? fbw : 1;
+    }
+    if (trace)
+        host_log("aa: game frame %llu: %s, scene FBP %d, %d 3D draws, after event %d, first 2D at %d of %zu, then %d 3D draws\n", (unsigned long long)stream_game_frames(),
+                 f->aa_ev != NOEV ? "on" : scene == NOEV ? "off (no 3D)" : "off (2D under the 3D)", scene == NOEV ? -1 : (int)scene, n3,
+                 last == NOEV ? -1 : (int)last, stop == NOEV ? -1 : (int)stop, f->nev, after);
+}
+
 void stream_exec(Frame* f)
 {
     long inst = -1;
@@ -412,8 +507,10 @@ void stream_exec(Frame* f)
     ntex_state_save(f->ntex_start);
     gs_tex_epoch = 0;
     hdpack_frame(f->fade);
+    aa_split(f);
     for (size_t i = 0; i < f->nev; i++) {
         const Ev* e = &f->ev[i];
+        if (i == f->aa_ev) gs_scene_aa(f->aa_fbp, f->aa_fbw);
         if (tex_event(e)) gs_tex_epoch = (uint32_t)i + 1;
         if (ntex_defining()) {   /* texture definition: recorded, not executed */
             if (e->kind == EV_REG) { ntex_define_reg(e->reg, e->v); continue; }
@@ -514,6 +611,7 @@ void stream_exec(Frame* f)
             break;
         }
     }
+    if (f->aa_ev == f->nev) gs_scene_aa(f->aa_fbp, f->aa_fbw);
     gs_flush();
 }
 
@@ -1060,6 +1158,7 @@ void stream_replay(const Frame* r, float t)
     gs_tex_epoch = 0;
     for (size_t i = 0; i < r->nev; i++) {
         const Ev* e = &r->ev[i];
+        if (i == r->aa_ev) gs_scene_aa(r->aa_fbp, r->aa_fbw);   /* where the executed frame ran it */
         if (tex_event(e)) gs_tex_epoch = (uint32_t)i + 1;
         uint64_t v;
         if (e->kind == EV_TEXDEF) { in_def = 1; continue; }
@@ -1118,6 +1217,7 @@ void stream_replay(const Frame* r, float t)
         if (vi < r->nvx && r->vx[vi] == i) vi++;
         gs_exec_reg(e->reg, v);
     }
+    if (r->aa_ev == r->nev) gs_scene_aa(r->aa_fbp, r->aa_fbw);
     gs_flush();
     gs_replaying = 0;
     gs = end;

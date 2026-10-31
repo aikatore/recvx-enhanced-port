@@ -128,7 +128,7 @@ static int batch_valid;
 static GLuint prog, vao, vbo, present_prog, present_vao, svao, svbo;
 static GLint u_rt_size, u_rt_margin, u_tme, u_tfx, u_tcc, u_fst, u_texsize, u_fge, u_fogcol, u_ate, u_atst, u_aref,
              u_tex, u_tex_alpha_scale, u_texofs, u_premul, u_zscale, u_clamp_mode, u_clamp_vals, u_afail_pass, u_rt16;
-static GLint up_tex, up_rect, up_pic;
+static GLint up_tex, up_rect, up_pic, up_ss;
 
 static const char* vs_src =
     "#version 330 core\n"
@@ -216,12 +216,21 @@ static const char* present_vs =
     "  gl_Position = vec4(c.x * 2.0 - 1.0, 1.0 - c.y * 2.0, 0.0, 1.0);\n"
     "}\n";
 /* u_pic: picture calibration (brightness offset, contrast, 1 / gamma, on); off at the neutral
-   values, so the image is the same as without it. gs_picture is the same on the CPU. */
+   values, so the image is the same as without it. gs_picture is the same on the CPU.
+   u_ss: taps across and down, the step between them (draw_display): one bilinear tap per window
+   pixel while the picture is enlarged; reduced (an Internal Resolution above the window), an even
+   grid over the pixel's footprint, so every texel counts (supersampling) instead of a bilinear
+   sample of every few. */
 static const char* present_fs =
     "#version 330 core\n"
-    "in vec2 v_uv; uniform sampler2D u_tex; uniform vec4 u_pic; out vec4 o;\n"
+    "in vec2 v_uv; uniform sampler2D u_tex; uniform vec4 u_pic, u_ss; out vec4 o;\n"
     "void main(){\n"
-    "  vec3 c = clamp(texture(u_tex, v_uv).rgb, 0.0, 1.0);\n"
+    "  vec3 c = vec3(0.0);\n"
+    "  int nx = int(u_ss.x), ny = int(u_ss.y);\n"
+    "  for (int j = 0; j < ny; j++)\n"
+    "    for (int i = 0; i < nx; i++)\n"
+    "      c += clamp(texture(u_tex, v_uv + vec2(float(i) - 0.5 * float(nx - 1), float(j) - 0.5 * float(ny - 1)) * u_ss.zw).rgb, 0.0, 1.0);\n"
+    "  c /= float(nx * ny);\n"
     "  if (u_pic.w != 0.0) c = clamp((pow(c, vec3(u_pic.z)) - 0.5) * u_pic.y + 0.5 + u_pic.x, 0.0, 1.0);\n"
     "  o = vec4(c, 1.0);\n"
     "}\n";
@@ -262,6 +271,8 @@ static GLuint compile(const char* vs, const char* fs)
     return p;
 }
 
+unsigned int gs_gl_compile(const char* vs, const char* fs) { return compile(vs, fs); }   /* aa.c */
+
 static void* gl_getproc(const char* name) { return (void*)SDL_GL_GetProcAddress(name); }
 
 void gs_renderer_init(void)
@@ -280,6 +291,7 @@ void gs_renderer_init(void)
     up_tex = glGetUniformLocation(present_prog, "u_tex");
     up_rect = glGetUniformLocation(present_prog, "u_rect");
     up_pic = glGetUniformLocation(present_prog, "u_pic");
+    up_ss = glGetUniformLocation(present_prog, "u_ss");
 
     glGenVertexArrays(1, &vao);
     glGenVertexArrays(1, &svao);
@@ -1589,7 +1601,11 @@ static void draw_display(GLuint tex, int rt_vw, int rt_vh)
         }
         {
             float x0 = g_margin_x && dw > 640.0f ? 0.0f : (float)g_margin_x;
+            float rx = dw * g_scale / vw, ry = dh * g_scale / vh;   /* texels per window pixel */
+            int nx = rx > 1.0f ? (int)ceilf(rx) : 1, ny = ry > 1.0f ? (int)ceilf(ry) : 1;
+            nx = nx > 8 ? 8 : nx; ny = ny > 8 ? 8 : ny;
             glUniform4f(up_rect, x0 / rt_vw, 0.0f, (x0 + dw) / rt_vw, dh / rt_vh);
+            glUniform4f(up_ss, (float)nx, (float)ny, dw / rt_vw / vw / nx, dh / rt_vh / vh / ny);
         }
         glBindVertexArray(present_vao);
         glDrawArrays(0x0005 /* GL_TRIANGLE_STRIP */, 0, 4);
@@ -1797,6 +1813,38 @@ void gs_replay_capture(unsigned int exec_tex, uint32_t fbp, uint32_t fbw, uint32
     if (!exec_tex || k == 2) return;
     capture_rt(&rcap[k].tex, &rcap[k].fbo, &rcap[k].pw, &rcap[k].ph, fbp, fbw, w, h, wide);
     rcap[k].exec = exec_tex; rcap[k].live = 1;
+}
+
+/* Anti-aliasing (aa.c), where the stream says the frame's 3D is complete (stream.c aa_split):
+   the target FBP/FBW filtered into a spare texture, which then becomes the target (the two swap,
+   as the replay targets do), so nothing is copied. Executed frames and their replays alike. */
+void gs_scene_aa(uint32_t fbp, uint32_t fbw)
+{
+    static GLuint tex, fbo;
+    static int pw, ph;
+    extern void aa_apply(int mode, unsigned int src, unsigned int dst_fbo, int w, int h);
+    RenderTarget* rt;
+    GLuint t, f;
+    gs_flush();
+    if (!g_config.anti_aliasing || !(rt = rt_find(fbp, fbw))) return;
+    ensure_target(&tex, &fbo, &pw, &ph, rt->pw, rt->ph);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    clip_distances(0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, rt->tex);   /* (a draw may have sampled it with TEX1's NEAREST) */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    aa_apply(g_config.anti_aliasing, rt->tex, fbo, rt->pw, rt->ph);
+    t = rt->tex; f = rt->fbo;
+    rt->tex = tex; rt->fbo = fbo;
+    tex = t; fbo = f;
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);   /* the spare keeps no depth (one of another size would cut the filter's output) */
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+    fb_forget();
+    glBindVertexArray(vao);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 /* ---------------- movies (pc/src/movie) ---------------- */

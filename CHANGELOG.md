@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New
+
+- **Anti-Aliasing**: a new display setting smooths the jagged edges of 3D scenes while text and menus stay sharp.
+
 ### Cheats
 
 - **Remove items**: the F2 inventory list has an X next to each item to take it out of your inventory,
