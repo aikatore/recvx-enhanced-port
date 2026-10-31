@@ -7,6 +7,11 @@
 - **Remove items**: the F2 inventory list has an X next to each item to take it out of your inventory,
   so you don't need an item box while testing.
 
+### Fixes
+
+- **Smoother Motion under water**: the views from the water at the airport's submarine dock now move as
+  smoothly as the rest of the game, wavy water effect included.
+
 ## 0.7.1 (2026-10-31)
 
 ### New

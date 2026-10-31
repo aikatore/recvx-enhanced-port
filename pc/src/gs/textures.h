@@ -27,6 +27,7 @@ void ntex_forget(uint32_t id);   /* the game thread dropped a definition */
 /* definition id is a texture captured from a render target (gs_capture_rt, RGBA16F as the
    render targets); replaces an earlier capture of the same id */
 void ntex_define_capture(uint32_t id, unsigned int gl_tex, int w, int h);
+unsigned int ntex_capture_tex(uint32_t id);   /* the GL texture of capture id (0: none) */
 /* the slot bindings (replays of a frame start from its starting state) */
 #define NTEX_STATE_SIZE 12288
 void ntex_state_save(void* out);

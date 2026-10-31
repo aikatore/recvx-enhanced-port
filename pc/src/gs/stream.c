@@ -1067,7 +1067,10 @@ void stream_replay(const Frame* r, float t)
         if (in_def) continue;
         if (e->kind == EV_TEXBIND) { ntex_bind((uint32_t)e->v, (uint32_t)(e->v >> 32) & 0x3FFF, (uint32_t)(e->v >> 46) & 0x3FFF); continue; }
         if (e->kind == EV_MOVIE) { gs_movie_bind((uint32_t)e->v, (int)e->len); continue; }
-        if (e->kind == EV_RTEX) continue;    /* draws bind the executed frame's capture (replay resources) */
+        if (e->kind == EV_RTEX) {   /* this image's own capture, bound in place of the executed frame's (gs_gl.c rcap) */
+            gs_replay_capture(ntex_capture_tex((uint32_t)e->v), (uint32_t)(e->v >> 32) & 0x1FF, (uint32_t)(e->v >> 48) & 0x3F, e->len & 0xFFFF, e->len >> 16, (int)(e->v >> 56) & 1);
+            continue;
+        }
         if (e->kind == EV_IMAGE) continue;   /* a replay writes no GS memory: its textures and render-target
                                                   reloads are the executed frame's (gs_gl.c, replay resources) */
         if (e->kind == EV_RAW) {
