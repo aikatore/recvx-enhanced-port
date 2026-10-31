@@ -39,6 +39,7 @@ void njRotateXYZ(NJS_MATRIX* m, Angle angx, Angle angy, Angle angz);
 #include "../../decomp/include/ps2/veronica/prog/pwksub.h"
 #include "../../decomp/include/ps2/veronica/prog/objitm.h"
 #include "../src/host/actors.h"
+#include "../src/host/placer.h"
 #include "../src/import/impmodel.h"
 #include "../include/pc_parse.h"
 #include <math.h>
@@ -884,6 +885,17 @@ static int load_rdx(int rm)
     end = room + len;
     loaded = rm;
     return 1;
+}
+
+/* the room file rm read and expanded, *len bytes (the --dev object placer, placer_glue.c); valid, as `pack`
+   (*scratch, *cap bytes free: the packed file is done with), until another room file or part file is read here */
+const unsigned char* actor_room_file(int rm, int* len, unsigned char** scratch, int* cap)
+{
+    if (!load_rdx(rm)) return NULL;
+    *len = (int)(end - room);
+    *scratch = pack;
+    *cap = (int)sizeof(pack);
+    return room;
 }
 
 /* system.c: the room file `name` the game read (to the top of [memp, endp)) could not be expanded
@@ -2064,6 +2076,7 @@ void actor_textures_released(void)
     }
     cast_mem_reset();
     actor_on = 0;
+    placer_textures_released();
 }
 
 __attribute__((constructor)) static void actor_init(void)

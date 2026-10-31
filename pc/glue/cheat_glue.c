@@ -11,6 +11,7 @@
 #include "../../decomp/include/ps2/veronica/prog/hitchk.h"
 void bhSetMessage(int mes_typ, int mes_idx);   /* message.h (its macros.h clashes with this file's headers) */
 #include "../src/host/cheat.h"
+#include "../src/host/placer.h"
 #include "../src/host/lang.h"
 #include "../src/host/coop.h"
 #include "../src/net/coop_proto.h"
@@ -763,6 +764,7 @@ void cheat_frame(void)
     max_hp = sys->gm_mode == 2 ? 320 : 160;
     slots = (sys->gm_flg & 0x8000000) ? 10 : 8;
     if (sys->mes_ip) read_names();
+    placer_frame();   /* --dev object placer (placer_glue.c) */
     item_trace(inv);
     if (sys->tk_flg && (sys->sp_flg & 0x2)) scripted(inv);   /* in game */
     unlock_switch();
