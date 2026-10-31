@@ -233,6 +233,7 @@ pad only to the focused window: turn Steam Input off for the game.
 | F5 | third person on / off |
 | F11 | windowed / fullscreen |
 | Page Up; F or Page Down | fly up / down (noclip cheat) |
+| none until you set one | Save Anywhere, Item Box Anywhere (the F2 cheats Save Now, Open Item Box) |
 
 ## Settings
 
@@ -477,8 +478,17 @@ F2 (or the EXTRAS page) is for testing and fun:
 - **Items**: add any item.
 - **Spawn**: any enemy in front of you, custom ones marked "[C]".
 - **Teleport**: a location, room and entry. Not every room works in every story state.
+- **Save Now**: the typewriter's save screen where you stand; no ink ribbon needed or used. Loading the
+  save puts you back on that spot.
+- **Open Item Box**: your item box wherever you are, the same box as at every item box.
 
-In co-op only the host can spawn enemies.
+Save Now and Open Item Box work while you control your character: not in a cutscene, door, menu,
+message, grab, first-person view, with the weapon raised or in the Battle Game. F2 says why when
+not. Both can have a key: OPTION -> ENHANCED SETTINGS -> CONTROLS or F1 -> Controls, HOTKEYS (Save
+Anywhere, Item Box Anywhere; none by default; ini `key_cheat_save`, `key_cheat_box`).
+
+In co-op only the host can spawn enemies. Both players can save anywhere. With shared loot the item
+box opens only while your partner doesn't have it open ("Your partner is using the item box.").
 
 ## Update check
 

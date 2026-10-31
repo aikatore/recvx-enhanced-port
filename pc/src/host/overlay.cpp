@@ -78,6 +78,11 @@ int overlay_event(const void* e)
         coop_visible = !coop_visible;
         return 1;
     }
+    for (int r = B_CHEAT_SAVE; r <= B_CHEAT_BOX; r++)   /* (unbound by default; not while typing in a field) */
+        if (!ImGui::GetIO().WantTextInput && bind_hotkey(ev, r)) {
+            __atomic_or_fetch(&g_cheat.request, r == B_CHEAT_SAVE ? CHEAT_SAVE : CHEAT_BOX, __ATOMIC_ACQ_REL);
+            return 1;
+        }
     if (g_dev_mode && bind_hotkey(ev, B_IMPORT)) {
         import_visible = !import_visible;
         return 1;
@@ -429,6 +434,12 @@ static void cheat_window(void)
         ImGui::SetTooltip(tr("Open key locks without carrying the key;\n"
                           "no items are added and story locks stay.\n"
                           "Supported locks update in the current room."));
+
+    if (ImGui::Button(tr("Save Now"))) __atomic_or_fetch(&c->request, CHEAT_SAVE, __ATOMIC_ACQ_REL);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("Open the typewriter's save screen here. No ink ribbon needed."));
+    ImGui::SameLine();
+    if (ImGui::Button(tr("Open Item Box"))) __atomic_or_fetch(&c->request, CHEAT_BOX, __ATOMIC_ACQ_REL);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("Open the item box here, the same box as at any item box."));
 
     ImGui::SeparatorText(tr("Add Item"));
     char label[48];

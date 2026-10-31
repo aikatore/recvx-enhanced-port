@@ -10,6 +10,10 @@
 
 - **Remove items**: the F2 inventory list has an X next to each item to take it out of your inventory,
   so you don't need an item box while testing.
+- **Save anywhere**: F2's Save Now opens the typewriter's save screen where you stand, without an ink
+  ribbon. Loading that save puts you back on the same spot. A key can be set for it in the hotkeys.
+- **Item box anywhere**: F2's Open Item Box opens your item box wherever you are, the same box as at
+  every item box. A key can be set for it in the hotkeys.
 
 ### Fixes
 

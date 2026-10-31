@@ -617,6 +617,12 @@ static void scripted(unsigned int* inv)
             tw = strchr(tw, ',') ? strchr(tw, ',') + 1 : NULL;
         }
     }
+    {   /* RECVX_CHEAT_SAVE / RECVX_CHEAT_BOX="frame,...": the F2 Save Now / Open Item Box (CHEAT_SAVE, CHEAT_BOX) at that game frame */
+        static const char *cs = (const char*)-1, *cb;
+        if (cs == (const char*)-1) { cs = getenv("RECVX_CHEAT_SAVE"); cb = getenv("RECVX_CHEAT_BOX"); }
+        if (cs && *cs && clock >= atoi(cs)) { __atomic_or_fetch(&g_cheat.request, CHEAT_SAVE, __ATOMIC_ACQ_REL); cs = strchr(cs, ',') ? strchr(cs, ',') + 1 : NULL; }
+        if (cb && *cb && clock >= atoi(cb)) { __atomic_or_fetch(&g_cheat.request, CHEAT_BOX, __ATOMIC_ACQ_REL); cb = strchr(cb, ',') ? strchr(cb, ',') + 1 : NULL; }
+    }
     {   /* RECVX_TEST_COMPUTER="frame:n,...": computer terminal n at that game frame (as the room scripts' EvtComSet n) */
         static const char* ct = (const char*)-1;
         if (ct == (const char*)-1) ct = getenv("RECVX_TEST_COMPUTER");
@@ -720,15 +726,15 @@ static void scripted(unsigned int* inv)
     }
 }
 
-/* RECVX_ITEM_TRACE=1: the inventory (equipped index, lighter slot, slots) and the two security
-   boxes (sys->itm[192], [224]: the metal detector's trays in 0/9) whenever a word changes, with
+/* RECVX_ITEM_TRACE=1: the inventory (equipped index, lighter slot, slots), the item box's first 16 entries
+   (sys->itm[64]) and the two security boxes (sys->itm[192], [224]: the metal detector's trays in 0/9) whenever a word changes, with
    the box screen's cursors (listcsr_0/listcsr_2, ips1); by presented frame, as RECVX_INPUT */
 uint64_t gs_frame_count(void);
 static void item_trace(const unsigned int* inv)
 {
     static int on = -1;
-    static unsigned int seen[48];
-    unsigned int now[48];
+    static unsigned int seen[64];
+    unsigned int now[64];
     int c;
     if (on < 0) on = getenv("RECVX_ITEM_TRACE") != NULL;
     if (!on) return;
@@ -739,19 +745,38 @@ static void item_trace(const unsigned int* inv)
             printf("detector: frame %u floor %u metal %u alarm %u\n", (unsigned)gs_frame_count(), d >> 2, d >> 1 & 1, d & 1);
         det = d;
     }
-    for (c = 0; c < 16; c++) { now[c] = inv[c]; now[16 + c] = sys->itm[192 + c]; now[32 + c] = sys->itm[224 + c]; }
+    for (c = 0; c < 16; c++) { now[c] = inv[c]; now[16 + c] = sys->itm[192 + c]; now[32 + c] = sys->itm[224 + c]; now[48 + c] = sys->itm[64 + c]; }
     if (!memcmp(now, seen, sizeof(now))) return;
     memcpy(seen, now, sizeof(now));
     printf("items: frame %u room %d/%d cursor %u/%u box cursor %d; equipped %u", (unsigned)gs_frame_count(), sys->stg_no, sys->rom_no,
            swork.listcsr_0, swork.listcsr_2, (int)swork.ips1, now[0]);
-    for (c = 1; c < 48; c++) {
-        if (!(c & 15)) printf("\n  box %d:", c == 16 ? 192 : 224);
+    for (c = 1; c < 64; c++) {
+        if (!(c & 15)) printf("\n  box %d:", c == 16 ? 192 : c == 32 ? 224 : 64);
         else if (c == 1) printf("\n  inventory:");
         if (now[c] >> 16) printf(" [%d] %s(%u) %u", c & 15, g_cheat.names[(now[c] >> 16) & 0xFF], (now[c] >> 16) & 0xFF, now[c] & 0xFFFF);
         else if (now[c]) printf(" [%d] junk %#x", c & 15, now[c]);
         else if (c < 16) printf(" [%d] -", c);
     }
     printf("\n");
+}
+
+/* Save Now / Open Item Box (CHEAT_SAVE, CHEAT_BOX): system.c bhCheckSubTask opens the typewriter's save screen
+   on cb_flg 0x200000 (what the typewriter's script sets on "Yes": no ink ribbon asked for or used) and the item
+   box on cb_flg 0x40000 (a box trigger without a lid, hitchk.c). Only where both open at once (bhCheckSubTask's
+   own conditions) and the player is free (no event, door, menu, message, raised weapon, grab, first person):
+   a flag set elsewhere would wait and open the screen later. Not in the Battle Game, which has neither. Co-op:
+   either player may save, as at a typewriter; the shared box (shared loot) not while the partner has it open. */
+extern unsigned char PauseBtn;   /* system.c */
+static int cheat_saving;         /* the open save screen is ours: ps2_McSaveFile.c mcWriteStartSaveFile uses no ink ribbon */
+int pc_cheat_save(void) { return cheat_saving; }
+static const char* anywhere_refused(int save)
+{
+    if (sys->gm_mode == 3) return "Not in the Battle Game.";
+    if (!pc_in_play(plp, 0) || plp->mnwP != plp->mnwPb || (plp->flg & 0x6) || plp->hp < 0 || !(sys->ts_flg & 0x1000) ||
+        (sys->ss_flg & 0x80000000) || (sys->st_flg & 0x1C04200C) || (sys->cb_flg & 0x27F4037) || PauseBtn)
+        return save ? "Cannot save now. Finish the current action first." : "Cannot open the item box now. Finish the current action first.";
+    if (!save && coop_box_busy()) return "Your partner is using the item box.";
+    return NULL;
 }
 
 void cheat_frame(void)
@@ -768,6 +793,7 @@ void cheat_frame(void)
     item_trace(inv);
     if (sys->tk_flg && (sys->sp_flg & 0x2)) scripted(inv);   /* in game */
     unlock_switch();
+    if (!(sys->cb_flg & 0x200000)) cheat_saving = 0;   /* (bup_00.c TypewriterExit: the save screen closed) */
 
     g_cheat.hp = plp->hp;
     g_cheat.stg = sys->stg_no; g_cheat.rom = sys->rom_no; g_cheat.pos = sys->pos_no;
@@ -801,6 +827,15 @@ void cheat_frame(void)
             g_cheat.result = "Item removed.";
         }
         if (getenv("RECVX_DROP")) printf("test: drop slot %d: %s (equipped %u, weapon %d; mn_mode0 %d play %d mot %d mode1 %d)\n", s, g_cheat.result, inv[0], plp->wpnr_no, sys->mn_mode0, pc_in_play(plp, 0), plp->mnwP == plp->mnwPb, plp->mode1);
+    }
+    if (req & (CHEAT_SAVE | CHEAT_BOX)) {   /* Save Now / Open Item Box: the requests a typewriter's "Yes" and a box trigger make */
+        int save = (req & CHEAT_SAVE) != 0;
+        const char* why = anywhere_refused(save);
+        if (why) g_cheat.result = why;
+        else if (save) { sys->cb_flg |= 0x200000; cheat_saving = 1; g_cheat.result = "Opening the save screen."; }
+        else { sys->cb_flg |= 0x40000; g_cheat.result = "Opening the item box."; }
+        host_log("cheat: %s in %d/%d at (%.1f %.1f %.1f): %s (play %d st %08x cb %08x gm %08x ts %08x flg %x mode0 %d)\n", save ? "save anywhere" : "item box anywhere",
+                 sys->stg_no, sys->rom_no, plp->px, plp->py, plp->pz, g_cheat.result, pc_in_play(plp, 0), sys->st_flg, sys->cb_flg, sys->gm_flg, sys->ts_flg, plp->flg, plp->mode0);
     }
     if (req & CHEAT_SPAWN) g_cheat.result = spawn_enemy(g_cheat.spawn_idx);
     if (req & CHEAT_TELEPORT) {

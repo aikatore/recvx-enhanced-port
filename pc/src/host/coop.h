@@ -175,6 +175,7 @@ typedef struct CoopTest {
 } CoopTest;
 void coop_test_aids(CoopTest* t);
 int coop_room_key(void);            /* game thread: the room we are in, sys->stg_no * 256 + sys->rom_no (any case) */
+int coop_box_busy(void);            /* game thread: the partner has the shared item box open (the F2 item box cheat waits) */
 /* game thread, before or while joining: where the joining player's own inventory, item box, health
    and weapon come from - a save region (bytes from SYS_WORK.version, as a save holds them) or NULL
    for the current game state (the default) */

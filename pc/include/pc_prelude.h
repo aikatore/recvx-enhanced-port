@@ -179,6 +179,7 @@ int   coop_replayed_event(void);              /* event.c bhEvtComSet: the runnin
 void  coop_scd0(int after);                   /* event.c bhInitEvent: before (0) and after (1) the room's entry script (a solved flag kept) */
 void  coop_retry_point(void);                 /* room.c bhPushGameData: our continue point moved (the host keeps the guest's items with it) */
 int   pc_no_ink_ribbon(void);                 /* typewriters save without an ink ribbon (setting; in co-op the host's rule) */
+int   pc_cheat_save(void);                    /* the open save screen is the F2 cheat's (pc/glue/cheat_glue.c): saving uses no ink ribbon */
 int   pc_detector_skipped(void);              /* co-op rule "Metal detector: Skipped" (pc/glue/detector_glue.c): event.c bhPlItemCheck in 0/9 finds no metal */
 void  pc_detector_scd1(void);                 /* ... event.c bhControlEvent before scd1: the empty security boxes rest */
 void  pc_quick_start(void);                   /* co-op rule "Quick start" (pc/glue/coop_glue.c): system.c bhSysCallMonitor after a new game's AllItemInit */

@@ -1226,6 +1226,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_BAG="f:eq:item:count,item:count,..."` | at game frame f, the bag from slot 2 on as given and the equipped slot `eq` (after `RECVX_EQUIP` put the weapon in the hand: e.g. the manual glitch's manual, card, bow gun, arrows) |
 | `RECVX_DROP="f:slot,..."` | at game frame f, the F2 inventory's X on that slot (`CHEAT_DROP`; slot 2 = the first bag slot): the item removed, the weapon in hand put away first |
 | `RECVX_HP="f:hp,..."`, `RECVX_RETRY="f,..."` | set health / set a retry point (Continue resumes in that room) at game frame f |
+| `RECVX_CHEAT_SAVE="f,..."`, `RECVX_CHEAT_BOX="f,..."` | the F2 Save Now / Open Item Box (`CHEAT_SAVE`, `CHEAT_BOX`, hotkey rows `B_CHEAT_SAVE` / `B_CHEAT_BOX`) at game frame f; every use logs `cheat: save anywhere in S/R at (x y z): <result> (...)` with the state flags it was decided on (`pc/glue/cheat_glue.c` `anywhere_refused`) |
 | `RECVX_TEST_TYPEWRITER="f,..."` | open the typewriter's save screen at game frame f (as its ink ribbon question's "yes"; no ribbon needed) |
 | `RECVX_TEST_COMPUTER="f:n,..."` | open computer terminal n at game frame f, as the room scripts' `EvtComSet n` (1 self-destruct lock, 2 security lock, 3 Albinoid file, 4-6 3D scanner, 7 password; rooms 9/31, 1/2, 3/12, 0/9, 1/9) |
 | `RECVX_TEST_EXAMINE="f:etc,..."` | the action button on room trigger `etc` at game frame f, wherever the player stands: the scripts' "at trigger" test and the trigger's message, as `bhCheckExmAtari` takes a type 3 trigger (co-op: refused while the partner uses it), e.g. `600:13` the main hall's terminal (1/2), `600:7` the office computer (1/9) |
@@ -1292,7 +1293,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_MODERN_TRACE=1` | modern controls: each frame a direction is translated, the direction, cut (and whether the previous cut is held), target and facing angle, the player's place on screen and the camera |
 | `RECVX_MENU_TRACE=1` | menu clicks with the menu state |
 | `RECVX_MOUSE_TRACE=1` | who has the mouse, on each change: captured (third person), OS cursor shown, a menu screen up, the player in control, overlay, focus |
-| `RECVX_ITEM_TRACE=1` | the bag (equipped slot, lighter slot, slots) and the metal detector's security boxes (`sys->itm[192]`, `[224]`) whenever a word changes, with the box screen's cursors, by presented frame; in 0/9 also the detector's floor zone (`sys->flr_idx`), its "metal carried" flag (`rm_flg` bit 2) and whether it went off (`ev_flg` bit 53) |
+| `RECVX_ITEM_TRACE=1` | the bag (equipped slot, lighter slot, slots), the item box's first 16 entries (`sys->itm[64]`) and the metal detector's security boxes (`sys->itm[192]`, `[224]`) whenever a word changes, with the box screen's cursors, by presented frame; in 0/9 also the detector's floor zone (`sys->flr_idx`), its "metal carried" flag (`rm_flg` bit 2) and whether it went off (`ev_flg` bit 53) |
 | `RECVX_PROFILE=file` | sampling profiler (as `--profile-samples`) |
 
 ## Tools
