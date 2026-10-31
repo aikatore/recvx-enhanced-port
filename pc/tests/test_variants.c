@@ -18,7 +18,7 @@ int main(void)
     CHECK(n0 >= 1 && (v = variant_by_id(1)) && !strcmp(v->name, "Mutated Steve") && !strcmp(v->ui, "[C] Mutated Steve"));
     CHECK(v->type == 17 && v->mdlver == 0 && v->model == -1 && v->donor_type == 19 && v->donor_mdlver == 0);
     CHECK(v->death_n == 2 && v->death[0] == 18 && v->death[1] == 2 && v->dmotion_n == 0);
-    CHECK(v->hp > 1 && v->damage * 50 < 100 && v->wild && !v->mild && v->heavy && !v->user && v->attach_n == 2);   /* (a blow: 50 x damage) */
+    CHECK(v->hp > 1 && v->damage * 50 < 100 && !v->wild && !v->mild && v->heavy && !v->user && v->attach_n == 2);   /* (a blow: 50 x damage; not drawn by the randomizer for now) */
     CHECK(!strcmp(actor_models[19].name, "Monster Steve") && actor_models[19].id == 17);   /* (its own look, posed from the donor) */
     for (i = 0; i < n0; i++) CHECK(variant_at(i)->id >= 1 && variant_at(i)->id < VARIANT_USER_MIN && variant_by_id(variant_at(i)->id) == variant_at(i));
 

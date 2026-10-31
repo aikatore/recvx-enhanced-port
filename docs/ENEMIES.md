@@ -381,7 +381,8 @@ game).
 ### Built in: Mutated Steve
 
 Monster Steve himself, killable (id 1, F2 "[C] Mutated Steve"): his own code (`en17.c`), model,
-arms, motions, attacks and sounds, spawned as an ordinary enemy, with the Tyrant's death.
+arms, motions, attacks and sounds, spawned as an ordinary enemy, with the Tyrant's death. Not drawn by the
+randomizer for now (weight 0 in Wild and Mild since 2026-10-31); the F2 spawner and `mods/enemies.ini` still offer him.
 
 * **Outside his chase**: his code is written for the Antarctic chase (RM_9280): no hit takes his
   hit points (250), his Die mode is empty and nothing moves him there, his axe swing (motion 2)
@@ -577,7 +578,8 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
 | Giant Black Widow | 1 | - / 1 | as the Tyrant (writes `rm_flg & 1`) |
 | bat, Spotter | 1 each | - / 3, 2 | only for bat/Spotter records (fliers hover where they are placed; ground enemies never become fliers and back); not in kill-count rooms; `rm_flg` as above |
 
-* Then the enemy variants with a randomizer weight ("Enemy variants"): Mutated Steve, 1 in Wild.
+* Then the enemy variants with a randomizer weight ("Enemy variants"): none built in for now (Mutated Steve's
+  weight is 0); `mods/enemies.ini` can add some.
 * Not in the pool: the adult albinoid (its code drives its own room's light 2 and an effect linked
   to it: two of them in a prison room crashed in `en22.c bhEne22_MV04`), moths (their eggs use
   Claire's sub-models and 16 slots), bosses, water and wall types.
