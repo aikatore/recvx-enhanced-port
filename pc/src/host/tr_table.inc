@@ -120,6 +120,7 @@
 { "Ammo probability", { "Probabilité de munitions", "Munitionshäufigkeit", "Probabilidad de munición", "弾薬の出やすさ", "Вероятность патронов" } },
 { "An import is already running.", { "Une importation est déjà en cours.", "Ein Import läuft bereits.", "Ya hay una importación en curso.", "インポートはすでに実行中です。", "Импорт уже выполняется." } },
 { "An import is running.", { "Importation en cours.", "Ein Import läuft.", "Hay una importación en curso.", "インポート実行中です。", "Выполняется импорт." } },
+{ "An older import: import again.", { "Import ancien : réimportez.", "Älterer Import: erneut importieren.", "Importación antigua: vuelve a importar.", "以前のインポートです。再度インポートしてください。", "Старый импорт: импортируйте заново." } },
 { "Animate your chosen model's face in cutscenes when available. Applies next room.", { "Anime le visage du modèle choisi dans les cinématiques si possible. Pris en compte à la salle suivante.", "Animiert das Gesicht des gewählten Modells in Zwischensequenzen, sofern möglich. Gilt ab dem nächsten Raum.", "Anima la cara del modelo elegido en las cinemáticas, si es posible. Se aplica en la siguiente habitación.", "ムービー中、えらんだモデルの表情を動かします（対応モデルのみ）。次の部屋から適用されます。", "Анимирует лицо выбранной модели в роликах, если возможно. Действует со следующей комнаты." } },
 { "Animated Faces (Experimental)", { "Visages animés (expérimental)", "Animierte Gesichter (experimentell)", "Caras animadas (experimental)", "表情アニメーション（実験的）", "Анимация лиц (эксперимент)" } },
 { "Any", { "Toutes", "Beliebig", "Cualquiera", "指定なし", "Любой" } },

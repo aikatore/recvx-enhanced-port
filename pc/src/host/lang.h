@@ -26,6 +26,7 @@ extern const char* const lang_names[LANG_COUNT];   /* in the language itself (UT
 extern int g_lang, g_subtitles;
 void lang_scan(void);                 /* which languages are installed (at start, after an import or a delete) */
 int  lang_installed(int l);           /* its folder is complete (English: always) */
+int  lang_old_import(int l);          /* imported before the fix of the item messages (lang.txt version 1): import again */
 int  lang_has_subtitles(int l);       /* its rooms have cutscene subtitles */
 int  lang_sub(void);                  /* the subtitles' language (installed, with subtitles), -1 none */
 const char* lang_dir(int l);          /* its folder, NULL for English */
@@ -66,6 +67,7 @@ int  pc_lang_file_page(float x, float y, int file, int page);   /* fileview.c: a
 int  pc_lang_page_end(int us);                      /* fileview.c PlayPageCheck: the manual's hidden pages (US 0 1 2 4 6 7) */
 int  lang_eu_picture(int adv);                      /* the ADV.AFS picture is the European one (its title layout) */
 unsigned int* pc_lang_room_mes(unsigned int* mesp);  /* bhSetRoom: the room's message table in the language */
+unsigned int* pc_lang_sys_mes(unsigned int* sp);     /* SYSMES.ALD read: its system messages, the US one where one is not whole */
 void lang_frame(void);                              /* every frame: Subtitles changed in a room */
 
 #ifdef __cplusplus

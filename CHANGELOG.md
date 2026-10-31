@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Internal Resolution**: each setting now shows the real size the game is drawn at.
+- **Item pickups in other languages**: in French, German, Spanish and Japanese, picking up an item no longer
+  hangs or crashes. Import the language again to see those messages in it (until then they are English).
+
 ## 0.7.0 (2026-10-30)
 
 ### New

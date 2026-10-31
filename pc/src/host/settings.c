@@ -219,7 +219,7 @@ static const char* fsres_name(int v, char* b, int n)
 static int exclusive_on(void) { return g_config.fullscreen && g_config.fullscreen_exclusive; }
 static const char* scale_name(int v, char* b, int n)
 {
-    if (v) snprintf(b, n, "%dx (%d x %d)", v, 640 * v, 448 * v);
+    if (v) snprintf(b, n, "%dx (%d x %d)", v, 640 * v, 480 * v);   /* the 640 x 480 picture (DISP_HEIGHT), shown at 4:3 */
     else snprintf(b, n, tr("Auto (%dx)"), (int)gs_wanted_scale());
     return b;
 }

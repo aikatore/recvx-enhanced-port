@@ -80,6 +80,16 @@ int pc_png_size(const uint8_t* d, size_t n, uint32_t* w, uint32_t* h);
 #define PC_KIT_MAX 256
 int pc_startkit_scan(const uint8_t* d, uint32_t n, uint32_t* at, int max, int (*insn)(const uint8_t*));
 
+/* ---------------------------------------------------------------- message tables (decomp message.c)
+   u32 count, count u32 offsets (from the table's start) of u16 texts ending in 0xFFFF. 0xFF02 (wait) and 0xFF03 (an
+   item's name) take an operand, which can be 0xFFFF (0xFF03 0xFFFF: the current item's name, "Take the ...?"): it is
+   not the end. A text shows at most 16 choices (0xFF04: the game keeps 16 places, sys->mes_sps). */
+/* the length in u16 (with the end) of the text at t, within max u16; 0 if it does not end there or has more choices */
+uint32_t pc_mes_len(const uint8_t* t, uint32_t max);
+/* the length of message i of the table t (size bytes) within its place (up to the next message's start); 0 if it is
+   not whole there (a language import before the 0xFF03 0xFFFF fix cut the text at that operand) */
+uint32_t pc_mes_at(const uint8_t* t, uint32_t size, uint32_t i);
+
 #ifdef __cplusplus
 }
 #endif

@@ -101,6 +101,7 @@ const unsigned short* pc_lang_mes(int which, const unsigned short* us);   /* the
 int   pc_lang_file_page(float x, float y, int file, int page);   /* a file page as the language's picture (1 drawn) */
 int   pc_lang_page_end(int us);   /* PlayPageCheck: the playing manual's hidden pages in the language's layout */
 unsigned int* pc_lang_room_mes(unsigned int* mesp);
+unsigned int* pc_lang_sys_mes(unsigned int* sp);   /* the system messages read (SYSMES.ALD): whole, the US ones where not */
 int   lang_picture(int adv);    /* the language of the ADV.AFS picture read last (0: English) */
 int   lang_eu_picture(int adv); /* ... is a European one (its title layout) */
 int   pc_model_cull(void);      /* actors/objects off-screen are skipped (bhCheckClipModel/Point) */

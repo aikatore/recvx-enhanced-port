@@ -98,7 +98,7 @@ static int put(const char* dir, const char* name, const void* d, uint32_t n)
 }
 
 /* ---------------------------------------------------------------- messages
-   A table: u32 count, count u32 offsets (from the table's start) of u16 texts ending in 0xFFFF. */
+   A table: u32 count, count u32 offsets (from the table's start) of u16 texts ending in 0xFFFF (pc_parse.h). */
 typedef struct Mes { const uint16_t* t[MES_MAX]; uint32_t len[MES_MAX]; int n; } Mes;   /* len in u16, with the end */
 
 static int mes_read(const unsigned char* d, uint32_t size, Mes* m)
@@ -106,12 +106,10 @@ static int mes_read(const unsigned char* d, uint32_t size, Mes* m)
     uint32_t n;
     if (size < 4 || (n = pc_rd32(d)) > MES_MAX || !pc_range_ok(4, 4ull * n, size)) return 0;
     for (uint32_t i = 0; i < n; i++) {
-        uint32_t o = pc_rd32(d + 4 + 4 * i), k = 0;
-        if ((o & 1) || o >= size) return 0;
-        while (o + 2 * k + 1 < size && pc_rd16(d + o + 2 * k) != 0xFFFF) k++;
-        if (o + 2 * k + 1 >= size) return 0;
+        uint32_t o = pc_rd32(d + 4 + 4 * i), k;
+        if ((o & 1) || o >= size || !(k = pc_mes_len(d + o, (size - o) / 2))) return 0;   /* (0xFF03 0xFFFF is no end: pc_parse.h) */
         m->t[i] = (const uint16_t*)(d + o);
-        m->len[i] = k + 1;
+        m->len[i] = k;
     }
     m->n = (int)n;
     return 1;
@@ -499,13 +497,14 @@ typedef struct LangTxt {
     int fpics;               /* the files are pictures from this entry of ITEM?.AFS on (Japanese), 0 text */
     const char* extra;       /* more lines (the executable's texts), or NULL */
 } LangTxt;
+/* version 2: the messages whole past 0xFF03 0xFFFF (1 cut the item messages there: lang_glue.c lang_old_import) */
 static int write_txt(FILE* o, void* ud)
 {
     const LangTxt* t = ud;
     char when[64];
     time_t now = time(NULL);
     strftime(when, sizeof(when), "%Y-%m-%d %H:%M", localtime(&now));
-    fprintf(o, "# recvx language 1\nlang|%s\nsource|%s\niso|%s\nwhen|%s\nsubtitles|%d\nwidths|", lang_codes[t->lang], t->src, t->iso, when, t->subs);
+    fprintf(o, "# recvx language 2\nlang|%s\nsource|%s\niso|%s\nwhen|%s\nsubtitles|%d\nwidths|", lang_codes[t->lang], t->src, t->iso, when, t->subs);
     for (int i = 0; i < t->nw; i++) fprintf(o, "%s%d", i ? "," : "", t->w[i]);
     if (t->ox) {
         fprintf(o, "\noffsets|");
