@@ -109,6 +109,7 @@ int  actor_double_kept(void);           /* the doubles stay the game's for the c
 void actor_act(int who, struct BH_PWORK* ep);
 int  actor_put_as(int who, struct BH_PWORK* ep);
 int  actor_own_hand(int who, int side, int* node);   /* its model has a hand of its own on side 0 right / 1 left (1; 2: no such hand at all), posed on source node *node */
+int  actor_src_head(int who, int node);   /* node is the neck or head of the source slot who was last posed from (as its model) */
 /* before actor_pose(who, src) (slots 0, 1): src shows the mesh of player character `mesh` (0..3, a
    part-file mesh on the real skeleton; -1: a catalogue model is shown) and plays the motions of
    character `motion`, its upper body bent by `pitch` (radians: the free-aim bend, tps_bend). Gender-matched

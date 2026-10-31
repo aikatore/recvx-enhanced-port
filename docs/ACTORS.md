@@ -575,9 +575,20 @@ joint rotations come from the source (`actor_glue.c rig_build`, `retarget`).
   ankle at its ends and the knee at mid-leg. Joints between mapped ones follow their parent rigidly.
 * **Root and feet**: the root's height over the floor is scaled by the hips' heights (crouching,
   kneeling, the walk's bob), and the body is then moved up or down so that its lowest ankle or toe is
-  as far over its rest height as the source's (in proportion; at most 3 units): feet of another shape
-  (a Hunter's long foot, Monster Steve's claw) stay on the floor. Only the height: room motions move
-  cutscene doubles across the room with the root.
+  exactly as high as the source's, each over its own sole (the rest pose's ankle heights): the model
+  stands where the source stands and its feet leave the floor as far as the source's do (a jump, a
+  climb, sitting with the feet up), not glued down. The floor for the scaling is under the source's
+  lowest ankle or toe, not the base matrix: a cutscene record's base matrix often stays at the room's
+  origin while its room motion carries it onto a floor 30 to 50 units up, and scaled from there a taller
+  model floated (Alexia for Steve in 0030 3.2 units, a Hunter for Alfred in 1020 2.2, Nosferatu for
+  Alexia in 9150 3.1) and a smaller one sank (the anatomist for Wesker in 8030 2.6); the old correction,
+  in proportion and at most 3 units, did not reach. Models whose legs are longer than their hips suggest
+  stood in the floor (the Tyrant for Rodrigo in the opening, ankles 1.6 units deep). Now within 0.4
+  units in every scene measured; the shift stops at half the model's hip height (feet of another kind).
+  For the player in gameplay (its base matrix on the floor) nothing visible changes (Tyrant: 0.1). Only
+  the height: room motions move cutscene doubles across the room with the root. Test aid
+  `RECVX_FEET_TRACE=1`: every 15 ticks each display slot's lowest ankle or toe and the source's over the
+  base matrix, the hips and rest ankle heights and the shift.
 * **Post-passes**: the two-handed grip IK and the lighter IK (below), the face mask's jaw, tongue and
   eyes, the cutscene doubles' hand pieces, as before.
 * **A missing hand**: what the game links to a source hand the model does not have (Nosferatu's right
@@ -788,9 +799,15 @@ played is read when a record is drawn, not at the load (`cast_glue.c played`): t
 (`sys->ply_id`, which a story switch changes at the end of the next room load's `bhFinishRoom`, after
 `cast_room`), the one a switch the script has set is about to make played (`PlayerChangeSet`:
 `cb_flg & 0x80`, `cng_pid`; Claire's part ends in 6100 with a switch to Chris and the door to his first
-scene, 7240), and in co-op the partner's (its part file, `Pose.mfile & 3`). Such a double gets a model at
-the load but is never drawn as it. The other player characters' records are ordinary cast (Claire in
-9150 while Chris is played, Chris in Claire's part, Steve).
+scene, 7240), and in co-op the partner's (its part file, `Pose.mfile & 3`). Claire also counts while
+Steve is played (`cast.c cast_plays`): his short section of her part (the switch in 3100 after the
+catwalk's Bandersnatch, back to her in 3210) is her story, and her scenes in it (the face relief room,
+3210, where Steve finds her) were the player's character drawn as a random model; she is shown as
+herself there (the Character Model is on Steve, who is played). Such a double gets a model at the load
+but is never drawn as it. The other player characters' records are ordinary cast (Claire in 9150 while
+Chris is played, Chris in Claire's part, Steve). Every double of the played character is one of the
+types above (checked over all room files: Claire 91; Chris 92, 42; Steve 93, 43; Wesker 97, 49, 47), so
+no scene stands the player in with another type.
 
 ### For the whole room visit
 
@@ -908,6 +925,15 @@ the same in Claire's part and in Chris's.
   own hands. A piece of more nodes holds a prop in the same mesh as the hand (Claire's hand with the
   lighter, two of Rodrigo's) and stays whole; items the script links to a hand are other objects and stay.
   The same for a model without that hand at all (the Bandersnatch's left).
+* **Head parts**: Claire's ponytail is an object of its own on her cutscene record's head (id 1200, 4
+  nodes, node 5: 9150, 9320, 3210), and so are Wesker's sunglasses on his event model 47 (id 1127, 8030);
+  the player's head part `sys->obwp[2]` when a script links it there. Drawn as another model, the record
+  left them swinging or sitting in the air where its head is. Every object linked to the record's neck or
+  head (the source's rig roles 4, 5: `actor_src_head`) is hidden while it is drawn as its model, all its
+  nodes (`cast_glue.c parts_hide`, `NJD_EVAL_HIDE`, as the hand pieces), and shown again at the next tick,
+  so they are back whenever the record is drawn as itself. The other objects linked to cast records sit on
+  their hands (checked in 0000, 0030, 1020, 3100, 3210, 7030, 7220, 8030, 9150, 9320). Test aid
+  `RECVX_CAST_PARTS=0`: the parts kept.
 * **Zero-length bones**: Rodrigo's and the hazmat man's shoulders are two nodes at one place, and the
   arm's rotation is the second's (see "Retargeting"). Taken from the first, the models on Rodrigo kept
   their upper arms near their rest pose, raised like a T-pose, while his hung down or lay on the table.
@@ -918,7 +944,7 @@ the same in Claire's part and in Chris's.
 
 ### Limits
 
-* Props the scripts link to a character's head stay at the record's head. On a model without hands the
+* On a model without hands the
   hand pieces are the record's (Rodrigo's gloves on Claire), sized for the record's hands; on one with
   hands a piece that holds a prop in its own mesh is shown with its hand.
 * Records drawn as the same model share its face mask: the one posed last talks.

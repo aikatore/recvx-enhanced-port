@@ -58,6 +58,10 @@ int main(void)
     }
     /* who is cast */
     CHECK(cast_character(91, 0) == 0 && cast_character(43, 0) == 2 && cast_character(96, 1) == 4 && cast_character(98, 0) == 6);
+    /* who counts as played: the character itself; Claire also while Steve is (his section of her part); nobody else */
+    for (c = 0; c < CAST_CHARACTERS; c++)
+        for (int p = -1; p < 4; p++) CHECK(cast_plays(c, p) == (p >= 0 && (c == p || (p == 2 && c == 0))));
+    CHECK(!cast_plays(1, 0) && !cast_plays(0, 1) && !cast_plays(2, 0) && !cast_plays(0, 3) && cast_plays(0, 2) && cast_plays(2, 2));
     CHECK(cast_character(99, 0) < 0 && !in(cine, nc, 14) && !in(all, na, 14));   /* the man in the hazmat suit: neither cast nor a pick */
     CHECK(cast_character(16, 0) < 0 && cast_character(12, 0) < 0 && cast_character(1, 0) < 0 && cast_character(68, 0) < 0);
     for (s = 0; s < 50; s++) {

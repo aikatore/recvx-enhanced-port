@@ -15,6 +15,11 @@ extern "C" {
 /* the story character (0..7) a record of type id, model version ver is, -1: none (Alfred's and
    Alexia's boss types, props, enemies) */
 int cast_character(int id, int ver);
+/* story character c (cast_character) counts as played while character ply (sys->ply_id & 3: 0 Claire, 1 Chris,
+   2 Steve, 3 Wesker; -1 none) is played: never cast then. The character itself, and Claire through Steve's short
+   section of her part (the training facility, 3100 to 3210): it is her story, her scenes there (the face relief room,
+   3210) are the player's character's */
+int cast_plays(int c, int ply);
 /* the models a character may be drawn as (all: 0 "Cutscene models", 1 "All models", 2 "Custom": the "All models"
    entries whose bit in off is clear; imports: the imported models 0..imports-1 too), as actor indices (catalogue
    entries, ACTOR_PART + 4 Claire's second costume (the other player files have no face mask: their characters' cutscene

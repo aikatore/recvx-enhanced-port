@@ -24,6 +24,10 @@
 - **Talking faces in the cutscene cast**: when Claire, Chris, Steve or Wesker takes someone's place in a
   cutscene, their mouth now moves with the lines, and Wesker, Alexia and Rodrigo no longer keep their mouths
   shut through some characters' lines.
+- **Cutscene cast**: Claire keeps her own look during Steve's short part of her story, and when someone
+  else takes her place, her ponytail (and Wesker's sunglasses) no longer float where her head would be.
+- **Swapped models on the ground**: taller or shorter models in cutscenes and as your Character Model now
+  stand on the floor instead of floating above it or sinking into it.
 - **Smoother Motion under water**: the views from the water at the airport's submarine dock now move as
   smoothly as the rest of the game, wavy water effect included.
 

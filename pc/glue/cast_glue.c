@@ -33,8 +33,8 @@ static signed char rec_slot[RECS];      /* record -> cast slot, -1: drawn as its
 static unsigned char rec_id[RECS], rec_ver[RECS], rec_chr[RECS];   /* what it was when given its model: type, model version, character */
 static short slot_model[CSLOTS] = { -1, -1, -1, -1, -1, -1 };
 _Static_assert(CSLOTS == 6, "slot_model");
-#define HIDDEN_MAX 16
-static NJS_CNK_OBJECT* hidden[HIDDEN_MAX];   /* hand pieces hidden this tick (hands_hide) */
+#define HIDDEN_MAX 64
+static NJS_CNK_OBJECT* hidden[HIDDEN_MAX];   /* hand pieces and head parts hidden this tick (hands_hide, parts_hide) */
 static int hidden_n;
 static unsigned char hid_logged[4];   /* (test aid: objects logged hidden in this room) */
 
@@ -136,12 +136,13 @@ void cast_room(const EnemyOpts* o)
    is drawn: the character played now (a story switch changes sys->ply_id after the room load: the end of bhFinishRoom);
    the one a switch the script has set (PlayerChangeSet: cb_flg 0x80, cng_pid) is about to make played, so the scene
    around the switch already counts it; and in co-op the partner's (its own part file), whom a scene of ours may show
-   while its game plays it. Claire while Chris is played (and no switch to her is pending) is cast as any character. */
+   while its game plays it; Claire also through Steve's section of her part (cast_plays). Claire while Chris is played
+   (and no switch to her is pending) is cast as any character. */
 int coop_partner_ply(void);             /* coop_glue.c: -1 none */
 static int played(int k)
 {
     int c = rec_chr[k];
-    return c < 4 && (c == (sys->ply_id & 3) || ((sys->cb_flg & 0x80) && c == (sys->cng_pid & 3)) || c == coop_partner_ply());
+    return c < 4 && (cast_plays(c, sys->ply_id & 3) || ((sys->cb_flg & 0x80) && cast_plays(c, sys->cng_pid & 3)) || cast_plays(c, coop_partner_ply()));
 }
 
 /* record k is drawn as its model now */
@@ -185,6 +186,34 @@ static void hands_hide(BH_PWORK* ep, int who)
     }
 }
 
+/* The record's own parts on its head: Claire's ponytail (object id 1200, 4 nodes, on head node 5 of her cutscene
+   record; the player's head part, sys->obwp[2], when a script links it there) and Wesker's sunglasses (id 1127 on his
+   event model 47 in 8030) are objects of their own, linked to the head, and kept swinging behind or sitting on the
+   model shown in the record's place. Hidden as the hand pieces are (every node's mesh, NJD_EVAL_HIDE) while the
+   record is drawn as its model, shown again at the next tick (the record drawn as itself). The other objects linked
+   to a record sit on its hands. */
+extern int cast_parts;                  /* actor_glue.c: 0 (test aid RECVX_CAST_PARTS=0): the parts kept */
+static void parts_hide(BH_PWORK* ep, int who)
+{
+    int o, i;
+    if (!cast_parts) return;
+    for (o = 2; o < 32; o++) {   /* (0, 1: the player's weapons) */
+        O_WRK* op = &sys->obwp[o];
+        if (!(op->flg & 0x1) || !(op->flg & 0x80) || op->lkwkp != (unsigned char*)ep || !actor_src_head(who, op->lkono) || !op->mlwP || !op->mlwP->objP) continue;
+        for (i = 0; i < (int)op->mlwP->obj_num && hidden_n < HIDDEN_MAX; i++) {
+            NJS_CNK_OBJECT* m = &op->mlwP->objP[i];
+            if (m->evalflags & 0x8) continue;   /* (hidden already) */
+            m->evalflags |= 0x8;
+            hidden[hidden_n++] = m;
+        }
+        if (getenv("RECVX_CAST_TRACE") && !(hid_logged[o >> 3] & (1 << (o & 7)))) {   /* test aid: once per object and room */
+            hid_logged[o >> 3] |= (unsigned char)(1 << (o & 7));
+            host_log("cast: room %04d record %d (type %d): its part (object %d, id %d, %d nodes) on head node %d hidden\n", room_file_now(), (int)(ep - ene), ep->id, o, op->id,
+                     (int)op->mlwP->obj_num, op->lkono);
+        }
+    }
+}
+
 /* actor_double_tick: every character shown in a cutscene, posed with its face and hands */
 void cast_tick(void)
 {
@@ -202,6 +231,7 @@ void cast_tick(void)
         if (!as_model(ep, k) || (ep->stflg & 0x41000000) || !ep->mlwP) continue;
         actor_act(ACTOR_CAST + rec_slot[k], ep);
         hands_hide(ep, ACTOR_CAST + rec_slot[k]);
+        parts_hide(ep, ACTOR_CAST + rec_slot[k]);
     }
 }
 

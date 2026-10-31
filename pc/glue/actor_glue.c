@@ -15,7 +15,7 @@
  *    the source's. Positions come from the model's own bone offsets; nodes without a map follow
  *    their parent rigidly (fingers, claws, face, tentacles). The weapon hands of the source are
  *    moved to the model's hands. Limbs are mapped by where the player's joints sit along each
- *    chain, the root's height and the feet follow the source's in proportion (docs/ACTORS.md
+ *    chain, the root's height follows the source's in proportion and the feet stand as high as its (docs/ACTORS.md
  *    "Retargeting"; RECVX_RETARGET=0: the previous mapping).
  *  - everything else: its own motion set's idle motion, looped (or its rest pose).
  * Textures go to the texture heap (shared by TIM2 index with a model the room already shows) and
@@ -83,6 +83,7 @@ typedef struct Disguise {
     int face;                           /* faces in its face mask (face_init; 0 none): lip sync mirrored from the double */
     int lip, lip_max;                   /* the double's lip data (a line) and its highest phoneme */
     signed char src_hand[2];            /* the last pose's source hand nodes (right, left; -1 none) */
+    signed char src_head[2];            /* and its neck and head nodes (-1 none) */
     NJS_TEXLIST* tex[16];               /* texlists we uploaded */
     int tex_n;
     Rig rig;                            /* rig.ok: posed from the source's skeleton */
@@ -152,6 +153,7 @@ int actor_retarget = 1;
 /* the cutscene cast's hands (cast_glue.c hands_hide, the turn above); test aid RECVX_CAST_HANDS=0: as before (the record's
    pieces kept everywhere, moved to the model's hands without its turn) */
 int cast_hands = 1;
+int cast_parts = 1;                     /* cast_glue.c parts_hide; test aid RECVX_CAST_PARTS=0: the head parts kept */
 
 /* the player's chains: the node whose position gives a node's bone direction (-1: a chain end) */
 static const signed char dir_child[22] = { -1, 2, 3, 4, 5, -1, 7, 8, 9, -1, 11, 12, 13, -1, 15, 16, 17, -1, 19, 20, 21, -1 };
@@ -487,18 +489,29 @@ static void retarget(Disguise* d, BH_PWORK* src, const Rig* sr)
     const Rig* tr = &d->rig;
     const float* dm = (const float*)d->w.mtxbuf;   /* the actor's own matrix (d->w.mtx points here) */
     const float* root = sr->map[0] >= 0 ? &sow[(int)sr->map[0]].mtx[12] : NULL;   /* the root: feet on the source's floor */
-    float rot[NODES][9], scaled[3];
+    float rot[NODES][9], scaled[3], fs = 1e9f, rs = 1e9f, rt = 1e9f, flr = dm[13], hs = 0, ht = 0;
+    int i, k, j, from[NODES];
     if (root && actor_retarget && tr->map[1] >= 0 && sr->map[1] >= 0) {
         /* The root's height above the floor (crouching, kneeling, the walk's bob) scaled by the hips'
-           heights: a taller body's legs bend as the source's and reach as far down in proportion, so
-           its feet stay on the floor instead of floating (a shorter one's: sinking). Only the height:
-           room motions move cutscene doubles across the room with the root. */
-        float hs = sr->rest[(int)sr->map[1]][1] - sr->rest[(int)sr->map[0]][1], ht = tr->rest[(int)tr->map[1]][1] - tr->rest[(int)tr->map[0]][1];
+           heights: a taller body's legs bend as the source's and reach as far down in proportion.
+           The floor is under the source's lowest ankle or toe (its height over the sole in the rest
+           pose), not the base matrix: a cutscene record's base matrix often stays at the room's origin
+           while its room motion carries it onto a floor 30 or 50 units up, and scaled from there a
+           taller model floated (Alexia in 0030 3 units, a Hunter in 1020 2) and a smaller one sank.
+           Only the height: room motions move cutscene doubles across the room with the root. */
+        hs = sr->rest[(int)sr->map[1]][1] - sr->rest[(int)sr->map[0]][1];
+        ht = tr->rest[(int)tr->map[1]][1] - tr->rest[(int)tr->map[0]][1];
+        for (k = 16; k <= 21; k++) {   /* the ankles and toes */
+            if (k == 18 || k == 19 || tr->map[k] < 0 || sr->map[k] < 0) continue;
+            fs = fminf(fs, sow[(int)sr->map[k]].mtx[13]);
+            rs = fminf(rs, sr->rest[(int)sr->map[k]][1] - sr->rest[(int)sr->map[0]][1]);
+            rt = fminf(rt, tr->rest[(int)tr->map[k]][1] - tr->rest[(int)tr->map[0]][1]);
+        }
+        if (fs < 1e8f) flr = fs - rs;
         memcpy(scaled, root, sizeof(scaled));
-        if (hs > 1.0f && ht > 1.0f) scaled[1] = dm[13] + (root[1] - dm[13]) * ht / hs;
+        if (hs > 1.0f && ht > 1.0f) scaled[1] = flr + (root[1] - flr) * ht / hs;
         root = scaled;
     }
-    int i, k, j, from[NODES];
     for (i = 0; i < tr->n; i++) from[i] = -1;
     for (k = 0; k < 22; k++) if (tr->map[k] >= 0 && sr->map[k] >= 0) from[(int)tr->map[k]] = k;
     for (i = 0; i < tr->n; i++) {
@@ -528,24 +541,25 @@ static void retarget(Disguise* d, BH_PWORK* src, const Rig* sr)
         else for (j = 0; j < 9; j++) rot[i][j] = dm[(j / 3) * 4 + j % 3];
     }
     place(m, tr, rot, dm, root);
-    if (root == scaled) {   /* The feet as the source's: its lowest ankle or toe as far over the floor (in
-        proportion) beyond its rest height as the model's beyond the model's. Feet of another shape (a
-        Hunter's long foot, Monster Steve's claw) lift the leg differently when the source's toe bends. */
-        float fs = 1e9f, ft = 1e9f, rs = 1e9f, rt = 1e9f, hs = sr->rest[(int)sr->map[1]][1] - sr->rest[(int)sr->map[0]][1],
-              ht = tr->rest[(int)tr->map[1]][1] - tr->rest[(int)tr->map[0]][1];
-        for (k = 16; k <= 21; k++) {
-            if (k == 18 || k == 19 || tr->map[k] < 0 || sr->map[k] < 0) continue;
-            fs = fminf(fs, sow[(int)sr->map[k]].mtx[13]);
-            rs = fminf(rs, sr->rest[(int)sr->map[k]][1] - sr->rest[(int)sr->map[0]][1]);
-            ft = fminf(ft, m->owP[(int)tr->map[k]].mtx[13]);
-            rt = fminf(rt, tr->rest[(int)tr->map[k]][1] - tr->rest[(int)tr->map[0]][1]);
-        }
-        if (ft < 1e8f && hs > 1.0f && ht > 1.0f) {
-            float shift = rt + (fs - dm[13] - rs) * ht / hs - (ft - dm[13]);
-            if (shift > 3.0f) shift = 3.0f;
-            if (shift < -3.0f) shift = -3.0f;
-            scaled[1] += shift;
-            place(m, tr, rot, dm, root);
+    if (root == scaled && fs < 1e8f && hs > 1.0f && ht > 1.0f) {
+        /* The feet as the source's: the model's lowest ankle or toe as high as the source's, each over its
+           own sole (the rest pose's ankle heights), so the model stands where the source stands and its
+           feet leave the floor as far as the source's do (a jump, a climb, a kick: matched, not glued to
+           the floor). The hips' scale alone missed models whose legs are longer or shorter than their
+           hips suggest (the Tyrant for Rodrigo in the opening: its ankles 1.6 units in the floor). Feet of another kind (a claw, a
+           tail for a leg) more than half the hip height off: the shift stops there. */
+        float ft = 1e9f, shift, lim = ht * 0.5f;
+        for (k = 16; k <= 21; k++) if (k != 18 && k != 19 && tr->map[k] >= 0 && sr->map[k] >= 0) ft = fminf(ft, m->owP[(int)tr->map[k]].mtx[13]);
+        shift = fs - rs + rt - ft;   /* ponytail: one shift for the whole body; a foot IK would plant each foot on its own */
+        if (shift > lim) shift = lim;
+        if (shift < -lim) shift = -lim;
+        scaled[1] += shift;
+        place(m, tr, rot, dm, root);
+        if (getenv("RECVX_FEET_TRACE") && !(actor_ticks % 15)) {   /* test aid: the lowest ankle or toe over the base matrix, source and model */
+            ft = 1e9f;
+            for (k = 16; k <= 21; k++) if (k != 18 && k != 19 && tr->map[k] >= 0 && sr->map[k] >= 0) ft = fminf(ft, m->owP[(int)tr->map[k]].mtx[13]);
+            host_log("actor: feet slot %d model %d: source %.2f model %.2f over %.2f (hips %.2f/%.2f, rest feet %.2f/%.2f, shift %.2f)\n", (int)(d - dg), d->model,
+                     fs - dm[13], ft - dm[13], dm[13], hs, ht, rs, rt, shift);
         }
     }
     {   /* Both hands on the weapon (two-handed aim and grips): the source's left hand is near its
@@ -1803,6 +1817,8 @@ void actor_pose(int who, BH_PWORK* src)
             }
             d->src_hand[0] = sr.map[9];
             d->src_hand[1] = sr.map[13];
+            d->src_head[0] = sr.map[4];
+            d->src_head[1] = sr.map[5];
             head_pose(d, who == ACTOR_DOUBLE || who >= ACTOR_CAST ? dbl_tick == 1 : !redraw);   /* (one head part, one swing per tick) */
             if (d->skin) imp_face(d, src, who == ACTOR_DOUBLE || who >= ACTOR_CAST ? dbl_tick == 1 : !redraw);
             imp_skin(d);
@@ -2087,6 +2103,7 @@ __attribute__((constructor)) static void actor_init(void)
     for (i = 0; i < 2; i++) sh[i].chr = sh[i].fail = sh[i].wpn_no = sh[i].motion = -1;
     if (getenv("RECVX_RETARGET")) actor_retarget = atoi(getenv("RECVX_RETARGET")) != 0;
     if (getenv("RECVX_CAST_HANDS")) cast_hands = atoi(getenv("RECVX_CAST_HANDS")) != 0;
+    if (getenv("RECVX_CAST_PARTS")) cast_parts = atoi(getenv("RECVX_CAST_PARTS")) != 0;
 }
 
 /* the display actor's work (its model, node matrices after actor_pose), NULL when none is shown */
@@ -2120,6 +2137,12 @@ int actor_own_hand(int who, int side, int* node)
     if (*node < 0 || d->model < 0 || !d->mapped) return 0;
     if (n < 0) return 2;   /* (no such hand at all: the Bandersnatch's left, Nosferatu's right) */
     return d->skin || node_has_mesh(&d->w, n);
+}
+
+int actor_src_head(int who, int node)
+{
+    const Disguise* d = &dg[who];
+    return node >= 0 && d->model >= 0 && d->mapped && (node == d->src_head[0] || node == d->src_head[1]);
 }
 
 int actor_hand_free(int who, int node)

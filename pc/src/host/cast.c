@@ -22,6 +22,8 @@ int cast_character(int id, int ver)
     }
 }
 
+int cast_plays(int c, int ply) { return ply >= 0 && c >= 0 && (c == ply || (ply == 2 && c == 0)); }
+
 static int listed(void) { return __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE); }   /* (the main thread appends) */
 static int imports_n(int imports) { return imports > 0 && imports <= listed() ? imports : 0; }
 
