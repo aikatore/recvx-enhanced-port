@@ -255,9 +255,9 @@ static void test_aid(void)
     } else if (!strcmp(op, "poison")) plp->stflg |= 0x80000;
     else if (!strcmp(op, "pad")) coop_test_press((unsigned)a);
     else if (!strcmp(op, "ok") && (sys->st_flg & 0x200)) coop_test_press(0xB00);   /* only a message's confirm */
-    printf("test: extras %s %d at game frame %d (presented %u) in %d/%d case %d: %d here%s, player %.1f %.1f %.1f ay %d, %spoisoned, box screen %d, planter %d\n", op, a,
+    printf("test: extras %s %d at game frame %d (presented %u) in %d/%d case %d: %d here%s, player %.1f %.1f %.1f ay %d, %spoisoned, box screen %d, planter %d (gm %08x cb %08x st %08x sp %08x)\n", op, a,
            clock, (unsigned)gs_frame_count(), sys->stg_no, sys->rom_no, sys->rcase, here_n, made ? "" : " (none made)", plp->px, plp->py, plp->pz, plp->ay,
-           plp->stflg & 0x80000 ? "" : "not ", (sys->cb_flg & 0x40000) != 0, ev);
+           plp->stflg & 0x80000 ? "" : "not ", (sys->cb_flg & 0x40000) != 0, ev, sys->gm_flg, sys->cb_flg, sys->st_flg, sys->sp_flg);
     fflush(stdout);
 }
 

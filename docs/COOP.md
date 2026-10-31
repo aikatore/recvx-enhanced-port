@@ -82,7 +82,7 @@ of their own (an arrow after them; RANDOMIZER also shows On or Off):
 | Entry | Its page |
 |---|---|
 | **RANDOMIZER** | The enemy options: **RANDOMIZER**, **VARIETY** (Wild / Mild) and **EVENT ENEMIES** (both shown only with the randomizer on), **SEED**, **RANDOM SEED**, then **EXTRA ENEMIES**, **LAYOUT**, and **CUTSCENE CAST** (it shows On or Off), which opens a page of its own: **RANDOMIZE CAST** (On / Off), **MODELS** (Cutscene Models / All Models / Custom; with Custom, **CHOOSE MODELS** opens the list of models to check, with SELECT ALL and DESELECT ALL; a joining player sees how many the host checked) and **ASSIGN** (Per Character / Per Cutscene; both while on), and **IMPORTED MODELS** (On / Off; while on, shown only to a player who has imported models). BACK returns to the RANDOMIZER page. See [ACTORS.md](ACTORS.md) "Cutscene cast". |
-| **EXTRA EVENTS** | Rules for single events: **QUICK START** (On / Off, see "Quick start"; hidden and off while BioRand is on), **METAL DETECTOR** (Skipped / Original, see "Metal detector"), **EXTRA BOXES AND HERBS** (On / Off, see "Extra item boxes and herbs"). |
+| **EXTRA EVENTS** | Rules for single events: **QUICK START** (On / Off, see "Quick start"; hidden and off while BioRand is on), **METAL DETECTOR** (Skipped / Original, see "Metal detector"), **BOXES/HERBS** (On / Off, see "Extra item boxes and herbs"). |
 
 Confirm or a click opens a page; BACK (or cancel, or a right click) returns to GAME RULES on its
 entry. The joiner sees the host's GAME OVER rule and both pages read-only (HOST RULES) once
@@ -577,7 +577,7 @@ with the shutters down) is released at its switch, as in the original.
 
 ### Extra item boxes and herbs
 
-**Extra Item Boxes and Herbs** (lobby GAME RULES, EXTRA EVENTS **EXTRA BOXES AND HERBS**; F1 / ENHANCED SETTINGS
+**Extra Item Boxes and Herbs** (lobby GAME RULES, EXTRA EVENTS **BOXES/HERBS**; F1 / ENHANCED SETTINGS
 GAMEPLAY and BioRand's EXTRA OPTIONS "Extra Item Boxes and Herbs"; ini `extra_objects`, default off): four more item
 boxes and eight blue herb planters in some rooms ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md) "Extra item boxes and
 herbs"), useful with the randomizers. In single player it is your own setting; in co-op the host's counts for both

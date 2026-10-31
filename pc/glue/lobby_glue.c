@@ -1299,7 +1299,7 @@ static void row_text(int r, char* label, char* val, int n)
                                                        (lb.role ? coop_biorand() == 1 : biorand_setting()) ? biorand_seed_text()[0] ? biorand_seed_text() : "On" : "Off"); break;
     case R_QUICK: strcpy(label, "QUICK START"); snprintf(val, n, "%s", (lb.role ? coop_quick_start() : g_coop.quick_start) ? "On" : "Off"); break;
     case R_DETECTOR: strcpy(label, "METAL DETECTOR"); snprintf(val, n, "%s", (lb.role ? coop_skip_detector() : g_coop.skip_detector) ? "Skipped" : "Original"); break;
-    case R_EXTRAOBJ: strcpy(label, "EXTRA BOXES AND HERBS"); snprintf(val, n, "%s", (lb.role ? coop_extra_objects() : settings_get(lset("Extra Item Boxes and Herbs"))) ? "On" : "Off"); break;
+    case R_EXTRAOBJ: strcpy(label, "BOXES/HERBS"); snprintf(val, n, "%s", (lb.role ? coop_extra_objects() : settings_get(lset("Extra Item Boxes and Herbs"))) ? "On" : "Off"); break;
     case R_RIBBON: strcpy(label, "INK RIBBONS"); snprintf(val, n, "%s", settings_get(lset("Free Typewriter Saves")) ? "Not needed" : "Needed"); break;
     case R_START: strcpy(label, "START"); start_label(val, n, g_coop.start); break;
     case R_RULES: strcpy(label, lb.role ? "HOST RULES" : "GAME RULES"); break;
