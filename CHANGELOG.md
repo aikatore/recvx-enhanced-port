@@ -5,9 +5,18 @@
 ### New
 
 - **Turkish and Brazilian Portuguese**: import them from their fan-translated discs; our menus are translated too.
-- **Weapon shortcuts**: swap weapons without the inventory. Press 1 to 8 on the keyboard, or hold the
-  right stick click and pick a weapon with the d-pad. Assign them in the inventory. L2 and R2 moved to the
-  keys 9 and 0.
+- **Weapon shortcuts**: swap weapons without opening the inventory.
+  - **Setting them up**: in the inventory, move the cursor onto a weapon and press a number key from 1
+    to 8 to put it on that shortcut; press the same number again to take it off. For an overview of all
+    your shortcuts, press C in the inventory (on a gamepad, click the right stick): pick a weapon, then
+    the slot you want it on.
+  - **Keyboard**: press 1 to 8 to draw that weapon straight away. You can also hold C to see your
+    shortcuts and choose one with the arrow keys; E switches to the second page.
+  - **Gamepad**: hold the right stick click to bring up your shortcuts, then press a direction on the
+    d-pad. RB switches to the second page.
+  - You can swap whenever your weapon is lowered. Weapons you aren't carrying are greyed out, and each
+    character keeps their own shortcuts. All keys and buttons can be changed in KEY CONFIG.
+  - To make room, L2 and R2 moved to the keys 9 and 0.
 
 ### Fixes
 
