@@ -209,8 +209,9 @@ static void usage(void)
         "  --coop-host PORT   online co-op: wait for a partner on this UDP port (F3: co-op window)\n"
         "  --coop-join HOST:PORT#CODE | ROOM  online co-op: join a host, or a room through the co-op server\n"
         "  --coop-server ADDR   co-op server (host or host:port, UDP 7141)  --coop-conn auto|direct|server  --coop-pw PASSWORD\n"
+        "  --dev              developer tools (the object placer in the F2 window)\n"
         "  --quiet\n"
-        "  --version          print the version and exit\n"
+        "  --version         print the version and exit\n"
         "  --log[=file]       copy all output to a log file (default recvx.log), crash backtraces included\n"
         "  --profile[=file]   per-frame timing CSV (default recvx_profile.csv): logic, vu0, vu1, gs,\n"
         "                     interp, present, wait; also shown live in the F1 overlay\n"
@@ -264,7 +265,7 @@ static void parse_args(int argc, char** argv)
         else if (!strcmp(argv[i], "--skip-intro")) g_config.skip_intro = 1;
         else if (!strcmp(argv[i], "--hd-textures") && i + 1 < argc) { SDL_strlcpy(g_config.hd_textures_dir, argv[++i], sizeof(g_config.hd_textures_dir)); }
         else if (!strcmp(argv[i], "--third-person")) g_tps.on = 1;
-        else if (!strcmp(argv[i], "--dev")) {}   /* (was: BioRand and the importers; now always shown; still accepted for old shortcuts) */
+        else if (!strcmp(argv[i], "--dev")) g_dev_tools = 1;   /* developer tools (the F2 object placer); BioRand and the importers are shown without it */
         else if (!strcmp(argv[i], "--quiet")) g_config.log_level = 0;
         else if (!strcmp(argv[i], "--coop-host") && i + 1 < argc) { g_coop.port = atoi(argv[++i]); g_coop.request = COOP_REQ_HOST; }
         else if (!strcmp(argv[i], "--coop-join") && i + 1 < argc) { SDL_strlcpy(g_coop.join, argv[++i], sizeof(g_coop.join)); g_coop.request = COOP_REQ_JOIN; }

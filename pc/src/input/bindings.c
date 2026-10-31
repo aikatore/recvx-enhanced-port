@@ -193,6 +193,7 @@ int bind_conflict(int row, int dev)
 }
 
 int g_dev_mode = 1;   /* BioRand, the importers (EXTRA, F9): on for everyone since 2026-10-30 (was --dev); 0 hides them again */
+int g_dev_tools;      /* --dev (host.c): developer tools, the F2 object placer (docs/DEV_PLACEMENTS.md) */
 int bind_row_shown(int row, int dev)
 {
     if (row == B_IMPORT && !g_dev_mode) return 0;
