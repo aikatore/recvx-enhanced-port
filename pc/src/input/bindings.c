@@ -36,6 +36,7 @@ const BindRow bind_rows[B_COUNT] = {
     [B_WPN3] = { "weapon3", "Weapon Shortcut 3", BG_GAME, 1 }, [B_WPN4] = { "weapon4", "Weapon Shortcut 4", BG_GAME, 1 },
     [B_WPN5] = { "weapon5", "Weapon Shortcut 5", BG_GAME, 1 }, [B_WPN6] = { "weapon6", "Weapon Shortcut 6", BG_GAME, 1 },
     [B_WPN7] = { "weapon7", "Weapon Shortcut 7", BG_GAME, 1 }, [B_WPN8] = { "weapon8", "Weapon Shortcut 8", BG_GAME, 1 },
+    [B_WPN_PAGE] = { "weapon_page", "Weapon Shortcuts: Page", BG_GAME, 1 },
     [B_TPS_FWD] = { "tps_forward", "Forward", BG_TPS, 0 },   [B_TPS_BACK] = { "tps_back", "Back", BG_TPS, 0 },
     [B_TPS_LEFT] = { "tps_left", "Turn Left", BG_TPS, 0 },   [B_TPS_RIGHT] = { "tps_right", "Turn Right", BG_TPS, 0 },
     [B_TPS_RUN] = { "tps_run", "Run", BG_TPS, 1 },           [B_TPS_ACTION] = { "tps_action", "Action / Confirm", BG_TPS, 1 },
@@ -59,7 +60,7 @@ const BindRow bind_rows[B_COUNT] = {
 const int bind_order[B_COUNT] = {
     B_UP, B_DOWN, B_LEFT, B_RIGHT, B_CROSS, B_SQUARE, B_CIRCLE, B_TRIANGLE, B_R1, B_L1, B_R2, B_L2,
     B_START, B_SELECT, B_R3, B_L3, B_FREEAIM, B_QUICKTURN, B_QUICKKNIFE, B_TRADE, B_RELOAD,
-    B_WPN_HOLD, B_WPN1, B_WPN2, B_WPN3, B_WPN4, B_WPN5, B_WPN6, B_WPN7, B_WPN8,
+    B_WPN_HOLD, B_WPN_PAGE, B_WPN1, B_WPN2, B_WPN3, B_WPN4, B_WPN5, B_WPN6, B_WPN7, B_WPN8,
     B_TPS_FWD, B_TPS_BACK, B_TPS_LEFT, B_TPS_RIGHT, B_TPS_RUN, B_TPS_ACTION, B_TPS_CANCEL, B_TPS_STATUS,
     B_TPS_MAP, B_TPS_AIM, B_TPS_FIRE, B_TPS_RELOAD, B_TPS_QUICKTURN, B_TPS_KNIFE, B_TPS_OPTIONS, B_TPS_RECENTER,
     B_TPS_TOGGLE, B_SETTINGS, B_CHEATS, B_COOP, B_IMPORT, B_FULLSCREEN, B_NOCLIP_UP, B_NOCLIP_DOWN,
@@ -80,6 +81,7 @@ static const int defaults[2][B_COUNT][BIND_SLOTS] = {
         [B_WPN1] = { SC(1) }, [B_WPN2] = { SC(2) }, [B_WPN3] = { SC(3) }, [B_WPN4] = { SC(4) },
         [B_WPN5] = { SC(5) }, [B_WPN6] = { SC(6) }, [B_WPN7] = { SC(7) }, [B_WPN8] = { SC(8) },
         [B_WPN_HOLD] = { SC(C) },   /* no game, third-person or hotkey use */
+        [B_WPN_PAGE] = { SC(E) },   /* free aim's and third-person action's too: while the wheel is up it is the wheel's */
         [B_TPS_TOGGLE] = { SC(F5) }, [B_SETTINGS] = { SC(F1) }, [B_CHEATS] = { SC(F2) }, [B_COOP] = { SC(F3) }, [B_IMPORT] = { SC(F9) },
         [B_FULLSCREEN] = { SC(F11) }, [B_NOCLIP_UP] = { SC(PAGEUP) }, [B_NOCLIP_DOWN] = { SC(F), SC(PAGEDOWN) },
     },
@@ -87,6 +89,7 @@ static const int defaults[2][B_COUNT][BIND_SLOTS] = {
         /* L3 is no game action under any key type: the left stick click trades. R3 is a second inventory button in A-C
            (Start is the first) and nothing in D: it holds the weapon shortcuts (it was R3's until them) */
         [B_SELECT] = { GB(BACK) }, [B_TRADE] = { GB(LEFT_STICK) }, [B_WPN_HOLD] = { GB(RIGHT_STICK) }, [B_START] = { GB(START) },
+        [B_WPN_PAGE] = { GB(RIGHT_SHOULDER) },   /* R1's (aim in A-C) and third-person reload's: the wheel's while it is up */
         [B_UP] = { GB(DPAD_UP) }, [B_RIGHT] = { GB(DPAD_RIGHT) }, [B_DOWN] = { GB(DPAD_DOWN) }, [B_LEFT] = { GB(DPAD_LEFT) },
         /* L2 is no game action in key types A-C (OPTION in D), R2 in none: the left trigger aims without auto-aim, the
            right trigger is the quick knife */
@@ -144,10 +147,10 @@ static int same_context(int a, int b)
 static int is_reload(int row) { return row == B_RELOAD || row == B_TPS_RELOAD; }
 
 /* a reload row may share a code with another row of its group: then it is a combination, Aim + that
-   button (bind_held) */
+   button (bind_held). The wheel's page row with any game or third-person row: the wheel takes it while up */
 static int may_share(int a, int b)
 {
-    return (is_reload(a) || is_reload(b)) && bind_rows[a].group != BG_HOTKEY && bind_rows[b].group != BG_HOTKEY;
+    return (is_reload(a) || is_reload(b) || a == B_WPN_PAGE || b == B_WPN_PAGE) && bind_rows[a].group != BG_HOTKEY && bind_rows[b].group != BG_HOTKEY;
 }
 
 void bind_set(int row, int dev, int slot, int code)
@@ -445,6 +448,9 @@ int bind_ini_line(const char* key, const char* value)
             put(B_FREEAIM, dev, 0, 0);
         for (int w = B_WPN_HOLD; w <= B_WPN8 && version < 4 && code; w++)
             if (r != w && same_context(r, w) && !may_share(r, w) && bind_get(w, dev, 0) == code) put(w, dev, 0, 0);
+        /* (< 5, from before the page row: L1 / R1 paged, the page row gets E / RB unless a hotkey has it) */
+        if (version < 5 && code && r != B_WPN_PAGE && same_context(r, B_WPN_PAGE) && !may_share(r, B_WPN_PAGE) && bind_get(B_WPN_PAGE, dev, 0) == code)
+            put(B_WPN_PAGE, dev, 0, 0);
         return 1;
     }
     return 0;
@@ -460,7 +466,7 @@ void bind_ini_write(void* fp)
                "# (Xbox A/B/X/Y, PlayStation Cross/Circle/Square/Triangle), back, start, leftshoulder, dpup, ...,\n"
                "# +lefttrigger, -lefty (left stick up). A second binding: <name>_2. none = unbound.\n"
                "# reload may share a button with a game row (third person: a third-person row): Aim + that button.\n"
-               "bindings_version = 4\n");
+               "bindings_version = 5\n");
     for (int dev = 0; dev < 2; dev++)
         for (int i = 0; i < B_COUNT; i++) {
             int r = bind_order[i];
@@ -593,7 +599,7 @@ const bool* bind_latch_frame(int on, const bool* keys)
 }
 void bind_latch_end(void) { latch_on = 0; }
 
-/* the weapon shortcut wheel (weapon_glue.c): while it is up its button, the d-pad rows and L1 / R1 are its own */
+/* the weapon shortcut wheel (weapon_glue.c): while it is up its button, the d-pad rows and the page row are its own */
 int g_wpn_overlay;
 static int wpn_through;   /* bind_held_through: read them anyway */
 
@@ -642,7 +648,7 @@ static int pad_row_reads(int row, int c)
 
 static int wpn_takes(int dev, int c)
 {
-    static const int rows[] = { B_WPN_HOLD, B_UP, B_RIGHT, B_DOWN, B_LEFT, B_L1, B_R1 };
+    static const int rows[] = { B_WPN_HOLD, B_UP, B_RIGHT, B_DOWN, B_LEFT, B_WPN_PAGE };
     for (int i = 0; i < (int)(sizeof(rows) / sizeof(rows[0])); i++)
         for (int s = 0; s < BIND_SLOTS; s++) if (bind_get(rows[i], dev, s) == c) return 1;
     return 0;
@@ -654,8 +660,9 @@ static int code_down(int row, int dev, int c, const bool* keys, int mouse)
     if (g_wpn_overlay && !wpn_through && row != B_WPN_HOLD && wpn_takes(dev, c)) return 0;
     if (dev == BIND_KB) {
         if (!input_accept(g_input_source, 0, BIND_KB, 0)) return 0;   /* Gamepad only */
-        /* third person takes the keys it uses over (W/A/S/Q by default), in a game outside OPTION (kb_play) */
-        if (bind_rows[row].group == BG_GAME && g_tps.kb_play && tps_uses(BIND_KB, c)) return 0;
+        /* third person takes the keys it uses over (W/A/S/Q by default), in a game outside OPTION (kb_play); not
+           from the wheel, which reads its own (bind_held_through: the page key E is third-person action's too) */
+        if (bind_rows[row].group == BG_GAME && g_tps.kb_play && !wpn_through && tps_uses(BIND_KB, c)) return 0;
         return c >= BIND_MOUSE ? (mouse & SDL_BUTTON_MASK(c - BIND_MOUSE)) != 0 : c < SDL_SCANCODE_COUNT && keys[c];
     }
     return gamepad && pad_row_reads(row, c) && pad_down(c);

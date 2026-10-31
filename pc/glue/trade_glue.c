@@ -103,8 +103,9 @@ int pc_item_icons(int user, int on)
     return icon_state == 1;
 }
 
-/* the icon of item word w (sub1.c ItemSet), drawn at x, y, scaled by sc, its colour times argb (white: as it is) */
-void pc_item_icon(unsigned int w, float x, float y, float sc, unsigned int argb)
+/* the icon of item word w (sub1.c ItemSet), drawn at x, y, scaled by sc, its colour times argb (white: as it is), at
+   2D depth z (as njDrawPolygon's; 1 and more: in front of all) */
+void pc_item_icon(unsigned int w, float x, float y, float sc, unsigned int argb, float z)
 {
     static const struct { unsigned char from, to; } remap[] = { { 30, 13 }, { 63, 41 }, { 128, 41 }, { 129, 41 }, { 130, 35 }, { 136, 47 },
                                                                 { 138, 48 }, { 142, 128 }, { 143, 49 }, { 144, 102 }, { 145, 133 } };
@@ -132,7 +133,7 @@ void pc_item_icon(unsigned int w, float x, float y, float sc, unsigned int argb)
     s.tanim = &a;
     njSetConstantMaterial(&c);
     njSetTexture(&icons);
-    njDrawSprite2D(&s, 0, -1.0f, 0x20 | 0x2);
+    njDrawSprite2D(&s, 0, z < 1.0f ? -1.0f / z : -1.0f, 0x20 | 0x2);
 }
 
 /* ---------------------------------------------------------------- layout (game 2D: 640x480) */
@@ -198,7 +199,7 @@ static void grid(int side)
         if (first) {
             int id = (wd >> 16) & 0xFF;
             char b[16];
-            if (icon_state == 1) pc_item_icon(wd, x, y, 1.0f, 0xFFFFFFFF);
+            if (icon_state == 1) pc_item_icon(wd, x, y, 1.0f, 0xFFFFFFFF, 1.0f);
             else {   /* no icons (texture memory): the name in the cell */
                 snprintf(b, sizeof(b), "%.10s", coop_item_name(wd));
                 pc_ui_text(x + 4, y + 16, b, 0.4f, 0xFFE0E0E0);

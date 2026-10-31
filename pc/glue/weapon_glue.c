@@ -2,7 +2,7 @@
  * character, each a weapon's item id (pc/src/host/weapons.h), so they survive the bag being sorted anew.
  *
  * Swapping: a shortcut key (1-8), or the d-pad while the Weapon Shortcuts button is held (the wheel, slots
- * 1-4 up/right/down/left, L1 / R1 the second page with 5-8), equips that weapon through the inventory's own
+ * 1-4 up/right/down/left, the page row (E, RB) the second page with 5-8), equips that weapon through the inventory's own
  * WeaponSet, as the quick knife does (knife_glue.c): equipped slot, weapon number, weapon file and model,
  * ammo display; the co-op partner sees it through the player state it gets each frame. Only at rest (the
  * quick knife's rule: in play, weapon down, standing, walking, running or idle; not aiming, reloading,
@@ -44,19 +44,34 @@ void pc_overlay_end(void);
 int pc_in_play(const BH_PWORK* p, int scope);   /* reload_glue.c */
 int pc_weapon_at_rest(void);                    /* knife_glue.c */
 int knife_busy(void);
+int knife_drawn(void);
 int pc_trade_screen(void);                      /* trade_glue.c */
 int pc_item_icons(int user, int on);
-void pc_item_icon(unsigned int w, float x, float y, float sc, unsigned int argb);
+void pc_item_icon(unsigned int w, float x, float y, float sc, unsigned int argb, float z);
 int pc_weapon_shortcuts_on(void);               /* host.c: the setting */
 void settings_save_later(void);
 extern PARTS parts_06b[24], parts_09b[8];
 extern ADV_WORK AdvWork;
 
 #define ID(w) ((int)((w) >> 16 & 0xFF))         /* item id without the ammo kind (WeaponSet's switch) */
-#define Z_DIM 30.0f                             /* as the trade screen: the dimming, then ours in front */
-#define Z_UI 30.5f
-#define Z_CUR 30.6f                             /* the cursor and picks: their own depth, so Smooth menus never */
-#define Z_PICK 30.7f                            /* pairs them with the cells' frames (view_glue.c pc_menu_tag) */
+/* 2D depth (z: the GS depth is -1/z, view_glue.c pc_menu_tag hashes it): one per kind of box, so Smooth Menus pairs
+   a box only with one of its kind, and per edge of a frame (all four have the same look otherwise: a cursor's top
+   edge paired with a cell frame's left one and grew into a box between frames). Below 1 (in the status screen's
+   projection 0.99 is depth 64875, 1 and more all 65534: the same), ascending in drawing order */
+#define Z_DIM 0.960f
+#define Z_CELL 0.965f                           /* the bag's cells */
+#define Z_ROW 0.967f                            /* the slots' rows */
+#define Z_EDGE 0.969f                           /* frames: + EDGE_DZ per edge */
+#define Z_ICON 0.972f                           /* item icons: behind what is drawn over them (the font's letters are at 1) */
+#define Z_MARK 0.974f                           /* slot marks: + MARK_DZ per slot (a new one never flies in from another) */
+#define Z_NOTE 0.977f
+#define Z_BTN 0.979f
+#define Z_PICK 0.982f                           /* the pick and the cursor: + SIDE_DZ per side (bag, slots, CLOSE): */
+#define Z_CUR 0.988f                            /* they glide within one and jump to another (they changed shape too) */
+#define EDGE_DZ 0.0006f                         /* (40 depth units) */
+#define SIDE_DZ (4 * EDGE_DZ)
+#define MARK_DZ 0.0003f
+#define Z_WHEEL 30.0f                           /* the wheel, in play: in front of the room (untagged there) */
 #define ICON_USER 2                             /* pc_item_icons */
 
 static unsigned int* inv(void) { return &sys->itm[(sys->ply_id & 3) * 16]; }
@@ -68,27 +83,38 @@ static const char* name(int id) { return coop_item_name((unsigned int)id << 16);
 
 static unsigned int pulse(unsigned int rgb) { return ((unsigned int)AdvWork.FlushCount2 / 2 + 128) << 24 | rgb; }
 static void text_c(float cx, float y, const char* s, float sc, unsigned int argb) { pc_ui_text(cx - pc_ui_text_w(s, sc) / 2, y, s, sc, argb); }
-/* s made smaller (to 3/4) to fit w, then cut at a whole letter; left at x, or centred on x */
-static void text_fit(float x, float y, const char* s, float sc, float w, unsigned int argb, int centred)
+/* s in a box w wide and h high (y its top), never cut: one line, made smaller to fit, down to 4/5 of sc; a
+   longer name on two lines, split at the space that evens them out (Japanese has none: one line, as small
+   as it must be). The text is centred in h; left at x, or centred on x */
+#define LINE_H 24.0f                    /* a line's height at scale 1 (the font's 24-pixel letters) */
+static void text_fit(float x, float y, float h, const char* s, float sc, float w, unsigned int argb, int centred)
 {
-    char b[96];
-    float k = sc;
-    int n;
+    char b[2][96];
+    const char* sp;
+    float k, best = 1e9f;
+    int n = 1, i;
     s = tr(s);
-    while (k > sc * 0.75f && pc_ui_text_w(s, k) > w) k -= 0.01f;
-    snprintf(b, sizeof(b), "%s", s);
-    for (n = (int)strlen(b); n > 0 && pc_ui_text_w(b, k) > w;) {
-        while (n > 0 && (b[n - 1] & 0xC0) == 0x80) n--;   /* (a UTF-8 letter's continuation bytes) */
-        b[--n > 0 ? n : 0] = 0;
-    }
-    pc_ui_text(centred ? x - pc_ui_text_w(b, k) / 2 : x, y, b, k, argb);
+    snprintf(b[0], sizeof(b[0]), "%s", s);
+    if (pc_ui_text_w(s, sc) * 0.8f > w)
+        for (sp = strchr(s, ' '); sp; sp = strchr(sp + 1, ' ')) {   /* the split whose longer line is shortest */
+            char l[96];
+            float m;
+            snprintf(l, sizeof(l), "%.*s", (int)(sp - s), s);
+            m = pc_ui_text_w(l, 1.0f) > pc_ui_text_w(sp + 1, 1.0f) ? pc_ui_text_w(l, 1.0f) : pc_ui_text_w(sp + 1, 1.0f);
+            if (m < best) { best = m; n = 2; snprintf(b[0], sizeof(b[0]), "%s", l); snprintf(b[1], sizeof(b[1]), "%s", sp + 1); }
+        }
+    k = sc;
+    for (i = 0; i < n; i++) if (pc_ui_text_w(b[i], k) > w) k = w / pc_ui_text_w(b[i], 1.0f);
+    if (n * LINE_H * k > h) k = h / (n * LINE_H);
+    y += (h - n * LINE_H * k) / 2;
+    for (i = 0; i < n; i++) pc_ui_text(centred ? x - pc_ui_text_w(b[i], k) / 2 : x, y + i * LINE_H * k, b[i], k, argb);
 }
 static void frame(float x0, float y0, float x1, float y1, float t, unsigned int argb, float z)
 {
     pc_ui_rect(x0, y0, x1, y0 + t, argb, z);
-    pc_ui_rect(x0, y1 - t, x1, y1, argb, z);
-    pc_ui_rect(x0, y0, x0 + t, y1, argb, z);
-    pc_ui_rect(x1 - t, y0, x1, y1, argb, z);
+    pc_ui_rect(x0, y1 - t, x1, y1, argb, z + EDGE_DZ);
+    pc_ui_rect(x0, y0, x0 + t, y1, argb, z + 2 * EDGE_DZ);
+    pc_ui_rect(x1 - t, y0, x1, y1, argb, z + 3 * EDGE_DZ);
 }
 /* the name of the first binding of row on the device in use (the gamepad's when one is open) */
 static const char* key_name(int row, char* b, int n)
@@ -103,10 +129,12 @@ static int page, pending = -1, pending_t, wheel;   /* wheel: up this frame (for 
 static unsigned int was_dirs, was_keys, was_hold;
 
 /* pad.c, each pad report: the wheel may come up (our player in play with the weapon down; not while the
-   quick knife has the hand, the trade screen is open or noclip flies) */
+   quick knife has the hand, the trade screen is open or noclip flies). Once up, the quick knife's button does not
+   take it down (knife_pad draws no knife meanwhile): in modern third person that is LB, which paged the wheel
+   too until the page row, and the knife read as held here before the wheel took its buttons */
 int wpn_hold_ok(void)
 {
-    if (!pc_weapon_shortcuts_on() || !sys || !plp || knife_busy() || pc_trade_screen() || g_cheat.noclip == 2) return 0;
+    if (!pc_weapon_shortcuts_on() || !sys || !plp || (wheel ? knife_drawn() : knife_busy()) || pc_trade_screen() || g_cheat.noclip == 2) return 0;
     if (pc_in_play(plp, 0) && plp->mode1 == 0) return 1;
     /* up already: it stays while the weapon it equipped loads (WeaponSet's mn_mode0 3, the monitor's mn_md0 3) */
     return wheel && plp == &ply && plp->mode0 == 1 && plp->mode1 == 0 && (*(int*)&sys->mn_mode0 == 3 || sys->mn_md0 == 3);
@@ -146,7 +174,7 @@ static void play_frame(unsigned int key_press)
     was_dirs = dirs;
     wheel = g_wpn_overlay;
     if (wheel) {
-        if (press & 0x30) { page ^= 1; CallSystemSe(0, 2); }
+        if (press & 0x10) { page ^= 1; CallSystemSe(0, 2); }
         for (n = 0; n < 4; n++) if (press & 1u << n) request(page * 4 + n, "d-pad");
     } else page = 0;
     if (pc_weapon_shortcuts_on() && pc_in_play(plp, 0))
@@ -405,7 +433,7 @@ static void note_line(float y)
     float w;
     if (note_t <= 0) return;
     w = pc_ui_text_w(note, 0.55f);
-    pc_ui_rect(320 - w / 2 - 10, y - 4, 320 + w / 2 + 10, y + 20, 0xC0000000, Z_UI);
+    pc_ui_rect(320 - w / 2 - 10, y - 4, 320 + w / 2 + 10, y + 20, 0xC0000000, Z_NOTE);
     text_c(320, y, note, 0.55f, 0xFFFFFFFF);
 }
 
@@ -415,7 +443,7 @@ static void draw_screen(void)
     signed char w[10];
     unsigned int* iv = inv();
     int icons = pc_item_icons(ICON_USER, 1), c, a, b, s, n = cells();
-    char t[96], k[32], p1[32], p2[32];
+    char t[96], k[32], p1[32];
     unsigned int under;
     coop_trade_layout(&iv[2], n, w);
     dim();
@@ -426,16 +454,16 @@ static void draw_screen(void)
     for (c = 0; c < n; c++) {
         int two = w[c] >= 0 && c + 1 < n && w[c + 1] == w[c];
         if (w[c] >= 0 && c > 0 && w[c - 1] == w[c]) continue;
-        pc_ui_rect(cell_x(c) + 1, cell_y(c) + 1, cell_x(c) + (two ? 2 : 1) * CW - 1, cell_y(c) + CH - 1, 0xC0081830, Z_UI);
-        frame(cell_x(c), cell_y(c), cell_x(c) + (two ? 2 : 1) * CW, cell_y(c) + CH, 1, 0xFF405878, Z_UI);
+        pc_ui_rect(cell_x(c) + 1, cell_y(c) + 1, cell_x(c) + (two ? 2 : 1) * CW - 1, cell_y(c) + CH - 1, 0xC0081830, Z_CELL);
+        frame(cell_x(c), cell_y(c), cell_x(c) + (two ? 2 : 1) * CW, cell_y(c) + CH, 1, 0xFF405878, Z_EDGE);
     }
     for (c = 0; c < n; c++) {
         unsigned int wd = cell_word(c, w);
         int id = ID(wd);
         float x = cell_x(c), y = cell_y(c), cw = (itemdata[id].type & 0x100) ? 2 * CW : CW;
         if (!wd || (c > 0 && w[c - 1] == w[c])) continue;
-        if (icons) pc_item_icon(wd, x, y, 1.0f, weapon(id) ? 0xFFFFFFFF : 0xFF686868);
-        else { snprintf(t, sizeof(t), "%.10s", name(id)); pc_ui_text(x + 4, y + 16, t, 0.4f, weapon(id) ? 0xFFE0E0E0 : 0xFF808080); }
+        if (icons) pc_item_icon(wd, x, y, 1.0f, weapon(id) ? 0xFFFFFFFF : 0xFF686868, Z_ICON);
+        else text_fit(x + 4, y + 2, CH - 4, name(id), 0.4f, cw - 8, weapon(id) ? 0xFFE0E0E0 : 0xFF808080, 0);
         if (itemdata[id].type & 0x3800) {   /* KazuSet: weapons and ammunition show their count */
             snprintf(t, sizeof(t), (wd & 0x8000000) ? "INF" : "%u", wd & 0xFFFF);
             pc_ui_text(x + cw - pc_ui_text_w(t, 0.5f) - 4, y + CH - 17, t, 0.5f, 0xFF60F060);
@@ -443,35 +471,35 @@ static void draw_screen(void)
         if (w[c] + 2 == (int)iv[0]) pc_ui_text(x + 4, y + 2, "E", 0.5f, 0xFFF0D040);
         if ((s = wpn_slot_of(chr(), id)) >= 0) {
             snprintf(t, sizeof(t), "%d", s + 1);
-            pc_ui_rect(x + cw - 16, y + 2, x + cw - 3, y + 17, 0xE0204060, Z_UI);
+            pc_ui_rect(x + cw - 16, y + 2, x + cw - 3, y + 17, 0xE0204060, Z_MARK + s * MARK_DZ);
             pc_ui_text(x + cw - 13, y + 2, t, 0.5f, 0xFF90D0FF);
         }
     }
-    if (ms.pick_cell >= 0) { span(ms.pick_cell, w, &a, &b); frame(cell_x(a) - 2, cell_y(a) - 2, cell_x(b) + CW + 2, cell_y(b) + CH + 2, 3, 0xFFFFE060, Z_PICK); }
-    if (ms.side == SIDE_BAG) { span(ms.cur, w, &a, &b); frame(cell_x(a) + 4, cell_y(a) + 4, cell_x(b) + CW - 4, cell_y(b) + CH - 4, 2, pulse(0xFFFFFF), Z_CUR); }
+    if (ms.pick_cell >= 0) { span(ms.pick_cell, w, &a, &b); frame(cell_x(a) - 2, cell_y(a) - 2, cell_x(b) + CW + 2, cell_y(b) + CH + 2, 3, 0xFFFFE060, Z_PICK + SIDE_BAG * SIDE_DZ); }
+    if (ms.side == SIDE_BAG) { span(ms.cur, w, &a, &b); frame(cell_x(a) + 4, cell_y(a) + 4, cell_x(b) + CW - 4, cell_y(b) + CH - 4, 2, pulse(0xFFFFFF), Z_CUR + SIDE_BAG * SIDE_DZ); }
     under = ms.side == SIDE_BAG ? cell_word(ms.cur, w) : 0;
-    text_c(GX + CW, GY + 5 * CH + 6, under ? name(ID(under)) : "", 0.55f, 0xFFE0E0E0);
+    if (under) text_fit(GX + CW, GY + 5 * CH - 2, 30, name(ID(under)), 0.55f, 2 * CW + 40, 0xFFE0E0E0, 1);
     /* the slots: key, d-pad direction (the second four: on the wheel's second page), weapon */
-    snprintf(t, sizeof(t), tr("Second page: %s / %s"), key_name(B_L1, p1, sizeof(p1)), key_name(B_R1, p2, sizeof(p2)));
+    snprintf(t, sizeof(t), tr("Second page: %s"), key_name(B_WPN_PAGE, p1, sizeof(p1)));
     pc_ui_text(LX, row_y(4) - LGAP - 1, t, 0.4f, 0xFFA0A0A0);
     for (s = 0; s < WPN_SLOTS; s++) {
         int id = g_wpn_slots[chr()][s], have = id && wpn_bag_find(iv, bag_n(), id);
         float y = row_y(s);
-        pc_ui_rect(LX - 4, y - 3, LX1, y + LH - 5, (s & 1) ? 0x80102030 : 0x80182840, Z_UI);
+        pc_ui_rect(LX - 4, y - 3, LX1, y + LH - 5, (s & 1) ? 0x80102030 : 0x80182840, Z_ROW);
         bind_code_name(BIND_KB, bind_get(B_WPN1 + s, BIND_KB, 0), k, sizeof(k));
         pc_ui_text(LX + 2, y + 1, k, 0.55f, 0xFFFFE080);
-        text_fit(LX + 34, y + 3, dirs[s & 3], 0.45f, 82, 0xFF90D0FF, 0);
+        text_fit(LX + 34, y - 6, LH - 2, dirs[s & 3], 0.45f, 82, 0xFF90D0FF, 0);
         if (!id) pc_ui_text(LX + 120, y + 1, "-", 0.55f, 0xFF707070);
         else {
             snprintf(t, sizeof(t), "%s%s", name(id), have ? "" : tr(" (not in the bag)"));
-            text_fit(LX + 120, y + 1, t, 0.55f, LX1 - LX - 124, !have ? 0xFF808080 : iv[0] && ID(iv[iv[0]]) == id ? 0xFFF0D040 : 0xFFE0E0E0, 0);
+            text_fit(LX + 120, y - 6, LH - 2, t, 0.55f, LX1 - LX - 124, !have ? 0xFF808080 : iv[0] && ID(iv[iv[0]]) == id ? 0xFFF0D040 : 0xFFE0E0E0, 0);
         }
-        if (s == ms.pick_slot) frame(LX - 6, y - 5, LX1 + 2, y + LH - 3, 3, 0xFFFFE060, Z_PICK);
-        if (ms.side == SIDE_SLOTS && s == ms.cur) frame(LX - 3, y - 2, LX1 - 1, y + LH - 6, 2, pulse(0xFFFFFF), Z_CUR);
+        if (s == ms.pick_slot) frame(LX - 6, y - 5, LX1 + 2, y + LH - 3, 3, 0xFFFFE060, Z_PICK + SIDE_SLOTS * SIDE_DZ);
+        if (ms.side == SIDE_SLOTS && s == ms.cur) frame(LX - 3, y - 2, LX1 - 1, y + LH - 6, 2, pulse(0xFFFFFF), Z_CUR + SIDE_SLOTS * SIDE_DZ);
     }
-    frame(OK_X0, OK_Y - 4, OK_X1, OK_Y + 22, 1, 0xFF6080A0, Z_UI);
+    frame(OK_X0, OK_Y - 4, OK_X1, OK_Y + 22, 1, 0xFF6080A0, Z_BTN);
     text_c(320, OK_Y, "CLOSE", 0.6f, 0xFFFFFFFF);
-    if (ms.side == SIDE_CLOSE) frame(OK_X0 + 2, OK_Y - 2, OK_X1 - 2, OK_Y + 20, 2, pulse(0xFFFFFF), Z_CUR);
+    if (ms.side == SIDE_CLOSE) frame(OK_X0 + 2, OK_Y - 2, OK_X1 - 2, OK_Y + 20, 2, pulse(0xFFFFFF), Z_CUR + SIDE_CLOSE * SIDE_DZ);
     note_line(418);
     if (note_t <= 0 && (ms.pick_cell >= 0 || ms.pick_slot >= 0)) text_c(320, 422, ms.pick_cell >= 0 ? "Now choose a shortcut." : "Now choose a weapon.", 0.5f, 0xFFF0C060);
     pc_ui_text_wrap(24, 442, 592, "Confirm: a weapon, then a shortcut. Cancel on a shortcut clears it. 1-8: the weapon under the cursor.", 0.4f, 0xFFA0A0A0, 2);
@@ -494,7 +522,7 @@ static void draw_inventory(void)
         float x = cen[0] + 24 + (c & 1) * 68, y = cen[1] + 8 + (c >> 1) * 48, cw = (itemdata[id].type & 0x100) ? 136 : 68;
         if (!id || (c > 0 && w[c - 1] == w[c]) || (s = wpn_slot_of(chr(), id)) < 0) continue;
         snprintf(t, sizeof(t), "%d", s + 1);
-        pc_ui_rect(x + cw - 16, y + 2, x + cw - 3, y + 17, 0xE0204060, Z_UI);
+        pc_ui_rect(x + cw - 16, y + 2, x + cw - 3, y + 17, 0xE0204060, Z_MARK + s * MARK_DZ);
         pc_ui_text(x + cw - 13, y + 2, t, 0.5f, 0xFF90D0FF);
     }
     note_line(440);
@@ -519,13 +547,13 @@ void wpn_menu_draw(void)
 #define WX 500.0f
 #define WY 372.0f
 #define WW 84.0f
-#define WH 46.0f
+#define WH 50.0f                        /* (a name on two lines under the icon) */
 void wpn_draw(void)
 {
     static const float off[4][2] = { { 0, -50 }, { 90, 0 }, { 0, 50 }, { -90, 0 } };
     unsigned int* iv;
     int icons, d, any = 0;
-    char t[96], k[32], k2[32];
+    char t[96], k[32];
     icons = pc_item_icons(ICON_USER, wheel || ms.open);
     if (!wheel || !plp) return;
     iv = inv();
@@ -536,15 +564,15 @@ void wpn_draw(void)
         int s = page * 4 + d, id = g_wpn_slots[chr()][s], have = id && wpn_bag_find(iv, bag_n(), id);
         int eq = have && iv[0] && ID(iv[iv[0]]) == id, two = (itemdata[id].type & 0x100) != 0;
         float cx = WX + off[d][0], cy = WY + off[d][1];
-        pc_ui_rect(cx - WW / 2, cy - WH / 2, cx + WW / 2, cy + WH / 2, 0xB0000810, Z_UI);
-        frame(cx - WW / 2, cy - WH / 2, cx + WW / 2, cy + WH / 2, eq ? 2 : 1, eq ? 0xFFF0D040 : 0xFF405878, Z_CUR);
+        pc_ui_rect(cx - WW / 2, cy - WH / 2, cx + WW / 2, cy + WH / 2, 0xB0000810, Z_WHEEL);
+        frame(cx - WW / 2, cy - WH / 2, cx + WW / 2, cy + WH / 2, eq ? 2 : 1, eq ? 0xFFF0D040 : 0xFF405878, Z_WHEEL);
         if (!id) { text_c(cx, cy - 8, "-", 0.6f, 0xFF707070); continue; }
-        if (icons) pc_item_icon((unsigned int)id << 16, cx - (two ? 34 : 17), cy - 20, 0.5f, have ? 0xFFFFFFFF : 0xFF484848);
-        text_fit(cx, cy + (icons ? 7 : -6), name(id), 0.36f, WW - 6, have ? 0xFFE0E0E0 : 0xFF707070, 1);
+        if (icons) pc_item_icon((unsigned int)id << 16, cx - (two ? 34 : 17), cy - 22, 0.5f, have ? 0xFFFFFFFF : 0xFF484848, Z_WHEEL);
+        text_fit(cx, icons ? cy + 2 : cy - 22, icons ? 21 : 44, name(id), 0.36f, WW - 6, have ? 0xFFE0E0E0 : 0xFF707070, 1);
     }
     snprintf(t, sizeof(t), "%d-%d", page * 4 + 1, page * 4 + 4);
     text_c(WX, WY - 7, t, 0.45f, 0xFF90D0FF);
-    snprintf(t, sizeof(t), "%s/%s: %d-%d", key_name(B_L1, k, sizeof(k)), key_name(B_R1, k2, sizeof(k2)), (!page) * 4 + 1, (!page) * 4 + 4);   /* the other page */
+    snprintf(t, sizeof(t), "%s: %d-%d", key_name(B_WPN_PAGE, k, sizeof(k)), (!page) * 4 + 1, (!page) * 4 + 4);   /* the other page */
     text_c(WX + 90, WY + 40, t, 0.36f, 0xFFA0A0A0);
     if (!any) {
         float hw;
@@ -552,7 +580,7 @@ void wpn_draw(void)
         float hx;
         hw = pc_ui_text_w(t, 0.42f) / 2 + 8;
         hx = WX + hw > 632 ? 632 - hw : WX;
-        pc_ui_rect(hx - hw, WY - 96, hx + hw, WY - 78, 0xB0000000, Z_UI);
+        pc_ui_rect(hx - hw, WY - 96, hx + hw, WY - 78, 0xB0000000, Z_WHEEL);
         text_c(hx, WY - 94, t, 0.42f, 0xFFFFE080);
     }
 }

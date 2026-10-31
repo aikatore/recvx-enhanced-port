@@ -300,7 +300,13 @@ shows in-between images at the display rate:
   candidates are about as near (within `AMBIG`, 4 px: a list scrolled a row) the one that moved
   as the menu piece matched before it did is taken, or none. Colours, texture coordinates and new
   or changed parts are the current frame's, so a cursor highlight or a new text shows at once.
-  Executed frames are unchanged (the tags only add stream events).
+  Executed frames are unchanged (the tags only add stream events). Our own boxes in a menu give
+  each kind of box its own depth (`biorand_menu.c`, `weapon_glue.c`: cells, rows, each edge of a
+  frame, each slot's mark, the cursor per side), as the look is otherwise the same for any
+  untextured rectangle: a cursor's top edge paired with a cell frame's side and grew into a box
+  between frames. The depth must stay below the clamp (in the status screen's projection 2D z 1 and
+  more is depth 65534 for all; 0.99 is 64875). The item icons get a depth below our cursor and marks
+  drawn over them (`pc_item_icon` takes one); the game's letters stay at 65534, over our frames.
 - **Frame blend**: `PS2_swap` mixes each new frame 75% over the previous display image (a
   motion trail). Replays start from the display image as the frame found it, so the trail stays
   correct. With frame blend off the swap copies the frame instead (as during movies).
@@ -540,7 +546,7 @@ village, collision. The render thread (GS emulation, replays: `r_exec`, `r_inter
   kind left out), so they follow a weapon wherever the bag puts it; stored in `recvx.ini`
   (`weapon_slots_claire = 9 2 8 0 0 0 0 0`, also `chris`, `steve`, `wesker`), not in the save: they are
   controls, as the bindings, and survive any save, load or new game. Rows `weapon1`-`weapon8` (keyboard
-  1-8) and `weapons` (hold: C, the right stick click). The equip is the quick knife's: `WeaponSet(slot, slot)`
+  1-8), `weapons` (hold: C, the right stick click) and `weapon_page` (the wheel's other page: E, RB). The equip is the quick knife's: `WeaponSet(slot, slot)`
   with `swork.pip` on the bag, so equipped slot, weapon number, weapon file and model, `mode3` reset and the
   co-op partner's view (it gets `wpnr_no` with the player state each frame) are the inventory's; the sniper
   rifle's scope flag (`ev_flg` 74, which `WeaponSet` takes from the command list's sprite) is kept. Only at
@@ -549,11 +555,17 @@ village, collision. The render thread (GS emulation, replays: `r_exec`, `r_inter
   in the bag or already in the hand: nothing. **The wheel**: each pad report (`pad.c build_report`) sets
   `g_wpn_overlay` while the hold row is held and `wpn_hold_ok` (shortcuts on, our player in play with the
   weapon down, no quick knife, trade screen or noclip flight; it stays up while a weapon it equipped
-  loads); while it is set `code_down` reads the codes of the hold row, the d-pad rows and L1 / R1 as up for
-  every other row (game and third-person rows, keyboard and gamepad), so the d-pad neither moves nor
-  quick-turns and R3 does not centre the third-person camera; `bind_held_through` reads them for the
-  wheel (also third-person ones). The hold row reads on a third-person button too (`pad_row_reads`).
-  `wpn_pad` (`bhSetPad`, after `trade_pad`) takes presses of the directions (L1 / R1 flip to slots 5-8)
+  loads); while it is set `code_down` reads the codes of the hold row, the d-pad rows and the page row as up
+  for every other row (game and third-person rows, keyboard and gamepad), so the d-pad neither moves nor
+  quick-turns, R3 does not centre the third-person camera and E / RB neither aim nor act / reload;
+  `bind_held_through` reads them for the wheel (also third-person ones, and on the keyboard keys third
+  person has taken over: Q / W, L1 / R1's, paged the wheel until the page row, but in third person they are
+  Cancel / Forward and never reached it). The page row may share its codes with any game or third-person
+  row (`may_share`). The hold row reads on a third-person button too (`pad_row_reads`). Once up, the quick
+  knife's button does not take the wheel down and `knife_pad` draws no knife meanwhile (`knife_drawn`): in
+  modern third person LB is the knife, and `wpn_hold_ok`, which runs before the wheel takes its buttons,
+  saw it held and hid the wheel while LB paged it.
+  `wpn_pad` (`bhSetPad`, after `trade_pad`) takes presses of the directions (the page row flips to slots 5-8)
   and of the shortcut rows; `wpn_draw` (`bhMainSequence`, after `trade_draw`) draws the four slots of the
   page with the status screen's icons (`trade_glue.c pc_item_icons` / `pc_item_icon`, loaded while the
   wheel or the screen is up). **Assigning**: in the inventory's item list (`swork` subscreen 2, mode 1,
@@ -646,7 +658,7 @@ Cross, `east`, `west`, `north`, `back`, `start`, `guide`, `leftshoulder`, `right
 `leftstick`, `rightstick`, `dpup`, `dpdown`, `dpleft`, `dpright`, `misc1`, `paddle1`-`paddle4`,
 `touchpad`) or an axis half (`+lefttrigger`, `-leftx`, `+lefty`, ...). `none` unbinds. Rows beyond
 the DS2 buttons: `freeaim` ("Free Aim"), `quickturn` (unbound: back, then run),
-`quickknife`, `trade`, `reload`, `weapons` and `weapon1`-`weapon8` (weapon shortcuts), the third-person keys (`key_tps_*`,
+`quickknife`, `trade`, `reload`, `weapons`, `weapon_page` and `weapon1`-`weapon8` (weapon shortcuts), the third-person keys (`key_tps_*`,
 [THIRDPERSON.md](THIRDPERSON.md#usage)), the third-person gamepad set (`pad_tps_*`,
 [THIRDPERSON.md](THIRDPERSON.md#gamepad)) and the hotkeys (`tps_toggle`, `settings`, `cheats`,
 `coop`, `import`, `fullscreen`, `noclip_up`, `noclip_down`).
@@ -663,6 +675,8 @@ Older files are migrated by `bindings_version`:
   `pad_r3 = rightstick`, the defaults then, are dropped (L2 / R2 get 9 / 0, the shortcuts 1-8 and the
   right stick click); a key such a file gave another row (say 5) stays there, leaving that shortcut's
   slot empty.
+- `bindings_version` below 5 (from before the wheel's page row, when L1 / R1 paged it): the page row
+  gets E / RB, unless such a file gave a hotkey that key (then it stays unbound).
 
 ### Control details
 

@@ -143,9 +143,10 @@ Game) has eight shortcuts, kept in `recvx.ini`, so they stay with every save and
   inventory.
 - **Keyboard**: 1-8 equip the weapon of that shortcut.
 - **Gamepad**: hold the right stick click. Shortcuts 1-4 show around the d-pad (up, right, down,
-  left); press a direction to equip one. LB / RB (L1 / R1) show 5-8. Let go without a direction:
-  nothing happens. While you hold it the d-pad does not move you (the stick still does). Holding C on
-  the keyboard does the same with the arrow keys.
+  left); press a direction to equip one. RB (R1) switches to 5-8 and back. Let go without a direction:
+  nothing happens. While you hold it the d-pad and RB do not move you or aim (the stick still moves
+  you; LB keeps its own use). Holding C on the keyboard does the same with the arrow keys, E switching
+  the page (outside the wheel E is still free aim, and action in third person).
 
 A shortcut works when you could open the inventory and the weapon is lowered: standing, walking or
 running. Aiming, reloading, climbing, doors, events and menus wait; a press up to half a second before
