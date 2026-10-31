@@ -125,9 +125,14 @@ typedef struct {
 static DrawState batch_state;
 static int batch_valid;
 
-static GLuint prog, vao, vbo, present_prog, present_vao, svao, svbo;
-static GLint u_rt_size, u_rt_margin, u_tme, u_tfx, u_tcc, u_fst, u_texsize, u_fge, u_fogcol, u_ate, u_atst, u_aref,
-             u_tex, u_tex_alpha_scale, u_texofs, u_premul, u_zscale, u_clamp_mode, u_clamp_vals, u_afail_pass, u_rt16;
+static GLuint vao, vbo, present_prog, present_vao, svao, svbo;
+/* the GS program in two variants: [1] with the alpha test, [0] without it (no discard in the
+   shader, so the GPU tests depth before shading: hidden pixels cost nothing). Draws whose alpha
+   test cannot discard take [0]; the arithmetic is the same, only the dead branch is gone. */
+typedef struct { GLint rt_size, rt_margin, tme, tfx, tcc, fst, texsize, fge, fogcol, ate, atst, aref,
+                 tex, tex_alpha_scale, texofs, premul, zscale, clamp_mode, clamp_vals, afail_pass, rt16; } ProgUni;
+static GLuint progs[2];
+static ProgUni pu[2], *pcur = &pu[0];
 static GLint up_tex, up_rect, up_pic, up_ss;
 
 static const char* vs_src =
@@ -151,8 +156,7 @@ static const char* vs_src =
     "  v_stq = a_stq; v_col = a_col; v_fog = a_fog;\n"
     "}\n";
 
-static const char* fs_src =
-    "#version 330 core\n"
+static const char* fs_src =   /* (after "#version" and "#define ATEST n") */
     "in vec3 v_stq; in vec4 v_col; in float v_fog;\n"
     "uniform sampler2D u_tex;\n"
     "uniform int u_tme, u_tfx, u_tcc, u_fst, u_fge, u_ate, u_atst, u_premul, u_afail_pass;\n"
@@ -188,6 +192,7 @@ static const char* fs_src =
     "  }\n"
     "  if (u_fge != 0) { float f = clamp(v_fog, 0.0, 255.0); c.rgb = (f * c.rgb + (255.0 - f) * u_fogcol.rgb) / 256.0; }\n"
     "  c = floor(c + 0.0001);\n"
+    "#if ATEST\n"
     "  if (u_ate != 0) {\n"
     "    bool pass = true;\n"
     "    if (u_atst == 0) pass = false;\n"
@@ -200,6 +205,7 @@ static const char* fs_src =
     "    if (u_afail_pass == 0 && !pass) discard;\n"
     "    if (u_afail_pass == 1 && pass) discard;\n"
     "  }\n"
+    "#endif\n"
     "  float as = c.a / 128.0;\n"
     "  vec3 rgb = c.rgb / 255.0;\n"
     "  if (u_premul == 1) rgb *= (1.0 + as);\n"
@@ -282,11 +288,15 @@ void gs_renderer_init(void)
     if (!gs_mem_selftest()) host_fatal("Graphics setup failed. Restart the game.");
     gs_reset();
 
-    prog = compile(vs_src, fs_src);
-#define U(n) u_##n = glGetUniformLocation(prog, "u_" #n)
-    U(rt_size); U(rt_margin); U(tme); U(tfx); U(tcc); U(fst); U(texsize); U(fge); U(fogcol); U(ate); U(atst); U(aref);
-    U(tex); U(tex_alpha_scale); U(texofs); U(premul); U(zscale); U(clamp_mode); U(clamp_vals); U(afail_pass); U(rt16);
+    for (int v = 0; v < 2; v++) {
+        static char fs[8192];
+        SDL_snprintf(fs, sizeof(fs), "#version 330 core\n#define ATEST %d\n%s", v, fs_src);
+        progs[v] = compile(vs_src, fs);
+#define U(n) pu[v].n = glGetUniformLocation(progs[v], "u_" #n)
+        U(rt_size); U(rt_margin); U(tme); U(tfx); U(tcc); U(fst); U(texsize); U(fge); U(fogcol); U(ate); U(atst); U(aref);
+        U(tex); U(tex_alpha_scale); U(texofs); U(premul); U(zscale); U(clamp_mode); U(clamp_vals); U(afail_pass); U(rt16);
 #undef U
+    }
     present_prog = compile(present_vs, present_fs);
     up_tex = glGetUniformLocation(present_prog, "u_tex");
     up_rect = glGetUniformLocation(present_prog, "u_rect");
@@ -775,17 +785,18 @@ static void apply_blend(const DrawState* st, int* premul)
     glBlendFuncSeparate(sf, df, GL_ONE, GL_ZERO);
 }
 
-/* prog's uniforms are set only when their value changes (program object state: kept across
-   program switches, and only gs_flush sets prog's) */
-static uint32_t ucache[64][4];
-static uint8_t uknown[64];
+/* the GS programs' uniforms are set only when their value changes (program object state: kept
+   across program switches, and only gs_flush sets theirs), per variant */
+static uint32_t ucache[2][64][4];
+static uint8_t uknown[2][64];
 static int uni_changed(GLint loc, const void* v, int n)
 {
+    int p = (int)(pcur - pu);
     if (loc < 0) return 0;
     if (loc >= 64) return 1;
-    if (uknown[loc] && !memcmp(ucache[loc], v, (size_t)n * 4)) return 0;
-    memcpy(ucache[loc], v, (size_t)n * 4);
-    uknown[loc] = 1;
+    if (uknown[p][loc] && !memcmp(ucache[p][loc], v, (size_t)n * 4)) return 0;
+    memcpy(ucache[p][loc], v, (size_t)n * 4);
+    uknown[p][loc] = 1;
     return 1;
 }
 static void uni1i(GLint l, int a) { if (uni_changed(l, &a, 1)) glUniform1i(l, a); }
@@ -804,7 +815,7 @@ static uint32_t gt_cnt[4];   /* RECVX_GPU_TIME: GL draws (at most), GS-path spri
 static void draw_batch(int afail_pass)
 {
     int at = 0;
-    uni1i(u_afail_pass, afail_pass);
+    uni1i(pcur->afail_pass, afail_pass);
     gt_cnt[0] += 1 + 2 * (uint32_t)nsruns;
     if (!nsruns) { glDrawArrays(batch_mode, vbo_first, vcount); return; }
     for (int r = 0; r <= nsruns; r++) {
@@ -1203,14 +1214,18 @@ void gs_flush(void)
         glScissor((GLint)((x0 + g_margin_x) * g_scale), (GLint)(y0 * g_scale),
                   (GLsizei)((x1 - x0 + 1) * g_scale), (GLsizei)((y1 - y0 + 1) * g_scale));
     }
-    glUseProgram(prog);
+    {   /* the alpha test can discard: not off, not ALWAYS */
+        int v = (st->ctx.test & 1) && ((st->ctx.test >> 1) & 7) != 1;
+        pcur = &pu[v];
+        glUseProgram(progs[v]);
+    }
     clip_distances(1);
-    uni2f(u_rt_size, (float)cur_rt->vw, (float)cur_rt->vh);
-    uni1f(u_rt_margin, (float)g_margin_x);
+    uni2f(pcur->rt_size, (float)cur_rt->vw, (float)cur_rt->vh);
+    uni1f(pcur->rt_margin, (float)g_margin_x);
     {
         uint32_t zpsm = (st->ctx.zbuf >> 24) & 0xF;
         float zmax = zpsm == 0 ? 4294967296.0f : zpsm == 1 ? 16777216.0f : 65536.0f;
-        uni1f(u_zscale, 1.0f / zmax);
+        uni1f(pcur->zscale, 1.0f / zmax);
     }
 
     /* depth */
@@ -1227,7 +1242,7 @@ void gs_flush(void)
                 ((fbmsk >> 24) != 0xFF) && fpsm != PSMCT24);
 
     apply_blend(st, &premul);
-    uni1i(u_premul, premul);
+    uni1i(pcur->premul, premul);
 
     /* texture */
     tme = (st->prim >> 4) & 1;
@@ -1236,7 +1251,7 @@ void gs_flush(void)
         if (notex < 0) notex = SDL_getenv("RECVX_DBG_NOTEX") != NULL;
         if (notex) { tme = 0; glDisable(GL_BLEND); }
     }
-    uni1i(u_tme, tme);
+    uni1i(pcur->tme, tme);
     if (tme) {
         uint64_t tex0 = st->ctx.tex0;
         uint32_t tbp = tex0 & 0x3FFF, tpsm = (tex0 >> 20) & 0x3F;
@@ -1266,9 +1281,9 @@ void gs_flush(void)
         if (srt && srt != cur_rt) {
             glBindTexture(GL_TEXTURE_2D, srt->tex);
             /* texel (GS units) -> RT normalized */
-            uni4f(u_texofs, 1.0f / srt->vw, 1.0f / srt->vh, (ox + g_margin_x) / srt->vw, oy / srt->vh);
-            uni1f(u_tex_alpha_scale, 128.0f);
-            uni4f(u_rt16, (float)is16, (float)(st->texa & 0xFF), (float)((st->texa >> 32) & 0xFF), (float)((st->texa >> 15) & 1));
+            uni4f(pcur->texofs, 1.0f / srt->vw, 1.0f / srt->vh, (ox + g_margin_x) / srt->vw, oy / srt->vh);
+            uni1f(pcur->tex_alpha_scale, 128.0f);
+            uni4f(pcur->rt16, (float)is16, (float)(st->texa & 0xFF), (float)((st->texa >> 32) & 0xFF), (float)((st->texa >> 15) & 1));
         } else {
             int w, h;
             float ascale;
@@ -1280,31 +1295,31 @@ void gs_flush(void)
                 if (record_memo && record_memo->rt < 0) { record_memo->tex = t; record_memo->w = w; record_memo->h = h; record_memo->ascale = ascale; }
             }
             glBindTexture(GL_TEXTURE_2D, hdpack_bind(t, &ascale));   /* a replacement keeps the texture's UV space */
-            uni4f(u_texofs, 1.0f / (float)w, 1.0f / (float)h, 0.0f, 0.0f);
-            uni1f(u_tex_alpha_scale, ascale);
-            uni4f(u_rt16, 0, 0, 0, 0);
+            uni4f(pcur->texofs, 1.0f / (float)w, 1.0f / (float)h, 0.0f, 0.0f);
+            uni1f(pcur->tex_alpha_scale, ascale);
+            uni4f(pcur->rt16, 0, 0, 0, 0);
         }
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filt);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filt);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, (wms == 0 && !srt) ? GL_REPEAT : GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, (wmt == 0 && !srt) ? GL_REPEAT : GL_CLAMP_TO_EDGE);
-        uni1i(u_tex, 0);
-        uni2f(u_texsize, (float)tw, (float)th);
-        uni1i(u_tfx, (int)((tex0 >> 35) & 3));
-        uni1i(u_tcc, (int)((tex0 >> 34) & 1));
-        uni1i(u_fst, (int)((st->prim >> 8) & 1));
-        uni4i(u_clamp_mode, wms, wmt, 0, 0);
-        uni4f(u_clamp_vals, (float)((st->ctx.clamp >> 4) & 0x3FF), (float)((st->ctx.clamp >> 14) & 0x3FF),
+        uni1i(pcur->tex, 0);
+        uni2f(pcur->texsize, (float)tw, (float)th);
+        uni1i(pcur->tfx, (int)((tex0 >> 35) & 3));
+        uni1i(pcur->tcc, (int)((tex0 >> 34) & 1));
+        uni1i(pcur->fst, (int)((st->prim >> 8) & 1));
+        uni4i(pcur->clamp_mode, wms, wmt, 0, 0);
+        uni4f(pcur->clamp_vals, (float)((st->ctx.clamp >> 4) & 0x3FF), (float)((st->ctx.clamp >> 14) & 0x3FF),
                     (float)((st->ctx.clamp >> 24) & 0x3FF), (float)((st->ctx.clamp >> 34) & 0x3FF));
     }
-    uni1i(u_fge, (int)((st->prim >> 5) & 1));
+    uni1i(pcur->fge, (int)((st->prim >> 5) & 1));
     {
         float fr = (float)(st->fogcol & 0xFF), fg = (float)((st->fogcol >> 8) & 0xFF), fb = (float)((st->fogcol >> 16) & 0xFF);
-        uni4f(u_fogcol, fr, fg, fb, 0.0f);
+        uni4f(pcur->fogcol, fr, fg, fb, 0.0f);
     }
-    uni1i(u_ate, (int)(test & 1));
-    uni1i(u_atst, (int)((test >> 1) & 7));
-    uni1f(u_aref, (float)((test >> 4) & 0xFF));
+    uni1i(pcur->ate, (int)(test & 1));
+    uni1i(pcur->atst, (int)((test >> 1) & 7));
+    uni1f(pcur->aref, (float)((test >> 4) & 0xFF));
 
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
