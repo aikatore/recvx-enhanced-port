@@ -130,6 +130,13 @@ point: the partial frame is executed and the game waits for the pixels.
   unchanged.
 - Textures are decoded from GS memory and cached per TEX0/CLUT, invalidated by page write
   generations.
+- The GS fragment shader is compiled at start in variants (`gs_gl.c` `V_ATEST`, `V_TEX`,
+  `V_REGION`, `V_FOG`), and each draw takes the one holding only the branches it runs: the same
+  arithmetic, without the work and registers of the others. Above all, a draw whose alpha test is
+  off or ALWAYS gets a shader without `discard`, so the GPU tests depth before shading and hidden
+  pixels cost nothing. On the Ryzen 9800X3D's integrated GPU (RM_0060, 2x, at its top clock) an
+  in-between image went from 3.15 to 2.68 ms, an executed frame from 2.92 to 2.62 ms;
+  `layout_check.sh` stays identical.
 
 ### Widescreen (hor+)
 

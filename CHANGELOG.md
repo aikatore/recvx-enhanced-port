@@ -11,6 +11,10 @@
 - **Remove items**: the F2 inventory list has an X next to each item to take it out of your inventory,
   so you don't need an item box while testing.
 
+### Performance
+
+- **Performance**: the game needs less graphics and processor power, which helps on slower PCs.
+
 ### Fixes
 
 - **Enemy Randomizer**: Mutated Steve no longer turns up among the randomized enemies for now.
