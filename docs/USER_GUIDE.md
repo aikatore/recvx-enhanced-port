@@ -81,13 +81,14 @@ KEY CONFIG type A; other types move the game's actions between the PS2 buttons.
 | Reload | R | hold RB / R1, press Y / Triangle |
 | Quick Knife (Hold) | Space | RT / R2 |
 | Quick Turn | back + run | back + run |
-| Inventory | Enter | Menu / Start, right stick click |
+| Inventory | Enter | Menu / Start |
 | Map | S | Y / Triangle |
 | OPTION | Backspace | View / Back |
 | Sniper scope zoom (hold) | Q | LB / L1 |
 | Trade (Co-op) | T | left stick click |
+| Weapon shortcuts ([below](#weapon-shortcuts)) | 1-8; hold C | hold right stick click |
 
-On the keyboard, 1 and 2 are the PS2's L2 and R2. Walking into stairs climbs them (Auto-climb
+On the keyboard, 9 and 0 are the PS2's L2 and R2. Walking into stairs climbs them (Auto-climb
 Stairs).
 
 ### Modern controls (fixed cameras)
@@ -129,6 +130,28 @@ aim (that is how Aim + Triangle works).
 
 Hold the quick-knife key (Space, the right trigger) to draw the knife without the inventory; let go
 to get your weapon back.
+
+### Weapon shortcuts
+
+Swap weapons without opening the inventory. Each character (Claire, Chris, Steve, Wesker in the Battle
+Game) has eight shortcuts, kept in `recvx.ini`, so they stay with every save and a new game.
+
+- **Assign** in the inventory: put the cursor on a weapon and press 1-8 (again: clears it). Or press
+  **Weapon Shortcuts** (C, the right stick click) there for their screen: your bag on the left, the
+  eight shortcuts on the right. Choose a weapon and then a shortcut, or the other way round (confirm or
+  click); cancel or right click on a shortcut clears it. Assigned weapons show their number in the
+  inventory.
+- **Keyboard**: 1-8 equip the weapon of that shortcut.
+- **Gamepad**: hold the right stick click. Shortcuts 1-4 show around the d-pad (up, right, down,
+  left); press a direction to equip one. LB / RB (L1 / R1) show 5-8. Let go without a direction:
+  nothing happens. While you hold it the d-pad does not move you (the stick still does). Holding C on
+  the keyboard does the same with the arrow keys.
+
+A shortcut works when you could open the inventory and the weapon is lowered: standing, walking or
+running. Aiming, reloading, climbing, doors, events and menus wait; a press up to half a second before
+counts. A weapon no longer in your bag shows grey and does nothing. In co-op each player has their own
+shortcuts and the partner sees the new weapon. Turn them off with **Weapon Shortcuts** (CONTROLS); the
+keys are rebound in CONTROLS like the others.
 
 ### Mouse
 
@@ -310,7 +333,7 @@ voices and what happens stay as they are.
 
 Input Devices and Gamepad ([above](#input-source-and-local-co-op)), Vibration Strength (100%), Mouse
 In Menus (on), Fixed Camera Controls (Combined, [Modern controls](#modern-controls-fixed-cameras)),
-then the bindings.
+Weapon Shortcuts (on, [Weapon shortcuts](#weapon-shortcuts)), then the bindings.
 
 ### Third person
 

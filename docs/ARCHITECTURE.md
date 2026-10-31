@@ -534,6 +534,39 @@ village, collision. The render thread (GS emulation, replays: `r_exec`, `r_inter
   aim breaks it), and on release restores the previous weapon (or the same item in another slot)
   once the knife is lowered. Nothing is restored if the weapon was changed meanwhile, or if the
   game ended (`bhExitGame` -> `knife_game_exit`).
+- **Weapon shortcuts** (`pc/glue/weapon_glue.c`; slots and their ini lines `input/weapons.c`, ctest
+  `bindings`): eight slots per character (`sys->ply_id`) holding an item id (`w >> 16 & 0xFF`, the ammo
+  kind left out), so they follow a weapon wherever the bag puts it; stored in `recvx.ini`
+  (`weapon_slots_claire = 9 2 8 0 0 0 0 0`, also `chris`, `steve`, `wesker`), not in the save: they are
+  controls, as the bindings, and survive any save, load or new game. Rows `weapon1`-`weapon8` (keyboard
+  1-8) and `weapons` (hold: C, the right stick click). The equip is the quick knife's: `WeaponSet(slot, slot)`
+  with `swork.pip` on the bag, so equipped slot, weapon number, weapon file and model, `mode3` reset and the
+  co-op partner's view (it gets `wpnr_no` with the player state each frame) are the inventory's; the sniper
+  rifle's scope flag (`ev_flg` 74, which `WeaponSet` takes from the command list's sprite) is kept. Only at
+  rest (`pc_weapon_at_rest`, the quick knife's: in play, weapon down, standing to running or idle) and not
+  while the quick knife has the hand; a press waits up to 15 game frames for that, else it is dropped. Not
+  in the bag or already in the hand: nothing. **The wheel**: each pad report (`pad.c build_report`) sets
+  `g_wpn_overlay` while the hold row is held and `wpn_hold_ok` (shortcuts on, our player in play with the
+  weapon down, no quick knife, trade screen or noclip flight; it stays up while a weapon it equipped
+  loads); while it is set `code_down` reads the codes of the hold row, the d-pad rows and L1 / R1 as up for
+  every other row (game and third-person rows, keyboard and gamepad), so the d-pad neither moves nor
+  quick-turns and R3 does not centre the third-person camera; `bind_held_through` reads them for the
+  wheel (also third-person ones). The hold row reads on a third-person button too (`pad_row_reads`).
+  `wpn_pad` (`bhSetPad`, after `trade_pad`) takes presses of the directions (L1 / R1 flip to slots 5-8)
+  and of the shortcut rows; `wpn_draw` (`bhMainSequence`, after `trade_draw`) draws the four slots of the
+  page with the status screen's icons (`trade_glue.c pc_item_icons` / `pc_item_icon`, loaded while the
+  wheel or the screen is up). **Assigning**: in the inventory's item list (`swork` subscreen 2, mode 1,
+  testmode 1, not busy) a shortcut key assigns the item under the cursor (`pip[listcsr_0]`, weapons only:
+  `itemdata` type bit 0, the EQUIP command's test); the hold row opens the screen. While it is up
+  `bhSysCallItemselect` skips `StatusMain` (the inventory waits, undrawn) and `wpn_menu_draw` draws it;
+  its input is all of the pad (`trade_pad`'s pattern: buttons held when it closes stay off until let
+  go) and the mouse (`menu_pad` leaves it to it). Assigning a weapon clears its old slot; changes are
+  written with `settings_save_later`. Battle Game: allowed (its characters as `ply_id`). Default keys:
+  1 and 2 were L2 / R2's (now 9 and 0, no game action in key types A-C, OPTION in D), the right stick
+  click R3's (a second inventory button in A-C, Start is the first; nothing in D); no gamepad button
+  is free in every scheme, and R3 is the one whose loss costs nothing. In modern third person R3 is
+  also Center Camera, which the wheel then takes. `RECVX_ITEM_TRACE` shows the bag, the log
+  `weapons:` lines each request, swap and assignment.
 - **Reload** (`pc/glue/reload_glue.c`, hooked in `bhControlPlayer` after the mode handler, where
   the game's own trigger-pull reload switches to it): on a press of a reload row (`pad_reload`: the
   game row, or in third person `tps_reload`) with the magazine not full, the game's
@@ -612,7 +645,7 @@ Cross, `east`, `west`, `north`, `back`, `start`, `guide`, `leftshoulder`, `right
 `leftstick`, `rightstick`, `dpup`, `dpdown`, `dpleft`, `dpright`, `misc1`, `paddle1`-`paddle4`,
 `touchpad`) or an axis half (`+lefttrigger`, `-leftx`, `+lefty`, ...). `none` unbinds. Rows beyond
 the DS2 buttons: `freeaim` ("Free Aim"), `quickturn` (unbound: back, then run),
-`quickknife`, `trade`, `reload`, the third-person keys (`key_tps_*`,
+`quickknife`, `trade`, `reload`, `weapons` and `weapon1`-`weapon8` (weapon shortcuts), the third-person keys (`key_tps_*`,
 [THIRDPERSON.md](THIRDPERSON.md#usage)), the third-person gamepad set (`pad_tps_*`,
 [THIRDPERSON.md](THIRDPERSON.md#gamepad)) and the hotkeys (`tps_toggle`, `settings`, `cheats`,
 `coop`, `import`, `fullscreen`, `noclip_up`, `noclip_down`).
@@ -625,6 +658,10 @@ Older files are migrated by `bindings_version`:
 - `bindings_version` below 3 (from before free aim): the left trigger sat on the L2 row, the
   default then. That line is dropped, so the left trigger becomes free aim's; a key such a file gave
   another game row (E) stays there, leaving free aim's keyboard slot empty.
+- `bindings_version` below 4 (from before the weapon shortcuts): `key_l2 = 1`, `key_r2 = 2` and
+  `pad_r3 = rightstick`, the defaults then, are dropped (L2 / R2 get 9 / 0, the shortcuts 1-8 and the
+  right stick click); a key such a file gave another row (say 5) stays there, leaving that shortcut's
+  slot empty.
 
 ### Control details
 
@@ -743,6 +780,7 @@ options: [ENEMIES.md](ENEMIES.md#enemy-options); bindings: [Binding ini format](
 | (lobby GAME RULES) BIORAND, Save System, Free Typewriter Saves | `biorand`, `save_system` (0 Separate Files, 1 Memory Card), `no_ink_ribbon` |
 | Input Devices, Gamepad | `input_source` (0 Auto, 1 Keyboard and Mouse, 2 Gamepad Only), `input_pad` (0 Any, 1-4) |
 | Vibration Strength, Mouse In Menus, Fixed Camera Controls | `rumble_strength`, `menu_mouse`, `fixed_cam_controls` (0 Classic, 1 Modern, 2 Combined) |
+| Weapon Shortcuts; (no row) their slots | `weapon_shortcuts`; `weapon_slots_claire`, `_chris`, `_steve`, `_wesker` (eight item ids, 0 none; assigned in the inventory) |
 | Music And Voice, Sound Effects | `music_volume`, `sfx_volume` |
 | APPEARANCE | `coop_char`, `appear_gender_anim`, `appear_in_cutscenes`, `appear_cutscene_face` |
 

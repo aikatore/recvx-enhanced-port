@@ -5,6 +5,9 @@
 ### New
 
 - **Turkish and Brazilian Portuguese**: import them from their fan-translated discs; our menus are translated too.
+- **Weapon shortcuts**: swap weapons without the inventory. Press 1 to 8 on the keyboard, or hold the
+  right stick click and pick a weapon with the d-pad. Assign them in the inventory. L2 and R2 moved to the
+  keys 9 and 0.
 
 ### Fixes
 
