@@ -421,6 +421,8 @@ const Setting g_settings[] = {
       .help = "Copy memory card saves to separate files. Existing copies are skipped; the card keeps its saves." },
     { SP_GAMEPLAY, "Free Typewriter Saves", V(g_config.no_ink_ribbon), 0, 1, 1,
       .help = "Save at typewriters without using ink ribbons. In co-op, the host decides." },
+    { SP_GAMEPLAY, "Extra Item Boxes and Herbs", V(g_config.extra_objects), 0, 1, 1, .group = "ITEMS",
+      .help = "Add item boxes and blue herb planters to some rooms. Useful with the randomizers. In co-op, the host decides." },
     { SP_GAMEPLAY, "Extra Enemies", V(g_enemy_opts.extra), 0, 3, 1, extras, .help = "Add more of a room's existing enemies from the next room. In co-op, the host decides.", .group = "ENEMIES" },
     { SP_GAMEPLAY, "Rearranged Enemies", V(g_enemy_opts.place), 0, 1, 1, .help = "Move roaming enemies to new starting positions; story and boss enemies stay. Applies next room." },
     { SP_GAMEPLAY, "Enemy Randomizer", V(g_enemy_opts.rand), 0, 1, 1, .help = "Replace enemies with other types that fit the room; bosses stay. Applies next room." },

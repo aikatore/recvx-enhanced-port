@@ -291,7 +291,8 @@ add_test(NAME variants COMMAND test_variants)
 add_executable(test_cast tests/test_cast.c src/host/cast.c src/host/actors.c)
 add_test(NAME cast COMMAND test_cast)
 # the --dev object placer's file (pc/src/host/placer.c): written and read back
-add_executable(test_placer tests/test_placer.c src/host/placer.c src/host/fileio.c)
+add_executable(test_placer tests/test_placer.c src/host/placer.c src/host/extras.c src/host/fileio.c)
+target_link_libraries(test_placer PRIVATE m)
 add_test(NAME placer COMMAND test_placer ${CMAKE_CURRENT_BINARY_DIR})
 
 # co-op networking (pc/src/net): a busy port, the port mapping started and stopped again

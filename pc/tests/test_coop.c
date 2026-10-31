@@ -501,7 +501,7 @@ static void test_dgrams(void)
     BADP(q.rcase = 255, COOP_BAD_FIELD);
     BADP(q.pflg = 0xFF, COOP_OK);                 /* hit/held and the aim pitch: every value */
     BADP(q.use = 255, COOP_OK);                   /* the trigger in use + 1: every value (0 none) */
-    BADP(q.spare[2] = 1, COOP_BAD_FIELD);         /* the spare bytes: zero */
+    BADP(q.spare[1] = 1, COOP_BAD_FIELD);         /* the spare bytes: zero */
     {   /* the aim pitch in pflg's spare bits: every step back as sent, hit/held kept; a build before it sends straight */
         int v;
         for (v = -COOP_PITCH_MAX; v <= COOP_PITCH_MAX; v++) {
@@ -516,6 +516,8 @@ static void test_dgrams(void)
     BADP(q.opts = OPT_GAMEOVER_BOTH, COOP_OK);    /* protocol 22: "Game over: Both" */
     BADP(q.opts = OPT_SKIP_DETECTOR, COOP_OK);    /* protocol 22: the metal detector rule */
     BADP(q.opts = OPT_QUICK_START, COOP_OK);      /* protocol 23: the quick start rule (every option bit is in use) */
+    BADP(q.opts2 = OPT2_EXTRA_OBJECTS, COOP_OK);  /* protocol 33: more rules, extra item boxes and herbs */
+    BADP(q.opts2 = OPT2_ALL + 1, COOP_BAD_FIELD); /* only the rules this protocol has */
     {   /* the PoseExt's enumerations (protocol 16) */
         PoseExt x;
         memset(&x, 0, sizeof(x));

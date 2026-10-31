@@ -56,6 +56,7 @@ typedef struct {
     int  biorand;            /* BioRand: the pack in <mods>/biorand is served (pc/glue/biorand_glue.c); changed at the title only */
     int  rifle_stack;        /* rifle and assault rifle bullets stack as the other ammo (always while BioRand is on) */
     int  no_ink_ribbon;      /* typewriters save without an ink ribbon and use none (in co-op the host's; pc_no_ink_ribbon) */
+    int  extra_objects;      /* "Extra Item Boxes and Herbs" (in co-op the host's; pc/glue/extras_glue.c, pc_extra_objects) */
     int  save_system;        /* 0 native save files (<save_dir>/saves, default), 1 the memory card (<save_dir>/card0) */
     int  native_3d;
     int  native_tex;         /* rendering rework: TIM2 textures uploaded once, bound afterwards (pc/glue/texture_glue.c) */          /* rendering rework: chunk models drawn by the GPU (pc/glue/native_glue.c) */         /* room transitions (doors, stairs, ladders) without their animation */

@@ -3028,8 +3028,11 @@ static unsigned int own_bits(int w)
 
 /* The host's game rules of protocol 19 (Pose.opts) as this session has them: the host's settings; the guest
    follows the host's last pose (OPT_IMPORTANT, OPT_SKIP_SYNC) */
+#define OPT_EXTRA_OBJECTS (OPT2_EXTRA_OBJECTS << 8)   /* Pose.opts2's rules in peer_opts' second byte (protocol 33) */
+int pc_cfg_extra_objects(void);         /* host.c: the GAMEPLAY setting */
 static int rule(int opt)
 {
+    if (is_host && opt == OPT_EXTRA_OBJECTS) return pc_cfg_extra_objects();
     if (is_host) return opt == OPT_IMPORTANT ? g_coop.important : opt == OPT_SKIP_SYNC ? g_coop.skip_sync : opt == OPT_GAMEOVER_BOTH ? g_coop.gameover_both :
                         opt == OPT_SKIP_DETECTOR ? g_coop.skip_detector : opt == OPT_QUICK_START && g_coop.quick_start && !biorand_next();
     return peer_opts >= 0 && (peer_opts & opt);
@@ -3048,6 +3051,14 @@ int pc_no_ink_ribbon(void)
     if (coop_on && !is_host && !echo_delay && peer_opts >= 0) return (peer_opts & OPT_NO_RIBBON) != 0;
     return pc_cfg_no_ink_ribbon();
 }
+/* "Extra Item Boxes and Herbs" (OPT2_EXTRA_OBJECTS, protocol 33; pc/glue/extras_glue.c): the setting, a guest plays by the
+   host's rule once it knows it */
+int pc_extra_objects(void)
+{
+    if (coop_on && !is_host && !echo_delay && peer_opts >= 0) return (peer_opts & OPT_EXTRA_OBJECTS) != 0;
+    return pc_cfg_extra_objects();
+}
+int coop_extra_objects(void) { return rule(OPT_EXTRA_OBJECTS); }   /* the guest's lobby: the host's */
 
 /* Shared loot, "important items for both" (OPT_IMPORTANT, docs/COOP.md "Loot modes"): the item kinds each player
    takes for itself, as individual loot does for every item - one taking it leaves the partner's copy lying. Without
@@ -5904,6 +5915,8 @@ int coop_replayed_event(void)
     return 1;
 }
 
+void coop_test_press(unsigned int bits) { pad_test |= bits; }   /* test aids (extras_glue.c RECVX_EXTRAS pad): pressed at the next pad read */
+
 /* pad.c bhSetPad (via trade_pad): the skip button while the partner plays a cutscene with us asks instead */
 unsigned int coop_skip_pad(unsigned int pad)
 {
@@ -6919,6 +6932,7 @@ void coop_frame(void)
                         (pc_cfg_no_ink_ribbon() ? OPT_NO_RIBBON : 0) | (g_coop.skip_sync ? OPT_SKIP_SYNC : 0) |
                         (g_coop.gameover_both ? OPT_GAMEOVER_BOTH : 0) | (g_coop.skip_detector ? OPT_SKIP_DETECTOR : 0) |
                         (g_coop.quick_start && !biorand_next() ? OPT_QUICK_START : 0) : 0;   /* BioRand: its own start inventory */
+    tx.opts2 = is_host && pc_cfg_extra_objects() ? OPT2_EXTRA_OBJECTS : 0;   /* (protocol 33) */
     tx.regroup = regroups;
     tx.seq = frame_no;
     if (echo_delay) {
@@ -6931,7 +6945,7 @@ void coop_frame(void)
         capture_hits();   /* before the snapshots overwrite the puppets' hit bits */
         if (join_dns) join_resolve();
         receive();
-        if (have_rx) peer_opts = rx.opts;
+        if (have_rx) peer_opts = rx.opts | rx.opts2 << 8;
         if (!is_host) spawn_pending(1);   /* the host's added enemies that came while our room did not run */
         if (rdv_active()) {
             rdv_frame();
