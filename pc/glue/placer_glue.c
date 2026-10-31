@@ -487,6 +487,7 @@ void placer_frame(void)
         if (sel >= 0 && sel < PL_MAX && here(&g_placer.p[sel])) {
             g_placer.p[sel].pos[1] = ground(g_placer.p[sel].pos) - g_placer.type_min[g_placer.p[sel].type][1];
             g_placer.result = "Snapped to the surface below.";
+            g_placer.edited = 1;
         } else g_placer.result = "Select an object in this room first.";
     }
 }
@@ -587,7 +588,7 @@ void placer_draw(void)
 /* ---------------------------------------------------------------- test aid */
 /* RECVX_PLACE="frame:op[:args],...", game frames counted from the first in a room:
    add:type[:dist] (in front of the player, selected), sel:i, move:dx:dy:dz, rot:ax:ay:az (degrees), snap, del,
-   log (the entries in this room; the gizmo's place while the F2 window shows it: RECVX_SHOW_OVERLAY=2) */
+   rings:0/1 (the pitch and roll rings), log (the entries in this room; the gizmo's place while the F2 window shows it: RECVX_SHOW_OVERLAY=2) */
 static void test_aid(void)
 {
     static const char* s = (const char*)-1;
@@ -620,6 +621,7 @@ static void test_aid(void)
         g_placer.p[i].used = 1;
         g_placer.sel = i;
     } else if (!strcmp(op, "sel")) g_placer.sel = atoi(arg);
+    else if (!strcmp(op, "rings")) g_placer.rings = atoi(arg);
     else if (g_placer.sel >= 0 && g_placer.sel < PL_MAX && g_placer.p[g_placer.sel].used) {
         Placement* p = &g_placer.p[g_placer.sel];
         float a[3] = { 0, 0, 0 };
@@ -629,6 +631,7 @@ static void test_aid(void)
         else if (!strcmp(op, "snap")) g_placer.request |= PL_SNAP;
         else if (!strcmp(op, "del")) { p->used = 0; g_placer.sel = -1; }
     }
+    if (strcmp(op, "log")) g_placer.edited = 1;
     if (!strcmp(op, "log") && g_placer.gz_ok)
         printf("test: placer gizmo at %.0f %.0f, x tip %.0f %.0f, y tip %.0f %.0f, z tip %.0f %.0f (length %.1f)\n", g_placer.gz_o[0], g_placer.gz_o[1],
                g_placer.gz_axis[0][0], g_placer.gz_axis[0][1], g_placer.gz_axis[1][0], g_placer.gz_axis[1][1], g_placer.gz_axis[2][0],

@@ -29,6 +29,7 @@ typedef struct PlacerState {
     volatile int request;               /* PL_* bits for the selected entry */
     volatile int rings;                 /* also the pitch and roll rings */
     volatile int gizmo;                 /* the F2 window is open: project the selected entry's gizmo */
+    volatile int edited;                /* the game thread changed the list (Snap to Floor, RECVX_PLACE): to be saved */
     /* published by the game thread */
     volatile int in_room;               /* a room is loaded and drawn */
     int stg, rom, rcase, ply;

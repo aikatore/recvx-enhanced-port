@@ -397,6 +397,7 @@ extern "C" void placer_poll(int f2_open)
         if (n >= 0) SDL_Log("placer: %d entries from %s", n, pth);
     }
     g_placer.gizmo = f2_open && selected();
+    if (__atomic_exchange_n(&g_placer.edited, 0, __ATOMIC_ACQ_REL)) changed();
     if (!f2_open) drag = -1;
     if (dirty && drag < 0 && SDL_GetTicks() - dirty > 500) {
         if (placer_save(pth)) { snprintf(msg_buf, sizeof msg_buf, "Could not write %s", pth); msg = msg_buf; }
