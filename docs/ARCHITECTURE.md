@@ -1231,7 +1231,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_PLAYER=n`, `RECVX_PLAYER=n:k` | the first (the k-th) teleport switches the played character to `ply_id` n (as the script op `bhPlayerChangeSet`) |
 | `RECVX_WARP="stg:rom:f:x:z:angle,..."` | move the player to x/z f frames after entering that room |
 | `RECVX_EQUIP="f:item:count[;f:item:count]"` | equip a weapon at game frame f (again later after `;`), once the player is in play with the weapon down (as the inventory) |
-| `RECVX_BAG="f:eq:item:count,item:count,..."` | at game frame f, the bag from slot 2 on as given and the equipped slot `eq` (after `RECVX_EQUIP` put the weapon in the hand: e.g. the manual glitch's manual, card, bow gun, arrows) |
+| `RECVX_BAG="f:eq:item:count,item:count,..."` | at game frame f, the bag from slot 2 on as given and the equipped slot `eq` (after `RECVX_EQUIP` put the weapon in the hand: e.g. the manual glitch's manual, card, bow gun, arrows); after a `;` another `f:eq:...` bag later; `pN` for f: presented frame N (the first game frame after it: one bag per inventory screen) |
 | `RECVX_DROP="f:slot,..."` | at game frame f, the F2 inventory's X on that slot (`CHEAT_DROP`; slot 2 = the first bag slot): the item removed, the weapon in hand put away first |
 | `RECVX_HP="f:hp,..."`, `RECVX_RETRY="f,..."` | set health / set a retry point (Continue resumes in that room) at game frame f |
 | `RECVX_CHEAT_SAVE="f,..."`, `RECVX_CHEAT_BOX="f,..."` | the F2 Save Now / Open Item Box (`CHEAT_SAVE`, `CHEAT_BOX`, hotkey rows `B_CHEAT_SAVE` / `B_CHEAT_BOX`) at game frame f; every use logs `cheat: save anywhere in S/R at (x y z): <result> (...)` with the state flags it was decided on (`pc/glue/cheat_glue.c` `anywhere_refused`) |

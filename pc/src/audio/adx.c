@@ -37,7 +37,7 @@
    disc does not have, and plain ISO files), <mods>/<AFS file>/<id> for entries of AFS archives
    (e.g. mods/MRY.AFS/12). While BioRand is on, <mods>/biorand/ (its pack: room files, SYSTEM.AFS/10, /11;
    not its title picture ADV.AFS/2) comes first; off, that folder is not looked at (pc/src/host/biorand.h). */
-static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t npath)
+static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t npath, int* srcp)
 {
     static const char* dir;
     FILE* f = NULL;
@@ -61,6 +61,7 @@ static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t 
     }
     pc_lang_file_opened(name, f ? src : LF_DISC);
     if (!f) return NULL;
+    if (srcp) *srcp = src;   /* (LF_*) */
     {
         long n = fseek(f, 0, SEEK_END) ? -1 : ftell(f);
         if (n < 0 || n > 0x7FFFF800L) {   /* (sizes are ints in the game; whole sectors are read) */
@@ -73,7 +74,7 @@ static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t 
     if (src != LF_LANG) host_log("mods: %s replaces the disc file (%u bytes)\n", path, *size);
     return f;
 }
-static FILE* mod_open(const char* name, uint32_t* size) { char path[512]; return mod_open_path(name, size, path, sizeof path); }
+static FILE* mod_open(const char* name, uint32_t* size) { char path[512]; return mod_open_path(name, size, path, sizeof path, NULL); }
 
 int pc_mod_file_size(const char* name)
 {
@@ -158,7 +159,7 @@ int adx_afs_locate(int ptid, int fid, uint32_t* lsn, uint32_t* size)
 }
 
 /* ---------------- ADXF ---------------- */
-typedef struct { int used; uint32_t lsn, size, pos_sct; int stat; FILE* host; } AdxfFile;
+typedef struct { int used; uint32_t lsn, size, pos_sct, disc_from; int stat; FILE* host; } AdxfFile;   /* (disc_from: lang.h pc_lang_disc_part) */
 static AdxfFile files[32];
 static int pt_stat[MAX_PT];
 
@@ -198,13 +199,21 @@ void* pc_mod_open(const char* name)
 
 void* ADXF_OpenAfs(int ptid, int flid)
 {
-    uint32_t lsn, size;
+    uint32_t lsn, size, n;
     AdxfFile* f;
     FILE* hf;
-    char name[64];
+    char name[64], path[512];
+    int src;
     if (ptid >= 0 && ptid < MAX_PT && pt[ptid].name[0]) {
         snprintf(name, sizeof(name), "%s/%d", pt[ptid].name, flid);
-        if ((hf = mod_open(name, &size))) return open_host(hf, size);
+        if ((hf = mod_open_path(name, &size, path, sizeof path, &src))) {
+            f = open_host(hf, size);
+            if (f && src == LF_LANG && adx_afs_locate(ptid, flid, &lsn, &n) && n == size) {   /* a language's file, a part of it the disc's */
+                f->lsn = lsn;
+                f->disc_from = pc_lang_disc_part(name, hf, size, lsn);
+            }
+            return f;
+        }
     }
     if (!adx_afs_locate(ptid, flid, &lsn, &size)) { host_log("adxf: no file %d in partition %d\n", flid, ptid); return NULL; }
     if (!(f = new_file())) return NULL;
@@ -246,6 +255,15 @@ int ADXF_ReadNw32(void* h, int nsct, void* buf)
         fseek(f->host, (long)f->pos_sct * SECTOR, SEEK_SET);
         got = fread(buf, 1, want, f->host);
         memset((char*)buf + got, 0, want - got);
+        if (f->disc_from) {   /* from disc_from on, the disc's bytes */
+            uint32_t a = f->pos_sct * SECTOR, b = a + (uint32_t)got;
+            uint8_t sec[SECTOR];
+            for (uint32_t s = (a > f->disc_from ? a : f->disc_from) / SECTOR; s * SECTOR < b; s++) {
+                uint32_t lo = s * SECTOR > f->disc_from ? s * SECTOR : f->disc_from, hi = (s + 1) * SECTOR < b ? (s + 1) * SECTOR : b;
+                if (!cdvd_read_sectors(f->lsn + s, 1, sec)) break;
+                memcpy((char*)buf + (lo - a), sec + lo % SECTOR, hi - lo);
+            }
+        }
         f->stat = ADXF_STAT_READEND;
     } else
     f->stat = cdvd_read_sectors(f->lsn + f->pos_sct, (uint32_t)nsct, buf) ? ADXF_STAT_READEND : ADXF_STAT_ERROR;
@@ -312,7 +330,7 @@ void ADXT_StartAfs(void* h, int ptid, int fid)
     ADXT_Stop(h);
     if (ptid >= 0 && ptid < MAX_PT && pt[ptid].name[0]) {   /* <mods>/<AFS file>/<id>, as ADXF_OpenAfs */
         snprintf(name, sizeof(name), "%s/%d", pt[ptid].name, fid);
-        hf = mod_open_path(name, &size, path, sizeof path);
+        hf = mod_open_path(name, &size, path, sizeof path, NULL);
     }
     if (hf) { rewind(hf); ok = fread(hdr, 1, SECTOR, hf) >= 0x34; fclose(hf); mod = 1; }
     else ok = adx_afs_locate(ptid, fid, &lsn, &size) && cdvd_read_sectors(lsn, 1, hdr);

@@ -238,7 +238,7 @@ European disc:
 | `ENG/SYSTEM1.AFS` | 1, 2 | the language screen's flags (the English copy too), 2 re-encoded |
 | `SPA/ADV4.AFS` | 0, 2, 4, 6, 7 (1, 5, 32 re-encoded English) | the warning, the title (Turkish plates in their own layout of the picture, the credit), OPTION, the battle game's selection screens |
 | `SPA/MRY4.AFS` | 39 entries | the English map pictures re-encoded: **the map stays English** (the clean Spanish has its own) |
-| `SPA/ITEM14.AFS` / `ITEM24.AFS` | 145..159 | the inventory's words (161, 162, 194, the Spanish file covers, are the English ones again) |
+| `SPA/ITEM14.AFS` / `ITEM24.AFS` | 145..159 | the inventory's words (161, 162, 194, the Spanish file covers, are the English ones again); 145's item pictures redrawn, each of the two with colours of its own where the game has one palette for both (see "The inventory's pictures") |
 | `SPA/RDX_LNK4.AFS` | 205 rooms | the messages (202 rooms with messages, the Spanish counts), 471 subtitles shown at once (`0xFE00`) |
 
 **The font**: the European one (same cells, same widths: the executable's second width table is not patched) with
@@ -320,6 +320,17 @@ no subtitles.
 
 - `lang_scan` (start, after an import or a delete) lists the installed languages; ini `language = fr|de|es|ja|ru`
   (English when that language is not installed), ini `subtitles` (below).
+- **The inventory's pictures** (`ITEM1.AFS` / `ITEM2.AFS` 145, read for the inventory, the item box and the file
+  screen): five textures. 0 the command words and digits, 1 the frame with its words (EXIT FILE MAP ITEM, ITEM LIST,
+  ITEM BOX...), 2 the status screen (the portraits and emblems with HEIGHT / WEIGHT / BLOOD TYPE, DATA, CONDITION,
+  Fine / Caution / Danger / Poison): the language's; 3 and 4 the **item pictures** (no writing): always the US
+  disc's. Both item textures fill palette bank 48, so they must share one palette, as on every disc but the Turkish
+  one: its patch redrew them with a palette each, and one sheet showed with the other's colours (the lighter, the
+  Calico, the keys scrambled). `adx.c ADXF_OpenAfs` asks `pc_lang_disc_part` for a language's file of the disc
+  entry's size: for these two it is the offset of the PLI chunk before the fourth texture, checked against the disc's
+  file, and `ADXF_ReadNw32` reads the bytes from there from the disc. The imports stay as they are (no import again);
+  the other languages' item pictures were the US ones already. The file covers (146..159, one texture each: the
+  book with its word) and the Russian typewriter (144: its keys in Cyrillic) keep the language's.
 - Files: `audio/adx.c mod_open_path` looks for a file the game opens (by name, or `ARCHIVE.AFS/n`) in BioRand's
   pack, the mods folder, then the language's folder (upper-case names; the game asks for `sysmes.ald`), then the
   disc. `pc_lang_file_opened` learns from it which language the loaded font (`SYSTEM.AFS/1`), the title and OPTION
@@ -481,6 +492,9 @@ Turkish and Brazilian Portuguese (2026-10-31, Linux, headless; job folder `lang3
   Sans, added to the font list for the test run only: this machine has no system font).
 - Subtitles in another language (`scene.sh`): English with Turkish subtitles, Turkish with Brazilian Portuguese,
   Brazilian Portuguese with Japanese (the new `LANG_OTHER` encoding).
+- The inventory's pictures (2026-11-01, job folder `langicons/`: `inv.sh` pages through every item, 8 per bag with
+  `RECVX_BAG` `p<frame>` bags, in every language before (the language's 145 served whole) and after, against
+  English): see the inventory section below.
 - ctest `lang` (every Turkish and Brazilian Portuguese translation against its font), the other ctests; French,
   German, Spanish, Russian, Japanese again; `layout_check.sh` main build vs this build (English): identical; Windows
   build.

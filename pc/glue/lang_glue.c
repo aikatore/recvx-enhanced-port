@@ -225,6 +225,31 @@ void pc_lang_file_opened(const char* name, int src)
     }
 }
 
+/* ITEM1.AFS / ITEM2.AFS 145, the inventory's pictures: its words, the frame and the status screen (textures 0..2)
+   are the language's, the item pictures (3, 4: one palette bank for both) always the disc's. A translation that
+   redrew them gave each its own colours (the Turkish one): one showed with the other's. From the PLI chunk before
+   the fourth texture on, where the disc's file has the same chunk. */
+static int disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n);
+uint32_t pc_lang_disc_part(const char* name, FILE* f, uint32_t size, uint32_t lsn)
+{
+    unsigned char h[32], g[32];
+    uint32_t o = 0, prev = 0, from = 0;
+    int tims = 0, pli = 0;
+    if (strcasecmp_(name, "ITEM1.AFS/145") && strcasecmp_(name, "ITEM2.AFS/145")) return 0;
+    while (pc_range_ok(o, 32, size) && !fseek(f, (long)o, SEEK_SET) && fread(h, 1, 32, f) == 32 && pc_rd32(h) != 0xFFFFFFFFu) {
+        if (!memcmp(h, "TIM2", 4) && ++tims == 4) { from = pli ? prev : o; break; }
+        if (!pc_range_ok(o + 32ull, pc_rd32(h + 4), size)) break;
+        pli = !memcmp(h, "PLI", 4);
+        prev = o;
+        o += 32 + pc_rd32(h + 4);
+    }
+    if (!from || fseek(f, (long)from, SEEK_SET) || fread(h, 1, 32, f) != 32 || !disc_read(lsn, from, g, 32) || memcmp(h, g, 32)) {
+        host_log("lang: %s: the item pictures are not where the disc has them: the language's\n", name);
+        return 0;
+    }
+    return from;
+}
+
 /* the language of a file the game is about to read: its folder (NULL: the disc's) */
 const char* pc_lang_file_dir(void) { return lang_dir(data_lang()); }
 

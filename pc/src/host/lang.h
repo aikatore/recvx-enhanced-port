@@ -3,6 +3,8 @@
    reads that folder's files instead of the disc's (audio/adx.c), takes its room messages (room.c bhSetRoom),
    its glyph widths (message.c bhGetFontSize) and its file pages (fileview.c tables). Our own texts: tr(). */
 #pragma once
+#include <stdint.h>
+#include <stdio.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -58,6 +60,9 @@ void pc_glyphs_utf8(const unsigned short* g, char* out, int n);
 enum { LF_DISC, LF_LANG, LF_MODS, LF_BIORAND };     /* where a file the game opens comes from */
 const char* pc_lang_file_dir(void);                 /* the folder of the language's files (NULL: none) */
 void pc_lang_file_opened(const char* name, int src); /* a file the game opens (by name or "ARCHIVE.AFS/n"), from LF_* */
+/* a language's file f of size bytes, the same size as its disc entry (at sector lsn): the offset from which the
+   disc's bytes are read instead (0: none). ITEM1.AFS / ITEM2.AFS 145: the item pictures */
+uint32_t pc_lang_disc_part(const char* name, FILE* f, uint32_t size, uint32_t lsn);
 float pc_font_width(unsigned short code);           /* the language font's width, < 0: the game's own */
 float pc_font_space(void);                          /* the advance of a space (0xFF01) at scale 1: 14, Japanese 28 */
 int  pc_font_glyph(int code, void** texlist, float* dx);   /* bhDispFont: the cell to draw (-1 none); *texlist another font's; *dx left shift */
