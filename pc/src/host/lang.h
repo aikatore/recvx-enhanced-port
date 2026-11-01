@@ -35,7 +35,7 @@ extern const char* const lang_names[LANG_COUNT];   /* in the language itself (UT
 extern int g_lang, g_subtitles;
 void lang_scan(void);                 /* which languages are installed (at start, after an import or a delete) */
 int  lang_installed(int l);           /* its folder is complete (English: always) */
-int  lang_old_import(int l);          /* imported before the fix of the item messages (lang.txt version 1): import again */
+int  lang_old_import(int l);          /* an older import (lang.txt version 1: the item messages cut; 2: no text crawl, movies): import again */
 int  lang_has_subtitles(int l);       /* its rooms have cutscene subtitles */
 int  lang_sub(void);                  /* the subtitles' language (installed, with subtitles), -1 none */
 const char* lang_dir(int l);          /* its folder, NULL for English */

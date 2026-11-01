@@ -75,6 +75,7 @@ static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t 
     return f;
 }
 static FILE* mod_open(const char* name, uint32_t* size) { char path[512]; return mod_open_path(name, size, path, sizeof path, NULL); }
+FILE* pc_mod_fopen(const char* name, uint32_t* size) { return mod_open(name, size); }   /* (movie_glue.c: a movie) */
 
 int pc_mod_file_size(const char* name)
 {

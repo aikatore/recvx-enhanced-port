@@ -30,6 +30,10 @@ long pc_prs_expand(const unsigned char* s, long n, unsigned char** out, long* ca
 /* lax: a stream that stops at the data's end without the end mark gives what it expanded so far (the Russian fan
    translation's rooms, docs/LANGUAGES.md) */
 long pc_prs_expand_ex(const unsigned char* s, long n, unsigned char** out, long* cap, int lax);
+/* n bytes as a PRS stream of literals only (as the Brazilian Portuguese translation's rooms), with the end mark, into out
+   (PC_PRS_PACKED(n) bytes): its size */
+#define PC_PRS_PACKED(n) ((n) + (n) / 8 + 4)
+uint32_t pc_prs_pack_literals(const uint8_t* s, uint32_t n, uint8_t* out);
 
 /* ---------------------------------------------------------------- AFS archives (adx.c, import ob2.c)
    Header (8 bytes): "AFS", u32 count; then count x (u32 offset, u32 size). */

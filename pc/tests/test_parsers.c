@@ -156,6 +156,15 @@ static void test_prs(void)
         CHECK(r == (long)on && cap >= r && !memcmp(out, want, on));
         free(out);
     }
+    for (uint32_t n = 0; n < 40; n++) {   /* packed as literals: the same bytes back, in the size given */
+        uint8_t* p = malloc(PC_PRS_PACKED(n));
+        uint32_t pn;
+        for (uint32_t i = 0; i < n; i++) want[i] = (uint8_t)rnd(256);
+        pn = pc_prs_pack_literals(want, n, p);
+        CHECK(pn <= PC_PRS_PACKED(n) && pc_prs_decode(p, pn, got, CAP) == (int32_t)n && !memcmp(got, want, n));
+        CHECK(ref_expand((const char*)p, ref) == (int)n && !memcmp(ref, want, n));
+        free(p);
+    }
     free(s); free(want); free(ref); free(got);
 }
 

@@ -6,6 +6,8 @@
      ADV.AFS/n MRY.AFS/n ITEM1.AFS/n ITEM2.AFS/n   the pictures with writing (entries that differ from English)
      ROOMS.MES                       every room's message table (by room index; bhSetRoom takes it)
      SAVELOAD.MES                    the executable's save / load messages (adv.c SaveLoadMessage), if they differ
+     RM_0000.RDX                     the US room with the opening's text crawl of the language (Russian, Brazilian Portuguese)
+     MOVIE/MV_0nn.PSS                the movies that differ from the US ones (Japanese: the logo)
      lang.txt                        written last: the language, the font's widths, the file tables, the
                                      executable's other texts
    Sources (lang_discs[]): the European disc (French, German, Spanish; its English is the US text), the US disc
@@ -538,14 +540,15 @@ typedef struct LangTxt {
     int fpics;               /* the files are pictures from this entry of ITEM?.AFS on (Japanese), 0 text */
     const char* extra;       /* more lines (the executable's texts), or NULL */
 } LangTxt;
-/* version 2: the messages whole past 0xFF03 0xFFFF (1 cut the item messages there: lang_glue.c lang_old_import) */
+/* version 2: the messages whole past 0xFF03 0xFFFF (1 cut the item messages there: lang_glue.c lang_old_import); 3: the
+   opening's text crawl (Russian, Brazilian Portuguese), the movies (Japanese) */
 static int write_txt(FILE* o, void* ud)
 {
     const LangTxt* t = ud;
     char when[64];
     time_t now = time(NULL);
     strftime(when, sizeof(when), "%Y-%m-%d %H:%M", localtime(&now));
-    fprintf(o, "# recvx language 2\nlang|%s\nsource|%s\niso|%s\nwhen|%s\nsubtitles|%d\nwidths|", lang_codes[t->lang], t->src, t->iso, when, t->subs);
+    fprintf(o, "# recvx language 3\nlang|%s\nsource|%s\niso|%s\nwhen|%s\nsubtitles|%d\nwidths|", lang_codes[t->lang], t->src, t->iso, when, t->subs);
     for (int i = 0; i < t->nw; i++) fprintf(o, "%s%d", i ? "," : "", t->w[i]);
     if (t->ox) {
         fprintf(o, "\noffsets|");
@@ -713,6 +716,100 @@ static char* eu_texts(int lang, const unsigned char* x, uint32_t n, const char* 
     return o;
 }
 
+/* ---------------------------------------------------------------- the opening's text crawl, the movies */
+/* RDX_LNK.AFS entry 0 (RM_0000.RDX) expanded into *ex (*cap bytes, grown): its size, < 0 if unreadable */
+static long room0(FILE* f, unsigned char** ex, long* cap)
+{
+    int64_t off;
+    uint32_t size;
+    int n = 0;
+    long xn = -1;
+    AfsFile* a = imp_iso_find(f, "RDX_LNK.AFS", &off, &size) ? imp_afs_list(f, off, size, &n) : NULL;
+    unsigned char* pk = a && n > 0 && a[0].size && a[0].size < (64u << 20) ? malloc(a[0].size) : NULL;
+    if (pk && imp_read_at(f, a[0].off, pk, a[0].size)) xn = pc_prs_expand_ex(pk, a[0].size, ex, cap, 1);   /* (lax: the Russian rooms) */
+    free(pk); free(a);
+    return xn;
+}
+/* a room's textures in order (rdx.py texture_blocks: the table at hed[4], each entry a list of 32-byte chunk heads up
+   to code -1): where each TIM2 starts (at) and its size; how many (up to max) */
+static int room_tims(const unsigned char* d, long n, uint32_t* at, uint32_t* len, int max)
+{
+    uint32_t tt = n >= 36 ? pc_rd32(d + 32) : 0, cnt, k = 0;
+    if (!tt || !pc_range_ok(tt, 4, (uint64_t)n) || (cnt = pc_rd32(d + tt)) > 4096 || !pc_range_ok(tt + 4, 4ull * cnt, (uint64_t)n)) return 0;
+    for (uint32_t i = 0; i < cnt; i++)
+        for (uint64_t p = pc_rd32(d + tt + 4 + 4 * i); p && p + 32 <= (uint64_t)n && pc_rd32(d + p) != 0xFFFFFFFFu;) {
+            uint32_t sz = pc_rd32(d + p + 4);
+            if (!memcmp(d + p, "TIM2", 4)) {
+                if ((int)k == max || !pc_range_ok(p + 32, sz, (uint64_t)n)) return (int)k;
+                at[k] = (uint32_t)p + 32; len[k++] = sz;
+            }
+            p += 32ull + sz;
+        }
+    return (int)k;
+}
+/* the opening's text crawl: RM_0000's textures 85..87 (its three pages: the story so far, "3 months later..."),
+   which the Russian and the Brazilian Portuguese patches translated, into the US room (its messages stay the US
+   ones: ROOMS.MES gives the language's), packed as the disc's rooms are (PRS, here literals only) to RM_0000.RDX.
+   lang_glue.c reads it with Translated Pictures on. 1 written, 0 none to take, -1 failed */
+#define CRAWL_FIRST 85
+#define CRAWL_PAGES 3
+static int crawl(FILE* uf, FILE* f, const char* dir)
+{
+    enum { MAXT = 512 };
+    unsigned char *u = malloc(1 << 20), *l = malloc(1 << 20), *pk = NULL;
+    long ucap = 1 << 20, lcap = 1 << 20, un = u && l ? room0(uf, &u, &ucap) : -1, ln = un > 0 ? room0(f, &l, &lcap) : -1;
+    uint32_t ua[MAXT], ul[MAXT], la[MAXT], ll[MAXT];
+    int nu, nl, took = 0, r = -1;
+    if (ln > 0 && (nu = room_tims(u, un, ua, ul, MAXT)) == (nl = room_tims(l, ln, la, ll, MAXT)) && nu >= CRAWL_FIRST + CRAWL_PAGES) {
+        for (int k = CRAWL_FIRST; k < CRAWL_FIRST + CRAWL_PAGES; k++)
+            if (ul[k] == ll[k] && memcmp(u + ua[k], l + la[k], ul[k])) { memcpy(u + ua[k], l + la[k], ul[k]); took++; }
+        r = 0;
+        if (took && (pk = malloc(PC_PRS_PACKED((uint32_t)un)))) r = put(dir, "RM_0000.RDX", pk, pc_prs_pack_literals(u, (uint32_t)un, pk)) ? 1 : -1;
+        else if (took) r = -1;
+    }
+    free(u); free(l); free(pk);
+    return r;
+}
+
+/* the movies of the language's disc that differ from the US disc's, copied to MOVIE/ (the Japanese release: the
+   ending's and the title demo's logo "BIOHAZARD -CODE:Veronica- 完全版"); movie_glue.c plays them with Translated
+   Pictures on. The bytes copied (*bytes); -1 if one could not be read or written */
+static int movies(FILE* uf, FILE* f, const char* dir, int64_t* bytes)
+{
+    enum { CH = 1 << 20 };
+    unsigned char *a = malloc(CH), *b = malloc(CH);
+    int ok = a && b;
+    *bytes = 0;
+    for (int m = 0; m < 32 && ok; m++) {
+        char name[40], p[1300];
+        int64_t uo, lo;
+        uint32_t us, ls, k;
+        int same;
+        FILE* o;
+        snprintf(name, sizeof(name), "MOVIE/MV_%03d.PSS", m);
+        if (!imp_iso_find(f, name, &lo, &ls)) continue;
+        same = imp_iso_find(uf, name, &uo, &us) && us == ls;
+        for (k = 0; same && k < ls; k += CH) {
+            uint32_t c = ls - k < CH ? ls - k : CH;
+            same = imp_read_at(uf, uo + k, a, c) && imp_read_at(f, lo + k, b, c) && !memcmp(a, b, c);
+        }
+        if (same) continue;
+        snprintf(p, sizeof(p), "%s/MOVIE", dir);
+        SDL_CreateDirectory(p);
+        snprintf(p, sizeof(p), "%s/%s", dir, name);
+        if (!(o = pc_fopen(p, "wb"))) { ok = 0; break; }
+        for (k = 0; ok && k < ls; k += CH) {
+            uint32_t c = ls - k < CH ? ls - k : CH;
+            ok = imp_read_at(f, lo + k, a, c) && fwrite(a, 1, c, o) == c;
+        }
+        ok = !fclose(o) && ok;
+        if (!ok) remove(p);   /* (no half movie) */
+        *bytes += ls;
+    }
+    free(a); free(b);
+    return ok ? 0 : -1;
+}
+
 /* a disc laid out as the US one, with one language at its root (the Russian, Brazilian Portuguese translations, the Japanese release):
    its files compared with the US disc's (uf) */
 static int one_disc(FILE* f, FILE* uf, const LangSource* s, const char* outdir, const char* iso,
@@ -773,6 +870,16 @@ static int one_disc(FILE* f, FILE* uf, const LangSource* s, const char* outdir, 
         free(e); free(a);
     }
     if (!rooms(f, dir, "RDX_LNK.AFS", lname, ja, &subs)) { host_log("lang: %s: the rooms could not be read or written\n", lname); return 0; }
+    snprintf(pg->phase, sizeof(pg->phase), tr("%s: pictures"), lname);
+    if (!ja) {   /* (the Russian, the Brazilian Portuguese) */
+        int c = crawl(uf, f, dir);
+        if (c) host_log(c > 0 ? "lang: %s: the opening's text crawl\n" : "lang: %s: the opening's text crawl could not be read or written\n", lname);
+    }
+    if (ld->lang == LANG_JA) {   /* (the Korean disc's movies are the Japanese ones: no Korean in them) */
+        int64_t mb;
+        if (movies(uf, f, dir, &mb)) host_log("lang: %s: the movies could not be read or written\n", lname);
+        else if (mb) host_log("lang: %s: movies, %.0f MB\n", lname, mb / 1048576.0);
+    }
     snprintf(pg->phase, sizeof(pg->phase), tr("%s: messages"), lname);
     if ((sl = exe_saveload(exe, nexe, &nsl))) {   /* the save / load messages */
         if (ja) {

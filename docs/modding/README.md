@@ -49,6 +49,7 @@ Related: [../ACTORS.md](../ACTORS.md) (models, skeletons, motions, enemy records
 | `RM_SRRC.SPQ.key` | room sound bank key | text file with one decimal retail key, e.g. `60` = RM_0060's bank. Log: `mods: room sound key 1150 uses 0060`. Not recursive; an invalid file is ignored |
 | `<ARCHIVE>/<index>` | entry *index* of an AFS archive opened by partition, e.g. `MRY.AFS/76` | sound banks, door animations, map files, player/weapon files, streamed ADX music and voices (ADX, at most 2 channels). Only ADX streams are tested in game |
 | `<NAME>` | a plain disc file opened through `ADXF_Open` | |
+| `MOVIE/MV_nnn.PSS` | movie *nnn* | a PSS as on the disc (MPEG-2 video at 29.97 frames a second, the disc's sound format). Hook: `movie_glue.c initAll`; `RECVX_MOVIE_TRACE` names where it came from |
 | `enemies.ini` | nothing: adds custom enemies (enemy variants: a base type, another model, stat factors, motion and sound mappings, randomizer weights) | read once at start; format and limits in [../ENEMIES.md](../ENEMIES.md) "Enemy variants". Co-op partners need the same file |
 
 Not covered: files the game reads with `ReadFileEx` (`MULTSPQ?.IDX`, `SYSMES.ALD`,
