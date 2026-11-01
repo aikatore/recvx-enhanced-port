@@ -22,6 +22,9 @@
 
 extern char* rdx_files[205];                    /* ps2_dvd_image.c, sorted names; AFS partition 17 entry i */
 unsigned int RoomNameSwitch(unsigned int name); /* bup_00.c: stage * 100 + room -> save menu room name 1..18, 0 none */
+extern int g_dev_tools;
+void devcat_scan_room(int room, const unsigned char* d, int n);   /* --dev scene list (devcine_glue.c): each file as read */
+void devcat_scan_done(void);
 
 enum { TP_SRC = 4, MAX_FILES = 1024 };
 typedef struct Row {
@@ -284,6 +287,7 @@ static int SDLCALL scan(void* ud)
         if (h && h != iso) fclose(h);
         if (n < 0 || (m = pc_prs_expand(in, n, &out, &cap)) < 0x80) { bad++; host_log("teleport: cannot read %s%s\n", f[i].mod ? "mods/" : "", f[i].name); continue; }
         parse(out, m, at[file_key(f[i].name)]);
+        if (g_dev_tools) devcat_scan_room(atoi(f[i].name + 3), out, (int)m);
     }
     for (i = 0; i < nrows; i++) {
         const Row* r = &rows[i];
@@ -301,6 +305,7 @@ static int SDLCALL scan(void* ud)
     }
     fclose(iso);
     free(f); free(out); free(in);
+    if (g_dev_tools) devcat_scan_done();
     __atomic_store_n(&state, 2, __ATOMIC_RELEASE);
     return 0;
 }

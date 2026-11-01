@@ -40,6 +40,48 @@ int  devcine_format(const DevCine* e, int full, char* buf, int n);
 int  devcine_text(char* buf, int n);    /* every entry, full, one per line; the length */
 int  devcine_export(const char* path);  /* appended with a header line; entries written, -1 error */
 
+/* The scene list (F6 "Scenes"): every cutscene of the room files, read from the player's disc (and the mods folder) with
+   the teleport list's scan (teleport.c), nothing of it in the repository. A scene is a set of events a room script
+   starts together (the EvtOn of one if-block) where one of them is a cutscene (cinema mode CineSet 0/3, an event camera
+   CamSet 0, a movie MovieStart, the player hidden InitModelSet 0 0 0: the log's test); events those start are part of
+   it. The skip's endings (blocks testing cb_flg bit 3) are not scenes. devcine_glue.c plays one (devcat_play). */
+enum { DS_EV = 16, DS_FLAGS = 8, DS_MV = 4 };
+typedef struct DevScene {
+    short room;                         /* RM_%04d */
+    short from;                         /* the script that starts it: 0 room entry (scd0), 1 every frame (scd1), 2 + k event k */
+    short ev[DS_EV];                    /* level << 8 | event, in the script's order */
+    unsigned char nev, nmv, nflag, ply; /* ply: the character the block tests for (CmpB ply_id ==), 0xFF any */
+    unsigned char mv[DS_MV];            /* movies (MV_%03u.PSS) */
+    struct { unsigned char set, on; unsigned short bit; } flag[DS_FLAGS];   /* the block's story flag tests (set 1 ev_flg, 2 ky_flg,
+                                           3 ed_flg, 7 it_flg, 8 mp_flg; on: wanted set), made to hold before the room is entered */
+    unsigned int block, blen;           /* the then-part (or else part) that starts it, from the event block's start; 0 none
+                                           (EvtOn at the script's top level): only its events are started */
+    unsigned short shots, voices, lines;   /* event cameras (CamSet 0), voice lines (VoiceOn), messages shown */
+    char who[64];                       /* the records its events load or show: "Alfred, Claire" */
+    char text[80];                      /* its first message with letters (the disc's text) */
+} DevScene;
+typedef const char* (*DevWho)(int id, int ver);   /* a record type's name, NULL: not listed */
+/* the scenes of the expanded room file d (n bytes) of RM_<room>, appended to out (up to max); the count. *unused: cutscene
+   events no script starts (left out) */
+int  devcat_room(int room, const unsigned char* d, int n, DevWho who, DevScene* out, int max, int* unused);
+/* our own name for the main scenes, NULL: none (then devcat_line describes it) */
+const char* devcat_title(const DevScene* s);
+/* "RM_1020 <room> | <name> | ev 1:1, 2:2 | MV_005 | Alfred | 18 shots, 14 lines, 9 voice" */
+int  devcat_line(const DevScene* s, const char* room_name, char* buf, int n);
+int  devcat_short(const DevScene* s);   /* a camera shot or two, nothing said, no one: hidden by "Hide short shots" */
+/* the list, built once (teleport.c), then read-only */
+void devcat_publish(DevScene* list, int n, int unused);
+int  devcat_count(void);                /* 0 until read */
+const DevScene* devcat_get(int i);
+int  devcat_unused(void);
+/* playing one (game thread, devcine_glue.c): chr 0 the part's character (the block's test, else Chris in stages 7..9,
+   Claire before), 1 Claire, 2 Chris, 3 as now */
+void devcat_play(int i, int chr);
+int  devcat_take(int* chr);             /* game thread: the request, -1 none */
+void devcat_say(const char* text);      /* game thread: what it did */
+void devcat_status(char* buf, int n);   /* what the last PLAY did */
+int  devcat_write(const char* path);    /* devcine_glue.c: the list as text, a scene per line; the scenes written, -1 error */
+
 #ifdef __cplusplus
 }
 #endif
