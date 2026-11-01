@@ -1174,6 +1174,7 @@ called by the game thread.
 | `--hd-textures DIR` | HD texture pack folder (default `mods/textures`) |
 | `--third-person` | start with the over-the-shoulder camera ([THIRDPERSON.md](THIRDPERSON.md)) |
 | `--dev` | developer tools: the object placer in the F2 window ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md)); nothing else changes (BioRand and the importers are shown without it) |
+| `--spoof-version V` | the running build counts as version V for the update check (as `RECVX_UPDATE_FAKE_VERSION`): the title shows it and a newer release is offered; the restart after an install drops it |
 | `--coop-host PORT`, `--coop-join HOST:PORT#CODE` or `ROOM`, `--coop-server ADDR`, `--coop-conn auto\|direct\|server`, `--coop-pw PASSWORD` | online co-op ([COOP.md](COOP.md#command-line)) |
 | `--log[=FILE]` | copy all output to a log file (default `recvx.log`), with a backtrace on a crash |
 | `--profile[=FILE]`, `--profile-samples=FILE` | performance measurements ([Profiling and logging](#profiling-and-logging)) |

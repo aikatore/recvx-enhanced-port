@@ -216,6 +216,7 @@ static void usage(void)
         "  --coop-join HOST:PORT#CODE | ROOM  online co-op: join a host, or a room through the co-op server\n"
         "  --coop-server ADDR   co-op server (host or host:port, UDP 7141)  --coop-conn auto|direct|server  --coop-pw PASSWORD\n"
         "  --dev              developer tools (the object placer in the F2 window)\n"
+        "  --spoof-version V  report version V (e.g. 0.6.0) to the update check, to test the update offer\n"
         "  --quiet\n"
         "  --version         print the version and exit\n"
         "  --log[=file]       copy all output to a log file (default recvx.log), crash backtraces included\n"
@@ -268,6 +269,7 @@ static void parse_args(int argc, char** argv)
         else if (!strcmp(argv[i], "--vanilla")) g_config.interpolate = 0;
         else if (!strcmp(argv[i], "--skip-doors")) g_config.skip_doors = 1;
         else if (!strcmp(argv[i], "--skip-intro")) g_config.skip_intro = 1;
+        else if (!strcmp(argv[i], "--spoof-version") && i + 1 < argc) SDL_setenv_unsafe("RECVX_UPDATE_FAKE_VERSION", argv[++i], 1);   /* the updater's test (update.c update_installed) */
         else if (!strcmp(argv[i], "--hd-textures") && i + 1 < argc) { SDL_strlcpy(g_config.hd_textures_dir, argv[++i], sizeof(g_config.hd_textures_dir)); }
         else if (!strcmp(argv[i], "--third-person")) g_tps.on = 1;
         else if (!strcmp(argv[i], "--dev")) g_dev_tools = 1;   /* developer tools (the F2 object placer); BioRand and the importers are shown without it */

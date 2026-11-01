@@ -424,7 +424,10 @@ void update_relaunch(int argc, char** argv, const char* cwd)
     if (!SDL_GetAtomicInt(&restart) || !exe[0]) return;
     config_save();   /* (the new process reads it) */
     args[n++] = exe;
-    for (int i = 1; i < argc && n < 63; i++) args[n++] = argv[i];
+    for (int i = 1; i < argc && n < 63; i++) {
+        if (!strcmp(argv[i], "--spoof-version")) { i++; continue; }   /* (the new build reports its own version) */
+        args[n++] = argv[i];
+    }
     args[n] = NULL;
     props = SDL_CreateProperties();
     SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, (void*)args);
