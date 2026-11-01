@@ -6,6 +6,8 @@
 
 - **Memory card slot 2**: with the Memory Card save system, MEMORY CARD slot 2 now works as a second card of
   its own, so you can save to and load from either slot.
+- **Translated opening text**: Translated Pictures now also shows the opening's story text in Russian and Brazilian
+  Portuguese, and the Japanese logo in the movies (import these languages again).
 
 ## 0.7.2 (2026-11-01)
 

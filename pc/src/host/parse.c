@@ -69,6 +69,18 @@ long pc_prs_expand_ex(const unsigned char* s, long n, unsigned char** out, long*
 }
 long pc_prs_expand(const unsigned char* s, long n, unsigned char** out, long* cap) { return pc_prs_expand_ex(s, n, out, cap, 0); }
 
+uint32_t pc_prs_pack_literals(const uint8_t* s, uint32_t n, uint8_t* out)
+{
+    uint32_t o = 1, slot = 0, bits = 0;
+#define BIT(b) do { if (bits == 8) { slot = o++; out[slot] = 0; bits = 0; } out[slot] |= (uint8_t)((b) << bits++); } while (0)
+    out[0] = 0;
+    for (uint32_t i = 0; i < n; i++) { BIT(1); out[o++] = s[i]; }
+    BIT(0); BIT(1);   /* the end: a long copy of distance 0 */
+    out[o++] = 0; out[o++] = 0;
+#undef BIT
+    return o;
+}
+
 
 /* ---------------------------------------------------------------- AFS */
 int pc_afs_count(const uint8_t* h, uint64_t size)
