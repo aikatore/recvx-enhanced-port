@@ -79,7 +79,9 @@ static const struct { unsigned short alef, pf; unsigned char cell[2]; } ar_lamal
     { 0x622, 0xFEF5, { 138, 0 } }, { 0x623, 0xFEF7, { 134, 135 } }, { 0x625, 0xFEF9, { 136, 137 } }, { 0x627, 0xFEFB, { 132, 133 } } };
 /* signs: the Arabic question mark, tatweel; ASCII in the Arabic font's own cells (the same as the US codes) */
 static const struct { unsigned short u; unsigned char cell; } ar_signs[] = { { 0x61F, 9 }, { 0x640, 63 } };
-static int ar_own(int code) { return code == 1 || (code >= 2 && code <= 6) || (code >= 14 && code <= 30); }   /* ! signs . / 0-9 : signs */
+/* the US codes drawn with the Arabic font: the signs the US font has there too (28 the choice cursor: ◀ here, the patch
+   writes the choice after its word); digits and punctuation are the US font's (Latin runs: seed strings, sizes) */
+static int ar_own(int code) { return code >= 28 && code <= 30; }
 
 /* the Arabic font's cell of a character (presentation form, base letter: its isolated form), 0 none */
 static int ar_cell(unsigned c)

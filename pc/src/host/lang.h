@@ -61,6 +61,7 @@ void lang_missing(int l, const char* s, char* out, int n);
    unchanged. Into out (n bytes); returns out. lang_rtl: s is such a display-order text (wrap it from its right end) */
 char* lang_shape(const char* s, char* out, int n);
 int  lang_rtl(const char* s);
+int  lang_rtl_text(void);             /* our texts are right to left (Arabic): pieces joined in code go in reverse */
 /* the byte where the last line of s[0, len) that is at most w wide starts (at a space; 0: all of it fits), for wrapping
    a display-order text from its right end; width(s, n, ud) measures n bytes */
 int  lang_rtl_cut(const char* s, int len, float w, float (*width)(const char* s, int n, void* ud), void* ud);
@@ -75,6 +76,7 @@ float pc_font_width(unsigned short code);           /* the language font's width
 float pc_font_space(void);                          /* the advance of a space (0xFF01) at scale 1: 14, Japanese 28 */
 int  pc_font_glyph(int code, void** texlist, float* dx);   /* bhDispFont: the cell to draw (-1 none); *texlist another font's; *dx left shift */
 const unsigned short* pc_lang_mes(int which, const unsigned short* us);   /* the executable's short texts (LM_*) */
+float pc_lang_mes_x(int which, float us);           /* ... the x the language's executable draws one at (us: the US x) */
 enum { LM_DEMO, LM_PRESS, LM_PAUSE, LM_RETRY, LM_COUNT };
 int  pc_lang_file_page(float x, float y, int file, int page);   /* fileview.c: a file page drawn as the language's picture */
 int  pc_lang_page_end(int us);                      /* fileview.c PlayPageCheck: the manual's hidden pages (US 0 1 2 4 6 7) */

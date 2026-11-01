@@ -160,9 +160,11 @@ static bool settings_imgui(int page, bool all = true)
         if (group && all) ImGui::SeparatorText(tr(group));
         group = nullptr;
         const char* lock = settings_locked(s);
-        char label[96], val[96];
+        char label[256], val[96];   /* (Arabic: 3 bytes a letter) */
         int v = settings_get(s), hi = settings_hi(s), st = s->step > 0 ? s->step : 1;
-        SDL_snprintf(label, sizeof label, "%s%s##set%d", tr(s->label), (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", i);
+        if (lang_rtl_text())   /* (right to left: the note on the label's left) */
+            SDL_snprintf(label, sizeof label, "%s%s##set%d", (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", tr(s->label), i);
+        else SDL_snprintf(label, sizeof label, "%s%s##set%d", tr(s->label), (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", i);
         ImGui::BeginDisabled(lock != nullptr);
         if (s->flags & SET_ACTION) {
             if (ImGui::Button(label)) settings_act(s);
@@ -294,7 +296,8 @@ static void settings_window(void)
     ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(460, 0), ImGuiCond_FirstUseEver);
     char title[160];
-    SDL_snprintf(title, sizeof title, "%s" RECVX_VERSION "###f1", tr("Resident Evil Code: Veronica X  -  settings (F1)  -  "));
+    if (lang_rtl_text()) SDL_snprintf(title, sizeof title, RECVX_VERSION "%s###f1", tr("Resident Evil Code: Veronica X  -  settings (F1)  -  "));
+    else SDL_snprintf(title, sizeof title, "%s" RECVX_VERSION "###f1", tr("Resident Evil Code: Veronica X  -  settings (F1)  -  "));
     if (!ImGui::Begin(title, &visible)) { ImGui::End(); return; }
 
     if (ImGui::CollapsingHeader(tr("Display"), ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -868,7 +871,8 @@ static void import_window(void)
             }
             for (int l = 1; l < LANG_COUNT; l++)
                 if (lang_installed(l) && lang_dir(l) && !SDL_strncmp(lang_dir(l), dir, SDL_strlen(dir)))
-                    ImGui::BulletText("%s%s", lang_names[l], lang_has_subtitles(l) ? tr(" (cutscene subtitles)") : "");
+                    ImGui::BulletText("%s%s", lang_rtl_text() && lang_has_subtitles(l) ? tr(" (cutscene subtitles)") : lang_names[l],
+                                      !lang_has_subtitles(l) ? "" : lang_rtl_text() ? lang_names[l] : tr(" (cutscene subtitles)"));   /* (right to left: the note first) */
             ImGui::PopID();
             continue;
         }

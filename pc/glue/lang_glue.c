@@ -196,6 +196,9 @@ const unsigned short* pc_lang_mes(int which, const unsigned short* us)
 {
     return which >= 0 && which < LM_COUNT && info[font_lang].mes[which] ? info[font_lang].mes[which] : us;
 }
+/* the Arabic game over question is laid out for the European executable's Spanish place (bhMainGameOver: x 184, the US
+   264; its choice cursor at the US 248 / 328) */
+float pc_lang_mes_x(int which, float us) { return which == LM_RETRY && font_lang == LANG_AR && info[font_lang].mes[which] ? 184.0f : us; }
 
 /* ---------------------------------------------------------------- files */
 static int strcasecmp_(const char* a, const char* b)
@@ -395,6 +398,7 @@ static int text_font(void)
     return l == font_lang || l == LANG_EN || !other_font(l) ? font_lang : l;
 }
 int lang_font(void) { return text_font(); }
+int lang_rtl_text(void) { return data_lang() == LANG_AR; }
 
 /* a glyph's advance in language l's font */
 static float width_of(int l, int code)
@@ -433,8 +437,15 @@ float pc_glyph_w(int code)
     return code >= 0 && code < 126 ? FontSz[code] : 0;
 }
 
-/* a glyph's shift left of its place (the Japanese look-alikes: proportional) */
-static float shift_of(int l, int code) { return l == LANG_JA && code < LANG_JA_BASE && code < info[l].nw && info[l].ox[code] ? info[l].ox[code] - 32.0f : 0; }
+/* a glyph's shift left of its place (the Japanese look-alikes: proportional; the Arabic font's cells: their ink is at
+   about 10..27 of the 28, drawn 16 apart, so they are drawn 10 to the left: next to the US font's letters (ink 0..14)
+   neither overlapping nor apart, among themselves joined as before) */
+#define AR_SHIFT 10.0f
+static float shift_of(int l, int code)
+{
+    if (l == LANG_AR) return lang_cell(l, code) >= 0 ? -AR_SHIFT : 0;
+    return l == LANG_JA && code < LANG_JA_BASE && code < info[l].nw && info[l].ox[code] ? info[l].ox[code] - 32.0f : 0;
+}
 
 int pc_font_glyph(int code, void** texlist, float* dx)
 {
