@@ -50,7 +50,7 @@ static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t 
         f = pc_fopen(path, "rb");
     }
     if (!f) { snprintf(path, npath, "%s/%s", dir, name); f = pc_fopen(path, "rb"); src = LF_MODS; }
-    if (!f && (ld = pc_lang_file_dir())) {   /* the language's version of the file (lang.h; docs/LANGUAGES.md; its names upper case) */
+    if (!f && (ld = pc_lang_file_dir(name))) {   /* the language's version of the file (lang.h; docs/LANGUAGES.md; its names upper case) */
         char up[64];
         int i;
         for (i = 0; name[i] && i < 63; i++) up[i] = name[i] >= 'a' && name[i] <= 'z' ? name[i] - 32 : name[i];
@@ -158,8 +158,20 @@ int adx_afs_locate(int ptid, int fid, uint32_t* lsn, uint32_t* size)
     return 1;
 }
 
+/* bytes [off, off + n) of the disc file at sector lsn (also lang_glue.c) */
+int adx_disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n)
+{
+    uint8_t sec[SECTOR];
+    for (uint32_t k; n; dst = (char*)dst + k, off += k, n -= k) {
+        k = SECTOR - off % SECTOR < n ? SECTOR - off % SECTOR : n;
+        if (!cdvd_read_sectors(lsn + off / SECTOR, 1, sec)) return 0;
+        memcpy(dst, sec + off % SECTOR, k);
+    }
+    return 1;
+}
+
 /* ---------------- ADXF ---------------- */
-typedef struct { int used; uint32_t lsn, size, pos_sct, disc_from; int stat; FILE* host; } AdxfFile;   /* (disc_from: lang.h pc_lang_disc_part) */
+typedef struct { int used; uint32_t lsn, size, pos_sct; int stat; FILE* host; PcPart* parts; int nparts; } AdxfFile;   /* (parts: lang.h pc_lang_disc_parts) */
 static AdxfFile files[32];
 static int pt_stat[MAX_PT];
 
@@ -208,9 +220,9 @@ void* ADXF_OpenAfs(int ptid, int flid)
         snprintf(name, sizeof(name), "%s/%d", pt[ptid].name, flid);
         if ((hf = mod_open_path(name, &size, path, sizeof path, &src))) {
             f = open_host(hf, size);
-            if (f && src == LF_LANG && adx_afs_locate(ptid, flid, &lsn, &n) && n == size) {   /* a language's file, a part of it the disc's */
-                f->lsn = lsn;
-                f->disc_from = pc_lang_disc_part(name, hf, size, lsn);
+            if (f && src == LF_LANG && adx_afs_locate(ptid, flid, &lsn, &n) && (f->parts = malloc(PC_PARTS_MAX * sizeof(PcPart)))) {
+                f->lsn = lsn;   /* a language's file: parts of it the disc's */
+                if (!(f->nparts = pc_lang_disc_parts(name, hf, size, lsn, n, f->parts, PC_PARTS_MAX))) { free(f->parts); f->parts = NULL; }
             }
             return f;
         }
@@ -239,6 +251,9 @@ void ADXF_Close(void* h)
     if (!f) return;
     if (f->host) fclose(f->host);
     f->host = NULL;
+    free(f->parts);
+    f->parts = NULL;
+    f->nparts = 0;
     f->used = 0;
 }
 int ADXF_GetFsizeByte(void* h) { return h ? (int)((AdxfFile*)h)->size : 0; }
@@ -255,14 +270,11 @@ int ADXF_ReadNw32(void* h, int nsct, void* buf)
         fseek(f->host, (long)f->pos_sct * SECTOR, SEEK_SET);
         got = fread(buf, 1, want, f->host);
         memset((char*)buf + got, 0, want - got);
-        if (f->disc_from) {   /* from disc_from on, the disc's bytes */
-            uint32_t a = f->pos_sct * SECTOR, b = a + (uint32_t)got;
-            uint8_t sec[SECTOR];
-            for (uint32_t s = (a > f->disc_from ? a : f->disc_from) / SECTOR; s * SECTOR < b; s++) {
-                uint32_t lo = s * SECTOR > f->disc_from ? s * SECTOR : f->disc_from, hi = (s + 1) * SECTOR < b ? (s + 1) * SECTOR : b;
-                if (!cdvd_read_sectors(f->lsn + s, 1, sec)) break;
-                memcpy((char*)buf + (lo - a), sec + lo % SECTOR, hi - lo);
-            }
+        for (int k = 0; k < f->nparts; k++) {   /* the disc's bytes there (lang.h pc_lang_disc_parts) */
+            const PcPart* p = &f->parts[k];
+            uint64_t a = (uint64_t)f->pos_sct * SECTOR, lo = a > p->off ? a : p->off, hi = (uint64_t)p->off + p->len;
+            if (hi > a + got) hi = a + got;
+            if (lo < hi) adx_disc_read(f->lsn, p->disc + (uint32_t)(lo - p->off), (char*)buf + (lo - a), (uint32_t)(hi - lo));
         }
         f->stat = ADXF_STAT_READEND;
     } else

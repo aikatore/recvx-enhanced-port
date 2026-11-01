@@ -16,6 +16,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+int adx_disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n);   /* (audio/adx.c) */
+#define disc_read adx_disc_read
+
 void host_log(const char* fmt, ...);
 extern const unsigned char FontSz[126];
 extern unsigned int fstbl[24], fsheader[24];
@@ -228,33 +231,37 @@ void pc_lang_file_opened(const char* name, int src)
     }
 }
 
-/* ITEM1.AFS / ITEM2.AFS 145, the inventory's pictures: its words, the frame and the status screen (textures 0..2)
-   are the language's, the item pictures (3, 4: one palette bank for both) always the disc's. A translation that
-   redrew them gave each its own colours (the Turkish one): one showed with the other's. From the PLI chunk before
-   the fourth texture on, where the disc's file has the same chunk. */
-static int disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n);
-uint32_t pc_lang_disc_part(const char* name, FILE* f, uint32_t size, uint32_t lsn)
+/* the language's picture files (docs/LANGUAGES.md "Pictures"): textures that show the disc's picture (a re-encode, no
+   writing changed) are read from the disc, so an HD pack's replacements apply (and the item pictures' palette bank
+   stays as the game expects it: the Turkish patch redrew both item sheets with a palette each, one showed with the
+   other's colours). With Translated Pictures off the archives' pictures are the disc's files (pc_lang_file_dir) and
+   in SYSTEM.AFS/1 and /2 every texture but the fonts is the disc's. */
+int g_lang_pictures = 1;
+static int picture_file(const char* name)
 {
-    unsigned char h[32], g[32];
-    uint32_t o = 0, prev = 0, from = 0;
-    int tims = 0, pli = 0;
-    if (strcasecmp_(name, "ITEM1.AFS/145") && strcasecmp_(name, "ITEM2.AFS/145")) return 0;
-    while (pc_range_ok(o, 32, size) && !fseek(f, (long)o, SEEK_SET) && fread(h, 1, 32, f) == 32 && pc_rd32(h) != 0xFFFFFFFFu) {
-        if (!memcmp(h, "TIM2", 4) && ++tims == 4) { from = pli ? prev : o; break; }
-        if (!pc_range_ok(o + 32ull, pc_rd32(h + 4), size)) break;
-        pli = !memcmp(h, "PLI", 4);
-        prev = o;
-        o += 32 + pc_rd32(h + 4);
-    }
-    if (!from || fseek(f, (long)from, SEEK_SET) || fread(h, 1, 32, f) != 32 || !disc_read(lsn, from, g, 32) || memcmp(h, g, 32)) {
-        host_log("lang: %s: the item pictures are not where the disc has them: the language's\n", name);
-        return 0;
-    }
-    return from;
+    return !strncmp(name, "ADV.AFS/", 8) || !strncmp(name, "MRY.AFS/", 8) || !strncmp(name, "ITEM1.AFS/", 10) || !strncmp(name, "ITEM2.AFS/", 10);
+}
+int pc_lang_disc_parts(const char* name, FILE* f, uint32_t size, uint32_t lsn, uint32_t dsize, PcPart* out, int max)
+{
+    static char logged[32];
+    int sys1 = !strcasecmp_(name, "SYSTEM.AFS/1"), sys2 = !strcasecmp_(name, "SYSTEM.AFS/2"), n = 0;
+    uint64_t keep = sys1 ? (data_lang() == LANG_JA ? 0xF : 1) : sys2 ? 2 : 0;   /* the fonts (the computer's: /2's texture 1) */
+    unsigned char *l, *d;
+    if (!picture_file(name) && !sys1 && !sys2) return 0;
+    if (size > (16u << 20) || dsize > (16u << 20)) return 0;
+    l = malloc(size);
+    d = malloc(dsize);
+    if (l && d && !fseek(f, 0, SEEK_SET) && fread(l, 1, size, f) == size && adx_disc_read(lsn, 0, d, dsize))
+        n = pc_lang_parts(l, size, d, dsize, keep, !g_lang_pictures && (sys1 || sys2), out, max);
+    free(l);
+    free(d);
+    if (n && strcmp(logged, name)) host_log("lang: %s: %d picture%s from the disc\n", name, n, n == 1 ? "" : "s");
+    if (n) snprintf(logged, sizeof(logged), "%s", name);
+    return n;
 }
 
 /* the language of a file the game is about to read: its folder (NULL: the disc's) */
-const char* pc_lang_file_dir(void) { return lang_dir(data_lang()); }
+const char* pc_lang_file_dir(const char* name) { return !g_lang_pictures && picture_file(name) ? NULL : lang_dir(data_lang()); }
 
 /* ---------------------------------------------------------------- textures of our own
    A TIM2 in memory as one texture of a list of ours: drawn as a loaded texture is (Ps2TexLoad takes its TIM2 from
@@ -292,18 +299,6 @@ static int tim_chunks(unsigned char* d, uint32_t n, unsigned char** tims, int ma
         o += 32 + sz;
     }
     return k;
-}
-
-/* bytes [off, off + n) of the disc file at sector lsn */
-static int disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n)
-{
-    unsigned char sec[2048];
-    for (uint32_t k; n; dst = (char*)dst + k, off += k, n -= k) {
-        k = 2048 - off % 2048 < n ? 2048 - off % 2048 : n;
-        if (!cdvd_read_sectors(lsn + off / 2048, 1, sec)) return 0;
-        memcpy(dst, sec + off % 2048, k);
-    }
-    return 1;
 }
 
 /* ---------------------------------------------------------------- the font */
@@ -358,7 +353,6 @@ static XFont xf[2] = { { -1 }, { -1 } };
 static int xf_last;   /* the one used last (a third language replaces the other) */
 
 int cdvd_find_file(const char* path, uint32_t* lsn, uint32_t* size);
-static int disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n);
 /* the US font (English: the disc's SYSTEM.AFS/1, past the mods and language folders) into DMA slot `slot`; its size */
 static long us_font(int slot, unsigned char** b)
 {

@@ -72,11 +72,14 @@ void pc_glyphs_utf8(const unsigned short* g, char* out, int n);
 
 /* game thread hooks (decomp, TARGET_PC; audio/adx.c; libgraph.c) */
 enum { LF_DISC, LF_LANG, LF_MODS, LF_BIORAND };     /* where a file the game opens comes from */
-const char* pc_lang_file_dir(void);                 /* the folder of the language's files (NULL: none) */
+const char* pc_lang_file_dir(const char* name);     /* the folder of the language's version of the file (NULL: none) */
 void pc_lang_file_opened(const char* name, int src); /* a file the game opens (by name or "ARCHIVE.AFS/n"), from LF_* */
-/* a language's file f of size bytes, the same size as its disc entry (at sector lsn): the offset from which the
-   disc's bytes are read instead (0: none). ITEM1.AFS / ITEM2.AFS 145: the item pictures */
-uint32_t pc_lang_disc_part(const char* name, FILE* f, uint32_t size, uint32_t lsn);
+/* the language's file f (size bytes) of a disc entry (dsize bytes at sector lsn): the parts read from the disc instead
+   (pc_parse.h pc_lang_parts: its pictures without the language's writing; with Translated Pictures off, SYSTEM.AFS/1
+   and /2 but the fonts), at most max; their count */
+struct PcPart;
+int pc_lang_disc_parts(const char* name, FILE* f, uint32_t size, uint32_t lsn, uint32_t dsize, struct PcPart* out, int max);
+extern int g_lang_pictures;                         /* Translated Pictures (ini translated_pictures): 0 the disc's pictures */
 float pc_font_width(unsigned short code);           /* the language font's width, < 0: the game's own */
 float pc_font_space(void);                          /* the advance of a space (0xFF01) at scale 1: 14, Japanese 28 */
 int  pc_font_glyph(int code, void** texlist, float* dx);   /* bhDispFont: the cell to draw (-1 none); *texlist another font's; *dx left shift */

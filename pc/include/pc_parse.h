@@ -90,6 +90,17 @@ uint32_t pc_mes_len(const uint8_t* t, uint32_t max);
    not whole there (a language import before the 0xFF03 0xFFFF fix cut the text at that operand) */
 uint32_t pc_mes_at(const uint8_t* t, uint32_t size, uint32_t i);
 
+/* ---------------------------------------------------------------- a language's pictures (lang_glue.c, docs/LANGUAGES.md)
+   A language's file l (nl bytes) against the disc's d (nd bytes), texture by texture: the TIM2 files in both (raw, or
+   a PVP chunk's payload), the k-th of l paired with the k-th of d (the same count, the same geometry). A texture is read
+   from the disc when it shows the same picture (every pixel within 8 of the disc's colour, 16 of its alpha: a
+   re-encode, no writing changed), or, with all, whenever it pairs (but the textures of keep, a bit mask by index: the
+   fonts); never when that changes a palette bank (the PLI chunk before it) that a texture staying the language's
+   draws with. out: the parts to read from the disc (offset in l, offset in d, length). Returns their count. */
+typedef struct PcPart { uint32_t off, disc, len; } PcPart;
+#define PC_PARTS_MAX 64
+int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, uint64_t keep, int all, PcPart* out, int max);
+
 #ifdef __cplusplus
 }
 #endif
