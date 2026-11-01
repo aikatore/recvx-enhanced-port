@@ -3,6 +3,7 @@
  * keeps running but receives no pad input. Settings are applied immediately and saved
  * to <save_dir>/recvx.ini.
  */
+#include <stdarg.h>
 #include "../ps2_platform.h"
 extern "C" {
 #include "../audio/audio.h"
@@ -547,6 +548,26 @@ static void coop_trade(void)
     if (cs.trade_msg[0]) ImGui::TextDisabled("%s", cs.trade_msg);
 }
 
+/* ImGui::TextWrapped, but an Arabic text (in display order: lang.h lang_shape) wrapped from its right end, where it
+   starts (ImGui has no right-to-left layout) */
+static float rtl_width(const char* s, int n, void*) { return ImGui::CalcTextSize(s, s + n).x; }
+static void wrapped(const char* fmt, ...)
+{
+    char b[2048];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(b, sizeof(b), fmt, ap);
+    va_end(ap);
+    if (!lang_rtl(b)) { ImGui::TextWrapped("%s", b); return; }
+    float w = ImGui::GetContentRegionAvail().x;
+    for (int len = (int)strlen(b); len > 0;) {
+        int cut = lang_rtl_cut(b, len, w, rtl_width, NULL);
+        ImGui::TextUnformatted(b + cut, b + len);
+        for (len = cut; len > 0 && b[len - 1] == ' '; len--) {}
+    }
+}
+
+
 static void coop_window(void)
 {
     CoopState* c = &g_coop;
@@ -694,7 +715,7 @@ static void coop_window(void)
                                   "They can rejoin with the same address or room code."));
         }
     }
-    ImGui::TextWrapped("%s", cs.status[0] ? coop_shown(cs.status) : tr("Not connected"));
+    wrapped("%s", cs.status[0] ? coop_shown(cs.status) : tr("Not connected"));
     if (cs.state != COOP_OFF && cs.host && cs.code[0]) ImGui::Text(tr("Join code: %.4s-%.4s"), cs.code, cs.code + 4);
     if (cs.state != COOP_OFF && cs.host && cs.room[0]) {
         char room[16];
@@ -818,15 +839,15 @@ static void import_window(void)
     ImGui::SetNextWindowPos(ImVec2(60, 60), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(820, 560), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin(tr("Import (F9)"), &import_visible)) { ImGui::End(); return; }
-    ImGui::TextWrapped("%s", tr("Import from your own disc images: character models (Character Model) and languages (Language)."));
+    wrapped("%s", tr("Import from your own disc images: character models (Character Model) and languages (Language)."));
     for (int s = 0; s < IMPORT_SOURCES; s++) {
         const ImportSource* src = &import_sources[s];
         char label[128], dir[1100];
         SDL_snprintf(label, sizeof(label), "%s (%s)", src->title, src->serial);
         if (!ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen)) continue;
         ImGui::PushID(s);
-        if (src->help) ImGui::TextWrapped("%s", tr(src->help));   /* (the Russian translation's author) */
-        ImGui::TextWrapped(tr("Disc image: %s"), g_import.iso[s][0] ? g_import.iso[s] : tr("(none chosen)"));
+        if (src->help) wrapped("%s", tr(src->help));   /* (the Russian translation's author) */
+        wrapped(tr("Disc image: %s"), g_import.iso[s][0] ? g_import.iso[s] : tr("(none chosen)"));
         ImGui::BeginDisabled(running != 0);
         if (ImGui::Button(tr("Choose Disc Image..."))) {
             static const SDL_DialogFileFilter filters[] = { { "PS2 disc image (*.iso)", "iso" }, { "All files", "*" } };
@@ -843,7 +864,7 @@ static void import_window(void)
                 char ov[64];
                 SDL_snprintf(ov, sizeof(ov), "%d / %d", pg->done, pg->total);
                 ImGui::ProgressBar(pg->total ? (float)pg->done / pg->total : 0.0f, ImVec2(-1, 0), ov);
-                ImGui::TextWrapped("%s", pg->phase);
+                wrapped("%s", pg->phase);
             }
             for (int l = 1; l < LANG_COUNT; l++)
                 if (lang_installed(l) && lang_dir(l) && !SDL_strncmp(lang_dir(l), dir, SDL_strlen(dir)))
@@ -871,7 +892,7 @@ static void import_window(void)
             char ov[64];
             SDL_snprintf(ov, sizeof(ov), "%d / %d", pg->done, pg->total);
             ImGui::ProgressBar(pg->total ? (float)pg->done / pg->total : 0.0f, ImVec2(-1, 0), ov);
-            ImGui::TextWrapped("%s", pg->phase);
+            wrapped("%s", pg->phase);
         }
         int ok = 0, players = 0, failed = 0;
         for (int i = 0; i < n[s]; i++) {
@@ -928,10 +949,13 @@ static void import_window(void)
 }
 
 /* our texts in other languages (lang.h): the default font has ASCII and Latin-1 (French, German, Spanish, Portuguese); the
-   letters of Japanese, Russian and Turkish come from a font of the system, merged in once such a language is chosen
-   (none found: they stay missing) */
+   letters of Japanese, Russian, Turkish and Arabic (its presentation forms: our Arabic texts are in display order,
+   lang_shape) come from a font of the system, merged in once such a language is chosen (none found: they stay missing) */
 static void lang_fonts(void)
 {
+    static const char* const ar[] = { "C:/Windows/Fonts/tahoma.ttf", "C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/segoeui.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/noto/NotoSansArabic-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf", NULL };
     static const char* const ja[] = { "C:/Windows/Fonts/meiryo.ttc", "C:/Windows/Fonts/msgothic.ttc", "C:/Windows/Fonts/YuGothM.ttc",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc", NULL };
@@ -939,11 +963,17 @@ static void lang_fonts(void)
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf", NULL };
     static bool done[LANG_COUNT];
     int l = lang_installed(g_lang) ? g_lang : LANG_EN;
-    if ((l != LANG_JA && l != LANG_RU && l != LANG_TR) || done[l]) return;   /* (Turkish: ğ ı İ ş, Latin Extended-A) */
+    if ((l != LANG_JA && l != LANG_RU && l != LANG_TR && l != LANG_AR) || done[l]) return;   /* (Turkish: ğ ı İ ş, Latin Extended-A) */
     done[l] = true;
     ImGuiIO& io = ImGui::GetIO();
     if (io.Fonts->Fonts.empty()) io.Fonts->AddFontDefault();
-    for (const char* const* p = l == LANG_JA ? ja : ru; *p; p++) {
+    const char* test = SDL_getenv("RECVX_TEST_OVERLAY_FONT");   /* test aid: a font file to try first */
+    if (test && *test) {
+        ImFontConfig c;
+        c.MergeMode = true;
+        if (SDL_GetPathInfo(test, NULL) && io.Fonts->AddFontFromFileTTF(test, 13.0f, &c)) { host_log("overlay: the letters of %s from %s\n", lang_codes[l], test); return; }
+    }
+    for (const char* const* p = l == LANG_JA ? ja : l == LANG_AR ? ar : ru; *p; p++) {
         ImFontConfig c;
         c.MergeMode = true;
         if (SDL_GetPathInfo(*p, NULL) && io.Fonts->AddFontFromFileTTF(*p, 13.0f, &c)) { host_log("overlay: the letters of %s from %s\n", lang_codes[l], *p); return; }

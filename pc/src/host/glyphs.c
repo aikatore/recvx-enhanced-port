@@ -56,6 +56,45 @@ static const struct { unsigned short u, code; } pt_letters[] = {
     { 0xE9, 104 }, { 0xED, 105 }, { 0xFA, 106 }, { 0xE7, 107 }, { 0xC7, 108 }, { 0xB0, 59 }, { 0xAE, 95 } };
 #define PT_SPACER 94   /* the blank after Ç (108: no width) */
 
+/* the Arabic font (the fan translation's, in the European font's place): its cells per letter as the Unicode
+   presentation forms order them (isolated, final, initial, medial; 0: the font has none), the first form's code point;
+   no Latin letters (the US font draws them: codes below LANG_AR_BASE) */
+static const struct { unsigned short u, pf; unsigned char cell[4]; } ar_letters[] = {
+    { 0x621, 0xFE80, { 10 } },                 { 0x622, 0xFE81, { 0, 145 } },           { 0x623, 0xFE83, { 13, 144 } },
+    { 0x624, 0xFE85, { 128, 129 } },           { 0x625, 0xFE87, { 8, 146 } },           { 0x626, 0xFE89, { 139, 140, 142, 141 } },
+    { 0x627, 0xFE8D, { 11, 143 } },            { 0x628, 0xFE8F, { 147, 31, 148, 149 } }, { 0x629, 0xFE93, { 126, 127 } },
+    { 0x62A, 0xFE95, { 32, 35, 33, 34 } },     { 0x62B, 0xFE99, { 36, 39, 37, 38 } },   { 0x62C, 0xFE9D, { 40, 43, 41, 42 } },
+    { 0x62D, 0xFEA1, { 44, 47, 45, 46 } },     { 0x62E, 0xFEA5, { 48, 51, 49, 50 } },   { 0x62F, 0xFEA9, { 71, 53 } },
+    { 0x630, 0xFEAB, { 54, 55 } },             { 0x631, 0xFEAD, { 56, 57 } },           { 0x632, 0xFEAF, { 58, 59 } },
+    { 0x633, 0xFEB1, { 60, 7, 61, 62 } },      { 0x634, 0xFEB5, { 64, 67, 65, 66 } },   { 0x635, 0xFEB9, { 68, 52, 69, 70 } },
+    { 0x636, 0xFEBD, { 72, 75, 73, 74 } },     { 0x637, 0xFEC1, { 76, 79, 77, 78 } },   { 0x638, 0xFEC5, { 80, 83, 81, 82 } },
+    { 0x639, 0xFEC9, { 84, 87, 85, 86 } },     { 0x63A, 0xFECD, { 88, 91, 89, 90 } },   { 0x641, 0xFED1, { 92, 95, 93, 94 } },
+    { 0x642, 0xFED5, { 96, 99, 97, 98 } },     { 0x643, 0xFED9, { 100, 103, 101, 102 } }, { 0x644, 0xFEDD, { 104, 107, 105, 106 } },
+    { 0x645, 0xFEE1, { 108, 111, 109, 110 } }, { 0x646, 0xFEE5, { 112, 115, 113, 114 } }, { 0x647, 0xFEE9, { 116, 119, 117, 118 } },
+    { 0x648, 0xFEED, { 120, 121 } },           { 0x649, 0xFEEF, { 130, 131 } },         { 0x64A, 0xFEF1, { 122, 125, 123, 124 } },
+};
+#define N_AR (int)(sizeof(ar_letters) / sizeof(ar_letters[0]))
+/* lam + alef: one glyph (isolated, final) */
+static const struct { unsigned short alef, pf; unsigned char cell[2]; } ar_lamalef[] = {
+    { 0x622, 0xFEF5, { 138, 0 } }, { 0x623, 0xFEF7, { 134, 135 } }, { 0x625, 0xFEF9, { 136, 137 } }, { 0x627, 0xFEFB, { 132, 133 } } };
+/* signs: the Arabic question mark, tatweel; ASCII in the Arabic font's own cells (the same as the US codes) */
+static const struct { unsigned short u; unsigned char cell; } ar_signs[] = { { 0x61F, 9 }, { 0x640, 63 } };
+static int ar_own(int code) { return code == 1 || (code >= 2 && code <= 6) || (code >= 14 && code <= 30); }   /* ! signs . / 0-9 : signs */
+
+/* the Arabic font's cell of a character (presentation form, base letter: its isolated form), 0 none */
+static int ar_cell(unsigned c)
+{
+    for (int i = 0; i < N_AR; i++) {
+        if (c == ar_letters[i].u) return ar_letters[i].cell[0] ? ar_letters[i].cell[0] : ar_letters[i].cell[1];
+        if (c >= ar_letters[i].pf && c < ar_letters[i].pf + (ar_letters[i].cell[2] ? 4u : 2u)) return ar_letters[i].cell[c - ar_letters[i].pf];
+    }
+    for (int i = 0; i < 4; i++) if (c >= ar_lamalef[i].pf && c < ar_lamalef[i].pf + 2u) return ar_lamalef[i].cell[c - ar_lamalef[i].pf];
+    for (size_t i = 0; i < sizeof(ar_signs) / sizeof(ar_signs[0]); i++) if (ar_signs[i].u == c) return ar_signs[i].cell;
+    return c >= 0x660 && c <= 0x669 ? 16 + (int)(c - 0x660) : 0;   /* (Arabic-Indic digits: the font's 0-9) */
+}
+/* the letter to show instead of a form the font lacks (the alef madda alone, final lam-alef madda: plain alef / lam) */
+static unsigned ar_plain(unsigned c) { return c == 0xFE81 || c == 0x622 ? 0x627 : c == 0xFEF6 ? 0xFEFC : 0; }
+
 /* the Japanese font's cells in order (\001: a sign without a character: S. T. A. R. W. B. O., the biohazard sign,
    crown, heart, spade, Umbrella, "AA") */
 static const char ja_cells[] =
@@ -144,6 +183,7 @@ static int ja_find(unsigned u)
 
 int lang_cell(int l, int code)
 {
+    if (l == LANG_AR) return code >= LANG_AR_BASE ? (code - LANG_AR_BASE < 324 ? code - LANG_AR_BASE : -1) : ar_own(code) ? code : -1;   /* (-1: the US font's) */
     if (l != LANG_JA) return code;
     ja_init();
     if (code >= LANG_JA_BASE) return code - LANG_JA_BASE < JA_CELLS ? code - LANG_JA_BASE : -1;
@@ -170,6 +210,11 @@ static int code_of(int l, unsigned c, unsigned* plain)
         if (c == '[' || c == ']' || c == '~') { *plain = c == '[' ? '(' : c == ']' ? ')' : '-'; return -1; }
     }
     if (c > 32 && c < 127) return (int)c - 32;
+    if (l == LANG_AR) {
+        int cell = ar_cell(c);
+        if (cell) return LANG_AR_BASE + cell;
+        if ((*plain = c == 0x60C ? ',' : ar_plain(c))) return -1;   /* (the Arabic comma: the Latin one) */
+    }
     if (l == LANG_TR) {
         for (size_t i = 0; i < sizeof(tr_letters) / sizeof(tr_letters[0]); i++) if (tr_letters[i].u == c) return tr_letters[i].code;
         for (size_t i = 0; i < sizeof(tr_lost) / sizeof(tr_lost[0]); i++) lost |= tr_lost[i] == c;   /* (its cell is a Turkish letter: plain) */
@@ -206,8 +251,10 @@ int lang_glyph(int l, const char** s)
 
 void lang_missing(int l, const char* s, char* out, int n)
 {
+    static char sh[4096];   /* (pure, single threaded: the tests and the tools) */
     int k = 0;
     out[0] = 0;
+    if (l == LANG_AR) s = lang_shape(s, sh, sizeof(sh));   /* (the forms the text shows) */
     while (*s) {
         const char* a = s;
         unsigned c = utf8_next(&s), plain;
@@ -232,6 +279,14 @@ unsigned lang_char(int l, int code)
         for (size_t i = 0; i < sizeof(pt_letters) / sizeof(pt_letters[0]); i++) if (pt_letters[i].code == code) return pt_letters[i].u;
         if (code == 61 || code == PT_SPACER || (code > 108 && code <= 112)) return code == 61 ? ' ' : 0;
     }
+    if (l == LANG_AR && code >= LANG_AR_BASE) {
+        int cell = code - LANG_AR_BASE;
+        for (int i = 0; i < N_AR; i++)
+            for (int k = 0; k < 4; k++) if (ar_letters[i].cell[k] == cell) return ar_letters[i].pf + k;
+        for (int i = 0; i < 4; i++) for (int k = 0; k < 2; k++) if (ar_lamalef[i].cell[k] == cell) return ar_lamalef[i].pf + k;
+        for (size_t i = 0; i < sizeof(ar_signs) / sizeof(ar_signs[0]); i++) if (ar_signs[i].cell == cell) return ar_signs[i].u;
+        return cell == 12 ? 0xFE87 : cell == 1 || (cell >= 14 && cell <= 26) ? (unsigned)cell + 32 : '?';
+    }
     if (code < 95) return code ? (unsigned)code + 32 : ' ';
     if (l == LANG_RU) {
         for (int i = 0; i < 32; i++) { if (ru_upper[i] == code) return 0x410 + i; if (ru_lower[i] == code) return 0x430 + i; }
@@ -240,7 +295,157 @@ unsigned lang_char(int l, int code)
     }
     if (l == LANG_PT) return '?';
     if (l == LANG_TR) for (size_t i = 0; i < sizeof(tr_letters) / sizeof(tr_letters[0]); i++) if (tr_letters[i].code == code) return tr_letters[i].u;
-    if (l == LANG_EN || l == LANG_JA) return code == 95 ? 0xAE : '?';   /* (the US codes) */
+    if (l == LANG_EN || l == LANG_JA || l == LANG_AR) return code == 95 ? 0xAE : '?';   /* (the US codes) */
     for (int i = 0; i < N_ACCENTS; i++) if (accents[i].code == code) return accents[i].u;
     return '?';
+}
+
+/* ---------------------------------------------------------------- Arabic display order (lang.h lang_shape)
+   ponytail: a small subset of the Unicode bidi algorithm and of Arabic shaping, enough for our menu texts: one
+   right-to-left paragraph per line, strong classes only (Arabic R; Latin letters, digits, printf placeholders L; the
+   rest neutral: L between two L, else R), no explicit embeddings, no number-separator rules, mirrored brackets ()[]{}<>
+   only; diacritics dropped (the font has none); at most AR_LINE characters a line (the rest cut). Upgrade: FriBidi /
+   HarfBuzz if the texts ever need more. Main thread (tr_init) and the tests: static buffers. */
+#define AR_LINE 1024
+static int ar_index(unsigned c) { for (int i = 0; i < N_AR; i++) if (ar_letters[i].u == c) return i; return -1; }
+/* joining: 2 both sides (dual), 1 to the letter before only (right-joining), 0 none */
+static int ar_join(unsigned c)
+{
+    int i = ar_index(c);
+    if (c == 0x640) return 2;   /* (tatweel) */
+    if (i < 0 || c == 0x621) return 0;
+    return ar_letters[i].cell[2] ? 2 : 1;   /* (the font's forms: alef maksura only isolated and final) */
+}
+static int ar_strong(unsigned c) { return (c >= 0x600 && c <= 0x6FF) || (c >= 0xFB50 && c <= 0xFDFF) || (c >= 0xFE70 && c <= 0xFEFF); }
+
+static int put_utf8(char* o, int k, int n, unsigned c)
+{
+    char b[4];
+    int m = 1;
+    if (c < 0x80) b[0] = (char)c;
+    else if (c < 0x800) { b[0] = (char)(0xC0 | c >> 6); b[1] = (char)(0x80 | (c & 0x3F)); m = 2; }
+    else { b[0] = (char)(0xE0 | c >> 12); b[1] = (char)(0x80 | (c >> 6 & 0x3F)); b[2] = (char)(0x80 | (c & 0x3F)); m = 3; }
+    if (k + m >= n) return k;
+    memcpy(o + k, b, (size_t)m);
+    return k + m;
+}
+
+/* one line (len bytes of s) in display order into o from k (n bytes); returns the new end */
+static int shape_line(const char* s, int len, char* o, int k, int n)
+{
+    static unsigned cp[AR_LINE];
+    static char cls[AR_LINE];
+    const char* e = s + len;
+    int m = 0, any = 0;
+    while (s < e && m < AR_LINE) {   /* the code points, without diacritics */
+        unsigned c = utf8_next(&s);
+        if ((c >= 0x64B && c <= 0x65F) || c == 0x670) continue;
+        any |= ar_strong(c);
+        cp[m++] = c;
+    }
+    if (!any) { for (int i = 0; i < m; i++) k = put_utf8(o, k, n, cp[i]); return k; }
+    for (int i = 0, before = 0; i < m; i++) {   /* the forms (logical order: the letter before, `before` its joining, and after) */
+        int j = ar_join(cp[i]), ix = ar_index(cp[i]), prev = before == 2 && j, next, f;
+        before = j;
+        if (ix < 0) continue;
+        if (cp[i] == 0x644 && i + 1 < m) {   /* lam-alef: one glyph */
+            int a = -1;
+            for (int t = 0; t < 4; t++) if (ar_lamalef[t].alef == cp[i + 1]) a = t;
+            if (a >= 0) { cp[i] = ar_lamalef[a].pf + (unsigned)prev; cp[++i] = 0; before = 1; continue; }
+        }
+        next = j == 2 && i + 1 < m && ar_join(cp[i + 1]);
+        f = prev && next ? 3 : prev ? 1 : next ? 2 : 0;
+        cp[i] = ar_letters[ix].pf + (unsigned)f;
+    }
+    {   /* (without the lam-alefs' alefs) */
+        int w = 0;
+        for (int i = 0; i < m; i++) if (cp[i]) cp[w++] = cp[i];
+        m = w;
+    }
+    for (int i = 0; i < m;) {   /* classes: R Arabic, L Latin letters, digits, other letters and placeholders, N the rest */
+        int len_ = 1;
+        unsigned c = cp[i];
+        if (c == '%' && i + 1 < m) {   /* %[flags][width][.precision][length]conversion: one L */
+            int j = i + 1;
+            while (j < m && cp[j] && cp[j] < 128 && strchr("-+ #0123456789.*", (int)cp[j])) j++;
+            while (j < m && cp[j] && cp[j] < 128 && strchr("hlLqjzt", (int)cp[j])) j++;
+            if (j < m && cp[j] < 128 && (((cp[j] | 32) >= 'a' && (cp[j] | 32) <= 'z') || cp[j] == '%')) len_ = j + 1 - i;
+        }
+        if (len_ > 1) cls[i] = 'L';
+        else if (ar_strong(c)) cls[i] = 'R';
+        else if (c >= 128 || ((c | 32) >= 'a' && (c | 32) <= 'z') || (c >= '0' && c <= '9')) cls[i] = 'L';
+        else cls[i] = 'N';
+        for (int t = 1; t < len_; t++) cls[i + t] = 'L';
+        i += len_;
+    }
+    {   /* bracket pairs (bidi N0, simplified): both sides R if they enclose Arabic, L if they enclose only Latin after Latin */
+        static const char br[] = "()[]{}";
+        int st[16], d = 0;
+        for (int i = 0; i < m; i++) {
+            const char* p = cp[i] && cp[i] < 128 && cls[i] == 'N' ? strchr(br, (int)cp[i]) : NULL;
+            int o, r = 0, l = 0, before = 'R';
+            if (!p) continue;
+            if (!((p - br) & 1)) { if (d < 16) st[d++] = i; continue; }
+            while (d > 0 && cp[st[d - 1]] != (unsigned char)p[-1]) d--;   /* (its opener; unmatched ones dropped) */
+            if (!d) continue;
+            o = st[--d];
+            for (int t = o + 1; t < i; t++) { r |= cls[t] == 'R'; l |= cls[t] == 'L'; }
+            for (int t = o - 1; t >= 0; t--) if (cls[t] != 'N') { before = cls[t]; break; }
+            if (r || l) cls[o] = cls[i] = r ? 'R' : before == 'L' ? 'L' : 'R';
+        }
+    }
+    for (int i = 0; i < m;) {   /* neutrals: L between two L, else R (the paragraph's) */
+        int j = i, l = 'R', r = 'R';
+        if (cls[i] != 'N') { i++; continue; }
+        while (j < m && cls[j] == 'N') j++;
+        for (int t = i - 1; t >= 0; t--) if (cls[t] != 'N') { l = cls[t]; break; }
+        if (j < m) r = cls[j];
+        for (int t = i; t < j; t++) cls[t] = l == 'L' && r == 'L' ? 'L' : 'R';
+        i = j;
+    }
+    for (int end = m; end > 0;) {   /* the runs from the last one: L as it is, R reversed (brackets mirrored) */
+        int start = end;
+        while (start > 0 && cls[start - 1] == cls[end - 1]) start--;
+        if (cls[end - 1] == 'L') for (int i = start; i < end; i++) k = put_utf8(o, k, n, cp[i]);
+        else
+            for (int i = end - 1; i >= start; i--) {
+                static const char mir[] = "()[]{}<>";
+                const char* p = cp[i] && cp[i] < 128 ? strchr(mir, (int)cp[i]) : NULL;
+                k = put_utf8(o, k, n, p ? (unsigned)(unsigned char)mir[(p - mir) ^ 1] : cp[i]);
+            }
+        end = start;
+    }
+    return k;
+}
+
+char* lang_shape(const char* s, char* out, int n)
+{
+    int k = 0;
+    if (n <= 0) return out;
+    while (*s) {
+        const char* nl = strchr(s, '\n');
+        int len = nl ? (int)(nl - s) : (int)strlen(s);
+        k = shape_line(s, len, out, k, n);
+        s += len;
+        if (*s == '\n') { if (k + 1 < n) out[k++] = '\n'; s++; }
+    }
+    out[k] = 0;
+    return out;
+}
+
+int lang_rtl(const char* s)
+{
+    for (; *s; s++) if ((unsigned char)s[0] == 0xEF && (unsigned char)s[1] >= 0xB9 && (unsigned char)s[1] <= 0xBB) return 1;   /* (U+FE40..U+FEFF) */
+    return 0;
+}
+
+int lang_rtl_cut(const char* s, int len, float w, float (*width)(const char* s, int n, void* ud), void* ud)
+{
+    int last = 0;
+    for (int i = 0; i < len; i++) {
+        if (s[i] == ' ' || (i && s[i - 1] != ' ')) continue;
+        last = i;
+        if (width(s + i, len - i, ud) <= w) return i;
+    }
+    return last;   /* (one word wider than w: alone) */
 }
