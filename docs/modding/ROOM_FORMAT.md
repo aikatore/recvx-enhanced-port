@@ -437,6 +437,7 @@ rooms load and draw as before. The compiler budgets follow from them
 |---|---|---|---|
 | Room arena (`freemem`, `sys->memp..endp`) | 12.25 MB block, ~11.7 MB arena, ~10 MB free on arrival | **+64 MB** (`PC_ARENA_EXTRA`), ~74.6 MB free on arrival | no check, overwrites player data and vertex buffers / fatal error with sizes |
 | Room load | packed (top) + expanded (bottom) at once | packed + expanded must fit the free arena | |
+| Texture swizzle scratch (`Ps2_PXLCONV`, every texture over 128x128) | the arena's top 320 KB | own 1 MB block (`main.c`): the port's models load textures at any frame, also while a room file is read | a texture loaded during a room read damages it |
 | After load | file up to the texture section + runtime allocations; the map/file/option screens copy the room model's textures above `memp` | same | |
 | Vertex work buffer (64 B per vertex of the node being drawn) | 5120 entries | **8192** (`PC_VERTEX_EXTRA`) | writes into sound memory / node not drawn |
 | Vertex chunk | one per node; u16 size: <= 8189 vertices | unchanged | |

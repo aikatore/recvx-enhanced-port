@@ -16,6 +16,7 @@
 - **Claire and Chris in the cutscene cast**: the cutscene cast no longer gives Claire or Chris a random model.
   In every cutscene they look the way you play them, also while you play the other one, for example Chris when
   his part begins.
+- **Retry after a game over**: choosing Yes no longer crashes in rooms with an extra item box or herb planter.
 
 ## 0.7.2 (2026-11-01)
 
