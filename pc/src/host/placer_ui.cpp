@@ -97,7 +97,7 @@ static int pick(ImVec2 m)
     ImVec2 o = W(g_placer.gz_o);
     int h = -1;
     float best = 8.0f, d;
-    if ((d = hypotf(m.x - o.x, m.y - o.y)) < 9.0f) return H_FREE;
+    if ((d = sqrtf((m.x - o.x) * (m.x - o.x) + (m.y - o.y) * (m.y - o.y))) < 9.0f) return H_FREE;
     for (int k = 0; k < 3; k++)
         if ((d = dist_seg(m, o, W(g_placer.gz_axis[k]))) < best) { best = d; h = H_X + k; }
     for (int k = 0; k < 3; k++) {
@@ -255,7 +255,7 @@ static void keys(Placement* p)
     struct { ImGuiKey key; float sx, sy; } dirs[4] = { { ImGuiKey_RightArrow, 1, 0 }, { ImGuiKey_LeftArrow, -1, 0 }, { ImGuiKey_UpArrow, 0, -1 }, { ImGuiKey_DownArrow, 0, 1 } };
     for (auto& d : dirs) {
         if (!ImGui::IsKeyPressed(d.key, true)) continue;
-        float lx = hypotf(vx.x, vx.y), lz = hypotf(vz.x, vz.y);
+        float lx = sqrtf(vx.x * vx.x + vx.y * vx.y), lz = sqrtf(vz.x * vz.x + vz.y * vz.y);   /* (not hypotf: GLIBC_2.35 on i686, past the release floor 2.34) */
         float dx = lx > 0 ? (vx.x * d.sx + vx.y * d.sy) / lx : 0, dz = lz > 0 ? (vz.x * d.sx + vz.y * d.sy) / lz : 0;
         if (fabsf(dx) >= fabsf(dz)) p->pos[0] += dx > 0 ? step : -step;
         else p->pos[2] += dz > 0 ? step : -step;
