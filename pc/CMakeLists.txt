@@ -294,6 +294,9 @@ add_test(NAME cast COMMAND test_cast)
 add_executable(test_placer tests/test_placer.c src/host/placer.c src/host/extras.c src/host/fileio.c)
 target_link_libraries(test_placer PRIVATE m)
 add_test(NAME placer COMMAND test_placer ${CMAKE_CURRENT_BINARY_DIR})
+# the --dev cutscene log's list (pc/src/host/devcine.c): repeats, the oldest dropped, clear, text and export
+add_executable(test_devcine tests/test_devcine.c src/host/devcine.c src/host/fileio.c)
+add_test(NAME devcine COMMAND test_devcine ${CMAKE_CURRENT_BINARY_DIR})
 
 # co-op networking (pc/src/net): a busy port, the port mapping started and stopped again
 add_executable(test_net tests/test_net.c src/net/net.c src/net/portmap.c)

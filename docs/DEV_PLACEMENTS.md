@@ -4,7 +4,7 @@ A developer tool for putting extra item boxes, herbs and other objects into room
 the input of the gameplay option **Extra Item Boxes and Herbs** ([below](#extra-item-boxes-and-herbs)),
 useful with the item and enemy randomizers. The placer's own models are **drawn only**: they cannot be
 used, they are not in the game's save, the scripts and collision never see them, and co-op does not
-send them. English only.
+send them. English only. The other `--dev` tool, the cutscene log (F6): [DEV_TOOLS.md](DEV_TOOLS.md).
 
 Code: `pc/src/host/placer.c` (catalogue, file), `pc/src/host/placer_ui.cpp` (window, gizmo,
 keys; render thread), `pc/glue/placer_glue.c` (loading, drawing, projection; game thread),

@@ -24,6 +24,7 @@ extern "C" {
 #include "lobby.h"
 #include "../import/import.h"
 #include "lang.h"
+#include "devcine.h"
 #include <SDL3/SDL.h>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
@@ -38,7 +39,7 @@ extern "C" void pad_set_game_input_enabled(int on);
 extern "C" void placer_poll(int f2_open), placer_overlay(void);   /* --dev object placer (placer_ui.cpp, English only) */
 
 static SDL_Window* win;
-static bool ready, visible, cheats_visible, coop_visible, import_visible;
+static bool ready, visible, cheats_visible, coop_visible, import_visible, devcine_visible;
 static bool tps_key_wait;   /* the next key pressed becomes the third-person toggle key */
 
 void overlay_init(void* window, void* gl_context)
@@ -51,8 +52,9 @@ void overlay_init(void* window, void* gl_context)
     ImGui_ImplSDL3_InitForOpenGL(win, (SDL_GLContext)gl_context);
     ImGui_ImplOpenGL3_Init("#version 330 core");
     ready = true;
-    const char* show = SDL_getenv("RECVX_SHOW_OVERLAY");   /* debugging aid (screenshots): 1 F1, 2 the cheats (F2), 3 the co-op window, 4 import (F9) */
-    visible = show && strcmp(show, "3") && strcmp(show, "2") && strcmp(show, "4");
+    const char* show = SDL_getenv("RECVX_SHOW_OVERLAY");   /* debugging aid (screenshots): 1 F1, 2 the cheats (F2), 3 the co-op window, 4 import (F9), 5 the --dev cutscene log (F6) */
+    visible = show && strcmp(show, "3") && strcmp(show, "2") && strcmp(show, "4") && strcmp(show, "5");
+    devcine_visible = show && !strcmp(show, "5");
     import_visible = show && !strcmp(show, "4");
     cheats_visible = show && !strcmp(show, "2");
     coop_visible = show && !strcmp(show, "3");
@@ -88,8 +90,12 @@ int overlay_event(const void* e)
         import_visible = !import_visible;
         return 1;
     }
+    if (g_dev_tools && bind_hotkey(ev, B_DEVCINE)) {
+        devcine_visible = !devcine_visible;
+        return 1;
+    }
     ImGui_ImplSDL3_ProcessEvent(ev);
-    if (!visible && !cheats_visible && !coop_visible && !import_visible) return 0;
+    if (!visible && !cheats_visible && !coop_visible && !import_visible && !devcine_visible) return 0;
     return (ev->type == SDL_EVENT_KEY_DOWN || ev->type == SDL_EVENT_KEY_UP || ev->type == SDL_EVENT_TEXT_INPUT ||
             ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN || ev->type == SDL_EVENT_MOUSE_BUTTON_UP || ev->type == SDL_EVENT_MOUSE_WHEEL);
 }
@@ -990,13 +996,113 @@ static void lang_fonts(void)
     host_log("overlay: no font of the system has the letters of %s\n", lang_codes[l]);
 }
 
+/* --dev cutscene log (devcine.h, docs/DEV_TOOLS.md; English only). The small overlay at the top left: what plays
+   now and the last scenes, behind the windows, no input. F6: the whole log, copy, export, clear. */
+static DevCine* dc_list;                /* (a snapshot per frame shown; 32 entries) */
+static char dc_msg[300];
+
+static void devcine_copy(const char* one)
+{
+    char* t = one ? nullptr : (char*)SDL_malloc(DEVCINE_TEXT);
+    int n = 0;
+    if (!one && !t) return;
+    if (t) {
+        devcine_text(t, DEVCINE_TEXT);
+        for (const char* c = t; *c; c++) n += *c == '\n';
+    }
+    SDL_SetClipboardText(one ? one : t);
+    char* back = SDL_GetClipboardText();   /* (logged: the test aid's check of what went there) */
+    host_log("devcine: %s copied to the clipboard, %d bytes read back\n%s%s", one ? "a line" : n == 1 ? "1 scene" : "the log", back ? (int)strlen(back) : -1,
+             back ? back : "", back && *back && back[strlen(back) - 1] != '\n' ? "\n" : "");
+    SDL_free(back);
+    if (one) SDL_snprintf(dc_msg, sizeof dc_msg, "Copied the line.");
+    else SDL_snprintf(dc_msg, sizeof dc_msg, "Copied %d %s to the clipboard.", n, n == 1 ? "scene" : "scenes");
+    SDL_free(t);
+}
+
+static void devcine_small(const DevCine* l, int n, int open)
+{
+    char line[256];
+    ImGui::SetNextWindowPos(ImVec2(8, 8), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.35f);
+    ImGui::Begin("##devcine", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs |
+                                       ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::PushTextWrapPos(ImGui::GetIO().DisplaySize.x * 0.45f);
+    if (open) {
+        devcine_format(&l[n - 1], 0, line, sizeof line);
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "> %s", line);
+        if (l[n - 1].cast[0]) {
+            ImGui::Indent();
+            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 0.8f), "%s", l[n - 1].cast);
+            ImGui::Unindent();
+        }
+    } else ImGui::TextDisabled("No cutscene");
+    for (int k = n - 1 - open, shown = 0; k >= 0 && shown < 4; k--, shown++) {
+        devcine_format(&l[k], 0, line, sizeof line);
+        ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 0.75f), "  %s", line);
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::End();
+}
+
+static void devcine_window(const DevCine* l, int n, int open)
+{
+    char line[512], path[1100], key[64];
+    bool show = g_devcine_show != 0;
+    SDL_snprintf(path, sizeof path, "%s/dev_cutscenes.txt", g_config.save_dir);
+    ImGui::SetNextWindowPos(ImVec2(60, 140), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(900, 440), ImGuiCond_FirstUseEver);
+    SDL_snprintf(line, sizeof line, "Cutscene Log (%s)###devcine", bind_code_name(BIND_KB, bind_get(B_DEVCINE, BIND_KB, 0), key, sizeof key));
+    if (!ImGui::Begin(line, &devcine_visible)) { ImGui::End(); return; }
+    if (ImGui::Checkbox("Show overlay", &show)) { g_devcine_show = show; settings_save_later(); }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The small log at the top left while this window is closed (it records either way).");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(n == 0);
+    if (ImGui::Button("Copy")) devcine_copy(nullptr);
+    ImGui::SameLine();
+    if (ImGui::Button("Export")) {
+        int w = devcine_export(path);
+        if (w < 0) SDL_snprintf(dc_msg, sizeof dc_msg, "Cannot write %s.", path);
+        else SDL_snprintf(dc_msg, sizeof dc_msg, "Appended %d %s to %s.", w, w == 1 ? "scene" : "scenes", path);
+        host_log("devcine: %s\n", dc_msg);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear")) { devcine_clear(); SDL_snprintf(dc_msg, sizeof dc_msg, "Cleared."); host_log("devcine: the log cleared\n"); }
+    ImGui::EndDisabled();
+    if (dc_msg[0]) { ImGui::SameLine(); ImGui::TextUnformatted(dc_msg); }
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("%s opens and closes this window. Click a line to copy it. Export appends the log to %s. \"ev 3:7\": the room script's "
+                       "event 7 on task level 3 (RECVX_TEST_EVENT=frame:3:7 replays it; \"?\": guessed); r3: the room's enemy record 3.", key, path);
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+    if (!open) ImGui::TextDisabled("No cutscene playing.");
+    if (ImGui::BeginChild("##devcinelist", ImVec2(0, 0), ImGuiChildFlags_Borders)) {
+        if (!n) ImGui::TextDisabled("Nothing recorded yet.");
+        for (int k = n - 1; k >= 0; k--) {   /* newest first */
+            devcine_format(&l[k], 1, line, sizeof line);
+            ImGui::PushID(k);
+            if (k == n - 1 && open) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.3f, 1.0f));
+            ImGui::PushTextWrapPos(0.0f);
+            if (ImGui::Selectable("##line", false, 0, ImVec2(0, ImGui::CalcTextSize(line, nullptr, false, ImGui::GetContentRegionAvail().x).y))) devcine_copy(line);
+            ImGui::SameLine(ImGui::GetStyle().WindowPadding.x * 0.5f);
+            ImGui::TextUnformatted(line);
+            ImGui::PopTextWrapPos();
+            if (k == n - 1 && open) ImGui::PopStyleColor();
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+    ImGui::End();
+}
+
 void overlay_render(void)
 {
     if (!ready) return;
     lang_fonts();
     coop_status_get(&cs);
     placer_poll(cheats_visible);
-    bool windows = visible || cheats_visible || coop_visible || import_visible;
+    bool devcine_on = g_dev_tools && (devcine_visible || g_devcine_show);   /* --dev cutscene log */
+    bool windows = visible || cheats_visible || coop_visible || import_visible || (g_dev_tools && devcine_visible);
     pad_set_game_input_enabled(!windows);
     tps_update_mouse_mode(win, windows);
     menu_mouse_update(win, windows);
@@ -1007,7 +1113,7 @@ void overlay_render(void)
     const char* hint = lobby_hint();
     bool tag = coop_on && tag_flags && !cs.trade_open && (g_coop.nametag || cs.busy_kind || cs.trade_hint[0]);   /* co-op: the partner is drawn in the frame shown */
     bool ping = g_config.show_ping && coop_on && cs.state == COOP_CONNECTED;   /* co-op: next to the frame rate */
-    if (!visible && !cheats_visible && !coop_visible && !import_visible && !g_config.show_fps && !ping && !crosshair && !hint && !tag) return;
+    if (!visible && !cheats_visible && !coop_visible && !import_visible && !devcine_on && !g_config.show_fps && !ping && !crosshair && !hint && !tag) return;
     {   /* readable on large displays: scale text with the window height (1080p = 1x) */
         int ww, wh;
         SDL_GetWindowSizeInPixels(win, &ww, &wh);
@@ -1016,6 +1122,11 @@ void overlay_render(void)
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
+    if (devcine_on && (dc_list || (dc_list = (DevCine*)SDL_malloc(sizeof(DevCine) * DC_MAX)))) {
+        int open, n = devcine_snapshot(dc_list, &open);
+        if (devcine_visible) devcine_window(dc_list, n, open);
+        else devcine_small(dc_list, n, open);
+    }
     if (visible) settings_window();
     if (cheats_visible) cheat_window();
     if (cheats_visible) placer_overlay();

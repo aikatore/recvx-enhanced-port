@@ -242,3 +242,6 @@ void vbrank_draw(void)
 
     D2_SyncTag();
 }
+
+/* the movie set up or playing ("MV_005.PSS;1", as the disc names it), NULL none (the --dev cutscene log) */
+const char* pc_movie_name(void) { return rmi.iMovieState && infile.fp.name[0] ? infile.fp.name : NULL; }

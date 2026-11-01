@@ -90,6 +90,7 @@ const char* appear_group(int chr);    /* the list's group of chr (the lobby's mo
 #define ACTOR_PART 10000   /* past ACTOR_MODELS + ACTOR_IMPORT_MAX */
 int  actor_set(int who, int idx);       /* 1 = shown (a failed entry is not retried) */
 int  actor_shown(int who);
+int  actor_shown_model(int who);       /* the model idx slot who shows, -1 none */
 int  actor_rigged(int who);             /* its model is posed from a source's skeleton (a humanoid node map was found) */
 struct BH_PWORK;
 void actor_pose(int who, struct BH_PWORK* src);   /* after src's bhSetMotion and bhCalcModel */

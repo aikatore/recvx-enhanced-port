@@ -241,3 +241,19 @@ int cast_draw(BH_PWORK* ep)
     int k = (int)(ep - ene);
     return as_model(ep, k) && actor_put_as(ACTOR_CAST + rec_slot[k], ep);
 }
+
+/* --dev cutscene log (devcine_glue.c): this room visit's swaps, "r3 Alfred(94)->Tyrant, r5 Rodrigo(98)->Wesker";
+   the length */
+int cast_describe(char* buf, int n)
+{
+    static const char* const chr[CAST_CHARACTERS] = { "Claire", "Chris", "Steve", "Wesker", "Alfred", "Alexia", "Rodrigo" };
+    int k, len = 0, r;
+    buf[0] = 0;
+    for (k = 0; k < RECS && len < n - 1; k++) {
+        if (!shown(rec_slot[k])) continue;   /* (also before the first room load: rec_slot still zeros) */
+        r = snprintf(buf + len, (size_t)(n - len), "%sr%d %s(%d)->%s%s", len ? ", " : "", k, chr[rec_chr[k] % CAST_CHARACTERS], rec_id[k],
+                     cast_entry_name(slot_model[rec_slot[k]]), played(k) ? " (played: as itself)" : "");
+        len = r < 0 || r >= n - len ? n - 1 : len + r;
+    }
+    return len;
+}

@@ -182,6 +182,8 @@ void  coop_retry_point(void);                 /* room.c bhPushGameData: our cont
 int   pc_no_ink_ribbon(void);                 /* typewriters save without an ink ribbon (setting; in co-op the host's rule) */
 int   pc_cheat_save(void);                    /* the open save screen is the F2 cheat's (pc/glue/cheat_glue.c): saving uses no ink ribbon */
 int   pc_detector_skipped(void);              /* co-op rule "Metal detector: Skipped" (pc/glue/detector_glue.c): event.c bhPlItemCheck in 0/9 finds no metal */
+void  pc_dev_event_start(int level, unsigned int id);   /* --dev cutscene log (pc/glue/devcine_glue.c): event.c Event_init, task level runs event id */
+void  pc_dev_event_op(int movie);             /* ... event.c bhCamSet, bhCineSet (0), bhMovieStart (1): the running task's event shows a scene */
 void  pc_extras_scd1(void);                   /* "Extra Item Boxes and Herbs" (pc/glue/extras_glue.c): event.c bhControlEvent before scd1 */
 void  pc_detector_scd1(void);                 /* ... event.c bhControlEvent before scd1: the empty security boxes rest */
 void  pc_quick_start(void);                   /* co-op rule "Quick start" (pc/glue/coop_glue.c): system.c bhSysCallMonitor after a new game's AllItemInit */

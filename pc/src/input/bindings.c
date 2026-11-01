@@ -57,6 +57,7 @@ const BindRow bind_rows[B_COUNT] = {
     [B_NOCLIP_DOWN] = { "noclip_down", "Fly Down", BG_HOTKEY, 0 },
     [B_CHEAT_SAVE] = { "cheat_save", "Save Anywhere", BG_HOTKEY, 0 },
     [B_CHEAT_BOX] = { "cheat_box", "Item Box Anywhere", BG_HOTKEY, 0 },
+    [B_DEVCINE] = { "dev_cutscenes", "Cutscene Log (Dev)", BG_HOTKEY, 0 },
 };
 
 const int bind_order[B_COUNT] = {
@@ -65,7 +66,7 @@ const int bind_order[B_COUNT] = {
     B_WPN_HOLD, B_WPN_PAGE, B_WPN1, B_WPN2, B_WPN3, B_WPN4, B_WPN5, B_WPN6, B_WPN7, B_WPN8,
     B_TPS_FWD, B_TPS_BACK, B_TPS_LEFT, B_TPS_RIGHT, B_TPS_RUN, B_TPS_ACTION, B_TPS_CANCEL, B_TPS_STATUS,
     B_TPS_MAP, B_TPS_AIM, B_TPS_FIRE, B_TPS_RELOAD, B_TPS_QUICKTURN, B_TPS_KNIFE, B_TPS_OPTIONS, B_TPS_RECENTER,
-    B_TPS_TOGGLE, B_SETTINGS, B_CHEATS, B_COOP, B_IMPORT, B_FULLSCREEN, B_NOCLIP_UP, B_NOCLIP_DOWN, B_CHEAT_SAVE, B_CHEAT_BOX,
+    B_TPS_TOGGLE, B_SETTINGS, B_CHEATS, B_COOP, B_IMPORT, B_FULLSCREEN, B_NOCLIP_UP, B_NOCLIP_DOWN, B_CHEAT_SAVE, B_CHEAT_BOX, B_DEVCINE,
 };
 
 static const int defaults[2][B_COUNT][BIND_SLOTS] = {
@@ -84,7 +85,7 @@ static const int defaults[2][B_COUNT][BIND_SLOTS] = {
         [B_WPN5] = { SC(5) }, [B_WPN6] = { SC(6) }, [B_WPN7] = { SC(7) }, [B_WPN8] = { SC(8) },
         [B_WPN_HOLD] = { SC(C) },   /* no game, third-person or hotkey use */
         [B_WPN_PAGE] = { SC(E) },   /* free aim's and third-person action's too: while the wheel is up it is the wheel's */
-        [B_TPS_TOGGLE] = { SC(F5) }, [B_SETTINGS] = { SC(F1) }, [B_CHEATS] = { SC(F2) }, [B_COOP] = { SC(F3) }, [B_IMPORT] = { SC(F9) },
+        [B_TPS_TOGGLE] = { SC(F5) }, [B_SETTINGS] = { SC(F1) }, [B_CHEATS] = { SC(F2) }, [B_COOP] = { SC(F3) }, [B_IMPORT] = { SC(F9) }, [B_DEVCINE] = { SC(F6) },
         [B_FULLSCREEN] = { SC(F11) }, [B_NOCLIP_UP] = { SC(PAGEUP) }, [B_NOCLIP_DOWN] = { SC(F), SC(PAGEDOWN) },
     },
     [BIND_PAD] = {
@@ -195,10 +196,11 @@ int bind_conflict(int row, int dev)
 }
 
 int g_dev_mode = 1;   /* BioRand, the importers (EXTRA, F9): on for everyone since 2026-10-30 (was --dev); 0 hides them again */
-int g_dev_tools;      /* --dev (host.c): developer tools, the F2 object placer (docs/DEV_PLACEMENTS.md) */
+int g_dev_tools;      /* --dev (host.c): developer tools, the F2 object placer, the F6 cutscene log (docs/DEV_TOOLS.md) */
 int bind_row_shown(int row, int dev)
 {
     if (row == B_IMPORT && !g_dev_mode) return 0;
+    if (row == B_DEVCINE && !g_dev_tools) return 0;
     return dev == BIND_KB ? bind_rows[row].pad_ok != 2 : bind_rows[row].pad_ok != 0;
 }
 

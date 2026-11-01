@@ -31,6 +31,7 @@ enum {
     /* port hotkeys (keyboard) */
     B_TPS_TOGGLE, B_SETTINGS, B_CHEATS, B_COOP, B_IMPORT, B_FULLSCREEN, B_NOCLIP_UP, B_NOCLIP_DOWN,
     B_CHEAT_SAVE, B_CHEAT_BOX,         /* the F2 cheats Save Now / Open Item Box (CHEAT_SAVE, CHEAT_BOX); no default key */
+    B_DEVCINE,                         /* --dev only: the cutscene log's window (overlay.cpp, docs/DEV_TOOLS.md); F6 */
     B_COUNT
 };
 enum { BIND_KB, BIND_PAD };            /* device sets */
@@ -51,7 +52,7 @@ void bind_reset(int dev);                               /* defaults of one set *
 int  bind_conflict(int row, int dev);                   /* another row of the same context shares a code: that row + 1, else 0 */
 int  bind_row_shown(int row, int dev);                  /* the row exists for this device */
 extern int g_dev_mode;                                   /* BioRand and the importers shown (bindings.c: on) */
-extern int g_dev_tools;                                  /* --dev: developer tools (the F2 object placer, docs/DEV_PLACEMENTS.md) */
+extern int g_dev_tools;                                  /* --dev: developer tools (the F2 object placer, the F6 cutscene log: docs/DEV_TOOLS.md) */
 const char* bind_code_name(int dev, int code, char* buf, int n);   /* for menus, by the connected pad's type */
 const char* bind_row_label(int row, char* buf, int n);  /* game rows: the actions of the button under the key type */
 const char* bind_pad_desc(char* buf, int n);            /* the connected gamepad (its name in buf), or "No gamepad"; any thread */

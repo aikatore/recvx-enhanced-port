@@ -1711,6 +1711,7 @@ int actor_set(int who, int idx)
 }
 
 int actor_shown(int who) { return dg[who].model >= 0; }
+int actor_shown_model(int who) { return dg[who].model; }   /* (the --dev cutscene log) */
 int actor_rigged(int who) { return dg[who].model >= 0 && dg[who].rig.ok; }
 
 /* pose slot `who` from `src` (after its bhSetMotion and bhCalcModel), in its gender-matched pose

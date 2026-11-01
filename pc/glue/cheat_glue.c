@@ -782,11 +782,13 @@ static const char* anywhere_refused(int save)
     return NULL;
 }
 
+void devcine_frame(void);   /* --dev cutscene log (devcine_glue.c) */
 void cheat_frame(void)
 {
     unsigned int* inv;
     int max_hp, slots, i, req;
 
+    devcine_frame();
     if (!sys || !plp) return;
     inv = &sys->itm[sys->ply_id * 16];
     max_hp = sys->gm_mode == 2 ? 320 : 160;

@@ -1173,7 +1173,7 @@ called by the game thread.
 | `--skip-intro` | boot straight into the title menu |
 | `--hd-textures DIR` | HD texture pack folder (default `mods/textures`) |
 | `--third-person` | start with the over-the-shoulder camera ([THIRDPERSON.md](THIRDPERSON.md)) |
-| `--dev` | developer tools: the object placer in the F2 window ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md)); nothing else changes (BioRand and the importers are shown without it) |
+| `--dev` | developer tools: the object placer in the F2 window ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md)) and the cutscene log at the top left, F6 its window ([DEV_TOOLS.md](DEV_TOOLS.md)); nothing else changes (BioRand and the importers are shown without it) |
 | `--spoof-version V` | the running build counts as version V for the update check (as `RECVX_UPDATE_FAKE_VERSION`): the title shows it and a newer release is offered; the restart after an install drops it |
 | `--coop-host PORT`, `--coop-join HOST:PORT#CODE` or `ROOM`, `--coop-server ADDR`, `--coop-conn auto\|direct\|server`, `--coop-pw PASSWORD` | online co-op ([COOP.md](COOP.md#command-line)) |
 | `--log[=FILE]` | copy all output to a log file (default `recvx.log`), with a backtrace on a crash |
@@ -1223,7 +1223,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_ISO=path` | the disc image (as on the command line) |
 | `RECVX_MODS=dir` | mods folder (default `./mods`) |
 | `SDL_VIDEO_DRIVER=offscreen` | headless run |
-| `RECVX_SHOW_OVERLAY=1` / `=2` / `=3` / `=4` | open the F1 overlay / the cheats window (F2) / the co-op window / the import window (F9) at start |
+| `RECVX_SHOW_OVERLAY=1` / `=2` / `=3` / `=4` / `=5` | open the F1 overlay / the cheats window (F2) / the co-op window / the import window (F9) / the `--dev` cutscene log (F6) at start |
 | `RECVX_IMPORT=outbreak2` / `=sles50306` / `=slus20184ru` / `=slpm65022`, `RECVX_IMPORT_ISO`, `RECVX_IMPORT_WHAT` | headless import, then exit ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md), [LANGUAGES.md](LANGUAGES.md)) |
 | `RECVX_EXIT_FRAME=n` | exit at presented frame n |
 | `RECVX_TEST_CRASH=stack\|null[:n]` | crash the game thread at frame hand-off n (default 100) with a stack overflow or a null write (the crash report) |
