@@ -200,6 +200,8 @@ void  coop_fx_particle(struct BH_PWORK* ewP, int lnk, const void* offP, const vo
 extern int actor_on, appear_on;
 int   actor_put_player(void);                 /* 1 = drawn */
 int   actor_put_enemy(struct BH_PWORK* ep);   /* 1 = drawn */
+extern int cast_n;                            /* the cutscene cast (pc/glue/cast_glue.c): records drawn as other models in this room */
+int   cast_draw(struct BH_PWORK* ep);         /* eneset.c bhDrawEnemy, a morphing record (Nosferatu's face, 6040): 1 = drawn as its model */
 /* enemy variants (pc/glue/variant_glue.c, docs/ENEMIES.md "Enemy variants"): pc_variant_n variant enemies in
    this room (0: none of these is called) */
 extern int pc_variant_n;

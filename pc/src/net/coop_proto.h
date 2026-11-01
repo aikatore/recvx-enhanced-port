@@ -1,4 +1,4 @@
-/* Online co-op wire format (protocol 34, docs/COOP.md "Protocol 34" and "Security") and
+/* Online co-op wire format (protocol 35, docs/COOP.md "Protocol 35" and "Security") and
    the checks every received packet passes before it may change anything. No game state here:
    pc/glue/coop_glue.c applies what passes; pc/tests/test_coop.c feeds malformed packets. */
 #ifndef RECVX_COOP_PROTO_H
@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 34                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 35                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -37,7 +37,8 @@ extern "C" {
                                                cutscene model (other picks from the same seed, EV_CASTOFF's bits shifted);
                                            33: Pose.opts2 (more game rules): OPT2_EXTRA_OBJECTS;
                                            34: the cutscene cast never picks for Claire and Chris (they show each player's own
-                                           look), so the same seed picks other models for the rest */
+                                           look), so the same seed picks other models for the rest;
+                                           35: the cutscene cast also draws the creatures only cutscenes show (Nosferatu in 6040, ...) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
 #define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */

@@ -809,8 +809,8 @@ At the end of every room load (`enemyopt_glue.c enemy_room_finished` -> `cast_ro
 story character (`cast_character`) gets a model: Claire 91; Chris 92, 42; Steve 93, 43; Wesker 97, 49,
 47; Alfred 94, 96 (both model versions), 44; Alexia 95; Rodrigo 98. Not: the man in the hazmat suit 99 (his helmet's mouth does not move, so neither cast nor a pick, in either pool);
 the bosses (Alfred's boss type 16, Alexia's forms 12..14), props and set pieces, enemies (zombies and
-creatures stay as they are; a first version swapped the cutscenes' zombies too, removed), anything
-spawned after the load. Kept by hand (`cast_glue.c kept[]`):
+creatures stay as they are; a first version swapped the cutscenes' zombies too, removed: the fights changed), anything
+spawned after the load. The creatures that only cutscenes show are cast too ("Creatures" below). Kept by hand (`cast_glue.c kept[]`):
 
 | Room, record | Why |
 |---|---|
@@ -846,6 +846,48 @@ section), and in co-op the partner's (its part file, `Pose.mfile & 3`). Such a r
 but is not drawn as it then. Steve and Wesker not played are ordinary cast. Every double of the played
 character is one of the types above (checked over all room files: Claire 91; Chris 92, 42; Steve 93, 43; Wesker
 97, 49, 47), so no scene stands the player in with another type.
+
+### Creatures
+
+A few creatures appear in cutscenes as records that no fight uses: a scripted actor without AI, or an
+enemy type in a room that is only a cutscene. They are cast like the characters (`cast.c cast_creature`, a
+table by room file, record and type), each kind as a character of its own after the seven, so with *Per
+Character* a kind gets one model in all its scenes and *Per Cutscene* picks again per room. They draw from
+the same pool as the characters (*Cutscene Models*, *All Models*, *Custom*, the imports), after them: the
+characters' picks are those of before, and with *Cutscene Models* (five models for five characters) a
+creature starts a new round, so it shows as one of the cast (Nosferatu as Alfred). Never its own look (the
+Tyrant not as the Tyrant, the Hunter not as a Hunter or Sweeper, Steve's father not as a zombie). No new
+setting: the cast is opt-in already, and these records change nothing in play.
+
+| Room, record (type) | Creature | Why it is safe |
+|---|---|---|
+| 6040, 4 (52) | Nosferatu breaking out of his restraints | a scripted actor (`subpl.c`, no AI); the fight is in 6100, another record (type 15) |
+| 3230, 1 (19) | the Tyrant Alfred releases | a cutscene room ("Cutscene: Alfred and the Tyrant"); the Tyrant fights are in 1122 and 5010, other records |
+| 8030, 2 (5) | the Hunter Wesker sends out | a cutscene room ("Cutscene: Wesker's monitor room") |
+| 3000, 2 (51) | Steve's father, a zombie | a scripted actor, no AI |
+
+Not cast (`enemies.py census` over all room files; every creature record without a kill flag looked at):
+
+* Fought, or the scene leads straight into the fight with the same record: Nosferatu in 6100, the Tyrant
+  in 1122 and on the plane (5010), Alexia's forms (9301, 9302, 9321), Monster Steve (9280), the
+  albinoid, the Giant Black Widow, the Gulp Worm in 3091 and 7230, the Hunters and Bandersnatches of the rooms. Swapping
+  only during the scene would not change the fight (visual only), but it shows the fight's own enemy.
+* Not shaped like a person (no humanoid skeleton to pose a model from: it would be drawn as itself anyway): the
+  Gulp Worm eating Rodrigo (7220, 7221), the tentacle (9300), the Spotter (8030), the albinoid infant (3120), the
+  Bandersnatch's long arm (3130: only the arm).
+* 9050, 1 (52, model 1): a body lying under the crane; the catalogue's "Zombie: Bandaged 2", a zombie look.
+* Nosferatu's core (53) and the close-up props in 6040: no model to replace.
+
+Two things the creatures needed in drawing:
+
+* **A morphing record**: Nosferatu's mesh in 6040 morphs (`mdflg & 0x2`, his face and chest), and
+  `eneset.c bhDrawEnemy` drew such a record with `bhPutModel` alone; under `TARGET_PC` it now asks
+  `cast_draw` first (only the cutscene cast; the doubles and the variants as before), so he is his model
+  in every shot, not only the first.
+* **A source without arms**: in his straitjacket Nosferatu's skeleton has no arms (16 nodes). The model's
+  arms took no rotation and stayed out in its T-pose; now an arm the source lacks hangs down beside the body
+  (`actor_glue.c retarget`, the upper arm turned from its rest direction to down and slightly out). The
+  heart (his core, a record linked to his chest) and the restraints stay where the script puts them.
 
 ### For the whole room visit
 
@@ -883,7 +925,7 @@ still picks from the files too: it sets the player's own look, and that one talk
 * `recvx.ini`: an older *Custom* list's lines for the files (`cast_custom_off = Steve`, `Chris`, ...) name no
   entry now and are ignored (dropped at the next save); the cutscene models' own lines (`Steve (Cutscene Model)`)
   keep counting, so a look unchecked under that name stays unchecked.
-* Co-op: protocol 32 (see the version history in [COOP.md](COOP.md) "Protocol 34"): the positions of the `EV_CASTOFF` bits and the picks from a seed changed.
+* Co-op: protocol 32 (see the version history in [COOP.md](COOP.md) "Protocol 35"): the positions of the `EV_CASTOFF` bits and the picks from a seed changed.
 
 ### Custom
 
@@ -918,7 +960,7 @@ cast"). *Custom* lists these looks too (after the *All Models* entries, checked 
 checks them wants them. The player's chosen looks (a catalogue model, an import) stay in the pools: the picks do
 not depend on them, so both co-op screens pick alike.
 
-`cast_model(seed, scene, character, ...)`: the five characters but Claire and Chris are assigned at once from a Fisher-Yates
+`cast_model(seed, scene, character, ...)`: the five characters but Claire and Chris, then the creatures ("Creatures"), are assigned at once from a Fisher-Yates
 shuffle of the pool by xorshift32 seeded with (seed, scene): each character in turn takes the first model
 of the shuffle not taken and not its own look (its own cutscene model or player file); when only its own
 are left it trades with an earlier character; with the pool used up (more characters than models: *Custom* with

@@ -537,8 +537,19 @@ static void retarget(Disguise* d, BH_PWORK* src, const Rig* sr)
             }
             for (j = 0; j < 9; j++) sw[j] = s[(j / 3) * 4 + j % 3];
             mul3(a, sw, rot[i]);
-        } else if (p >= 0) follow(d, rot, i, p);   /* rigidly with its parent */
-        else for (j = 0; j < 9; j++) rot[i][j] = dm[(j / 3) * 4 + j % 3];
+        } else if (p >= 0) {
+            int s;
+            follow(d, rot, i, p);   /* rigidly with its parent */
+            for (s = 7; s <= 11; s += 4)   /* a source without that arm (Nosferatu in his straitjacket, 6040): the model's upper arm
+                                              hangs down beside its body instead of staying out in its T-pose */
+                if (tr->map[s] == i && sr->map[s] < 0 && sr->map[s + 2] < 0 && tr->map[s + 2] >= 0) {
+                    float u[3], v[3] = { 0, -1, 0 }, a[9];
+                    for (j = 0; j < 3; j++) u[j] = tr->rest[(int)tr->map[s + 2]][j] - tr->rest[i][j];
+                    v[0] = u[0] > 0 ? 0.2f : -0.2f;
+                    rot_from_to(u, v, a);
+                    mul3(a, rot[p], rot[i]);
+                }
+        } else for (j = 0; j < 9; j++) rot[i][j] = dm[(j / 3) * 4 + j % 3];
     }
     place(m, tr, rot, dm, root);
     if (root == scaled && fs < 1e8f && hs > 1.0f && ht > 1.0f) {

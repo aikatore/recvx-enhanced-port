@@ -71,11 +71,11 @@ int main(void)
        look for it (whoever is played, about to be or the partner's: Chris in 7240 and 7220 while the game still plays
        Claire, Claire in Steve's section and in Chris's part); Steve and Wesker as themselves while played, about to be
        or the partner's; everyone else cast */
-    for (c = -1; c <= CAST_CHARACTERS; c++)
+    for (c = -1; c <= CAST_ALL; c++)
         for (int p = -1; p < 4; p++)
             for (int q = -1; q < 4; q++)
                 for (int r = -1; r < 4; r++) {
-                    int want = c < 0 || c >= CAST_CHARACTERS ? CAST_OWN : c < 2 ? (c == p ? CAST_OWN : CAST_LOOK) : c < 4 && (c == p || c == q || c == r) ? CAST_OWN : CAST_PICK;
+                    int want = c < 0 || c >= CAST_ALL ? CAST_OWN : c < 2 ? (c == p ? CAST_OWN : CAST_LOOK) : c < 4 && (c == p || c == q || c == r) ? CAST_OWN : CAST_PICK;
                     CHECK(cast_role(c, p, q, r) == want);
                 }
     CHECK(cast_role(1, 0, 1, -1) == CAST_LOOK && cast_role(1, 0, -1, -1) == CAST_LOOK && cast_role(1, 1, -1, -1) == CAST_OWN);   /* Chris in 7240 / 7220; played */
@@ -104,7 +104,24 @@ int main(void)
     /* Fixed: a character's model does not depend on who is played or where (cast_model takes neither): the same in Claire's
        part (room 0000) and in Chris's (7220), scene 0 in both */
     for (s = 0; s < 50; s++) for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL) == cast_model((unsigned)s, 0, c, 0, 0, NULL) && cast_model((unsigned)s, 0, c, 1, 0, NULL) == cast_model((unsigned)s, 0, c, 1, 0, NULL));   /* most rooms pick another model than the fixed one */
-    CHECK(cast_model(1, 0, 8, 0, 0, NULL) < 0 && cast_model(1, 0, -1, 0, 0, NULL) < 0);   /* not a character */
+    CHECK(cast_model(1, 0, CAST_ALL, 0, 0, NULL) < 0 && cast_model(1, 0, -1, 0, 0, NULL) < 0);   /* not a character */
+    {   /* the creatures only cutscenes show: by room file, record and type, nothing else (the fought ones: never) */
+        static const int got[][4] = { { 3000, 2, 51, 10 }, { 3230, 1, 19, 8 }, { 6040, 4, 52, 7 }, { 8030, 2, 5, 9 },
+                                      { 6100, 2, 15, -1 }, { 1122, 1, 19, -1 }, { 5010, 0, 19, -1 }, { 9280, 0, 17, -1 }, { 9321, 1, 12, -1 },
+                                      { 6040, 4, 1, -1 }, { 6041, 4, 52, -1 }, { 6040, 3, 52, -1 }, { 9050, 1, 52, -1 }, { 7220, 0, 2, -1 } };
+        static const signed char own[CAST_CREATURES] = { 16, 17, 20, -1 };   /* Nosferatu, the Tyrant, the Hunter, (Steve's father: the zombies) */
+        for (unsigned i = 0; i < sizeof(got) / sizeof(got[0]); i++) CHECK(cast_creature(got[i][0], got[i][1], got[i][2]) == got[i][3]);
+        CHECK(!strcmp(cast_name(7), "Nosferatu") && !strcmp(cast_name(CAST_ALL - 1), "Steve's father") && !strcmp(cast_name(6), "Rodrigo"));
+        for (s = 0; s < 200; s++)
+            for (c = CAST_CHARACTERS; c < CAST_ALL; c++) {
+                int f = cast_model((unsigned)s, 0, c, 1, 0, NULL), r = cast_model((unsigned)s, 77, c, 1, 0, NULL), z = actor_models[f < ACTOR_MODELS ? f : 0].id;
+                CHECK(cast_role(c, 0, -1, -1) == CAST_PICK && f >= 0 && f == cast_model((unsigned)s, 0, c, 1, 0, NULL) && r >= 0);   /* fixed: one model in every scene */
+                CHECK(f != own[c - CAST_CHARACTERS] && (c != 8 || f != 18) && (c != 9 || f != 21) && (c != CAST_ALL - 1 || f >= ACTOR_MODELS || (z != 1 && z != 51 && z != 52)));   /* never itself (the Tyrant's twin, the Sweeper) */
+                CHECK(in(all, na, f) || f == cast_zombie_look((unsigned)s, 0, c));
+                CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL) >= 0);   /* "Cutscene Models": the five used up, a new round */
+                for (int d = 2; d < c; d++) CHECK(cast_model((unsigned)s, 0, d, 1, 0, NULL) != f);   /* "All Models" has enough: each its own */
+            }
+    }
     {   /* the seed decides: two seeds differ somewhere */
         int d = 0;
         for (c = 2; c < CAST_CHARACTERS; c++) d += cast_model(1, 0, c, 0, 0, NULL) != cast_model(2, 0, c, 0, 0, NULL);

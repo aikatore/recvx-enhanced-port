@@ -12,6 +12,8 @@
   for Claire and another for Chris. Each keeps it in every cutscene, also when they meet in the other one's
   part. BioRand's "Randomize Character Model" can likewise give Claire and Chris (and Steve in his short part)
   a random look each, or keep one look for the whole game as before.
+- **Creatures in the cutscene cast**: the cutscene cast now also changes monsters that only appear in cutscenes,
+  such as Nosferatu breaking free. The creatures you fight keep their own look.
 
 ### Fixes
 

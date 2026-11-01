@@ -1,7 +1,7 @@
 /* The cutscene cast randomizer in the game (docs/ACTORS.md "Cutscene cast"; the choices: pc/src/host/cast.c).
  *
  * At the end of every room load (enemyopt_glue.c enemy_room_finished) each room record of a story character
- * (cast_character: Alfred, Steve, Rodrigo, ...) is given another model (cast_model), loaded into a display
+ * (cast_character: Alfred, Steve, Rodrigo, ...) or of a creature only a cutscene shows (cast_creature) is given another model (cast_model), loaded into a display
  * slot of the appearance system (ACTOR_CAST + k, one per model the room shows; the retargeting of
  * actor_glue.c). Then, while a record has one (cast_n), for the whole room visit (the cutscene and after it, where
  * the character stays in the room); cast_scene only marks the cutscene for the trace:
@@ -98,7 +98,8 @@ void cast_room(const EnemyOpts* o)
         BH_PWORK* ep = &ene[k];
         int c;
         want[k] = -1;
-        if (!(ep->flg & 0x1) || !ep->mlwP || (c = cast_character(ep->id, ep->mdlver)) < 0 || (c >= 2 && !o->cast)) continue;   /* (the character played's doubles too: played()) */
+        if ((c = cast_character(ep->id, ep->mdlver)) < 0) c = cast_creature(room, k, ep->id);   /* (a creature only a cutscene shows) */
+        if (!(ep->flg & 0x1) || !ep->mlwP || c < 0 || (c >= 2 && !o->cast)) continue;   /* (the character played's doubles too: played()) */
         for (j = 0; j < (int)(sizeof(kept) / sizeof(kept[0])) && !(kept[j].room == room && kept[j].rec == k); j++);
         if (j < (int)(sizeof(kept) / sizeof(kept[0]))) { host_log("cast: room %04d record %d (type %d) stays: %s\n", room, k, ep->id, kept[j].why); continue; }
         want[k] = c < 2 ? coop_look_model(c) : cast_model((unsigned)o->seed, scene, c, o->cast_all, imports, enemy_cast_off());   /* (Claire's, Chris's: never cast) */
@@ -249,12 +250,11 @@ int cast_draw(BH_PWORK* ep)
    the length */
 int cast_describe(char* buf, int n)
 {
-    static const char* const chr[CAST_CHARACTERS] = { "Claire", "Chris", "Steve", "Wesker", "Alfred", "Alexia", "Rodrigo" };
     int k, len = 0, r;
     buf[0] = 0;
     for (k = 0; k < RECS && len < n - 1; k++) {
         if (!shown(rec_slot[k])) continue;   /* (also before the first room load: rec_slot still zeros) */
-        r = snprintf(buf + len, (size_t)(n - len), "%sr%d %s(%d)->%s%s", len ? ", " : "", k, chr[rec_chr[k] % CAST_CHARACTERS], rec_id[k],
+        r = snprintf(buf + len, (size_t)(n - len), "%sr%d %s(%d)->%s%s", len ? ", " : "", k, cast_name(rec_chr[k]), rec_id[k],
                      cast_entry_name(slot_model[rec_slot[k]]),
                      played(k) ? (rec_chr[k] < 2 ? " (played: the double)" : " (played: as itself)") : rec_chr[k] < 2 ? " (your look)" : "");
         len = r < 0 || r >= n - len ? n - 1 : len + r;

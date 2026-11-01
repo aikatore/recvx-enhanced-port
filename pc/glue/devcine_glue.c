@@ -156,9 +156,8 @@ static int scan_n, scan_cap, scan_unused, scan_rooms;
 /* a record type's name for the list: the story characters, else the "You appear as" catalogue's */
 static const char* who(int id, int ver)
 {
-    static const char* const chr[CAST_CHARACTERS] = { "Claire", "Chris", "Steve", "Wesker", "Alfred", "Alexia", "Rodrigo" };
     int c = cast_character(id, ver), i;
-    if (c >= 0) return chr[c];
+    if (c >= 0) return cast_name(c);
     if (id == 1 || id == 51 || id == 52) return "Zombies";
     for (i = 0; i < ACTOR_MODELS && !(actor_models[i].id == id && actor_models[i].mdlver == ver); i++) {}
     if (i == ACTOR_MODELS) for (i = 0; i < ACTOR_MODELS && actor_models[i].id != id; i++) {}

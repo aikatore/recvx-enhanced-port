@@ -22,9 +22,34 @@ int cast_character(int id, int ver)
     }
 }
 
+/* The creatures shown only in cutscenes: records no fight uses (a scripted actor without AI, or an enemy type in a room
+   that is only a cutscene), so their looks change nothing in play. Not cast: every creature that is fought in the room,
+   or whose scene leads straight into its fight (Nosferatu in 6100, the Tyrant in 1122 and on the plane, 5010, Alexia's
+   forms, Monster Steve, ...), and the ones not shaped like a person (the Gulp Worm eating Rodrigo, 7220: no humanoid
+   skeleton to pose a model from). */
+static const struct { short room; unsigned char rec, id, c; } creatures[] = {
+    { 3000, 2, 51, 10 },   /* Steve's father, a zombie (a scripted actor) */
+    { 3230, 1, 19, 8 },    /* the Tyrant Alfred releases (a cutscene room; the Tyrant is fought in 1122 and 5010, other records) */
+    { 6040, 4, 52, 7 },    /* Nosferatu breaking out of his restraints (a scripted actor; fought in 6100) */
+    { 8030, 2, 5, 9 },     /* the Hunter Wesker sends out (a cutscene room) */
+};
+
+int cast_creature(int room, int rec, int id)
+{
+    for (int i = 0; i < (int)(sizeof(creatures) / sizeof(creatures[0])); i++)
+        if (creatures[i].room == room && creatures[i].rec == rec && creatures[i].id == id) return creatures[i].c;
+    return -1;
+}
+
+const char* cast_name(int c)
+{
+    static const char* const name[CAST_ALL] = { "Claire", "Chris", "Steve", "Wesker", "Alfred", "Alexia", "Rodrigo", "Nosferatu", "Tyrant", "Hunter", "Steve's father" };
+    return c >= 0 && c < CAST_ALL ? name[c] : "?";
+}
+
 int cast_role(int c, int ply, int pending, int partner)
 {
-    if (c < 0 || c >= CAST_CHARACTERS) return CAST_OWN;
+    if (c < 0 || c >= CAST_ALL) return CAST_OWN;
     if (c < 2) return c == ply ? CAST_OWN : CAST_LOOK;
     return c < 4 && (c == ply || c == pending || c == partner) ? CAST_OWN : CAST_PICK;
 }
@@ -96,11 +121,17 @@ int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
     return n;
 }
 
-/* the story character a model shows (a pick of the same one is no change), -1 */
+/* the story character or creature a model shows (a pick of the same one is no change), -1 */
 static int model_char(int m)
 {
     static const signed char part[5] = { 0, 1, 2, 3, 0 };   /* player files: Claire, Chris, Steve, Wesker, Claire's second costume */
     if (m >= ACTOR_PART && m < ACTOR_PART + 5) return part[m - ACTOR_PART];
+    switch (m) {   /* (catalogue entries) */
+    case 16: return 7;              /* Nosferatu */
+    case 17: case 18: return 8;     /* the Tyrant */
+    case 20: case 21: return 9;     /* the Hunter, the Sweeper */
+    case CAST_ZOMBIES: return 10;   /* Steve's father: no other zombie */
+    }
     for (int c = 0; c < CAST_CHARACTERS; c++) if (cine[c] == m) return c;
     return -1;
 }
@@ -109,23 +140,24 @@ static unsigned rng;
 static unsigned rnd(void) { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng; }   /* xorshift32, as the enemy randomizer's */
 
 #define POOL_MAX (ACTOR_MODELS + 5 + ACTOR_IMPORT_MAX)
-static int pool[POOL_MAX], pick[CAST_CHARACTERS];
+static int pool[POOL_MAX], pick[CAST_ALL];
 static unsigned char used[POOL_MAX];
 
 int cast_model(unsigned seed, unsigned scene, int c, int all, int imports, const unsigned char* off)
 {
     int n = cast_pool(all, imports, pool, POOL_MAX, off), i, k, t;
-    if (c < 0 || c >= CAST_CHARACTERS || n < 1) return -1;   /* ("Custom" with nothing checked: nobody changes) */
+    if (c < 0 || c >= CAST_ALL || n < 1) return -1;   /* ("Custom" with nothing checked: nobody changes) */
     rng = (seed * 2654435761u) ^ (scene * 4u + 0x9E3779B9u);
     if (!rng) rng = 1;
     rnd(); rnd();
     for (i = n - 1; i > 0; i--) { k = (int)(rnd() % (unsigned)(i + 1)); t = pool[i]; pool[i] = pool[k]; pool[k] = t; }   /* Fisher-Yates */
     memset(used, 0, (size_t)n);
-    /* every character but Claire and Chris (never cast: cast_role) in turn (all of them, so each answer is the same whichever is asked): the first model of the
+    /* every character but Claire and Chris (never cast: cast_role), then the creatures, in turn (all of them, so each answer is the
+       same whichever is asked; the creatures after the characters, so the characters' picks are those of before): the first model of the
        shuffle not taken and not its own; when only its own are left, it trades with an earlier character whose model
        is not its own and who may take one of those left; with the pool used up, the first not its own again */
     pick[0] = pick[1] = -1;
-    for (i = 2; i < CAST_CHARACTERS; i++) {
+    for (i = 2; i < CAST_ALL; i++) {
         pick[i] = -1;
         for (k = 0; k < n && pick[i] < 0; k++) if (!used[k] && model_char(pool[k]) != i) pick[i] = k;
         for (k = 0; k < n && pick[i] < 0; k++) {
