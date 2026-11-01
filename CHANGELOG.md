@@ -8,7 +8,8 @@
 - **Extra item boxes and herbs**: an optional setting adds item boxes and blue herb planters to some rooms. They
   work like the game's own, the planters cure poison as often as you need, and in co-op the host decides. It is
   meant to help with the randomizers, where blue herbs can be scarce early on and many items have to wait in a box.
-- **Arabic**: import it from the Arabic fan-translated disc; our menus are translated too.
+- **Arabic**: import it from the Arabic fan-translated disc; our menus are translated too, and the enhanced
+  settings are laid out right to left.
 - **Updates in the game**: when a new version is out, the title screen offers to download and install it,
   and to restart into it. "Check For Updates" can also just show it, or be off.
 

@@ -31,6 +31,7 @@ void host_log(const char* fmt, ...);
 void pc_ui_text(float x, float y, const char* s, float sc, unsigned int argb);
 float pc_ui_text_w(const char* s, float sc);
 int pc_ui_text_wrap(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines);
+int pc_ui_text_wrap_r(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines);
 void pc_ui_rect(float x0, float y0, float x1, float y1, unsigned int argb, float z);
 void pc_ui_arrow(float x, float y, int dir, unsigned int argb);
 int bind_any_down(void);
@@ -395,6 +396,12 @@ static struct {
 static Row rows[MAX_ROWS];
 static int nrows;
 
+/* right to left (Arabic, lang.h lang_rtl_text): the pages mirrored about the screen's middle, the coordinates below
+   are the left-to-right layout's; mx: where something w wide at x goes (a point: w 0). < and > still lower and raise */
+static int rtl;
+static float mx(float x, float w) { return rtl ? 640 - x - w : x; }
+static void text_m(float x, float y, const char* s, float sc, unsigned int col) { pc_ui_text(mx(x, pc_ui_text_w(s, sc)), y, s, sc, col); }
+
 static const char* const heads[] = { "", "THIRD PERSON: KEYBOARD AND MOUSE", "HOTKEYS" };
 
 /* every row of the page that is shown now (what F1 shows of a page, this shows too), headings first */
@@ -468,7 +475,7 @@ static void change(const Row* r, int dir)
     switch (r->kind) {
     case K_PAGE: set_page(st.page + dir); return;
     case K_DEVICE: st.dev ^= 1; st.slot = 0; CallSystemSe(0, 2); return;
-    case K_BIND: st.slot = dir > 0; CallSystemSe(0, 2); return;
+    case K_BIND: st.slot = (dir > 0) != rtl; CallSystemSe(0, 2); return;   /* (right to left: the second binding on the left) */
     case K_SET:
         if (s->flags & SET_ACTION) return;
         if (settings_locked(s)) { CallSystemSe(0, 1); say(settings_locked(s)); return; }
@@ -557,7 +564,7 @@ static void scroll_to_sel(void)
 static void text_fit(float x, float y, const char* s, float sc, float w, unsigned int col)
 {
     float tw = pc_ui_text_w(s, sc), k = tw > w ? w / tw : 1.0f;
-    pc_ui_text(x, y + (1.0f - k) * 9.0f, s, sc * k, col);
+    pc_ui_text(mx(x, tw * k), y + (1.0f - k) * 9.0f, s, sc * k, col);
 }
 
 static void draw_row(int i, int sel)
@@ -580,24 +587,24 @@ static void draw_row(int i, int sel)
         pc_ui_arrow(320 - w / 2 - 14, y + 9, -1, col);
         pc_ui_arrow(320 + w / 2 + 14, y + 9, 1, col);
         snprintf(t, sizeof(t), "%d/%d", st.page + 1, SP_COUNT);
-        pc_ui_text(560, y + 2, t, 0.45f, 0xFF909090);
-        pc_ui_text(48, y + 2, page_keys(t, sizeof(t)), 0.45f, 0xFF909090);
+        text_m(560, y + 2, t, 0.45f, 0xFF909090);
+        text_m(48, y + 2, page_keys(t, sizeof(t)), 0.45f, 0xFF909090);
         return;
     }
-    case K_GROUP: pc_ui_text(X_LABEL - 6, y + 2, g_settings[r->idx].group, 0.45f, 0xFFE0C080); return;
+    case K_GROUP: text_m(X_LABEL - 6, y + 2, g_settings[r->idx].group, 0.45f, 0xFFE0C080); return;
     case K_HEAD: {
         char t[64];
         if (r->idx == BG_GAME) snprintf(t, sizeof(t), tr("GAME (CONTROL TYPE %c)"), 'A' + pc_keytype());
         else snprintf(t, sizeof(t), "%s", r->idx == BG_TPS && st.dev ? "THIRD PERSON: MODERN GAMEPAD" : heads[r->idx]);
-        pc_ui_text(X_LABEL - 6, y + 2, t, 0.45f, 0xFFE0C080);
+        text_m(X_LABEL - 6, y + 2, t, 0.45f, 0xFFE0C080);
         return;
     }
     case K_DEVICE:
-        pc_ui_text(X_LABEL, y, "DEVICE", SC_ROW, col);
+        text_m(X_LABEL, y, "DEVICE", SC_ROW, col);
         snprintf(val, sizeof(val), "%s", st.dev ? "Gamepad" : "Keyboard and mouse");
         break;
-    case K_RESET: pc_ui_text(X_LABEL, y, "RESET TO DEFAULTS", SC_ROW, col); return;
-    case K_BACK: pc_ui_text(X_LABEL, y, "BACK", SC_ROW, col); return;
+    case K_RESET: text_m(X_LABEL, y, "RESET TO DEFAULTS", SC_ROW, col); return;
+    case K_BACK: text_m(X_LABEL, y, "BACK", SC_ROW, col); return;
     case K_BIND: {
         int conflict = bind_conflict(r->idx, st.dev);
         text_fit(X_LABEL, y, bind_row_label(r->idx, label, sizeof(label)), SC_ROW, 300, col);
@@ -607,7 +614,7 @@ static void draw_row(int i, int sel)
             const char* nm = st.capture == r->idx + 1 && k == st.slot ? "..." : bind_code_name(st.dev, bind_get(r->idx, st.dev, k), val, sizeof(val));
             char combo[80];
             if (!(st.capture == r->idx + 1 && k == st.slot) && bind_combo(r->idx, st.dev, k)) { snprintf(combo, sizeof(combo), tr("Aim + %s"), nm); nm = combo; }
-            if (sel && k == st.slot) pc_ui_rect(x - 4, y - 2, x + 116, y + ROW_H - 5, 0x40FFFFFF, Z_HI + 0.01f);
+            if (sel && k == st.slot) pc_ui_rect(mx(x - 4, 120), y - 2, mx(x - 4, 120) + 120, y + ROW_H - 5, 0x40FFFFFF, Z_HI + 0.01f);
             text_fit(x, y, nm, SC_ROW, 110, c);
         }
         return;
@@ -618,24 +625,25 @@ static void draw_row(int i, int sel)
         else snprintf(label, sizeof(label), "%s%s", tr(s->label), (s->flags & SET_RESTART) ? tr(" (restart needed)") : "");
         text_fit(X_LABEL, y, label, SC_ROW, 296, col);
         if (s->flags & SET_ACTION) {
-            if (st.pending[r->idx]) pc_ui_text(X_VALUE, y, "(on leaving menu)", 0.5f, 0xFFE0C080);
+            if (st.pending[r->idx]) text_m(X_VALUE, y, "(on leaving menu)", 0.5f, 0xFFE0C080);
             return;
         }
         settings_value(s, val, sizeof(val));
         break;
     }
     {   /* a value between arrows */
-        float w = pc_ui_text_w(val, SC_ROW);
+        float w = pc_ui_text_w(val, SC_ROW), x0, x1;
         if (w > 210) w = 210;
-        if (!lock) { pc_ui_arrow(X_VALUE - 6, y + 9, -1, col); pc_ui_arrow(X_VALUE + 12 + w + 8, y + 9, 1, col); }
+        x0 = X_VALUE - 6, x1 = X_VALUE + 12 + w + 8;   /* the arrows' tips */
+        if (!lock) { pc_ui_arrow(mx(rtl ? x1 : x0, 0), y + 9, -1, col); pc_ui_arrow(mx(rtl ? x0 : x1, 0), y + 9, 1, col); }
         text_fit(X_VALUE + 6, y, val, SC_ROW, 210, col);
     }
     if (sel && s && (s->flags & SET_CALIB)) {   /* the test pattern, right on the row: drawn into the picture, so calibrated with it */
         float x = 466;
         for (int k = 0; k < 2; k++, x += 5 * 12 + 4 + 6) {
-            pc_ui_rect(x, y - 1, x + 5 * 12 + 4, y + ROW_H - 6, k ? 0xFFFFFFFF : 0xFF000000, Z_HI + 0.02f);
+            pc_ui_rect(mx(x, 5 * 12 + 4), y - 1, mx(x, 5 * 12 + 4) + 5 * 12 + 4, y + ROW_H - 6, k ? 0xFFFFFFFF : 0xFF000000, Z_HI + 0.02f);
             for (int j = 0; j < CALIB_STEPS; j++)
-                pc_ui_rect(x + 4 + j * 12, y + 3, x + 12 + j * 12, y + ROW_H - 10, 0xFF000000u | settings_calib[k][j] * 0x010101u, Z_HI + 0.03f);
+                pc_ui_rect(mx(x + 4 + j * 12, 8), y + 3, mx(x + 4 + j * 12, 8) + 8, y + ROW_H - 10, 0xFF000000u | settings_calib[k][j] * 0x010101u, Z_HI + 0.03f);
         }
     }
 }
@@ -679,7 +687,7 @@ static void draw_help(void)
         break;
     }
     }
-    pc_ui_text_wrap(X_LABEL - 4, y, 560, t, 0.45f, col, HELP_LINES);
+    (rtl ? pc_ui_text_wrap_r : pc_ui_text_wrap)(X_LABEL - 4, y, 560, t, 0.45f, col, HELP_LINES);
 }
 
 static void draw(void)
@@ -696,11 +704,11 @@ static void draw(void)
     draw_row(0, st.sel == 0);
     for (int i = st.top; i < nrows && i < st.top + VISIBLE; i++) draw_row(i, i == st.sel);
     if (st.top > 1) {   /* more above / below */
-        NJS_POLYGON_VTX v[3] = { { 594, 187, 0.3f, 0xFFA0A0A0 }, { 606, 187, 0.3f, 0xFFA0A0A0 }, { 600, 180, 0.3f, 0xFFA0A0A0 } };
+        NJS_POLYGON_VTX v[3] = { { mx(594, 0), 187, 0.3f, 0xFFA0A0A0 }, { mx(606, 0), 187, 0.3f, 0xFFA0A0A0 }, { mx(600, 0), 180, 0.3f, 0xFFA0A0A0 } };
         njDrawPolygon(v, 3, 1);
     }
     if (nrows > st.top + VISIBLE) {
-        NJS_POLYGON_VTX v[3] = { { 594, Y_HELP - 14, 0.3f, 0xFFA0A0A0 }, { 606, Y_HELP - 14, 0.3f, 0xFFA0A0A0 }, { 600, Y_HELP - 7, 0.3f, 0xFFA0A0A0 } };
+        NJS_POLYGON_VTX v[3] = { { mx(594, 0), Y_HELP - 14, 0.3f, 0xFFA0A0A0 }, { mx(606, 0), Y_HELP - 14, 0.3f, 0xFFA0A0A0 }, { mx(600, 0), Y_HELP - 7, 0.3f, 0xFFA0A0A0 } };
         njDrawPolygon(v, 3, 1);
     }
     draw_help();
@@ -713,7 +721,9 @@ static int input(int port)
     unsigned int press = Pad[port].press, rept = Pad[port].Rept;
     unsigned int ok = ok_button() | P_START, cancel = cancel_button() | P_SELECT;
     int hit;
+    float x;   /* the pointer in the left-to-right layout */
     menu_mouse_take(&mt);
+    x = mx(mt.x, 0);
     if (st.capture) {
         int c = bind_capture_poll();
         if (c != -1) capture_end(c);
@@ -726,13 +736,13 @@ static int input(int port)
     }
     hit = row_at(mt.x, mt.y);
     if (hit >= 0 && (mt.moved || mt.left) && hit != st.sel) { st.sel = hit; CallSystemSe(0, 2); }
-    if (rows[st.sel].kind == K_BIND && hit == st.sel && (mt.moved || mt.left)) st.slot = mt.x >= 360 + 120;
+    if (rows[st.sel].kind == K_BIND && hit == st.sel && (mt.moved || mt.left)) st.slot = x >= 360 + 120;
     if (mt.wheel) move_sel(mt.wheel > 0 ? -1 : 1);   /* as the d-pad, like the game's menus */
     if (mt.left && hit >= 0) {
         const Row* r = &rows[hit];
         if (r->kind == K_PAGE) change(r, mt.x < 320 ? -1 : 1);
         else if ((r->kind == K_SET && !(g_settings[r->idx].flags & SET_ACTION)) || r->kind == K_DEVICE) {
-            if (mt.x >= X_VALUE - 16) change(r, mt.x < X_VALUE + 4 ? -1 : 1);   /* the "<" arrow: back */
+            if (x >= X_VALUE - 16) change(r, (x < X_VALUE + 4) != rtl ? -1 : 1);   /* the first arrow ("<", right to left ">"): its way, else the other */
             else activate(r);
         } else return activate(r);
         return 0;
@@ -753,6 +763,7 @@ static int input(int port)
 int pc_options_pc(int port, int flag)
 {
     int back = 0;
+    rtl = lang_rtl_text();
     build_rows();
     if (flag) back = input(port);
     build_rows();

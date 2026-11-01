@@ -122,7 +122,9 @@ static float rtl_w(const char* s, int n, void* sc)
 }
 
 /* at most `w` wide: the words that fit, then the next line (returns the lines drawn). Arabic (in display order,
-   lang.h lang_shape): its first line is the right end of the text, so lines are taken from there (lang_rtl_cut) */
+   lang.h lang_shape): its first line is the right end of the text, so lines are taken from there (lang_rtl_cut).
+   wrap_right (pc_ui_text_wrap_r): each line right-aligned in x..x + w */
+static int wrap_right;
 static int text_wrap(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines)
 {
     char line[160], rl[400];
@@ -134,7 +136,7 @@ static int text_wrap(float x, float y, float w, const char* s, float sc, unsigne
             if (len - cut < (int)sizeof(rl)) {
                 memcpy(rl, s + cut, (size_t)(len - cut));
                 rl[len - cut] = 0;
-                text(x, y + n * 28 * sc * 1.05f, rl, sc, argb);
+                text(wrap_right ? x + w - text_w(rl, sc) : x, y + n * 28 * sc * 1.05f, rl, sc, argb);
             }
             n++;
             for (len = cut; len > 0 && s[len - 1] == ' '; len--) {}
@@ -152,7 +154,7 @@ static int text_wrap(float x, float y, float w, const char* s, float sc, unsigne
         if (!s[len]) fit = len;
         if (!fit) fit = len ? len : 1;
         memcpy(line, s, fit); line[fit] = 0;
-        text(x, y + n * 28 * sc * 1.05f, line, sc, argb);
+        text(wrap_right ? x + w - text_w(line, sc) : x, y + n * 28 * sc * 1.05f, line, sc, argb);
         n++;
         s += fit;
         while (*s == ' ') s++;
@@ -1921,6 +1923,14 @@ int pc_ui_text_wrap(float x, float y, float w, const char* s, float sc, unsigned
 {
     font_ok = (sys->ss_flg & 0x40) != 0;
     return text_wrap(x, y, w, s, sc, argb, max_lines);
+}
+int pc_ui_text_wrap_r(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines)
+{
+    int n;
+    wrap_right = 1;
+    n = pc_ui_text_wrap(x, y, w, s, sc, argb, max_lines);
+    wrap_right = 0;
+    return n;
 }
 void pc_ui_rect(float x0, float y0, float x1, float y1, unsigned int argb, float z) { rect(x0, y0, x1, y1, argb, z); }
 void pc_ui_arrow(float x, float y, int dir, unsigned int argb) { arrow(x, y, dir, argb); }

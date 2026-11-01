@@ -486,7 +486,13 @@ lines of at most 1024 characters): enough for menu texts. Consequences, checked 
   "(restart needed)", the help line's lock reason, "Restart needed.", help and "Applies when you leave this menu.", the
   F1 window's title and version, F9's language and "(cutscene subtitles)". Other joins in code (a label and a value
   drawn in one string, a bullet before a sentence) read left to right as pieces; each piece itself is right.
-- Layout stays left-aligned (the patch's own messages are too); values sit between their arrows as in English.
+- **ENHANCED SETTINGS** is laid out right to left (`options_glue.c`: `rtl`, `mx` mirrors the left-to-right layout's
+  positions about the screen's middle when drawing and the pointer when hit-testing): labels and headings end at the
+  list's right edge, values (between their arrows, which still lower and raise) end at the middle, the bindings'
+  first slot sits next to the label (left/right move to the slot on that side), the help lines are right-aligned
+  (`pc_ui_text_wrap_r`), the page counter is on the left and the page keys on the right; Latin values read left to
+  right where they stand. Other screens (title menus, co-op lobby, BIORAND, IMPORT, the dialogs, F1) stay
+  left-aligned, as the patch's own messages are; values sit between their arrows as in English.
 - The language's name in the settings is `العربية` in display order (`lang.c lang_names`); an Arabic word in another
   language's text is drawn with the Arabic font (`pc_glyph_next`: the Subtitles row in any language).
 
