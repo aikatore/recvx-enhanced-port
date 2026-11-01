@@ -45,7 +45,7 @@ typedef struct CoopState {
     /* lobby screen and name tag (pc/glue/lobby_glue.c) */
     char name[COOP_NAME_MAX];       /* our name, as the partner sees it (ini coop_name) */
     int nametag;                    /* show the partner's name above its head (ini coop_nametag) */
-    int items;                      /* joining: COOP_ITEMS_* or 0..14 the items of that save slot (ini coop_items) */
+    int items;                      /* joining: COOP_ITEMS_* or the items of that save (lobby.h slot: card 0..29, native number - 1) (ini coop_items) */
     int start;                      /* hosting from the lobby: 0..2 new game normal/easy/very easy, 3 + n save slot n (ini coop_start) */
     int lobby;                      /* game thread: our lobby screen is open */
     char note[40];                  /* game thread: what we chose there, shown to the partner */

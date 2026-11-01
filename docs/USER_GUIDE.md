@@ -29,7 +29,7 @@ folders.
 |---|---|
 | `save/recvx.ini` | settings, key bindings, the disc image path, your co-op name |
 | `save/saves/` | your saves, one file each |
-| `save/card0/` | the emulated memory card (Save System: Memory Card only) |
+| `save/card0/`, `save/card1/` | the emulated memory cards in slot 1 and slot 2 (Save System: Memory Card only) |
 | `mods/` | mods and HD textures (`mods/textures/`) |
 | `recvx.log`, `recvx-crash.log` | logs ([Troubleshooting](#troubleshooting)) |
 
@@ -410,8 +410,10 @@ of the list, or overwrites one. Loading starts on the newest save.
 - Renaming the part after the number is fine; deleting a file deletes the save.
 - Back up by copying the `save` folder. `system.dat` holds options, unlocks and best times.
 - On the first start, memory card saves are copied in; the card keeps them.
-- **Memory Card** brings back the 15 slots. The two systems do not see each other's
-  saves; **Import Memory Card Saves** copies the card's saves again.
+- **Memory Card** brings back the game's memory card screens: two cards (MEMORY CARD slot 1 and
+  slot 2) with 15 saves each, chosen in the save and load screens. A card is full when its folder
+  holds about 8 MB (another game's saves copied in, for example). The two systems do not see each
+  other's saves; **Import Memory Card Saves** copies both cards' saves again (slot 2's as saves 16 to 30).
 
 File format: ARCHITECTURE.md, "Save system".
 

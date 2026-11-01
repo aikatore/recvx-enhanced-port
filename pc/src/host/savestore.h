@@ -45,10 +45,10 @@ void savestore_filename(char* out, int n, int number, const char* label);
 void savestore_label(char* out, int n, const unsigned char* data);
 /* card save bytes are valid and not an empty slot */
 int  savestore_card_valid(const unsigned char* data);
-/* copies the memory card's saves (<save_dir>/card0/BASLUS-20184/SAVEDATA-nn) into dir as native
-   saves (number nn + 1 if free, else the next free one; saves already there with the same bytes are
-   skipped) with their co-op partners files (<save_dir>/coop-partners-nn.bin), and the system file
-   as dir/system.dat if dir has none. The card files are kept. Returns the saves copied. */
+/* copies the memory cards' saves (<save_dir>/card0/BASLUS-20184/SAVEDATA-nn, card 2's card1/...
+   as slot nn + 15) into dir as native saves (number slot + 1 if free, else the next free one; saves
+   already there with the same bytes are skipped) with their co-op partners files
+   (<save_dir>/coop-partners-<slot>.bin), and card 1's system file as dir/system.dat if dir has none. The card files are kept. Returns the saves copied. */
 int  savestore_import_card(const char* save_dir, const char* dir);
 
 #ifdef __cplusplus

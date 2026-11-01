@@ -2,7 +2,8 @@
 #pragma once
 #include <stdint.h>
 /* game thread */
-int    movie_open(uint32_t lsn, uint32_t size);   /* 1 if at least one frame decodes */
+#include <stdio.h>
+int    movie_open(FILE* f, uint32_t lsn, uint32_t size);   /* f (taken over) or, NULL, the disc image at sector lsn; 1 if at least one frame decodes */
 void   movie_close(void);
 void   movie_pause(int paused);
 int    movie_frames_total(void);                  /* -1 while still decoding */

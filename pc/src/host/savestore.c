@@ -252,9 +252,9 @@ int savestore_import_card(const char* save_dir, const char* dir)
     int i, j, n, copied = 0;
     SDL_LockSpinlock(&lock);
     n = savestore_list(dir, &list);
-    for (i = 0; i < 15; i++) {
+    for (i = 0; i < 30; i++) {   /* card 1's slots 0..14, card 2's 15..29 (lobby.h) */
         int num, dup = 0;
-        snprintf(path, sizeof(path), "%s/card0/BASLUS-20184/SAVEDATA-%02d", save_dir, i);
+        snprintf(path, sizeof(path), "%s/card%d/BASLUS-20184/SAVEDATA-%02d", save_dir, i / 15, i % 15);
         if (read_file(path, d, sizeof(d)) != SAVE_DATA_BYTES || !savestore_card_valid(d)) continue;
         for (j = 0; j < n && !dup; j++) {
             snprintf(to, sizeof(to), "%s/%s", dir, list[j].file);

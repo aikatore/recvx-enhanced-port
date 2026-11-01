@@ -147,7 +147,12 @@ void lang_scan(void)
 }
 
 int lang_installed(int l) { return l >= 0 && l < LANG_COUNT && info[l].ok; }
-int lang_old_import(int l) { return l > 0 && l != LANG_RU && lang_installed(l) && info[l].ver < 2; }   /* (the Russian system messages were copied whole) */
+/* (the Russian system messages were copied whole; version 3 added the Russian and Brazilian Portuguese opening's text
+   crawl, the Japanese movies: lang.c crawl, movies) */
+int lang_old_import(int l)
+{
+    return l > 0 && lang_installed(l) && ((l != LANG_RU && info[l].ver < 2) || ((l == LANG_RU || l == LANG_PT || l == LANG_JA) && info[l].ver < 3));
+}
 int lang_has_subtitles(int l) { return lang_installed(l) && info[l].subs; }
 int lang_sub(void)
 {
@@ -260,8 +265,17 @@ int pc_lang_disc_parts(const char* name, FILE* f, uint32_t size, uint32_t lsn, u
     return n;
 }
 
+/* files that are pictures as a whole: a room (the opening's text crawl, RM_0000.RDX: lang.c crawl), a movie (MOVIE/) */
+static int picture_whole(const char* name)
+{
+    size_t n = strlen(name);
+    return !strncmp(name, "MOVIE/", 6) || (n > 4 && !strcasecmp_(name + n - 4, ".RDX"));
+}
 /* the language of a file the game is about to read: its folder (NULL: the disc's) */
-const char* pc_lang_file_dir(const char* name) { return !g_lang_pictures && picture_file(name) ? NULL : lang_dir(data_lang()); }
+const char* pc_lang_file_dir(const char* name)
+{
+    return !g_lang_pictures && (picture_file(name) || picture_whole(name)) ? NULL : lang_dir(data_lang());
+}
 
 /* ---------------------------------------------------------------- textures of our own
    A TIM2 in memory as one texture of a list of ours: drawn as a loaded texture is (Ps2TexLoad takes its TIM2 from

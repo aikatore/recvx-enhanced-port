@@ -67,7 +67,7 @@ drawn in the game's own style; your model turns in a 3D preview on the left. It 
   click) returns without changing it.
 * **START** (host): a new game (normal, easy, very easy) or one of your saves
   ("Save nn: character stage-room"; nn is the save's number, or the memory card slot with the
-  Memory Card save system, [USER_GUIDE.md](USER_GUIDE.md#saves)).
+  Memory Card save system: 1..15 on MEMORY CARD slot 1, 16..30 on slot 2, [USER_GUIDE.md](USER_GUIDE.md#saves)).
 * **ITEMS** (joiner): what you bring, see "Saved partner inventories".
 * **FOLLOW** (joiner): see "Follow host".
 * **RELAY**: *Only if needed* (Automatic) or *Always* (Server Relay), see "Connection modes".
@@ -458,7 +458,7 @@ Inventory", ini `coop_items`):
 |---|---|---|
 | *Saved with the host* (default) | -2 | What the host kept for you from your last visit; none: a new inventory, or, when you join again from the game you played in the host's session (the connection was lost, the host's game crashed, you left), the items you have now. In the host's lobby the row says "(available)", "(none)" or "(host: off)". |
 | *New inventory* | -1 | The new-game inventory of the session's game mode. |
-| A save | 0.. | The items of that save: save number - 1 (native save files), or memory card slot 0..14. |
+| A save | 0.. | The items of that save: save number - 1 (native save files), or memory card slot 0..14 (MEMORY CARD slot 1) and 15..29 (slot 2). |
 | *Current Inventory* (F3 only) | -3 | Joining from your own running game keeps its items. |
 
 ### Shared item box
@@ -659,7 +659,7 @@ status) per player, with its saves:
 * While you play in the host's game, your items are sent to the host as they change (at most once a
   second). When the host saves, the records are written next to the save (removed when there are
   none): `<save dir>/saves/NNN.coop-partners.bin` for save file NNN, or
-  `<save dir>/coop-partners-nn.bin` for memory card slot nn. A game started from that save has them again; a new game has none.
+  `<save dir>/coop-partners-nn.bin` for memory card slot nn (MEMORY CARD slot 2's saves: nn 15..29). A game started from that save has them again; a new game has none.
   Up to 16 players per playthrough (the oldest goes first).
 * Joining with *Saved with the host*: "Restored your saved items from the host"; none: "No saved
   items at the host - starting with a new inventory". A new inventory or a save chosen explicitly

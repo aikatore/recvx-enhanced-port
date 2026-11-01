@@ -181,9 +181,19 @@ int main(void)
         snprintf(path, sizeof(path), "%s/SAVEDATA-02", card); write_raw(path, e, SAVE_DATA_BYTES);
         snprintf(path, sizeof(path), "%s/BASLUS-20184", card); write_raw(path, cfg, sizeof(cfg));
         snprintf(path, sizeof(path), "%s/coop-partners-02.bin", save_dir); write_raw(path, "partners", 8);
+        {   /* card 2's slot 2 is slot 17: number 18, its partners file coop-partners-17.bin */
+            unsigned char c2[SAVE_DATA_BYTES];
+            card_save(c2, 3, 1, 2, 7);
+            snprintf(path, sizeof(path), "%s/card1/BASLUS-20184", save_dir); SDL_CreateDirectory(path);
+            snprintf(path, sizeof(path), "%s/card1/BASLUS-20184/SAVEDATA-02", save_dir); write_raw(path, c2, SAVE_DATA_BYTES);
+            snprintf(path, sizeof(path), "%s/coop-partners-17.bin", save_dir); write_raw(path, "card2", 5);
+        }
         card_save(back, 1, 0, 4, 1);
         CHECK(savestore_write(dir, 1, back, NULL) == 1);   /* number 1 taken: slot 1's save goes after it */
-        CHECK(savestore_import_card(save_dir, dir) == 2);
+        CHECK(savestore_import_card(save_dir, dir) == 3);
+        CHECK(savestore_find(dir, 18, file, sizeof(file)));
+        snprintf(path, sizeof(path), "%s/018.coop-partners.bin", dir);
+        CHECK(file_size(path) == 5);
         CHECK(savestore_find(dir, 3, file, sizeof(file)) && !strcmp(file, "003_Steve_Residence-SR.sav"));
         CHECK(savestore_find(dir, 2, file, sizeof(file)) && !strcmp(file, "002_Claire_Prison-front.sav"));
         snprintf(path, sizeof(path), "%s/%s", dir, file);
@@ -196,13 +206,13 @@ int main(void)
         CHECK(file_size(path) == SAVE_DATA_BYTES);
         CHECK(savestore_import_card(save_dir, dir) == 0);
         n = savestore_list(dir, &l);
-        CHECK(n == 3);
+        CHECK(n == 4);
         free(l);
     }
 
     {   /* SDL_RemovePath removes empty folders only: files first, then the folders inside out */
-        const char* dirs[] = { "saves", "user/saves", "user/card0/BASLUS-20184", "user", "user/card0", "" };
-        for (int k = 0; k < 6; k++) {
+        const char* dirs[] = { "saves", "user/saves", "user/card0/BASLUS-20184", "user/card1/BASLUS-20184", "user", "user/card0", "user/card1", "" };
+        for (int k = 0; k < 8; k++) {
             int cnt = 0;
             char** fl;
             snprintf(dir, sizeof(dir), "%s/%s", root, dirs[k]);
@@ -211,6 +221,7 @@ int main(void)
             SDL_free(fl);
         }
         snprintf(path, sizeof(path), "%s/user/card0", root); SDL_RemovePath(path);
+        snprintf(path, sizeof(path), "%s/user/card1", root); SDL_RemovePath(path);
         snprintf(path, sizeof(path), "%s/user", root); SDL_RemovePath(path);
         SDL_RemovePath(root);
         CHECK(file_size(root) < 0);

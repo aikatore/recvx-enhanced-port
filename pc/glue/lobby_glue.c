@@ -681,7 +681,7 @@ void pc_lobby_textures_released(void)
 
 /* ---------------------------------------------------------------- saves */
 typedef struct SaveInfo { int slot, ply_id, stg, rom, gm_mode, count; } SaveInfo;
-static SaveInfo* saves;   /* the valid ones by slot (lobby.h: the card's 0..14 or native save number - 1) */
+static SaveInfo* saves;   /* the valid ones by slot (lobby.h: the cards' 0..29 or native save number - 1) */
 static int n_saves;
 static unsigned char save_buf[LOBBY_SAVE_BYTES];   /* the host's chosen save, read when the game starts */
 
@@ -1866,7 +1866,7 @@ void pc_title_leave(void)
 void pc_adv_in_game(void) { AdvWork.AppMode = 1; }
 
 /* Test aid (frame hand-off, pc/src/ps2/libgraph.c): RECVX_TEST_SAVE="gameframe:slot[,...]" writes the
-   game in progress to memory card save slot `slot` (0..14) as a typewriter save holds it (the
+   game in progress to memory card save slot `slot` (lobby.h: 0..14 card 1, 15..29 card 2; native number - 1) as a typewriter save holds it (the
    player's live position, angle, health, weapon and status first, as coop_glue.c send_blob does),
    at that frame of the game task. */
 void lobby_frame(void)
