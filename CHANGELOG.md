@@ -33,6 +33,8 @@
   else takes her place, her ponytail (and Wesker's sunglasses) no longer float where her head would be.
 - **Swapped models on the ground**: taller or shorter models swapped into cutscenes now stand on the floor
   instead of floating above it or sinking into it.
+- **Co-op: stairs to the residence**: after your partner watched the scene of Alfred laughing at the foot of
+  the stairs to his residence, you can now follow down the stairs instead of being stuck there.
 - **Smoother Motion under water**: the views from the water at the airport's submarine dock now move as
   smoothly as the rest of the game, wavy water effect included.
 
