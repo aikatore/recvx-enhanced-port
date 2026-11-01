@@ -303,3 +303,8 @@ game keeps for its movable objects' extra records (a room that has them full get
 and case, facing it, `d` units farther; also with the rule off), `poison`, `pad:hex` (game pad bits for one
 frame: `b00` the action button / confirm), `hold:hex:n` (for n frames: `21` forward, `1000` cancel), `ok` (confirm,
 only while a message shows), `log` (the room's extras, the player, poison, the box screen, the planter's state).
+
+`pc/tools/retry_check.sh OUT` (the disc image in `RECVX_ISO`; about a minute): Chris killed in the prison's main gate
+(0/3 case 1, an extra box and planter) and the game over's retry; passes when the room is set up again from the same
+file and nothing crashed (the extras' textures loaded during the retry's room read once damaged it: `ROOM_FORMAT.md`
+"Limits and budgets", the swizzle scratch).

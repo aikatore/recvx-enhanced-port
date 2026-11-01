@@ -7,6 +7,10 @@
 - **Memory card slot 2**: with the Memory Card save system, MEMORY CARD slot 2 now works as a second card of
   its own, so you can save to and load from either slot.
 
+### Fixes
+
+- **Retry after a game over**: choosing Yes no longer crashes in rooms with an extra item box or herb planter.
+
 ## 0.7.2 (2026-11-01)
 
 ### New
