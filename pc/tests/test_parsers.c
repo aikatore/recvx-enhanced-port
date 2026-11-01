@@ -368,8 +368,51 @@ static void test_startkit(void)
     mk_room(d); d[SCRIPT] = 230; CHECK(pc_startkit_scan(d, sizeof(d), at, PC_KIT_MAX, coop_insn_len_raw) == 0);      /* an op of unknown length ends the scan */
 }
 
+/* ---------------------------------------------------------------- a language's pictures */
+/* a PLI chunk naming bank, then a TIM2 chunk: 4 x 4, 8-bit, 256 colours (CSM1); pixel p shows colour col(p) through
+   index idx(p) (perm: the index of colour value v); returns the bytes written */
+static uint32_t lp_tex(uint8_t* o, unsigned bank, int perm, int seed)
+{
+    uint32_t n = 0, tot = 48 + 16 + 1024;
+    memset(o, 0, 32 + 12 + 32 + 16 + tot);
+    memcpy(o, "PLI", 4); put32(o + 4, 12); put32(o + 32, 1); put32(o + 40, bank << 8); n = 44;
+    memcpy(o + n, "TIM2", 4); put32(o + n + 4, 16 + tot); n += 32;
+    memcpy(o + n, "TIM2", 4); o[n + 4] = 4; put16(o + n + 6, 1);
+    uint8_t* ph = o + n + 16;
+    put32(ph, tot); put32(ph + 4, 1024); put32(ph + 8, 16); put16(ph + 12, 48); put16(ph + 14, 256);
+    ph[17] = 1; ph[18] = 3; ph[19] = 5; put16(ph + 20, 4); put16(ph + 22, 4);
+    for (int p = 0; p < 16; p++) {
+        unsigned v = (unsigned)(p * 7 + seed) & 255, i = perm ? 255 - v : v;   /* colour value v at index i */
+        unsigned s = (i & ~0x18u) | (i & 8) << 1 | (i & 0x10) >> 1;           /* (where CSM1 stores entry i) */
+        ph[48 + p] = (uint8_t)i;
+        ph[64 + 4 * s] = (uint8_t)v; ph[64 + 4 * s + 1] = (uint8_t)(v ^ 0x55); ph[64 + 4 * s + 3] = 0x80;
+    }
+    return n + 16 + tot;
+}
+static void test_lang_parts(void)
+{
+    static uint8_t l[8192], d[8192];
+    PcPart p[8];
+    uint32_t nl = 0, nd = 0, at[3];
+    /* 0: the font (other pixels), 1: a re-encode (other indices, the same colours), 2: other pixels (writing) */
+    nl += lp_tex(l + nl, 1, 0, 1); nd += lp_tex(d + nd, 1, 0, 2);
+    at[1] = nl + 76; nl += lp_tex(l + nl, 2, 1, 0); nd += lp_tex(d + nd, 2, 0, 0);
+    at[2] = nl + 76; nl += lp_tex(l + nl, 3, 0, 5); nd += lp_tex(d + nd, 3, 0, 6);
+    CHECK(pc_lang_parts(l, nl, d, nd, 1, 0, p, 8) == 1 && p[0].off == at[1] && p[0].disc == at[1] && p[0].len == 16 + 48 + 16 + 1024);
+    CHECK(pc_lang_parts(l, nl, d, nd, 1, 1, p, 8) == 2 && p[0].off == at[1] && p[1].off == at[2]);   /* all but the font */
+    CHECK(pc_lang_parts(l, nl, l, nl, 0, 1, p, 8) == 0);   /* the same bytes: nothing to read */
+    CHECK(pc_lang_parts(l, nl, d, nd - 200, 1, 0, p, 8) == 0);   /* the disc's last texture cut off: no pairs */
+    /* the re-encode on the bank of the texture with writing: its colours would change that one's: stays */
+    nl = nd = 0;
+    nl += lp_tex(l + nl, 3, 1, 0); nd += lp_tex(d + nd, 3, 0, 0);
+    nl += lp_tex(l + nl, 3, 0, 5); nd += lp_tex(d + nd, 3, 0, 6);
+    CHECK(pc_lang_parts(l, nl, d, nd, 0, 0, p, 8) == 0);
+    CHECK(pc_lang_parts(l, nl, d, nd, 0, 1, p, 8) == 2);   /* both the disc's: the bank too */
+}
+
 int main(void)
 {
+    test_lang_parts();
     test_prs();
     test_afs();
     test_cvxm();

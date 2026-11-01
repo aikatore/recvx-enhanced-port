@@ -333,3 +333,104 @@ uint32_t pc_mes_at(const uint8_t* t, uint32_t size, uint32_t i)
     if ((o & 1) || o >= end) return 0;
     return pc_mes_len(t + o, (end - o) / 2);
 }
+
+/* ---------------------------------------------------------------- a language's pictures */
+typedef struct { uint32_t off, len, ph; uint64_t banks[2]; } Tim;   /* ph: the picture header; banks: 0..127 */
+
+/* the banks the last PLI chunk before the TIM2 chunk at c names (bhSetMemPvpTexture: a PLI of size 0 keeps the one
+   before; bank 255 is a free one each time, not shared) */
+static void tim_banks(const uint8_t* d, uint32_t c, uint64_t* banks)
+{
+    if (c < 44) return;
+    for (uint32_t p = c - 44 + 1; p-- > 0 && c - p < (1u << 16);) {   /* (a PLI chunk: 32 + 4 + 8 n bytes) */
+        uint32_t sz, n;
+        if (d[p] != 'P' || memcmp(d + p, "PLI", 4)) continue;
+        sz = pc_rd32(d + p + 4);
+        if (sz == 0 || sz > c - p - 32 || (n = pc_rd32(d + p + 32)) == 0 || n > 64 || sz < 4 + 8 * n) continue;
+        for (uint32_t k = 0; k < n; k++) {
+            unsigned b = d[p + 32 + 4 + 8 * k + 5];
+            if (b != 255) banks[(b >> 6) & 1] |= 1ull << (b & 63);
+        }
+        return;
+    }
+}
+
+/* the TIM2 files of d (one picture each), at most max */
+static int tims(const uint8_t* d, uint32_t n, Tim* t, int max)
+{
+    int k = 0;
+    for (uint32_t o = 0; o + 0x40 <= n && k < max; o++) {
+        uint32_t ph, tot, clut, img, hsz;
+        if (d[o] != 'T' || memcmp(d + o, "TIM2", 4) || d[o + 4] < 3 || d[o + 4] > 4 || d[o + 5] > 1 || pc_rd16(d + o + 6) != 1 ||
+            !memcmp(d + o + 32, "TIM2", 4))   /* (a PVP chunk's header: its TIM2 follows) */
+            continue;
+        ph = o + (d[o + 5] ? 128 : 16);
+        if (!pc_range_ok(ph, 24, n)) continue;
+        tot = pc_rd32(d + ph); clut = pc_rd32(d + ph + 4); img = pc_rd32(d + ph + 8); hsz = pc_rd16(d + ph + 12);
+        if (tot < 24 || !pc_range_ok(ph, tot, n) || hsz < 24 || (uint64_t)hsz + img + clut > tot) continue;
+        t[k].off = o; t[k].len = ph - o + tot; t[k].ph = ph; t[k].banks[0] = t[k].banks[1] = 0;
+        if (o >= 32 && !memcmp(d + o - 32, "TIM2", 4)) tim_banks(d, o - 32, t[k].banks);   /* (a PVP chunk) */
+        o += t[k++].len - 1;
+    }
+    return k;
+}
+
+/* 1: the same picture (the geometry equal: TotalSize .. ImageHeight; the colours within 8, alpha 16) */
+static int tim_same(const uint8_t* a, const uint8_t* b)
+{
+    uint32_t img = pc_rd32(a + 8), hsz = pc_rd16(a + 12), ncol = pc_rd16(a + 14), w = pc_rd16(a + 20), h = pc_rd16(a + 22);
+    unsigned ctype = a[18], itype = a[19], bits = itype == 4 ? 4 : 8;
+    const uint8_t *ia = a + hsz, *ib = b + hsz, *ca = ia + img, *cb = ib + img;
+#define NEAR(x, y) (abs((x)[0] - (y)[0]) <= 8 && abs((x)[1] - (y)[1]) <= 8 && abs((x)[2] - (y)[2]) <= 8 && abs((x)[3] - (y)[3]) <= 16)
+    if (memcmp(a, b, 24) || (itype != 4 && itype != 5) || (ctype & 0x3F) != 3 || ncol == 0 || (uint64_t)w * h * bits / 8 > img ||
+        4ull * ncol > pc_rd32(a + 4))
+        return 0;
+    if (!memcmp(ia, ib, img)) {   /* the same pixels: every colour near */
+        for (uint32_t i = 0; i < ncol; i++) if (!NEAR(ca + 4 * i, cb + 4 * i)) return 0;
+        return 1;
+    }
+    if (ncol != (bits == 4 ? 16u : 256u)) return 0;   /* (several palettes: which one shows is the game's choice) */
+    for (uint32_t p = 0; p < w * h; p++) {
+        unsigned x = bits == 4 ? ia[p / 2] >> (p & 1) * 4 & 15 : ia[p], y = bits == 4 ? ib[p / 2] >> (p & 1) * 4 & 15 : ib[p];
+        if (bits == 8 && !(ctype & 0x80)) {   /* CSM1: entries 8..15 and 16..23 of each 32 swapped */
+            x = (x & ~0x18u) | (x & 8) << 1 | (x & 0x10) >> 1;
+            y = (y & ~0x18u) | (y & 8) << 1 | (y & 0x10) >> 1;
+        }
+        if (!NEAR(ca + 4 * x, cb + 4 * y)) return 0;
+    }
+#undef NEAR
+    return 1;
+}
+
+int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, uint64_t keep, int all, PcPart* out, int max)
+{
+    enum { N = 2 * PC_PARTS_MAX };
+    Tim* t = malloc(2 * N * sizeof(Tim));
+    Tim* u = t + N;
+    unsigned char swap[N];
+    int n, m, k, j, changed, np = 0;
+    if (!t) return 0;
+    n = tims(l, nl, t, N);
+    m = tims(d, nd, u, N);
+    for (k = 0; k < n; k++) {
+        const uint8_t *a = l + t[k].ph, *b = n == m ? d + u[k].ph : NULL;
+        swap[k] = 0;
+        if (!b || t[k].len != u[k].len || t[k].ph - t[k].off != u[k].ph - u[k].off || memcmp(a, b, 24) ||
+            !memcmp(l + t[k].off, d + u[k].off, t[k].len))
+            continue;   /* (no twin, or the same bytes) */
+        swap[k] = (all && (k >= 64 || !(keep >> k & 1))) || tim_same(a, b);
+    }
+    do {   /* a bank that a texture staying the language's draws with keeps the language's colours */
+        changed = 0;
+        for (k = 0; k < n; k++) {
+            uint32_t hsz = pc_rd16(l + t[k].ph + 12), img = pc_rd32(l + t[k].ph + 8), clut = pc_rd32(l + t[k].ph + 4);
+            if (!swap[k] || !memcmp(l + t[k].ph + hsz + img, d + u[k].ph + hsz + img, clut)) continue;
+            for (j = 0; j < n; j++)
+                if (j != k && !swap[j] && ((t[j].banks[0] & t[k].banks[0]) | (t[j].banks[1] & t[k].banks[1]))) { swap[k] = 0; changed = 1; break; }
+        }
+    } while (changed);
+    for (k = 0; k < n && np < max; k++)
+        if (swap[k]) { out[np].off = t[k].off; out[np].disc = u[k].off; out[np].len = t[k].len; np++; }
+    free(t);
+    return np;
+}

@@ -397,6 +397,8 @@ const Setting g_settings[] = {
       .help = "The game's text. Applies from the next screen." },
     { SP_GAMEPLAY, "Subtitles", NULL, 0, 0, 1, .get = subs_get, .set = subs_set, .name = subs_name, .count = subs_n, .locked = subs_locked, .shown = lang_any,
       .help = "Cutscene subtitles in this language, also with the game in another one." },
+    { SP_GAMEPLAY, "Translated Pictures", V(g_lang_pictures), 0, 1, 1, .shown = lang_any,
+      .help = "Pictures with writing in the language (menus, maps, labels). Off shows the English ones, which an HD texture pack can replace." },
     { SP_GAMEPLAY, "Skip Intro", V(g_config.skip_intro), 0, 1, 1, .flags = SET_RESTART, .help = "Go straight to the title screen. Off lets you skip each logo and movie with a button press." },
     { SP_GAMEPLAY, "Check For Updates", V(g_config.update_check), 0, 2, 1, (const char* const[]){ "Off", "Ask to Install", "Notify Only" }, .apply = update_start,
       .help = "Check for a newer game version at startup. Ask to Install offers to download and install it on the title screen; Notify Only just shows it there." },

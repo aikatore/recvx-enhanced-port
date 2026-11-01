@@ -39,6 +39,10 @@
   the stairs to his residence, you can now follow down the stairs instead of being stuck there.
 - **Smoother Motion under water**: the views from the water at the airport's submarine dock now move as
   smoothly as the rest of the game, wavy water effect included.
+- **Item pictures in other languages**: in Turkish, some item pictures in the inventory and the item box showed
+  with scrambled colours. Pictures without writing (item pictures, effects, maps) now always come from your own
+  disc, so an HD texture pack replaces them in every language. The new Translated Pictures setting can also show
+  the pictures with writing in English, to keep the HD pack's everywhere. No new import is needed.
 
 ## 0.7.1 (2026-10-31)
 

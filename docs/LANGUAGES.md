@@ -241,7 +241,7 @@ European disc:
 | `ENG/SYSTEM1.AFS` | 1, 2 | the language screen's flags (the English copy too), 2 re-encoded |
 | `SPA/ADV4.AFS` | 0, 2, 4, 6, 7 (1, 5, 32 re-encoded English) | the warning, the title (Turkish plates in their own layout of the picture, the credit), OPTION, the battle game's selection screens |
 | `SPA/MRY4.AFS` | 39 entries | the English map pictures re-encoded: **the map stays English** (the clean Spanish has its own) |
-| `SPA/ITEM14.AFS` / `ITEM24.AFS` | 145..159 | the inventory's words (161, 162, 194, the Spanish file covers, are the English ones again) |
+| `SPA/ITEM14.AFS` / `ITEM24.AFS` | 145..159 | the inventory's words (161, 162, 194, the Spanish file covers, are the English ones again); 145's item pictures redrawn, each of the two with colours of its own where the game has one palette for both (see "Pictures" under "How the port uses it") |
 | `SPA/RDX_LNK4.AFS` | 205 rooms | the messages (202 rooms with messages, the Spanish counts), 471 subtitles shown at once (`0xFE00`) |
 
 **The font**: the European one (same cells, same widths: the executable's second width table is not patched) with
@@ -370,6 +370,36 @@ no subtitles.
 
 - `lang_scan` (start, after an import or a delete) lists the installed languages; ini `language = fr|de|es|ja|ru|tr|pt-BR|ar`
   (English when that language is not installed), ini `subtitles` (below).
+- **Pictures** (the language's `SYSTEM.AFS/1`, `/2`, `ADV.AFS/n`, `MRY.AFS/n`, `ITEM1.AFS/n`, `ITEM2.AFS/n`): only the
+  textures with the language's writing are the language's. `adx.c ADXF_OpenAfs` asks `pc_lang_disc_parts` for a
+  language's file of an archive: `pc_parse.h pc_lang_parts` pairs the k-th TIM2 of the file (raw, or a PVP chunk's
+  payload) with the k-th of the disc's entry (the same count and geometry; the offsets may differ, as in the European
+  `SYSTEM.AFS/1`) and a texture whose every pixel shows the disc's colour (within 8, alpha 16) is read from the disc
+  (`ADXF_ReadNw32` puts the disc's bytes there): a re-encode, no writing changed. An HD texture pack (hashes of the US
+  texels and palettes) then replaces it as in English. Measured on the imports (`langicons/tools/tdiff.py`,
+  `small.py`): such textures differ by at most 1, every texture with writing by 77 or more. Never when that would
+  change a palette bank (the PLI chunk before it) a texture staying the language's draws with (the Russian font is
+  drawn with another texture's bank). What this takes from the disc:
+  - Turkish: the **item pictures** (`ITEM1/2.AFS/145` textures 3, 4: the patch redrew both sheets with a palette
+    each, but both fill palette bank 48, so one sheet showed with the other's colours: the lighter, the Calico, the
+    keys scrambled; now the disc's, and the HD pack's), the English map pictures (`MRY.AFS`, all but 1..4), the
+    title's, OPTION's and the battle game's pictures without writing (`ADV.AFS/1`, `/2`, `/4`, `/5`, `/32`), two
+    effect textures (`SYSTEM.AFS/1`).
+  - French, German, Spanish, Arabic: 12 effect textures of `SYSTEM.AFS/1` (the European disc re-encoded them).
+  - Japanese: 11 textures of `SYSTEM.AFS/1` (the same pictures; the kanji pages among them).
+  - Russian, Brazilian Portuguese: nothing (their other pictures all carry writing; the Russian typewriter's
+    selection boxes, `ITEM1.AFS/144` texture 2, have 16 colours of their second palette changed).
+  The rest is the language's: the fonts, the inventory's words, frame and status screen (`ITEM?.AFS/145` 0..2), the
+  file covers (146..159: the book with its word), the map words and area names, the title and OPTION plates, the game
+  over picture, the Arabic item model labels (ammunition boxes, ink ribbon: `ITEM1.AFS/11` ... `/124`), the Russian
+  typewriter's keys and clipboard (`ITEM1.AFS/144`), the computer's screens with words (Brazilian Portuguese
+  `SYSTEM.AFS/2` texture 2). No import again: the imports stay as they are.
+- **Translated Pictures** (GAMEPLAY > GENERAL, under Subtitles, shown with an imported language; ini
+  `translated_pictures`, default 1): Off reads the archives' pictures from the disc (`pc_lang_file_dir(name)` gives
+  no folder for `ADV.AFS/`, `MRY.AFS/`, `ITEM1.AFS/`, `ITEM2.AFS/`) and in `SYSTEM.AFS/1` and `/2` every texture
+  but the fonts (`/1` texture 0, Japanese 0..3; `/2` texture 1, the computer's font) and those the bank rule keeps:
+  the pictures are English (the text stays the language's), so an HD pack replaces them; only the font stays the
+  language's. It applies to the files loaded next (the next screen).
 - Files: `audio/adx.c mod_open_path` looks for a file the game opens (by name, or `ARCHIVE.AFS/n`) in BioRand's
   pack, the mods folder, then the language's folder (upper-case names; the game asks for `sysmes.ald`), then the
   disc. `pc_lang_file_opened` learns from it which language the loaded font (`SYSTEM.AFS/1`), the title and OPTION
@@ -563,6 +593,12 @@ Turkish and Brazilian Portuguese (2026-10-31, Linux, headless; job folder `lang3
   Sans, added to the font list for the test run only: this machine has no system font).
 - Subtitles in another language (`scene.sh`): English with Turkish subtitles, Turkish with Brazilian Portuguese,
   Brazilian Portuguese with Japanese (the new `LANG_OTHER` encoding).
+- Pictures (2026-11-01, job folder `langicons/`): `inv.sh` pages through every item (155, 6 per bag: `RECVX_BAG`
+  `p<frame>` bags; bag 17, the Hemostatic, in the next room: it starts the cell's cutscene) in every language before
+  (the language's `145` whole) and after, against English (`tools/compare.py`, sheets `cmp_<lang>.png`): Turkish
+  before: every key item picture scrambled (bags 10..25), after: as English; the other languages: as English before
+  and after. With the HD pack (read only, `RECVX_TRACE_HD`, `hd.sh`): Turkish's item sheets now hit the pack's
+  replacements; with Translated Pictures off only the language's font misses (Turkish, Arabic).
 - ctest `lang` (every Turkish and Brazilian Portuguese translation against its font), the other ctests; French,
   German, Spanish, Russian, Japanese again; `layout_check.sh` main build vs this build (English): identical; Windows
   build.
