@@ -1,18 +1,18 @@
 /*
- * libmc on the host: memory card slot 1 is a directory (<save_dir>/card0),
- * slot 2 is empty. Commands complete immediately; sceMcSync reports them.
+ * libmc on the host: memory card slot 1 is a directory (<save_dir>/card0), slot 2 another
+ * (<save_dir>/card1). Commands complete immediately; sceMcSync reports them.
  */
 #include "ps2_platform.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
 
-#define MC_FREE_CLUSTERS 8000
+#define MC_FREE_CLUSTERS 8000   /* KB a card holds; what its folder's files take is used */
 
 static int last_cmd, last_result, pending;
-static char curdir[256] = "/";
+static char curdir[2][256] = { "/", "/" };   /* per card, as libmc keeps them */
 static FILE* fds[16];
-static signed char fd_save[16];   /* the game's save file SAVEDATA-nn open on it: nn, -1 another file */
+static signed char fd_save[16];   /* the game's save file open on it: lobby.h slot (card 2: 15 + nn), -1 another file */
 static unsigned char fd_wrote[16];
 void coop_save_written(int slot);   /* pc/glue/coop_glue.c: the host's saved partner inventories go with the save */
 static int save_slot(const char* name)
@@ -20,9 +20,11 @@ static int save_slot(const char* name)
     const char* s = strstr(name, "SAVEDATA-");
     return s && s[9] >= '0' && s[9] <= '9' && s[10] >= '0' && s[10] <= '9' && !s[11] ? (s[9] - '0') * 10 + s[10] - '0' : -1;
 }
-static int card_seen;
+static int card_seen[2];
+#define CARD(port) ((port) ? 1 : 0)
 
 static const char* trace_arg;   /* RECVX_TRACE_MC: log every card command */
+static int trace_card = -1;     /* its card's folder, -1 a file descriptor's command */
 /* libmc accepts one command at a time: until its result is collected with sceMcSync, new
    requests fail (the game's per-frame card polling then retries instead of stealing the
    result of a save in progress). */
@@ -32,38 +34,63 @@ static void done(int cmd, int result)
 {
     static int on = -1;
     if (on < 0) on = SDL_getenv("RECVX_TRACE_MC") != NULL;
-    if (on) printf("mc: cmd %02x %s -> %d\n", cmd, trace_arg ? trace_arg : "", result);
-    trace_arg = NULL;
+    if (on) {
+        char c[8] = "";
+        if (trace_card >= 0) SDL_snprintf(c, sizeof(c), "card%d ", trace_card);
+        printf("mc: cmd %02x %s%s -> %d\n", cmd, c, trace_arg ? trace_arg : "", result);
+    }
+    trace_arg = NULL; trace_card = -1;
     last_cmd = cmd; last_result = result; pending = 1;
 }
 
-static void host_path(const char* name, char* out, size_t n)
+static void host_path(int port, const char* name, char* out, size_t n)
 {
     char rel[512];
+    const char* cur = curdir[CARD(port)];
+    trace_card = CARD(port);
     if (name[0] == '/') SDL_strlcpy(rel, name, sizeof(rel));
-    else SDL_snprintf(rel, sizeof(rel), "%s%s%s", curdir, curdir[strlen(curdir) - 1] == '/' ? "" : "/", name);
-    SDL_snprintf(out, n, "%s/card0%s", g_config.save_dir, rel);
+    else SDL_snprintf(rel, sizeof(rel), "%s%s%s", cur, cur[strlen(cur) - 1] == '/' ? "" : "/", name);
+    SDL_snprintf(out, n, "%s/card%d%s", g_config.save_dir, CARD(port), rel);
 }
 
-static void ensure_card(void)
+static void ensure_card(int port)
 {
     char p[1100];
-    SDL_snprintf(p, sizeof(p), "%s/card0", g_config.save_dir);
+    SDL_snprintf(p, sizeof(p), "%s/card%d", g_config.save_dir, CARD(port));
     SDL_CreateDirectory(p);   /* SDL: UTF-8 paths on Windows too, parents included */
 }
 
-int save_native(void);   /* lobby.h: native save files, the card folder is made only when the game uses it */
-int sceMcInit(void) { if (!save_native()) ensure_card(); return 0; }
+/* KB the files in dir take, 1 KB clusters and one per folder (all the card's folder holds, other games' saves too) */
+static SDL_EnumerationResult SDLCALL used_entry(void* ud, const char* dir, const char* name)
+{
+    char full[1400];
+    SDL_PathInfo st;
+    SDL_snprintf(full, sizeof(full), "%s%s", dir, name);   /* SDL's dir ends in a separator */
+    if (!SDL_GetPathInfo(full, &st)) return SDL_ENUM_CONTINUE;
+    if (st.type == SDL_PATHTYPE_DIRECTORY) { *(Sint64*)ud += 1; SDL_EnumerateDirectory(full, used_entry, ud); }
+    else *(Sint64*)ud += (Sint64)((st.size + 1023) / 1024);
+    return SDL_ENUM_CONTINUE;
+}
+
+int save_native(void);   /* lobby.h: native save files, the card folders are made only when the game uses them */
+int sceMcInit(void) { if (!save_native()) { ensure_card(0); ensure_card(1); } return 0; }
 
 int sceMcGetInfo(int port, int slot, int* type, int* free_, int* format)
 { MC_BUSY();
     (void)slot;
-    if (port != 0) { if (type) *type = 0; done(1, -10 /* no card */); return 0; }
+    if (port != 0 && port != 1) { if (type) *type = 0; done(1, -10 /* no card */); return 0; }
     if (type) *type = 2;           /* PS2 memory card */
-    if (free_) *free_ = MC_FREE_CLUSTERS;
+    if (free_) {
+        char p[1100];
+        Sint64 used = 0;
+        host_path(port, "/", p, sizeof(p));
+        SDL_EnumerateDirectory(p, used_entry, &used);
+        *free_ = used < MC_FREE_CLUSTERS ? MC_FREE_CLUSTERS - (int)used : 0;
+    }
     if (format) *format = 1;
-    done(1, card_seen ? 0 : -1);   /* -1: card (re)inserted since last check */
-    card_seen = 1;
+    trace_card = port;
+    done(1, card_seen[port] ? 0 : -1);   /* -1: card (re)inserted since last check */
+    card_seen[port] = 1;
     return 0;
 }
 
@@ -71,13 +98,13 @@ int sceMcOpen(int port, int slot, const char* name, int mode)
 { MC_BUSY();
     trace_arg = name;
     char p[1100]; const char* m;
-    (void)port; (void)slot;
-    host_path(name, p, sizeof(p));
+    (void)slot;
+    host_path(port, name, p, sizeof(p));
     if (mode & 0x200) m = (mode & 3) == 1 ? "rb" : "w+b";   /* CREAT */
     else m = (mode & 3) == 1 ? "rb" : "r+b";
     for (int fd = 0; fd < 16; fd++) if (!fds[fd])   /* libmc descriptors start at 0; the game relies on it */ {
         fds[fd] = pc_fopen(p, m);
-        fd_save[fd] = (signed char)save_slot(name);
+        fd_save[fd] = (signed char)(save_slot(name) < 0 ? -1 : save_slot(name) + 15 * CARD(port));
         fd_wrote[fd] = 0;
         done(2, fds[fd] ? fd : -4);
         return 0;
@@ -107,8 +134,8 @@ int sceMcMkdir(int port, int slot, const char* name)
 { MC_BUSY();
     trace_arg = name;
     char p[1100];
-    (void)port; (void)slot;
-    host_path(name, p, sizeof(p));
+    (void)slot;
+    host_path(port, name, p, sizeof(p));
     if (SDL_GetPathInfo(p, NULL)) { done(0x0b, -4); return 0; }
     done(0x0b, SDL_CreateDirectory(p) ? 0 : -4);
     return 0;
@@ -118,13 +145,14 @@ int sceMcChdir(int port, int slot, const char* newdir, char* olddir)
 { MC_BUSY();
     trace_arg = newdir;
     char p[1100];
-    (void)port; (void)slot;
-    if (olddir) strcpy(olddir, curdir);
-    host_path(newdir, p, sizeof(p));
+    char* cd = curdir[CARD(port)];
+    (void)slot;
+    if (olddir) strcpy(olddir, cd);
+    host_path(port, newdir, p, sizeof(p));
     if (!SDL_GetPathInfo(p, NULL)) { done(0x0c, -4); return 0; }
-    if (newdir[0] == '/') SDL_strlcpy(curdir, newdir, sizeof(curdir));
-    else if (!strcmp(newdir, "..")) { char* s = strrchr(curdir, '/'); if (s && s != curdir) *s = 0; else strcpy(curdir, "/"); }
-    else { if (curdir[strlen(curdir) - 1] != '/') SDL_strlcat(curdir, "/", sizeof(curdir)); SDL_strlcat(curdir, newdir, sizeof(curdir)); }
+    if (newdir[0] == '/') SDL_strlcpy(cd, newdir, sizeof(curdir[0]));
+    else if (!strcmp(newdir, "..")) { char* s = strrchr(cd, '/'); if (s && s != cd) *s = 0; else strcpy(cd, "/"); }
+    else { if (cd[strlen(cd) - 1] != '/') SDL_strlcat(cd, "/", sizeof(curdir[0])); SDL_strlcat(cd, newdir, sizeof(curdir[0])); }
     done(0x0c, 0);
     return 0;
 }
@@ -161,16 +189,16 @@ int sceMcGetDir(int port, int slot, const char* name, unsigned mode, int maxent,
     char dir[1100], pattern[256];
     int n = 0;
     const char* slash = strrchr(name, '/');
-    (void)port; (void)slot; (void)mode;
+    (void)slot; (void)mode;
     /* name is "<dir>/<pattern>" or "<pattern>"; pattern is '*' or an exact name */
     if (slash) {
         char d[256]; size_t len = (size_t)(slash - name);
         if (len >= sizeof(d)) len = sizeof(d) - 1;
         memcpy(d, name, len); d[len] = 0;
-        host_path(len ? d : "/", dir, sizeof(dir));
+        host_path(port, len ? d : "/", dir, sizeof(dir));
         SDL_strlcpy(pattern, slash + 1, sizeof(pattern));
     } else {
-        host_path(".", dir, sizeof(dir));
+        host_path(port, ".", dir, sizeof(dir));
         SDL_strlcpy(pattern, name, sizeof(pattern));
     }
     {
@@ -189,13 +217,13 @@ int sceMcDelete(int port, int slot, const char* name)
 { MC_BUSY();
     trace_arg = name;
     char p[1100];
-    (void)port; (void)slot;
-    host_path(name, p, sizeof(p));
+    (void)slot;
+    host_path(port, name, p, sizeof(p));
     done(0x0f, SDL_RemovePath(p) ? 0 : -4);
     return 0;
 }
 
-int sceMcFormat(int port, int slot)   { MC_BUSY(); (void)port; (void)slot; ensure_card(); done(0x10, 0); return 0; }
+int sceMcFormat(int port, int slot)   { MC_BUSY(); (void)slot; ensure_card(port); done(0x10, 0); return 0; }
 int sceMcUnformat(int port, int slot) { MC_BUSY(); (void)port; (void)slot; done(0x11, 0); return 0; }
 
 int sceMcSync(int mode, int* cmd, int* result)

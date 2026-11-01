@@ -34,12 +34,12 @@ void lobby_io_frame(void* window);      /* per presented frame: text input on/of
 int  save_native(void);
 const char* save_native_dir(void);      /* <save_dir>/saves; the first use creates it and copies the card's saves in */
 /* any thread: save `slot` of the active save system, the game's SAVEFILE (the save region
-   sys->version..save_end, then a byte-sum checksum). Slots are the memory card's 0..14
-   (<save_dir>/card0/BASLUS-20184/SAVEDATA-nn), or native save number - 1 (a memory card slot's
+   sys->version..save_end, then a byte-sum checksum). Slots are the memory cards' 0..14
+   (card 1: <save_dir>/card0/BASLUS-20184/SAVEDATA-nn) and 15..29 (card 2: card1/.../SAVEDATA-(slot - 15)), or native save number - 1 (a memory card slot's
    save keeps its number when copied over; sparse, up to SAVESTORE_NUMBER_MAX - 1). read: 1 = valid. */
 #define LOBBY_SAVE_BYTES 0x838
 typedef struct LobbySave { int slot; char file[256]; } LobbySave;
-/* the saves there are, by slot (malloc'd in *out, free() it): the card's 15 slots (empty ones too),
+/* the saves there are, by slot (malloc'd in *out, free() it): the cards' 30 slots (empty ones too),
    or the valid native save files (at most SAVESTORE_MAX) */
 int  lobby_save_list(LobbySave** out);
 int  lobby_read_listed(const LobbySave* s, unsigned char* out);

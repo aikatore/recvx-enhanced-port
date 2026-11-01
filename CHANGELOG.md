@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- **Memory card slot 2**: with the Memory Card save system, MEMORY CARD slot 2 now works as a second card of
+  its own, so you can save to and load from either slot.
+
 ## 0.7.2 (2026-11-01)
 
 ### New

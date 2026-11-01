@@ -995,8 +995,13 @@ Two save systems, chosen by `save_system` (F1 / ENHANCED SETTINGS GAMEPLAY "Save
 
 - **Separate Files** (0, default): `<save dir>/saves/NNN_<label>.sav`, one file per save, up to `SAVESTORE_MAX` (10,000) listed
   (`pc/src/host/savestore.c`, tested by `pc/tests/test_savestore.c`).
-- **Memory Card** (1): the PS2 card as before, `pc/src/ps2/mc.c` (libmc on a folder,
-  `<save dir>/card0`, 15 save slots plus the system file).
+- **Memory Card** (1): the PS2 cards as before, `pc/src/ps2/mc.c` (libmc on a folder per card:
+  port 0 = MEMORY CARD slot 1 `<save dir>/card0`, port 1 = slot 2 `<save dir>/card1`; 15 save slots
+  each plus the system file). Both cards are always in, formatted (`sceMcInit` makes both folders);
+  free space is 8000 KB less what the card's folder holds (1 KB clusters, one per folder), so a
+  folder over 8 MB is a full card and the game's own "not enough memory space" path shows. The
+  current directory and the "card inserted" result are per card. The game reads its system file
+  from slot 1 only (`ps2_SystemLoadScreen.c`), as on the PS2.
 
 **File format.** A 64-byte header followed by the game's save exactly as the card holds it
 (`SAVEFILE`, 0x838 bytes: `sys->version .. save_end` and the game's byte-sum checksum), so a native
@@ -1049,13 +1054,14 @@ before the native system.
 last. An empty row looks like the card's empty slot ("NO_DATA"); loading with no saves shows one.
 
 **Migration.** The first time native files are used (`save_native_dir()` finds no `saves` folder)
-the card's saves are copied in (`savestore_import_card`): slot nn becomes save number nn + 1 when
-free, with `coop-partners-nn.bin` as `saves/NNN.coop-partners.bin`, and the card's system file as
+the cards' saves are copied in (`savestore_import_card`): slot nn becomes save number nn + 1 when
+free (card 2's slot nn is slot 15 + nn: saves 16..30), with `coop-partners-nn.bin` as
+`saves/NNN.coop-partners.bin`, and card 1's system file as
 `system.dat`; the card is never changed. "Import Memory Card Saves" does the same later (saves
 whose bytes are already there are skipped).
 
 **Other readers** go through `pc/src/host/lobby.h`, which follows the active system: save "slots"
-are the card's 0..14 or the native number - 1 (so a migrated slot keeps its meaning in `coop_start`
+are the cards' 0..14 (slot 1) and 15..29 (slot 2) or the native number - 1 (so a migrated slot keeps its meaning in `coop_start`
 and `coop_items`); native numbers can be sparse, so lists come from `lobby_save_list()` (the saves
 there are, by slot), never from a count. The co-op lobby's START list, the joiner's
 ITEMS choice, `RECVX_TEST_SAVE`, the host's partner records (`coop-partners-nn.bin` /

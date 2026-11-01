@@ -140,7 +140,9 @@ const char* save_native_dir(void)
     return dir;
 }
 
-static void card_path(char* p, int n, int slot) { SDL_snprintf(p, n, "%s/card0/BASLUS-20184/SAVEDATA-%02d", g_config.save_dir, slot); }
+/* the cards' slots: card 1's 0..14, card 2's 15..29 (lobby.h) */
+#define CARD_SLOTS 30
+static void card_path(char* p, int n, int slot) { SDL_snprintf(p, n, "%s/card%d/BASLUS-20184/SAVEDATA-%02d", g_config.save_dir, slot / 15, slot % 15); }
 
 /* native: the file of save number slot + 1 */
 static int native_path(char* p, int n, int slot)
@@ -172,10 +174,10 @@ int lobby_save_list(LobbySave** out)
         free(e);
         return k;
     }
-    if (!(l = malloc(sizeof(*l) * 15))) return 0;
-    for (i = 0; i < 15; i++) { l[i].slot = i; l[i].file[0] = 0; }   /* lobby_read_listed reads the slot */
+    if (!(l = malloc(sizeof(*l) * CARD_SLOTS))) return 0;
+    for (i = 0; i < CARD_SLOTS; i++) { l[i].slot = i; l[i].file[0] = 0; }   /* lobby_read_listed reads the slot */
     *out = l;
-    return 15;
+    return CARD_SLOTS;
 }
 
 int lobby_read_listed(const LobbySave* s, unsigned char* out)
@@ -193,7 +195,7 @@ int lobby_read_save(int slot, unsigned char* out)
     unsigned int sum = 0, ck;
     int i, n;
     if (save_native()) return native_path(p, sizeof(p), slot) && savestore_read(p, out);   /* a folder scan: lists read lobby_read_listed */
-    if (slot < 0 || slot > 14) return 0;
+    if (slot < 0 || slot >= CARD_SLOTS) return 0;
     card_path(p, sizeof(p), slot);
     if (!(f = pc_fopen(p, "rb"))) return 0;
     n = (int)fread(out, 1, LOBBY_SAVE_BYTES, f);
@@ -211,7 +213,7 @@ int lobby_write_save(int slot, const void* region, int size)
     char p[1200];
     FILE* f;
     int i, ok;
-    if (slot < 0 || slot > (save_native() ? 999999998 : 14) || size != LOBBY_SAVE_BYTES - 4) return 0;
+    if (slot < 0 || slot > (save_native() ? 999999998 : CARD_SLOTS - 1) || size != LOBBY_SAVE_BYTES - 4) return 0;
     memcpy(b, region, size);
     for (i = 0; i < size; i++) sum += b[i];
     memcpy(b + size, &sum, 4);
@@ -219,7 +221,7 @@ int lobby_write_save(int slot, const void* region, int size)
         char file[256];
         return savestore_write(save_native_dir(), slot + 1, b, savestore_find(save_native_dir(), slot + 1, file, sizeof(file)) ? file : NULL) != 0;
     }
-    SDL_snprintf(p, sizeof(p), "%s/card0/BASLUS-20184", g_config.save_dir);
+    SDL_snprintf(p, sizeof(p), "%s/card%d/BASLUS-20184", g_config.save_dir, slot / 15);
     SDL_CreateDirectory(p);
     card_path(p, sizeof(p), slot);
     if (!(f = pc_fopen(p, "wb"))) return 0;
@@ -229,7 +231,7 @@ int lobby_write_save(int slot, const void* region, int size)
 }
 
 /* co-op: the partners' saved items that go with save `slot` (docs/COOP.md "Saved partner
-   inventories"): <save_dir>/coop-partners-nn.bin, outside the card directory (the game lists it);
+   inventories"): <save_dir>/coop-partners-nn.bin (nn the slot, card 2's 15..29), outside the card directories (the game lists them);
    native: <save_dir>/saves/NNN.coop-partners.bin */
 static int partners_path(char* p, int n, int slot)
 {
@@ -238,7 +240,7 @@ static int partners_path(char* p, int n, int slot)
         SDL_snprintf(p, n, "%s/" SAVE_PARTNERS_FMT, save_native_dir(), slot + 1);
         return 1;
     }
-    if (slot < 0 || slot > 14) return 0;
+    if (slot < 0 || slot >= CARD_SLOTS) return 0;
     SDL_snprintf(p, n, "%s/coop-partners-%02d.bin", g_config.save_dir, slot);
     return 1;
 }
