@@ -5,7 +5,7 @@ over the internet or a LAN (UDP). Co-op is an optional addon: with it off the ga
 as without it (every hook is `#ifdef TARGET_PC` and `if (coop_on)`).
 
 Part 1 is for players: how to host, join and play. Part 2 is the reference: architecture,
-protocol 33, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
+protocol 34, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
 [USER_GUIDE.md](USER_GUIDE.md) (settings, controls), [ACTORS.md](ACTORS.md) (models and voices),
 [ENEMIES.md](ENEMIES.md) (enemy options), [ARCHITECTURE.md](ARCHITECTURE.md),
 [BUILDING.md](BUILDING.md).
@@ -713,7 +713,9 @@ grabbed by is released on the host, an unanswered trade item returns to its owne
 The host's enemy options (EXTRA ENEMIES, LAYOUT, RANDOMIZER, VARIETY, EVENT ENEMIES, SEED, and the
 CUTSCENE CAST page; F1 / ENHANCED SETTINGS GAMEPLAY, lobby GAME RULES, RANDOMIZER) count for both: both
 players see the same cutscene cast, picked from the host's seed (the joiner's own cast settings do not
-count while it is joined). The joiner's lobby shows them (read-only) before the game
+count while it is joined). Claire and Chris are not cast: each screen shows them with its own player's look for
+them (that player's "Character Model", or its BioRand "Randomize Played as" pick for that character), as each
+screen's cutscene doubles are its own ([ACTORS.md](ACTORS.md) "Cutscene cast"). The joiner's lobby shows them (read-only) before the game
 starts; changes in game take effect at the next room load on both sides. Enemies the host adds
 appear in the joiner's game in the same slots. Details: [ENEMIES.md](ENEMIES.md).
 
@@ -725,7 +727,9 @@ the partner as that cutscene model, no protocol change), Claire, Chris, Steve, W
 costume, or a story-cast, creature or zombie model. Your partner sees you as that model, and so do you (also in single player). The
 partner's voice follows its model. Both players need the same build. "Custom Cutscene Model"
 (`appear_in_cutscenes`) counts for your own screen: off, your cutscenes (also one replayed from
-the partner's event) show the real Claire or Chris. Models, voices and cutscene behaviour:
+the partner's event) show the real Claire or Chris. What the partner sees of you follows the character you play:
+after a story switch (Claire -> Chris) your model for Chris is sent (BioRand's "Randomize Played as" with "Per
+Character": your Chris pick; a co-op guest's look is always its own "Character Model"). Models, voices and cutscene behaviour:
 [ACTORS.md](ACTORS.md).
 
 ## Local co-op on one PC
@@ -1335,10 +1339,10 @@ send time minus the echoed datagram's arrival. Sample = arrival - our clock - th
 smoothed (EWMA 0.1). The name tag's point goes with the recorded frame (`stream_point`) and is
 interpolated with the in-between frames; it snaps on camera cuts and in vanilla mode.
 
-## Protocol 33
+## Protocol 34
 
-`COOP_VERSION` is **33**; both players need builds with the same version (a mismatch is reported,
-e.g. "The host uses co-op compatibility version 32; yours is 33. Use matching game builds."). The co-op server does not
+`COOP_VERSION` is **34**; both players need builds with the same version (a mismatch is reported,
+e.g. "The host uses co-op compatibility version 33; yours is 34. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
 tag, `EV_OWN`; 17 trade requests; 18 voices; 19 the game rules `OPT_IMPORTANT`, `OPT_NO_RIBBON`,
@@ -1353,7 +1357,7 @@ and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid
 `Pose.opts`, so a further rule needs a field of its own); 24 enemy slots 0..254 (`COOP_ENE_SLOTS`, the PC's
 255 slots) in every slot field, and `EV_FX` marks its `FX_*` references in `refs` (the bytes 253..255 are slots now); 25 `Pose.use`, the trigger the sender is using (one player at a puzzle at a time, see "Puzzles"; the pose grew to 112 bytes); 26 `EneSnap.id`, the enemy type in the slot: a snapshot applies only to a slot holding the same type (`hokan_count` is 16 bits now; the snapshot stays 100 bytes); 27 `PoseExt.br`, `br_seed`, `br_id` (BioRand: the host's choice and each side's pack; `Pose.opts` has no free bit, so a field of its own; the extension grew to 104 bytes); 28 direct sessions are encrypted after a handshake bound to the whole join code (`PKT_HELLO`, `PKT_HELLO_ACK`, see "Security"), so `Pose.auth`, the 32-bit join-code proof, is gone (`rsv`, zero), the goodbye's `COOP_REJ_STATE`, and a generic `EV_FX` only for the effects co-op sends, each field checked (see "Effects and voices"); 29 the cutscene cast: `EV_EOPTS` carries `cast`, `cast_all`, `cast_assign`, `cast_imports` (the event stays 88 bytes) and `PoseExt.imp_id`, the sender's imported models (the extension grew to 108 bytes); 30 `EV_BRSEED`, the host's BioRand seed string and CLI checksum (a guest can generate the host's pack, see "BioRand"; the pose and extension are unchanged); 31 `EV_CASTOFF`, the host's cutscene cast "Custom" list, and `EV_EOPTS` `cast_all` 2 (Custom); 32 the cutscene cast's pools without the player files that have a talking twin (Claire's, Chris's, Steve's, Wesker's: their cutscene models stand for them, [ACTORS.md](ACTORS.md) "Talking twins"), so the same seed picks other models and the `EV_CASTOFF` bits name other entries (the event is unchanged); 33 `Pose.opts2`, more game rules
 in the first of the pose's spare bytes (`OPT2_EXTRA_OBJECTS` 1, see "Extra item boxes and herbs"; unknown bits refused; the pose stays 112
-bytes). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 

@@ -61,10 +61,10 @@ void pc_biorand_start_kit(void);                   /* the pack's start inventory
 int  pc_biorand_save_differs(const void* save);    /* a save region (card bytes) made with another BioRand state */
 void pc_biorand_save_accept(void* save);           /* loaded anyway: its words become the current state */
 const char* pc_biorand_ask(int line);              /* the warning's lines 0..2 (after save_differs) */
-/* "Randomize Played as" (biorand_glue.c, save word BR_APPEAR): the look this game was given, -1 none (the user's own) */
+/* "Randomize Played as" (biorand_glue.c, save words BR_APPEAR, BR_APPEAR2): the looks this game was given, -1 none (the user's own) */
 void pc_biorand_appear_new(void);                  /* a new game: picked from the pack's seed, or none */
-int  pc_biorand_appear(void);                      /* in game: the picked "You appear as" chr, -1 none */
-void pc_biorand_appear_drop(void);                 /* the user chose a look in game: this game's pick goes */
+int  pc_biorand_appear(int ply);                   /* in game: the picked "You appear as" chr of character ply (0 Claire, 1 Chris, 2 Steve, 3 as Chris; -1 the one played now), -1 none */
+void pc_biorand_appear_drop(void);                 /* the user chose a look in game: this game's picks go */
 /* co-op (coop_glue.c): -1 not a guest in a session (our own setting counts), else the host's choice (0/1) */
 int coop_biorand(void);
 /* a guest whose pack is not the host's, at the title (protocol 30, docs/BIORAND_INGAME.md S5b): the host's seed string

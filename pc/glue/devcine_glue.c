@@ -14,6 +14,7 @@
 #include "../src/host/enemies.h"
 #include "../src/host/devcine.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 extern int g_dev_tools;
@@ -22,6 +23,7 @@ extern BH_SCEWORK* bhCetask;
 int room_file_now(void);                /* enemyopt_glue.c */
 int cast_describe(char* buf, int n);    /* cast_glue.c */
 const char* pc_movie_name(void);        /* movie_glue.c */
+void host_log(const char* fmt, ...);
 
 #define QUIET 15                        /* game frames without a scene that end one */
 static int lvl_ev[16] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };   /* the event each task level runs */
@@ -72,6 +74,20 @@ static void describe(char* out, int n)
         snprintf(out + len, (size_t)(n - len), "%splayer -> %s", len ? "; " : "", actor_model(m) ? actor_model(m)->name : "a player file");
 }
 
+/* a scene ended; test aid RECVX_DEVCINE_LOG=1: its line (as Copy and Export give it) in the log */
+static void scene_end(void)
+{
+    char* t;
+    int n;
+    devcine_end();
+    if (!getenv("RECVX_DEVCINE_LOG") || !(t = malloc(DEVCINE_TEXT))) return;
+    n = devcine_text(t, DEVCINE_TEXT);
+    if (n > 0 && t[n - 1] == '\n') t[--n] = 0;
+    while (n > 0 && t[n - 1] != '\n') n--;
+    host_log("devcine: %s\n", t + n);
+    free(t);
+}
+
 /* every game frame (cheat_frame) */
 void devcine_frame(void)
 {
@@ -88,8 +104,8 @@ void devcine_frame(void)
     if (mv) now = DC_FMV;
     else if (rom && (bits & 14)) now = DC_EVENT;
     r = room_file_now();
-    if (open && now && (now != kind || r != room || strcmp(name, movie))) { devcine_end(); open = 0; }   /* the next scene */
-    if (open && !now && ++quiet >= QUIET) { devcine_end(); open = 0; }
+    if (open && now && (now != kind || r != room || strcmp(name, movie))) { scene_end(); open = 0; }   /* the next scene */
+    if (open && !now && ++quiet >= QUIET) { scene_end(); open = 0; }
     if (!open && now) {
         DevCine e;
         memset(&e, 0, sizeof e);

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- **A random look for each character**: BioRand's "Randomize Character Model" can now give Claire and Chris
+  (and Steve in his short part) a random look each, or keep one look for the whole game as before.
+
+### Fixes
+
+- **Claire and Chris in the cutscene cast**: the cutscene cast no longer gives Claire or Chris a random model.
+  In every cutscene they look the way you play them, also while you play the other one, for example Chris when
+  his part begins.
+
 ## 0.7.2 (2026-11-01)
 
 ### New

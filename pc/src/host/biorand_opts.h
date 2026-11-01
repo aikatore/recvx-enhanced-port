@@ -107,7 +107,8 @@ void biorand_doors_estimate(const BioOpts* o, char* out, size_t n);
 /* ---- recvx.ini: one key, biorand_seed (config.c) ---- */
 extern char g_biorand_seed[BIORAND_SEED_CAP];
 /* ini biorand_appear: "Randomize Played as" (the BIORAND screen's PORT EXTRAS page; S5 picks the look
-   once per generated seed). Not part of the seed string. */
+   once per generated seed): 0 off, 1 one look for the game ("Same for Both"), 2 one each for Claire, Chris and Steve's
+   section ("Per Character"). Not part of the seed string. */
 extern int g_biorand_appear;
 /* *o from g_biorand_seed, rules applied; empty or invalid: defaults + rules (invalid: a log line) */
 void biorand_opts_load(BioOpts* o);

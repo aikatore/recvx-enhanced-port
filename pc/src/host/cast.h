@@ -15,11 +15,14 @@ extern "C" {
 /* the story character (0..7) a record of type id, model version ver is, -1: none (Alfred's and
    Alexia's boss types, props, enemies) */
 int cast_character(int id, int ver);
-/* story character c (cast_character) counts as played while character ply (sys->ply_id & 3: 0 Claire, 1 Chris,
-   2 Steve, 3 Wesker; -1 none) is played: never cast then. The character itself, and Claire through Steve's short
-   section of her part (the training facility, 3100 to 3210): it is her story, her scenes there (the face relief room,
-   3210) are the player's character's */
-int cast_plays(int c, int ply);
+/* how a record of story character c (cast_character) is drawn while character ply (sys->ply_id & 3: 0 Claire, 1 Chris,
+   2 Steve, 3 Wesker; -1 none) is played, pending (the one a story switch the script has set makes played, -1) is about
+   to be and partner (co-op: the partner's, -1) is: Claire and Chris are never cast: the one played is the game's double
+   (its look: "Character Model", actor_glue.c actor_doubles), the other one gets the player's look for that character
+   in a cast slot (CAST_LOOK). Steve and Wesker played (or about to be, or the partner's) are the game's doubles;
+   everyone else is cast (CAST_PICK). */
+enum { CAST_OWN, CAST_LOOK, CAST_PICK };
+int cast_role(int c, int ply, int pending, int partner);
 /* the models a character may be drawn as (all: 0 "Cutscene models", 1 "All models", 2 "Custom": the "All models"
    entries whose bit in off is clear; imports: the imported models 0..imports-1 too), as actor indices (catalogue
    entries, ACTOR_PART + 4 Claire's second costume (the other player files have no face mask: their characters' cutscene
@@ -49,17 +52,18 @@ int  cast_custom_count(const unsigned char* off, int imports, int* total);
 /* the zombie look (catalogue entry) character c gets when it draws the zombie entry: from (seed, scene, c) */
 int cast_zombie_look(unsigned seed, unsigned scene, int c);
 /* What character c is drawn as: the actor index, -1 none. scene: 0 for "Fixed per character" (the
-   same in every room), else the room file + 1 ("Random per cutscene"). All eight characters are
+   same in every room), else the room file + 1 ("Random per cutscene"). The characters but Claire and Chris (-1: never cast) are
    assigned at once from a shuffle of the pool seeded by (seed, scene), each in turn the next model not
    taken and not its own: different characters get different models while the pool has enough. */
 int cast_model(unsigned seed, unsigned scene, int c, int all, int imports, const unsigned char* off);   /* off: cast_pool's */
 /* identity of the imported models list (names, groups, order): co-op uses them only when both sides
    have the same; 0 with none */
 unsigned cast_import_id(void);
-/* "Randomize Played as" (BioRand, docs/BIORAND_INGAME.md S5a): the "You appear as" chr for BioRand seed number
-   seed, from it alone: an entry of the "All models" pool with Steve's and Wesker's player files too (zombies one entry, then a look of them; imports
-   0..imports-1 too) */
-int cast_appear_pick(unsigned seed, int imports);
+/* "Randomize Played as" (BioRand, docs/BIORAND_INGAME.md S5a): the "You appear as" chr of character c (0 Claire,
+   1 Chris, 2 Steve in his section of Claire's part) for BioRand seed number seed, from it alone: an entry of the "All
+   models" pool with Steve's and Wesker's player files too (zombies one entry, then a look of them; imports
+   0..imports-1 too); the three characters' entries differ. Claire's is the one look of the versions before. */
+int cast_appear_pick(unsigned seed, int imports, int c);
 
 #ifdef __cplusplus
 }

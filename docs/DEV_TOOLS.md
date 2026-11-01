@@ -27,7 +27,7 @@ side, game thread), `overlay.cpp` (`devcine_small`, `devcine_window`; render thr
 ## A line
 
 ```
-#3 13:54:27 RM_1020 (stage 1 room 02 case 0) | event ev 1:1 | cinema+event camera+player hidden | 121.7 s | player Claire | cast seed 0 per cutscene (scene 1021): r0 Claire(91)->Alfred Ashford (played: as itself), r1 Alfred(94)->Alexia Ashford
+#3 13:54:27 RM_1020 (stage 1 room 02 case 0) | event ev 1:1 | cinema+event camera+player hidden | 121.7 s | player Claire | cast seed 0 per cutscene (scene 1021): r1 Alfred(94)->Alexia Ashford
 #2 13:41:19 RM_0000 (stage 0 room 00 case 0) | movie MV_000.PSS (ev 2:31) | movie+cinema+event camera+player hidden | 1.0 s | player Claire | ...
 ```
 
@@ -40,7 +40,7 @@ side, game thread), `overlay.cpp` (`devcine_small`, `devcine_window`; render thr
 | `cinema+event camera+player hidden` | what made it a scene, over its whole run: the movie, the cinema mode (`cb_flg 0x4`), an event camera (`st_flg 0x1000000`), the player hidden by an event (`plp->stflg 0x1000000`) |
 | `121.7 s`, `x2` | how long it ran (game frames / 30); `x2`: it played twice in a row |
 | `player Claire` | the character played (`sys->ply_id`) |
-| `cast seed 0 per cutscene (scene 1021): r1 Alfred(94)->Alexia Ashford` | the cutscene cast: the seed, the Model Assignment, `cast_model`'s scene (0 per character, room file + 1 per cutscene), then each room record given a model: record number, character (type), the model it is drawn as; `(played: as itself)`: a double of the character played, drawn by "Character Model" instead. Missing while the cast is off |
+| `cast seed 0 per cutscene (scene 1021): r1 Alfred(94)->Alexia Ashford` | the cutscene cast: the seed, the Model Assignment, `cast_model`'s scene (0 per character, room file + 1 per cutscene), then each room record given a model: record number, character (type), the model it is drawn as; `(your look)`: Claire or Chris, never cast, drawn as the player's look for that character; `(played: the double)`: Claire or Chris played now, whose double "Character Model" draws; `(played: as itself)`: Steve or Wesker played (or about to be), left to the game or "Character Model". Missing while the cast is off |
 | `double -> ...`, `player -> ...` | the "Character Model" shown on the cutscene double of the character played (while one acts) and on the player |
 
 The overlay's short form is `#3 RM_1020 ev 1:1  121.7 s  Claire`.
@@ -65,5 +65,6 @@ a camera pan as a room is entered, a lever, a close-up (many of the 600 cinema e
 ## Test aids
 
 * `RECVX_SHOW_OVERLAY=5`: the window open at start.
+* `RECVX_DEVCINE_LOG=1`: each scene's line, as Copy gives it, also in the log when the scene ends (`devcine: #2 ...`).
 * `RECVX_KEYS="f:F6,..."` and clicks (`f:@x:y`) drive it; Copy and a line's click log what the clipboard reads back
   (`devcine: ... copied to the clipboard, n bytes read back` and the text), Export and Clear log a line too.

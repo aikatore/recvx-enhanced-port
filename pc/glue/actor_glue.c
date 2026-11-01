@@ -2068,14 +2068,21 @@ int actor_put_as(int who, BH_PWORK* ep)
 static int dbl_kept;
 int actor_double_kept(void) { return dbl_kept; }
 
-void actor_doubles(int idx)
+/* the model character pid's doubles are drawn as for look idx (as actor_doubles takes it), -1 the game's own; *kept: its
+   own cutscene model, so the game's (its face, its hands, its head part) */
+int actor_double_model(int idx, int pid, int* kept)
 {
-    int i, j, pid = sys->ply_id & 3, any = 0;
     static const signed char twin[5] = { 0, 1, 3, 5, -1 };   /* the player files' cutscene models (a face mask): Claire, Chris, Steve, Wesker */
     if (!g_appear_cutscene) idx = -1;
     if (g_appear_face && idx >= ACTOR_PART && idx < ACTOR_PART + 5 && twin[idx - ACTOR_PART] >= 0) idx = twin[idx - ACTOR_PART];
-    dbl_kept = idx >= 0 && idx < ACTOR_MODELS && actor_models[idx].id == doubles[pid][0];
-    if (dbl_kept) idx = -1;   /* the played character's own cutscene model: the game's double (its face, its hands, its head part) */
+    *kept = idx >= 0 && idx < ACTOR_MODELS && actor_models[idx].id == doubles[pid & 3][0];
+    return *kept ? -1 : idx;
+}
+
+void actor_doubles(int idx)
+{
+    int i, j, pid = sys->ply_id & 3, any = 0;
+    idx = actor_double_model(idx, pid, &dbl_kept);
     if (idx >= 0)
         for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS && !any; i++)
             for (j = 0; j < 3; j++) any |= (ene[i].flg & 0x1) && doubles[pid][j] && ene[i].id == doubles[pid][j];

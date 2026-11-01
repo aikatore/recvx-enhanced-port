@@ -249,7 +249,7 @@ static const char* subs_name(int v, char* b, int n) { snprintf(b, n, "%s", subs_
 static const char* subs_locked(void) { return subs_n() < 2 ? "No language with subtitles is installed." : NULL; }
 static const char* rifle_locked(void) { return biorand_active() ? "Required by BioRand." : NULL; }
 /* "You appear as": positions in the menus' list (actors.c, without event doubles) */
-static int chr_get(void) { int o = pc_biorand_appear(); return appear_pos(o >= 0 ? o : g_coop.chr); }   /* (BioRand's pick of this game shown) */
+static int chr_get(void) { int o = pc_biorand_appear(-1); return appear_pos(o >= 0 ? o : g_coop.chr); }   /* (BioRand's pick of this game shown) */
 static void chr_set(int v) { g_coop.chr = appear_at(v); pc_biorand_appear_drop(); }
 static const char* chr_name(int v, char* b, int n) { snprintf(b, n, "%s", tr(appear_name(appear_at(v)))); return b; }
 /* saves: the memory card's copied into the native folder (as the first native start does) */

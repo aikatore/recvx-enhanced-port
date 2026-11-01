@@ -792,22 +792,31 @@ spawned after the load. Kept by hand (`cast_glue.c kept[]`):
 |---|---|
 | 7030, 1 | Alexia asleep in her ice capsule (the monitor scene): the scene needs her silhouette |
 
-**Precedence**: the doubles of the character played (Claire 91 while Claire is played; Chris 92/42,
-Steve 93/43, Wesker 97/49/47 likewise) belong to "Character Model" and "Custom Cutscene Model"
-("Cutscene doubles"); the cast leaves them to the game or the appearance. Which characters count as
-played is read when a record is drawn, not at the load (`cast_glue.c played`): the one played now
-(`sys->ply_id`, which a story switch changes at the end of the next room load's `bhFinishRoom`, after
-`cast_room`), the one a switch the script has set is about to make played (`PlayerChangeSet`:
-`cb_flg & 0x80`, `cng_pid`; Claire's part ends in 6100 with a switch to Chris and the door to his first
-scene, 7240), and in co-op the partner's (its part file, `Pose.mfile & 3`). Claire also counts while
-Steve is played (`cast.c cast_plays`): his short section of her part (the switch in 3100 after the
-catwalk's Bandersnatch, back to her in 3210) is her story, and her scenes in it (the face relief room,
-3210, where Steve finds her) were the player's character drawn as a random model; she is shown as
-herself there (the Character Model is on Steve, who is played). Such a double gets a model at the load
-but is never drawn as it. The other player characters' records are ordinary cast (Claire in 9150 while
-Chris is played, Chris in Claire's part, Steve). Every double of the played character is one of the
-types above (checked over all room files: Claire 91; Chris 92, 42; Steve 93, 43; Wesker 97, 49, 47), so
-no scene stands the player in with another type.
+**Claire and Chris are never cast** (`cast.c cast_role`): they are the characters the story is played as, and
+in every cutscene they show the player's look for them, played or not. The one played now is the game's
+double ("Cutscene doubles": "Character Model" and "Custom Cutscene Model"); the other one's records get, at the
+load, that character's look as their model instead of a pick (`cast_glue.c cast_room` -> `coop_glue.c
+coop_look_model`: "Character Model" resolved for that character, BioRand's "Randomize Played as" pick for that
+character first, then as the doubles take it, `actor_double_model`: none with "Custom Cutscene Model" off, the
+talking twin of a player file with "Animated Faces", none for the character's own look) and are drawn as it
+while that character is not the one played. So Chris arriving at Rockfort Island (7240) and with Rodrigo (7220)
+is your Chris whether or not the game has switched to him yet (played through, 6100's `PlayerChangeSet` 1 and
+its door to 7240 switch at 7240's load, and he is the double; arriving there without the switch, by a teleport,
+the game still plays Claire and he is drawn as your Chris look in a cast slot), Claire in Chris's part (9150,
+9300, 9350, 9360) is your Claire, Chris in Claire's part (5820) your Chris, Claire in Steve's section (3210) your
+Claire. "Current Character" (the user's own look), the character's own cutscene model or "Custom Cutscene Model"
+off: they are themselves. In co-op each screen shows them with its own player's looks, as its doubles.
+`--dev` cutscene log: `r0 Chris(92)->Nosferatu (your look)`, a played one `(played: the double)`.
+
+**Precedence** for the others: the doubles of Steve and Wesker while played (Steve 93/43, Wesker 97/49/47) belong
+to "Character Model" too; the cast leaves them to the game or the appearance. Which characters count as played
+is read when a record is drawn, not at the load (`cast_glue.c role`): the one played now (`sys->ply_id`, which a
+story switch changes at the end of the next room load's `bhFinishRoom`, after `cast_room`), the one a switch the
+script has set is about to make played (`PlayerChangeSet`: `cb_flg & 0x80`, `cng_pid`: Steve in 3100 before his
+section), and in co-op the partner's (its part file, `Pose.mfile & 3`). Such a record gets a model at the load
+but is not drawn as it then. Steve and Wesker not played are ordinary cast. Every double of the played
+character is one of the types above (checked over all room files: Claire 91; Chris 92, 42; Steve 93, 43; Wesker
+97, 49, 47), so no scene stands the player in with another type.
 
 ### For the whole room visit
 
@@ -845,7 +854,7 @@ still picks from the files too: it sets the player's own look, and that one talk
 * `recvx.ini`: an older *Custom* list's lines for the files (`cast_custom_off = Steve`, `Chris`, ...) name no
   entry now and are ignored (dropped at the next save); the cutscene models' own lines (`Steve (Cutscene Model)`)
   keep counting, so a look unchecked under that name stays unchecked.
-* Co-op: protocol 32 (see the version history in [COOP.md](COOP.md) "Protocol 33"): the positions of the `EV_CASTOFF` bits and the picks from a seed changed.
+* Co-op: protocol 32 (see the version history in [COOP.md](COOP.md) "Protocol 34"): the positions of the `EV_CASTOFF` bits and the picks from a seed changed.
 
 ### Custom
 
@@ -875,20 +884,21 @@ Never in a pool but *Custom*'s: Claire's and Chris's looks (their cutscene model
 player files, and Claire's second costume). They are the characters the story is played as, whose look "Character Model" decides; on
 someone else they read as the player character (Steve at the end of Claire's part, 6100, just before the
 switch to Chris, was drawn as Chris's cutscene model: it looked as if Chris's part began with a random
-Chris instead of the chosen model). Claire and Chris themselves are still cast when they appear as the
-other, non-played character. *Custom* lists these looks too (after the *All Models* entries, checked like
-any new entry): a player who checks them wants them.
+Chris instead of the chosen model). Claire and Chris themselves get no pick (above, "Claire and Chris are never
+cast"). *Custom* lists these looks too (after the *All Models* entries, checked like any new entry): a player who
+checks them wants them. The player's chosen looks (a catalogue model, an import) stay in the pools: the picks do
+not depend on them, so both co-op screens pick alike.
 
-`cast_model(seed, scene, character, ...)`: all seven characters are assigned at once from a Fisher-Yates
+`cast_model(seed, scene, character, ...)`: the five characters but Claire and Chris are assigned at once from a Fisher-Yates
 shuffle of the pool by xorshift32 seeded with (seed, scene): each character in turn takes the first model
 of the shuffle not taken and not its own look (its own cutscene model or player file); when only its own
-are left it trades with an earlier character; with the pool used up (seven characters, five cutscene
-models) a new round over it begins, so a model serves at most two characters. Every answer is the same
+are left it trades with an earlier character; with the pool used up (more characters than models: *Custom* with
+few checked) a new round over it begins. With *Cutscene Models* (five) each character gets another one. Every answer is the same
 whichever character is asked, and it depends on neither the character played nor the room (Per Character):
 the same in Claire's part and in Chris's.
 
-* *Per Character*: scene 0, the same in every room (seed 1: Steve as Alfred in 0030 and 6100,
-  Claire as Wesker in 0000, 0030 and 6100).
+* *Per Character*: scene 0, the same in every room (seed 1, *Cutscene Models*: Steve as Rodrigo, Rodrigo as Wesker
+  in every room).
 * *Per Cutscene*: scene = room file + 1: each cutscene room (`RM_<stg><rom><case>`) picks again,
   the same room the same; deterministic from (seed, room file, character), so both co-op sides pick alike
   and a revisit shows the same cast.
