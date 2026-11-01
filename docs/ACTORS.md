@@ -352,7 +352,8 @@ loader ([ENEMIES.md](ENEMIES.md) "Enemy spawner (F2)").
 
 ## You appear as
 
-"Character Model" (F3 window, the lobby's MODEL page, F1 and ENHANCED SETTINGS -> APPEARANCE; ini `coop_char`) shows
+"Character Model" (F3 window, the lobby's MODEL page, F1 and ENHANCED SETTINGS -> APPEARANCE; ini `coop_char`; or,
+with "Character Models" *Per Character*, "Claire's Model" and "Chris's Model", "Per Character" below) shows
 our player as one of the player files or one of 62 models found in the room files: the story
 cast, the creatures, the zombie variants (`pc/src/host/actors.c`). It applies in single player and
 co-op (the partner sees it too) and in cutscenes to the event double of the character played
@@ -360,6 +361,29 @@ co-op (the partner sees it too) and in cutscenes to the event double of the char
 Models imported from other games' discs (F9) are listed after the
 catalogue: chr `COOP_CHR_IMPORT + k`, actor index `ACTOR_MODELS + k`, skinned every frame
 ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md#conversion)).
+
+### Per Character
+
+"Character Models" (APPEARANCE, F1, F3 and the lobby's MODELS; ini `appear_per_char`, default 0):
+
+| Value | Rows | Who gets what |
+|---|---|---|
+| **Same for Both** (0) | "Character Model" (`coop_char`) | that model for whoever is played (as before) |
+| **Per Character** (1) | "Claire's Model" (`appear_claire`), "Chris's Model" (`appear_chris`) | Claire hers, Chris his; Steve (his short section) and Wesker (the Battle Game) as themselves ("Current Character") |
+
+Both per-character rows offer the same list ("The list" below, imports and "Current Character (Cutscene)" too);
+in Claire's row "Current Character" is Claire herself. Their ini value -1 (the default) means "not chosen yet":
+`coop_char`'s model, so switching to Per Character starts with the model chosen so far for both. Steve's section
+keeps his own look so that Claire, in the same scenes (3210), does not show the model a second time.
+`actors.c appear_choice(one, c)` (ctest `appear`) resolves it, and `coop_glue.c look_of(c)` is the one place that
+asks: our model (`my_chr`: the character played now, so a story switch changes the model), the cutscene doubles
+(`actor_doubles`), Claire's or Chris's records in the other one's part (`coop_look_model`, "Cutscene cast"), the
+voice, third person and the co-op pose (`Pose.chr`, the lobby's `lchr`). There is no random choice in the list
+(BioRand's "Randomize Played as" is the only random look).
+
+**Precedence**: a BioRand game's picks ("Randomize Played as", stored in its saves) come first for the
+characters they cover, in either mode; choosing a model in game (any of the three rows; not the mode switch) drops
+them, as before. A co-op guest never has them.
 
 ### The list
 
@@ -807,6 +831,11 @@ the game still plays Claire and he is drawn as your Chris look in a cast slot), 
 Claire. "Current Character" (the user's own look), the character's own cutscene model or "Custom Cutscene Model"
 off: they are themselves. In co-op each screen shows them with its own player's looks, as its doubles.
 `--dev` cutscene log: `r0 Chris(92)->Nosferatu (your look)`, a played one `(played: the double)`.
+With "Character Models" *Per Character* ("Per Character" above) this runs also with the cast off: `cast_room`
+then gives only Claire's and Chris's records their look (`cast: room 9350: 2 records of Claire or Chris drawn as
+your look for them (Per Character)`), so Claire in Chris's part is "Claire's Model" and Chris in hers "Chris's
+Model" without any randomizer; with *Same for Both* and the cast off they stay themselves, as before (one model
+for both would show twice).
 
 **Precedence** for the others: the doubles of Steve and Wesker while played (Steve 93/43, Wesker 97/49/47) belong
 to "Character Model" too; the cast leaves them to the game or the appearance. Which characters count as played

@@ -456,12 +456,13 @@ static void self_keep(void)
     }
 }
 
-/* "You appear as" for character c (0..3: "As played (cutscene)": its cutscene model); BioRand's "Randomize Played as"
-   pick of this game for that character first (biorand_glue.c: Claire's, Chris's, Steve's) */
+/* "You appear as" for character c (0..3: "As played (cutscene)": its cutscene model): "Character Model", or with
+   "Per Character" Claire's or Chris's own (actors.c appear_choice); BioRand's "Randomize Played as" pick of this game
+   for that character first (biorand_glue.c: Claire's, Chris's, Steve's) */
 static int look_of(int c)
 {
     int o = pc_biorand_appear(c);
-    return appear_played(o >= 0 ? o : g_coop.chr, c);
+    return appear_played(o >= 0 ? o : appear_choice(g_coop.chr, c), c);
 }
 /* ... for the character played now */
 static int my_chr(void) { return look_of(sys ? sys->ply_id & 3 : 0); }
@@ -6917,7 +6918,7 @@ void coop_frame(void)
     }
     g_coop.at_title = sys && (sys->tk_flg & 0x8);   /* the lobby hint (overlay) */
     if (!coop_on) {   /* "You appear as" also in single player (appear_on: game.c calls coop_control_remote) */
-        appear_on = sys && plp && (g_coop.chr || pc_biorand_appear(0) > 0 || self_mesh >= 0 || actor_shown(0) || actor_shown(ACTOR_DOUBLE) || cast_n);   /* (cast_n: the cutscene cast's hands and faces, actor_double_tick) */
+        appear_on = sys && plp && (my_chr() || pc_biorand_appear(0) > 0 || self_mesh >= 0 || actor_shown(0) || actor_shown(ACTOR_DOUBLE) || cast_n);   /* (cast_n: the cutscene cast's hands and faces, actor_double_tick) */
         if (appear_on) self_frame();
         tx_in_game = 0;
         publish_status();

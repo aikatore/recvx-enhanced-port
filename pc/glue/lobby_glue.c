@@ -516,7 +516,7 @@ static void pv_set(int k, int chr, int played)
 {
     Preview* p = &pv[k];
     int file = chr == 0 ? played : chr <= 4 ? chr - 1 : chr == 5 ? 4 : played & 3, i, ok = 1;
-    if (chr == p->chr) return;
+    if (chr == p->chr && (chr < 0 || file == p->file)) return;   /* (the same entry as another character: its file) */
     if (chr < 0) { pv_release(p, k); return; }
     if (chr == p->fail_chr && net_ms() - p->fail_at < (1000u << (p->fails < 5 ? p->fails : 5))) return;   /* 2, 4 .. 32 s */
     if (file != p->file) {
@@ -867,13 +867,13 @@ static void title_version(void)
    The rows in display order; a gap where the group changes. */
 enum { R_MODE, R_HOSTSTEP, R_JOINSTEP,
        R_SERVER, R_PORT, R_ADDR, R_PW, R_RELAY,
-       R_NAME, R_CHAR,
+       R_NAME, R_CHARMODE, R_CHAR, R_CHAR2,
        R_START, R_ITEMS, R_FOLLOW, R_RULES,
        R_BIORAND, R_LOOT, R_IMP, R_TFREEZE, R_SKIPS, R_RIBBON, R_GOVER, R_ENEMYPG, R_EVENTPG,
        R_RAND, R_VARIETY, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTASSIGN, R_CASTIMP, R_QUICK, R_DETECTOR, R_EXTRAOBJ,
        R_HOST, R_GO, R_COPY, R_RCOPY, R_KICK, R_STOP, R_JOIN,
        R_BACK, R_N };
-static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6 };
+static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6 };
 _Static_assert(sizeof(row_group) == R_N, "row_group");
 enum { F_NONE, F_NAME, F_ADDR, F_PORT, F_SEED, F_SERVER, F_PW };
 
@@ -882,12 +882,13 @@ static struct {
     int step;                           /* 1 connection and role, 2 its options, 3 game rules, 4 / 5 its pages, 6 the models, 7 the cutscene cast (from 4),
                                            8 its "Custom" models (from 7) */
     int pick, top;                      /* the model page: the cursor's and the first shown list position (appear_at) */
+    int pick_c;                         /* ... whose model it chooses: 0 "Character Model" (Same for Both) or Claire's, 1 Chris's (R_CHAR2) */
     int mode;                           /* 0 direct (P2P), 1 via a co-op server (g_coop.conn Automatic or Via server) */
     int edit;                           /* F_* being edited */
     char buf[128];
     int caret, max;
     int spin;
-    int want_chr, chr_stable;           /* debounce while the model choice is cycled */
+    int want_chr, want_ply, chr_stable; /* debounce while the model choice is cycled */
     int items_sent;                     /* the joining items handed to coop_glue.c */
     char msg[96];
     int msg_t;
@@ -919,7 +920,8 @@ static int row_visible(int r)
     case R_PORT: return host && !srv;
     case R_SERVER: case R_PW: case R_RELAY: return srv;   /* the co-op server (docs/SERVER.md) */
     case R_ADDR: case R_ITEMS: case R_FOLLOW: case R_JOIN: return !host;
-    case R_NAME: case R_CHAR: return 1;
+    case R_NAME: case R_CHARMODE: case R_CHAR: return 1;
+    case R_CHAR2: return g_appear_per;   /* "Per Character": CLAIRE (R_CHAR) and CHRIS */
     case R_START: return host;
     case R_RULES: return host || g_coop.state == COOP_CONNECTED;   /* guest: the host's, once known */
     case R_HOST: return host && !session_on();
@@ -1082,6 +1084,7 @@ static void change(int r, int dir)
     case R_START: g_coop.start = step_choice(g_coop.start, dir, 0, 3, 3); break;
     case R_ITEMS: g_coop.items = step_choice(g_coop.items, dir, COOP_ITEMS_HOST, 2, 0); break;
     case R_FOLLOW: g_coop.follow ^= 1; break;   /* the joining player's own choice, also during a session */
+    case R_CHARMODE: g_appear_per ^= 1; break;   /* "Character Models" (ENHANCED SETTINGS APPEARANCE) */
     case R_EXTRA: settings_step(eset(&g_enemy_opts.extra), dir); break;
     case R_PLACE: settings_step(eset(&g_enemy_opts.place), dir); break;
     case R_RAND: settings_step(eset(&g_enemy_opts.rand), dir); break;
@@ -1099,7 +1102,7 @@ static void change(int r, int dir)
 
 static int has_value(int r)
 {
-    return r == R_MODE || r == R_RELAY || r == R_BIORAND || r == R_LOOT || r == R_IMP || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON || r == R_GOVER || r == R_QUICK || r == R_DETECTOR || r == R_EXTRAOBJ || r == R_START || r == R_ITEMS || r == R_FOLLOW ||
+    return r == R_MODE || r == R_RELAY || r == R_BIORAND || r == R_LOOT || r == R_IMP || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON || r == R_GOVER || r == R_QUICK || r == R_DETECTOR || r == R_EXTRAOBJ || r == R_START || r == R_ITEMS || r == R_FOLLOW || r == R_CHARMODE ||
            r == R_EXTRA || r == R_PLACE || r == R_RAND || r == R_VARIETY || r == R_EVENTS || r == R_CAST || r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP;
 }
 
@@ -1135,7 +1138,7 @@ static int back(void)
 {
     CallSystemSe(0, 0);
     if (lb.step <= 1) return 1;
-    if (lb.step == 6) { lb.step = 2; lb.row = R_CHAR; }
+    if (lb.step == 6) { lb.step = 2; lb.row = lb.pick_c ? R_CHAR2 : R_CHAR; }
     else if (lb.step == 8) { lb.step = 7; lb.row = R_CASTCUSTOM; }
     else if (lb.step == 7) { lb.step = 4; lb.row = R_CASTPG; }
     else if (lb.step > 3) { lb.row = lb.step == 4 ? R_ENEMYPG : R_EVENTPG; lb.step = 3; }
@@ -1155,7 +1158,7 @@ static int need_server(void)
     return 1;
 }
 
-static void pick_open(void);   /* the model page (below) */
+static void pick_open(int c);   /* the model page (below) */
 static void custom_open(void);
 
 /* 0 stay, 1 back to the menu, 2 new game, 3 the chosen save */
@@ -1169,7 +1172,8 @@ static int activate(int r)
     case R_CASTPG: step_to(7); return 0;
     case R_CASTCUSTOM: custom_open(); return 0;
     case R_EVENTPG: step_to(5); return 0;
-    case R_CHAR: pick_open(); return 0;
+    case R_CHAR: pick_open(0); return 0;
+    case R_CHAR2: pick_open(1); return 0;
     case R_NAME: edit_begin(F_NAME); return 0;
     case R_PORT: edit_begin(F_PORT); return 0;
     case R_SEED: edit_begin(F_SEED); return 0;
@@ -1301,7 +1305,7 @@ static const char* heading(void)
     static char h[64];
     if (lb.step == 1) return "HOW DO YOU WANT TO PLAY?";
     if (lb.step == 3) return lb.role ? "THE HOST'S GAME RULES" : "GAME RULES";
-    if (lb.step == 6) return "CHARACTER MODEL";
+    if (lb.step == 6) return !g_appear_per ? "CHARACTER MODEL" : lb.pick_c ? "CHRIS'S MODEL" : "CLAIRE'S MODEL";
     if (lb.step == 7) return lb.role ? "HOST RULES - CUTSCENE CAST" : "GAME RULES - CUTSCENE CAST";
     if (lb.step == 8) return "GAME RULES - CUSTOM MODELS";
     if (lb.step > 3) return lb.step == 4 ? (lb.role ? "HOST RULES - RANDOMIZER" : "GAME RULES - RANDOMIZER")
@@ -1321,7 +1325,9 @@ static void row_text(int r, char* label, char* val, int n)
     case R_JOINSTEP: strcpy(label, joining() ? "JOINED LOBBY" : "JOIN A GAME"); break;
     case R_RELAY: strcpy(label, "RELAY"); snprintf(val, n, "%s", g_coop.conn == COOP_CONN_SERVER ? "Always" : "Only if needed"); break;
     case R_NAME: strcpy(label, "NAME"); snprintf(val, n, "%s", lb.edit == F_NAME ? lb.buf : g_coop.name); break;
-    case R_CHAR: strcpy(label, "MODEL"); snprintf(val, n, "%s", appear_name(g_coop.chr)); break;
+    case R_CHARMODE: strcpy(label, "MODELS"); snprintf(val, n, "%s", g_appear_per ? "Per Character" : "Same for Both"); break;
+    case R_CHAR: strcpy(label, g_appear_per ? "CLAIRE" : "MODEL"); snprintf(val, n, "%s", appear_name(appear_choice(g_coop.chr, 0))); break;
+    case R_CHAR2: strcpy(label, "CHRIS"); snprintf(val, n, "%s", appear_name(appear_choice(g_coop.chr, 1))); break;
     case R_PORT: strcpy(label, "PORT"); if (lb.edit == F_PORT) snprintf(val, n, "%s", lb.buf); else snprintf(val, n, "%d", g_coop.port); break;
     case R_LOOT: strcpy(label, "LOOT"); snprintf(val, n, "%s", loots[g_coop.loot & 1]); break;
     case R_TFREEZE: strcpy(label, "TRADING"); snprintf(val, n, "%s", g_coop.trade_freeze ? "On" : "Off"); break;
@@ -1395,8 +1401,12 @@ static const char* row_help(int r)
     case R_PW: return host ? "Set an optional room password for your partner to enter. The password is not saved." : "Enter the host's password, or leave blank if the room has none.";
     case R_RELAY: return "Only If Needed tries direct first, then relays through the server. Always uses the server relay.";
     case R_NAME: return "Choose the name your partner sees overhead and in the lobby.";
+    case R_CHARMODE: return eset(&g_appear_per)->help;
+    case R_CHAR2: if (lb.step != 6) return lset("Chris's Model")->help;   /* (the model page: as R_CHAR's) */
+    /* fall through */
     case R_CHAR:
         if (lb.step == 6 && lb.pick >= appear_count()) return "Return to the lobby without changing your model.";
+        if (lb.step != 6 && g_appear_per) return lset("Claire's Model")->help;
         return lb.step == 6 ? "Scroll with up/down, L1/R1, Page Up/Down or the wheel. Confirm: use model; BACK: cancel."
                             : "Choose your appearance. You and your partner both see it.";
     case R_START: return "Choose a new game and difficulty, or one of your saves.";
@@ -1492,10 +1502,11 @@ static void custom_open(void)
     host_log("lobby: the cutscene cast's custom models\n");
 }
 
-static void pick_open(void)
+static void pick_open(int c)
 {
     lb.step = 6;
-    lb.pick = appear_pos(g_coop.chr);   /* the current model, in the middle of the page */
+    lb.pick_c = g_appear_per ? c : 0;
+    lb.pick = appear_pos(appear_choice(g_coop.chr, lb.pick_c));   /* the current model, in the middle of the page */
     lb.top = lb.pick - PICK_ROWS / 2;
     pick_scroll(0);
     host_log("lobby: model page (%d models)\n", appear_count());
@@ -1506,11 +1517,11 @@ static void pick_open(void)
 static void pick_take(void)
 {
     if (lb.pick >= appear_count()) { back(); return; }
-    g_coop.chr = appear_at(lb.pick);
+    *(g_appear_per ? &g_appear_own[lb.pick_c] : &g_coop.chr) = appear_at(lb.pick);
     lobby_settings_changed();
-    host_log("lobby: model %s\n", appear_name(g_coop.chr));
+    host_log("lobby: %s %s\n", !g_appear_per ? "model" : lb.pick_c ? "Chris's model" : "Claire's model", appear_name(appear_at(lb.pick)));
     lb.step = 2;
-    lb.row = R_CHAR;
+    lb.row = lb.pick_c ? R_CHAR2 : R_CHAR;
     CallSystemSe(0, 3);
 }
 
@@ -1556,7 +1567,7 @@ static void pick_input(unsigned int press, unsigned int rept, unsigned int ok, u
 
 static void draw_models(void)
 {
-    int n = appear_count(), cur = appear_pos(g_coop.chr), i;
+    int n = appear_count(), cur = appear_pos(appear_choice(g_coop.chr, lb.pick_c)), i;
     float right = n > PICK_ROWS ? PICK_BAR_X - 6 : 634;   /* the names stop before the scroll bar */
     char pos[24];
     text(ROW_X - 4, HEAD_Y, heading(), 0.5f, 0xFFFFE080);
@@ -1658,7 +1669,7 @@ static void draw_rows(void)
             if (!locked) { arrow(VAL_X, y + 9, -1, col); arrow(VAL_X + 14 + w + 12, y + 9, 1, col); }
             text(VAL_X + 12, y + (ROW_SC - sc) * 14, val, sc, col);
         } else if (val[0] || lb.edit) {
-            int page = r == R_ENEMYPG || r == R_EVENTPG || r == R_CASTPG || r == R_CHAR || r == R_CASTCUSTOM;   /* opens a page: an arrow after it */
+            int page = r == R_ENEMYPG || r == R_EVENTPG || r == R_CASTPG || r == R_CHAR || r == R_CHAR2 || r == R_CASTCUSTOM;   /* opens a page: an arrow after it */
             float lim = page ? 196.0f : 220.0f, w = text_w(val, ROW_SC), sc = w > lim ? ROW_SC * lim / w : ROW_SC;   /* a long address: narrower */
             text(VAL_X, y + (ROW_SC - sc) * 14, val, sc, col);
             if (page) arrow(VAL_X + (sc < ROW_SC ? lim : w) + 16, y + 9, 1, col);
@@ -1708,9 +1719,11 @@ static void draw_previews(void)
     int played = g_coop.start >= 3 && lb.role == 0 && start_valid(g_coop.start) ? saves[save_at(g_coop.start - 3)].ply_id : 0;
     /* the chosen model (on the model page the one under the cursor) loads once it has stayed for a
        few frames (scrolling through the list) */
-    int chr = lb.step == 6 && lb.pick < appear_count() ? appear_at(lb.pick) : g_coop.chr;
-    if (chr != lb.want_chr) { lb.want_chr = chr; lb.chr_stable = 0; }
-    if (++lb.chr_stable >= 8 || pv[0].chr < 0) pv_set(0, appear_played(lb.want_chr, played), played);   /* ("As played (cutscene)": that character's cutscene model) */
+    int chr;
+    if (g_appear_per && (lb.step == 6 || lb.row == R_CHAR || lb.row == R_CHAR2)) played = lb.step == 6 ? lb.pick_c : lb.row == R_CHAR2;   /* Claire's or Chris's being chosen: as that one */
+    chr = lb.step == 6 && lb.pick < appear_count() ? appear_at(lb.pick) : appear_choice(g_coop.chr, played);
+    if (chr != lb.want_chr || played != lb.want_ply) { lb.want_chr = chr; lb.want_ply = played; lb.chr_stable = 0; }
+    if (++lb.chr_stable >= 8 || pv[0].chr < 0) pv_set(0, appear_played(lb.want_chr, lb.want_ply), lb.want_ply);   /* ("As played (cutscene)": that character's cutscene model) */
     pv_set(1, partner && g_coop.peer_lchr >= 0 && g_coop.peer_lchr <= COOP_CHR_MAX ? g_coop.peer_lchr : -1, 0);
     lb.spin += 1;
     {

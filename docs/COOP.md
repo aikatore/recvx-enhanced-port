@@ -51,10 +51,10 @@ drawn in the game's own style; your model turns in a 3D preview on the left. It 
 
 | Role, connection | Rows |
 |---|---|
-| Host, Direct | **PORT**, NAME, MODEL, **START**, **GAME RULES**, **OPEN THE LOBBY**; once open: **START THE GAME**, **COPY JOIN ADDRESS**, **CLOSE THE LOBBY**, **REMOVE PARTNER** (with a partner) |
-| Host, Via server | **SERVER**, **PASSWORD** (optional), **RELAY**, NAME, MODEL, START, GAME RULES, OPEN THE LOBBY; once open: **COPY ROOM CODE** ("WAITING FOR ROOM CODE" until it arrives) |
-| Join, Direct | **ADDRESS** (`ip:port#CODE`), NAME, MODEL, **ITEMS**, **FOLLOW**, **JOIN** / **LEAVE**; once connected: **HOST RULES** |
-| Join, Via server | **SERVER**, **CODE** (the room code), **PASSWORD**, **RELAY**, NAME, MODEL, ITEMS, FOLLOW, JOIN / LEAVE |
+| Host, Direct | **PORT**, NAME, MODELS, MODEL, **START**, **GAME RULES**, **OPEN THE LOBBY**; once open: **START THE GAME**, **COPY JOIN ADDRESS**, **CLOSE THE LOBBY**, **REMOVE PARTNER** (with a partner) |
+| Host, Via server | **SERVER**, **PASSWORD** (optional), **RELAY**, NAME, MODELS, MODEL, START, GAME RULES, OPEN THE LOBBY; once open: **COPY ROOM CODE** ("WAITING FOR ROOM CODE" until it arrives) |
+| Join, Direct | **ADDRESS** (`ip:port#CODE`), NAME, MODELS, MODEL, **ITEMS**, **FOLLOW**, **JOIN** / **LEAVE**; once connected: **HOST RULES** |
+| Join, Via server | **SERVER**, **CODE** (the room code), **PASSWORD**, **RELAY**, NAME, MODELS, MODEL, ITEMS, FOLLOW, JOIN / LEAVE |
 
 * **NAME**: what your partner sees above your head and in the lobby. Up to 15 characters: letters,
   digits, space and `-_.!?'()+`. Default: your login name.
@@ -65,6 +65,9 @@ drawn in the game's own style; your model turns in a 3D preview on the left. It 
   L1/R1 and Page Up/Down a page, Home/End to the first and last; the mouse hovers, the wheel
   scrolls. Confirm or a click takes the model and returns to MODEL; BACK (or cancel, or a right
   click) returns without changing it.
+* **MODELS** (Same for Both / Per Character, "Character Models"): with Per Character, MODEL becomes **CLAIRE**
+  and **CHRIS** follows; each opens the same page for that character (its heading, CLAIRE'S MODEL or CHRIS'S
+  MODEL, names it; the preview shows the model as that character).
 * **START** (host): a new game (normal, easy, very easy) or one of your saves
   ("Save nn: character stage-room"; nn is the save's number, or the memory card slot with the
   Memory Card save system: 1..15 on MEMORY CARD slot 1, 16..30 on slot 2, [USER_GUIDE.md](USER_GUIDE.md#saves)).
@@ -728,8 +731,13 @@ costume, or a story-cast, creature or zombie model. Your partner sees you as tha
 partner's voice follows its model. Both players need the same build. "Custom Cutscene Model"
 (`appear_in_cutscenes`) counts for your own screen: off, your cutscenes (also one replayed from
 the partner's event) show the real Claire or Chris. What the partner sees of you follows the character you play:
-after a story switch (Claire -> Chris) your model for Chris is sent (BioRand's "Randomize Played as" with "Per
-Character": your Chris pick; a co-op guest's look is always its own "Character Model"). Models, voices and cutscene behaviour:
+after a story switch (Claire -> Chris) your model for Chris is sent ("Character Models" Per Character: your
+"Chris's Model"; BioRand's "Randomize Played as" with "Per Character": your Chris pick; a co-op guest's look is
+always its own choice). Each player chooses for themselves: with Per Character (lobby MODELS, F3, F1 / ENHANCED
+SETTINGS; ini `appear_per_char`, `appear_claire`, `appear_chris`) one model for Claire and one for Chris, and
+the partner sees the one for the character you play. Claire or Chris shown in a cutscene of the other one's
+part is drawn on each screen with that screen's player's look for them ([ACTORS.md](ACTORS.md) "Cutscene
+cast"), so nothing more is sent: no protocol change. Models, voices and cutscene behaviour:
 [ACTORS.md](ACTORS.md).
 
 ## Local co-op on one PC

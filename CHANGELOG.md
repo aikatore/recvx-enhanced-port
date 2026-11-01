@@ -8,8 +8,10 @@
   its own, so you can save to and load from either slot.
 - **Translated opening text**: Translated Pictures now also shows the opening's story text in Russian and Brazilian
   Portuguese, and the Japanese logo in the movies (import these languages again).
-- **A random look for each character**: BioRand's "Randomize Character Model" can now give Claire and Chris
-  (and Steve in his short part) a random look each, or keep one look for the whole game as before.
+- **A look for each character**: "Character Models" can now be set to Per Character, so you choose one model
+  for Claire and another for Chris. Each keeps it in every cutscene, also when they meet in the other one's
+  part. BioRand's "Randomize Character Model" can likewise give Claire and Chris (and Steve in his short part)
+  a random look each, or keep one look for the whole game as before.
 
 ### Fixes
 

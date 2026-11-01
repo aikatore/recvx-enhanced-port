@@ -11,6 +11,14 @@
 int g_appear_anim = 1;
 int g_appear_face = 0;
 int g_appear_cutscene = 1;
+int g_appear_per = 0;
+int g_appear_own[2] = { -1, -1 };
+
+int appear_choice(int one, int c)
+{
+    if (!g_appear_per) return one;
+    return c == 0 || c == 1 ? (g_appear_own[c] >= 0 ? g_appear_own[c] : one) : 0;
+}
 
 const ActorModel actor_models[] = {
     /* the story cast, moved by the player's motions (a man's or a woman's, section 8) */

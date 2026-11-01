@@ -252,6 +252,14 @@ static const char* rifle_locked(void) { return biorand_active() ? "Required by B
 static int chr_get(void) { int o = pc_biorand_appear(-1); return appear_pos(o >= 0 ? o : g_coop.chr); }   /* (BioRand's pick of this game shown) */
 static void chr_set(int v) { g_coop.chr = appear_at(v); pc_biorand_appear_drop(); }
 static const char* chr_name(int v, char* b, int n) { snprintf(b, n, "%s", tr(appear_name(appear_at(v)))); return b; }
+/* "Per Character": Claire's and Chris's own (BioRand's picks of this game for them shown) */
+static int per_on(void) { return g_appear_per; }
+static int per_off(void) { return !g_appear_per; }
+static int own_get(int c) { int o = pc_biorand_appear(c); return appear_pos(o >= 0 ? o : appear_choice(g_coop.chr, c)); }
+static int claire_get(void) { return own_get(0); }
+static int chris_get(void) { return own_get(1); }
+static void claire_set(int v) { g_appear_own[0] = appear_at(v); pc_biorand_appear_drop(); }
+static void chris_set(int v) { g_appear_own[1] = appear_at(v); pc_biorand_appear_drop(); }
 /* saves: the memory card's copied into the native folder (as the first native start does) */
 static void import_card(void)
 {
@@ -348,6 +356,7 @@ static const char* const extras[] = { "Off", "Up to 1", "Up to 2", "Up to 3" };
 static const char* const varieties[] = { "Mild", "Wild" };
 static const char* const cast_pools[] = { "Cutscene Models", "All Models", "Custom" };
 static const char* const cast_assigns[] = { "Per Character", "Per Cutscene" };
+static const char* const model_modes[] = { "Same for Both", "Per Character" };
 static int cast_on(void) { return g_enemy_opts.cast != 0; }
 static int cast_imports_shown(void) { return cast_on() && __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0; }
 
@@ -486,7 +495,13 @@ const Setting g_settings[] = {
     { SP_AUDIO, "Music And Voice", V(g_config.music_volume), 0, 100, 5, .fmt = "%d%%", .apply = apply_volume },
     { SP_AUDIO, "Sound Effects", V(g_config.sfx_volume), 0, 100, 5, .fmt = "%d%%", .apply = apply_volume },
 
-    { SP_APPEAR, "Character Model", NULL, 0, 0, 1, .get = chr_get, .set = chr_set, .name = chr_name, .count = appear_count, .help = "Choose your character's appearance. Your co-op partner sees it too." },
+    { SP_APPEAR, "Character Models", V(g_appear_per), 0, 1, 1, model_modes,
+      .help = "Same for Both uses one model for the character you play. Per Character chooses one for Claire and one for Chris; Steve and Wesker look like themselves." },
+    { SP_APPEAR, "Character Model", NULL, 0, 0, 1, .get = chr_get, .set = chr_set, .name = chr_name, .count = appear_count, .shown = per_off, .help = "Choose your character's appearance. Your co-op partner sees it too." },
+    { SP_APPEAR, "Claire's Model", NULL, 0, 0, 1, .get = claire_get, .set = claire_set, .name = chr_name, .count = appear_count, .shown = per_on,
+      .help = "Choose Claire's appearance, also in cutscenes of Chris's part. Your co-op partner sees it while you play her." },
+    { SP_APPEAR, "Chris's Model", NULL, 0, 0, 1, .get = chris_get, .set = chris_set, .name = chr_name, .count = appear_count, .shown = per_on,
+      .help = "Choose Chris's appearance, also in cutscenes of Claire's part. Your co-op partner sees it while you play him." },
     { SP_APPEAR, "Match Model Animations", V(g_appear_anim), 0, 1, 1, .help = "Use Chris's movements for male models and Claire's for female models." },
     { SP_APPEAR, "Custom Cutscene Model", V(g_appear_cutscene), 0, 1, 1, .help = "Use your chosen model in cutscenes. Off shows the original story character." },
     { SP_APPEAR, "Animated Faces (Experimental)", V(g_appear_face), 0, 1, 1, .help = "Animate your chosen model's face in cutscenes when available. Applies next room." },

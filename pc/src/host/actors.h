@@ -68,6 +68,12 @@ int appear_grab_motion(int id, int mtn, int from, int to);
    (stored in recvx.ini); never sent to the partner: appear_played resolves it first. */
 #define COOP_CHR_CINE 4095
 int appear_played(int chr, int ply_id);   /* chr; for COOP_CHR_CINE the cutscene model of ply_id (0..3; else 0, as played) */
+/* "Character Models" (ini appear_per_char, default 0): 0 "Same for Both", "Character Model" (g_coop.chr, ini coop_char)
+   for whoever is played; 1 "Per Character": "Claire's Model" and "Chris's Model" (g_appear_own[0], [1], ini
+   appear_claire, appear_chris; -1: not chosen yet, "Character Model"'s), Steve and Wesker as themselves */
+extern int g_appear_per;
+extern int g_appear_own[2];
+int appear_choice(int one, int c);   /* the chosen look of character c (0 Claire, 1 Chris, 2 Steve, 3 Wesker), one: "Character Model" */
 
 /* The list the menus show (F3, the lobby, ENHANCED SETTINGS): one entry per distinct look, "As played"
    and "As played (cutscene)" first, then the player files, the player characters' cutscene models last. Event doubles of a listed look are left

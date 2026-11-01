@@ -36,6 +36,13 @@ int main(void)
     CHECK(appear_step(0, -1) == COOP_CHR_ACTOR + 5 && appear_step(COOP_CHR_ACTOR + 5, 1) == 0);   /* wrapping at Wesker's */
     CHECK(appear_step(COOP_CHR_ACTOR + 6, 1) == 5);                      /* from a hidden one (Wesker event model): on from Wesker */
     CHECK(!strcmp(appear_name(1), "Claire"));
+    /* "Character Models": Same for Both, the one for all; Per Character, Claire's and Chris's own (unset: the one), Steve and Wesker themselves */
+    for (int c = 0; c < 4; c++) CHECK(appear_choice(9, c) == 9);
+    g_appear_per = 1; g_appear_own[1] = 12;
+    CHECK(appear_choice(9, 0) == 9 && appear_choice(9, 1) == 12 && appear_choice(9, 2) == 0 && appear_choice(9, 3) == 0);
+    g_appear_per = 0;
+    CHECK(appear_choice(9, 1) == 9);
+    g_appear_own[1] = -1;
     /* gender-matched animations: Chris's for a man while Claire is played, Claire's for a woman while a man is */
     CHECK(actor_models[8].anim == ANIM_MALE && actor_models[12].anim == ANIM_FEMALE && actor_models[24].anim == ANIM_IDLE);   /* Alfred, Alexia, Cerberus */
     CHECK(appear_motion_chr(ANIM_MALE, 0) == 1 && appear_motion_chr(ANIM_MALE, 1) < 0 && appear_motion_chr(ANIM_MALE, 3) < 0);

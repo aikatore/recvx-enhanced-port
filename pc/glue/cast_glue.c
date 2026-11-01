@@ -12,7 +12,8 @@
  *    links to its hands go to the model's hands (as for the cutscene double).
  * Nothing else changes: the record keeps its type, its motions, collision and script. Claire and Chris are never
  * cast: the doubles of the character played are "You appear as"'s (actor_doubles), and the other one's records are
- * given the player's look for that character instead of a pick (coop_look_model; cast.c cast_role).
+ * given the player's look for that character instead of a pick (coop_look_model; cast.c cast_role). With "Character
+ * Models" Per Character (g_appear_per) that part runs with the cast off too: Claire's and Chris's records only.
  */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
@@ -90,14 +91,14 @@ void cast_room(const EnemyOpts* o)
         for (k = 0; k < (int)((const unsigned char*)sys->ply_stflg - b); k++) h = (h ^ b[k]) * 16777619u;   /* story, item, kill, key, map flags and items */
         host_log("cast: room %04d loaded: state %08x, player %.2f %.2f %.2f hp %d\n", room, h, plp ? plp->px : 0.0f, plp ? plp->py : 0.0f, plp ? plp->pz : 0.0f, plp ? plp->hp : 0);
     }
-    if (!o || !o->cast || !rom) { cast_release(); return; }
+    if (!o || !rom || (!o->cast && !g_appear_per)) { cast_release(); return; }   /* ("Per Character": Claire's and Chris's looks without the cast) */
     imports = import_count(o);
     scene = o->cast_assign ? (unsigned)room + 1 : 0;
     for (k = 0; k < rom->ene_n && k < RECS; k++) {
         BH_PWORK* ep = &ene[k];
         int c;
         want[k] = -1;
-        if (!(ep->flg & 0x1) || !ep->mlwP || (c = cast_character(ep->id, ep->mdlver)) < 0) continue;   /* (the character played's doubles too: played()) */
+        if (!(ep->flg & 0x1) || !ep->mlwP || (c = cast_character(ep->id, ep->mdlver)) < 0 || (c >= 2 && !o->cast)) continue;   /* (the character played's doubles too: played()) */
         for (j = 0; j < (int)(sizeof(kept) / sizeof(kept[0])) && !(kept[j].room == room && kept[j].rec == k); j++);
         if (j < (int)(sizeof(kept) / sizeof(kept[0]))) { host_log("cast: room %04d record %d (type %d) stays: %s\n", room, k, ep->id, kept[j].why); continue; }
         want[k] = c < 2 ? coop_look_model(c) : cast_model((unsigned)o->seed, scene, c, o->cast_all, imports, enemy_cast_off());   /* (Claire's, Chris's: never cast) */
@@ -130,6 +131,7 @@ void cast_room(const EnemyOpts* o)
         host_log("cast: room %04d record %d (type %d model %d) -> %s (slot %d)\n", room, k, ene[k].id, ene[k].mdlver, name, s);
     }
     if (o->cast_all == 2) snprintf(custom, sizeof(custom), "custom models: %d checked", cast_custom_count(enemy_cast_off(), imports, NULL));
+    if (!o->cast) { host_log("cast: room %04d: %d records of Claire or Chris drawn as your look for them (Per Character)\n", room, n); return; }
     host_log("cast: room %04d: %d records drawn as other models in cutscenes (seed %d, %s, %s%s)\n", room, n, o->seed,
              o->cast_assign ? "random per cutscene" : "fixed", o->cast_all == 2 ? custom : o->cast_all ? "all models" : "cutscene models", imports ? ", imported models" : "");
 }

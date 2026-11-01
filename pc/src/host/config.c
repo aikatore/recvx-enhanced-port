@@ -73,6 +73,9 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "frame_blend", &g_config.frame_blend, -1, 1 },
     { "coop_port", &g_coop.port, 1, 65535 },
     { "coop_char", &g_coop.chr, 0, COOP_CHR_CINE },   /* (imports and the ids between: checked after import_registry_load) */
+    { "appear_per_char", &g_appear_per, 0, 1 },        /* "Character Models": 0 Same for Both, 1 Per Character (actors.h) */
+    { "appear_claire", &g_appear_own[0], -1, COOP_CHR_CINE },   /* "Claire's Model", -1: coop_char's */
+    { "appear_chris", &g_appear_own[1], -1, COOP_CHR_CINE },    /* "Chris's Model" */
     { "appear_gender_anim", &g_appear_anim, 0, 1 },
     { "appear_cutscene_face", &g_appear_face, 0, 1 },
     { "appear_in_cutscenes", &g_appear_cutscene, 0, 1 },
@@ -221,6 +224,7 @@ void config_load(void)
        written, becomes Combined; Classic, never the default since Modern, stays */
     if (!combined_seen && g_modern_on == 1) g_modern_on = MODERN_COMBINED;
     g_coop.chr = appear_canon(g_coop.chr);   /* an event double no longer listed: its listed twin (actors.c) */
+    for (int c = 0; c < 2; c++) if (g_appear_own[c] >= 0) g_appear_own[c] = appear_canon(g_appear_own[c]);
     g_enemy_opts.cast = g_enemy_opts.cast == 1 || g_enemy_opts.cast == 3;   /* the cutscene cast had 1 Characters, 2 Enemies, 3 Both: the characters' on */
     default_name();
     player_id();

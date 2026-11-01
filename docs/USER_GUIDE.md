@@ -317,14 +317,14 @@ voices and what happens stay as they are.
 * **Randomize Cutscene Cast**: On swaps the story characters (Alfred, Alexia, Steve, Rodrigo, Wesker)
   in cutscenes; a character who stays in the room afterwards keeps the new look. Claire and Chris are never
   swapped: in every cutscene, also while you play the other one, they show your look for them ("Character
-  Model", or BioRand's random look for that character).
+  Model", Claire's or Chris's Model with Per Character, or BioRand's random look for that character).
 * **Model Selection**: *Cutscene Models* picks among the characters' cutscene models: their mouths
   move with the lines and their eyes look where the original character's do (the voice stays the
   original character's). *All Models* also uses the creatures and the zombies
   (all zombie looks count as one choice, so zombies do not crowd out the rest); most of those keep a
   still face. Claire, Chris, Steve and Wesker always come as their cutscene models, so they talk;
   Claire's second costume has none and keeps a still face. A model with hands of its own shows them instead of the character's gloves. Claire's
-  and Chris's looks are never given to someone else: how they look is up to "Character Model".
+  and Chris's looks are never given to someone else: how they look is up to "Character Model" (or Claire's and Chris's Model).
   *Custom* uses only the models you check in a list of the *All Models* ones (with SELECT ALL and
   DESELECT ALL): in F1 under Model Selection, or in the co-op lobby (GAME RULES, RANDOMIZER, CUTSCENE
   CAST, CHOOSE MODELS). Your choice is saved. With nothing checked, nobody changes.
@@ -363,7 +363,9 @@ Music And Voice, Sound Effects: 0-100%, default 100%.
 
 | Setting | Default | What it does |
 |---|---|---|
+| Character Models | Same for Both | Same for Both: one Character Model for whoever you play. Per Character: Claire's Model and Chris's Model instead, so each has a look of their own, also when one shows up in the other's cutscenes (Steve and Wesker then look like themselves) |
 | Character Model | Current Character | play as another character, creature or zombie; your co-op partner sees it too. "Current Character (Cutscene)": the character you play in its cutscene model (follows character switches; also over other costumes) |
+| Claire's Model, Chris's Model | the Character Model | with Per Character: the same list, one for each. A BioRand game's random looks come first until you choose a model in game |
 | Match Model Animations | On | a male model moves like Chris, a female one like Claire |
 | Custom Cutscene Model | On | Off: cutscenes show the real Claire or Chris |
 | Animated Faces (Experimental) | Off | the swapped model moves its mouth |

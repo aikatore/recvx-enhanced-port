@@ -706,9 +706,15 @@ static void coop_window(void)
                           "as can long story cutscenes."));
     if (cs.state == COOP_CONNECTED) ImGui::TextDisabled(tr("Session: %s"), tr(loots[cs.loot_now ? 1 : 0]));
     auto appear = [](void*, int i) -> const char* { return tr(appear_name(appear_at(i))); };
-    int pos = appear_pos(c->chr);   /* the list leaves out event doubles (actors.c) */
-    if (ImGui::Combo(tr("Character Model"), &pos, appear, nullptr, appear_count(), 20)) { c->chr = appear_at(pos); changed = true; }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Choose your appearance; your partner sees it too.\nModels can change movement and voice;\nAppearance settings control animations and cutscene models."));
+    for (int k = 0; k < (g_appear_per ? 2 : 1); k++) {   /* "Per Character": Claire's and Chris's */
+        static const char* const lbl[3] = { "Character Model", "Claire's Model", "Chris's Model" };
+        int pos = appear_pos(appear_choice(c->chr, k));   /* the list leaves out event doubles (actors.c) */
+        if (ImGui::Combo(tr(lbl[g_appear_per ? 1 + k : 0]), &pos, appear, nullptr, appear_count(), 20)) {
+            (g_appear_per ? g_appear_own[k] : c->chr) = appear_at(pos);
+            changed = true;
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Choose your appearance; your partner sees it too.\nModels can change movement and voice;\nAppearance settings control animations and cutscene models."));
+    }
     if (off) {
         /* at the title the window closes, so the pad drives the game's menu again */
         if (ImGui::Button(tr("Host"))) { __atomic_store_n(&c->request, COOP_REQ_HOST, __ATOMIC_RELEASE); coop_visible = !cs.at_title; }
