@@ -107,6 +107,14 @@ typedef struct Disguise {
     } hp;
 } Disguise;
 static Disguise dg[ACTOR_SLOTS] __attribute__((aligned(64)));
+/* the cast slots' own hands (actor_cast_hands): a player character's unarmed pieces, as the lobby preview's */
+#define HAND_MDL 4096                   /* one piece's model (the four characters': 2.4..2.8 KB) */
+static struct {
+    O_WRK obj[2];                       /* right, left: linked to the display actor's hand nodes */
+    O_WORK ow[2][4] __attribute__((aligned(16)));
+    unsigned char mdl[2][HAND_MDL] __attribute__((aligned(64)));
+    int on, tried;
+} ch[ACTOR_SLOTS - ACTOR_CAST] __attribute__((aligned(64)));
 /* The model buffers: our player's, the partner's, the double's and the variants' 1.5 MB each; the cast slots share
    one buffer, each taking what its model needs (no motions: a cast model is always posed from its source), given back
    when all of them are unloaded (the room's end). All of it inside the PS2 address window (ps2/memory.c). */
@@ -719,6 +727,7 @@ static void unload(Disguise* d)
         bhGarbageTexture(NULL, 0);
     }
     d->tex_n = d->tex_gone = d->posed = d->face = d->lip = d->lip_max = d->hp.on = 0;
+    if (d >= &dg[ACTOR_CAST]) ch[d - &dg[ACTOR_CAST]].on = ch[d - &dg[ACTOR_CAST]].tried = 0;   /* (their textures: in d->tex) */
     posed_src[d - dg] = NULL;
     d->model = -1;
     memset(&d->w, 0, sizeof(d->w));
@@ -2058,6 +2067,7 @@ void actor_act(int who, BH_PWORK* ep)
     posed_t[who] = actor_ticks;
 }
 
+static void cast_hands_draw(int who, const BH_PWORK* ep);
 int actor_put_as(int who, BH_PWORK* ep)
 {
     Disguise* d = &dg[who];
@@ -2070,6 +2080,7 @@ int actor_put_as(int who, BH_PWORK* ep)
     if (!d->mapped) return 0;   /* a source without a humanoid node map is drawn as itself */
     bhPutModel(&d->w);
     head_draw(d);
+    cast_hands_draw(who, ep);
     return 1;
 }
 
@@ -2156,6 +2167,79 @@ int actor_own_hand(int who, int side, int* node)
     if (*node < 0 || d->model < 0 || !d->mapped) return 0;
     if (n < 0) return 2;   /* (no such hand at all: the Bandersnatch's left, Nosferatu's right) */
     return d->skin || node_has_mesh(&d->w, n);
+}
+
+/* A cast slot's own hands. The cast's cutscene models and the player files have none: the room script links the
+   record's hand pieces to its hands (cast_glue.c). A creature cast as a character (cast_glue.c cast_room) has no
+   pieces (Nosferatu in his straitjacket, 6040, has no arms at all; the Tyrant, the Hunter, Steve's father have
+   theirs in their mesh), so the model stood there without hands. Such a slot gets the unarmed pieces of the
+   character the model is (appear_voice: the cast its own, other men Chris's, women Claire's; weapon file
+   c * 30 + 20, as the lobby preview and the game unarmed), linked to its hand nodes; drawn on each hand of the
+   model without a mesh of its own while the record has no piece of the script's on that hand (cast_hands_draw).
+   Loaded once per model (two textures: Steve's and Wesker's 17 KB each, Chris's 65 KB, Claire's 128 KB). */
+void actor_cast_hands(int who)
+{
+    Disguise* d = &dg[who];
+    unsigned char* p = pack;
+    const unsigned char* end = pack + sizeof(pack);
+    int side, c, n, need = 0;
+    if (who < ACTOR_CAST || who >= ACTOR_SLOTS || d->model < 0 || !d->rig.ok || d->skin || ch[who - ACTOR_CAST].tried) return;
+    ch[who - ACTOR_CAST].tried = 1;
+    for (side = 0; side < 2; side++) need |= (n = d->rig.map[side ? 13 : 9]) >= 0 && !node_has_mesh(&d->w, n);
+    if (!need) return;   /* (hands of its own: a zombie, a creature) */
+    n = d->model - ACTOR_PART;
+    c = d->model >= ACTOR_PART ? (n <= 3 ? n : appear_part_anim(n) == ANIM_FEMALE ? 0 : 1) : appear_voice(COOP_CHR_ACTOR + d->model);
+    if (c < 0 || c > 3 || !read_file(sys->sys_partid, c * 30 + 20)) { host_log("actor: slot %d: no hands (character %d)\n", who, c); return; }
+    for (side = 0; side < 2; side++) {   /* (the file as bhReadWeaponData reads it: per hand its model, then its texture block) */
+        O_WRK* op = &ch[who - ACTOR_CAST].obj[side];
+        ML_WORK* m = &op->mdl[0];
+        unsigned int msz = (unsigned)(end - p) >= 8 ? rd32(p) : 0, t;
+        if (!msz || msz > HAND_MDL || msz > (unsigned)(end - p) - 8) return;
+        memset(op, 0, sizeof(*op));
+        memcpy(ch[who - ACTOR_CAST].mdl[side], p + 4, msz);
+        p += 4 + msz;
+        t = rd32(p);
+        p += 4;
+        if (t & 0x80000000) { p = pack + ((p - pack + 63) & ~63); t &= ~0x80000000u; }
+        if (t > (unsigned)(end - p)) return;
+        bhMlbBinRealize(ch[who - ACTOR_CAST].mdl[side], m);
+        if (!m->objP || m->obj_num > 4 || !m->texP || !t || d->tex_n >= (int)(sizeof(d->tex) / sizeof(d->tex[0])) || !tex_room("hands", 1)) {
+            host_log("actor: slot %d: hands of character %d not loaded\n", who, c);
+            return;
+        }
+        bhSetMemPvpTexture(m->texP, p, 0);
+        m->flg |= 0x200;
+        d->tex[d->tex_n++] = m->texP;
+        p += t;
+        m->owP = ch[who - ACTOR_CAST].ow[side];
+        memset(m->owP, 0, sizeof(ch[0].ow[0]));
+        op->mlwP = m;
+        op->flg = 0x81;   /* (as bhSetWeapon: linked) */
+        op->id = 1210;
+        op->mtx = (void*)op->mtxbuf;
+        op->lkwkp = (unsigned char*)&d->w;
+        op->lkono = d->rig.map[side ? 13 : 9];
+    }
+    ch[who - ACTOR_CAST].on = 1;
+    host_log("actor: slot %d: the unarmed hands of character %d\n", who, c);
+}
+
+/* actor_put_as: slot who's own hands where its model has none and record ep has no piece on that hand */
+static void cast_hands_draw(int who, const BH_PWORK* ep)
+{
+    Disguise* d = &dg[who];
+    int side, o;
+    if (!ch[who - ACTOR_CAST].on || !d->mapped) return;
+    for (side = 0; side < 2; side++) {
+        O_WRK* op = &ch[who - ACTOR_CAST].obj[side];
+        int src = d->src_hand[side];
+        if (op->lkono < 0 || node_has_mesh(&d->w, op->lkono)) continue;
+        for (o = 0; o < 32 && src >= 0; o++)
+            if ((sys->obwp[o].flg & 0x81) == 0x81 && sys->obwp[o].lkwkp == (const unsigned char*)ep && sys->obwp[o].lkono == src) break;
+        if (src >= 0 && o < 32) continue;   /* (the script's piece: it is the hand, cast_glue.c) */
+        bhCalcModel((BH_PWORK*)op);
+        bhPutModel((BH_PWORK*)op);
+    }
 }
 
 int actor_src_head(int who, int node)

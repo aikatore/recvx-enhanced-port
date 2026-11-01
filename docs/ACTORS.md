@@ -876,7 +876,8 @@ Not cast (`enemies.py census` over all room files; every creature record without
   Gulp Worm eating Rodrigo (7220, 7221), the tentacle (9300), the Spotter (8030), the albinoid infant (3120), the
   Bandersnatch's long arm (3130: only the arm).
 * 9050, 1 (52, model 1): a body lying under the crane; the catalogue's "Zombie: Bandaged 2", a zombie look.
-* Nosferatu's core (53) and the close-up props in 6040: no model to replace.
+* Nosferatu's core (53) and the close-up props in 6040: no model to replace (the core is hidden while he is
+  his model, below).
 
 Two things the creatures needed in drawing:
 
@@ -887,7 +888,23 @@ Two things the creatures needed in drawing:
 * **A source without arms**: in his straitjacket Nosferatu's skeleton has no arms (16 nodes). The model's
   arms took no rotation and stayed out in its T-pose; now an arm the source lacks hangs down beside the body
   (`actor_glue.c retarget`, the upper arm turned from its rest direction to down and slightly out). The
-  heart (his core, a record linked to his chest) and the restraints stay where the script puts them.
+  restraints (records of their own, not linked to him) stay where the script puts them.
+* **Parts of the body**: his heart is a record of its own (type 53, record 5, morphing, beating) linked to his
+  chest (`flg & 0x80`, `lkwkp` his record, node 3); it showed on the chest or the face of the model in his
+  place. A record linked to a creature drawn as its model is not drawn (`cast_glue.c creature_part`: `cast_draw`
+  answers "drawn" for it; it still runs); with the creature drawn as itself it is back. Only the creatures:
+  what a character's record has linked to it could be something it holds. The other three have nothing linked
+  but the script's objects of the room.
+* **Hands**: a creature has no hand pieces of the script's (Nosferatu has no arms; the Tyrant, the Hunter and
+  Steve's father have theirs in their mesh), so a model without hands of its own (the cutscene models, the player
+  files) stood there with its sleeves ending at the wrists. A slot a creature record uses gets the unarmed
+  pieces of the character the model is (`actor_glue.c actor_cast_hands`; `appear_voice`: the cast their own,
+  other men Chris's, women Claire's; weapon file `c * 30 + 20`, as the lobby preview), linked to the model's
+  hand nodes and drawn after it on each hand without a mesh of its own while the record has no piece of the
+  script's on that hand (`cast_hands_draw`). Loaded with the model at the room load (two textures: Steve's and
+  Wesker's 17 KB each, Chris's 65 KB, Claire's 128 KB; refused like a model under the margins). Monster Steve's
+  arms end without a mesh at the hand node too (his claws are linked records in his fight): he gets Steve's
+  hands.
 
 ### For the whole room visit
 
@@ -1005,7 +1022,8 @@ the same in Claire's part and in Chris's.
   `actor_weapon_hands` does for the weapons' hand pieces): before, Rodrigo's gloves lay over a zombie's
   own hands. A piece of more nodes holds a prop in the same mesh as the hand (Claire's hand with the
   lighter, two of Rodrigo's) and stays whole; items the script links to a hand are other objects and stay.
-  The same for a model without that hand at all (the Bandersnatch's left).
+  The same for a model without that hand at all (the Bandersnatch's left). A creature's record has no pieces:
+  a model without hands gets a character's unarmed ones there ("Creatures").
 * **Head parts**: Claire's ponytail is an object of its own on her cutscene record's head (id 1200, 4
   nodes, node 5: 9150, 9320, 3210), and so are Wesker's sunglasses on his event model 47 (id 1127, 8030);
   the player's head part `sys->obwp[2]` when a script links it there. Drawn as another model, the record

@@ -127,6 +127,7 @@ void cast_room(const EnemyOpts* o)
         rec_slot[k] = (signed char)s;
         rec_id[k] = (unsigned char)ene[k].id;
         rec_ver[k] = ene[k].mdlver;
+        if (rec_chr[k] >= CAST_CHARACTERS) actor_cast_hands(ACTOR_CAST + s);   /* (a creature: no hand pieces of the script's) */
         cast_n++;
         n++;
         host_log("cast: room %04d record %d (type %d model %d) -> %s (slot %d)\n", room, k, ene[k].id, ene[k].mdlver, name, s);
@@ -238,10 +239,25 @@ void cast_tick(void)
     }
 }
 
+/* A part of a creature's body is a record of its own linked to it (flg 0x80, lkwkp, lkono): Nosferatu's heart in 6040
+   (type 53, record 5, on his chest node 3, beating, a morphing record) showed on the chest of the model in his place.
+   While the creature is drawn as its model, the records linked to it are not drawn (bhDrawEnemy asks cast_draw for
+   them, morphing or not; the record still runs, only its drawing is left out). Only for the creatures: a story
+   character's linked records could be what it holds. */
+static int creature_part(const BH_PWORK* ep)
+{
+    const BH_PWORK* l = (const BH_PWORK*)ep->lkwkp;
+    int k;
+    if (!(ep->flg & 0x80) || l < ene || l >= ene + RECS || (const unsigned char*)l != (const unsigned char*)&ene[l - ene]) return 0;
+    k = (int)(l - ene);
+    return rec_chr[k] >= CAST_CHARACTERS && as_model(l, k);
+}
+
 /* actor_put_enemy: 1 = drawn */
 int cast_draw(BH_PWORK* ep)
 {
     int k = (int)(ep - ene);
+    if (creature_part(ep)) return 1;   /* (drawn: as nothing) */
     return as_model(ep, k) && actor_put_as(ACTOR_CAST + rec_slot[k], ep);
 }
 
