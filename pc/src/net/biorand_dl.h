@@ -8,7 +8,8 @@
    The pure parts below are checked by pc/tests/test_biorand_dl.c.
    Test aids: RECVX_BIORAND_API_TEST replaces the API URL; a file:// URL there also allows file://
    for the asset (Linux curl only). RECVX_BIORAND_CLI_DIR_TEST replaces the game's folder.
-   The same thread also runs the CLI (biorand_cli_generate, docs/BIORAND_INGAME.md S5): one job at a time. */
+   The same thread also runs the CLI (biorand_cli_generate, docs/BIORAND_INGAME.md S5): one job at a time.
+   The game's own update (update.c) uses the transfer steps below (brdl_fetch .. brdl_move) with a BrdlJob of its own. */
 #ifndef RECVX_BIORAND_DL_H
 #define RECVX_BIORAND_DL_H
 #include <string.h>
@@ -50,8 +51,30 @@ void biorand_cli_status(BrdlStatus* s);   /* any thread; error only in BRDL_ERRO
 int  biorand_cli_generate(const char* seed, const char* iso, const char* mods, const char* cfg);
 #define BRDL_GEN_FREE_MB 4096   /* free space it needs in mods: the pack 1.4 GB, the CLI's scratch 2.4 GB while it runs */
 int  biorand_free_mb(const char* dir);   /* free space of dir's disk in MB (at most INT_MAX), -1 unknown */
+static inline int brdl_nested(const char* name) { return strchr(name, '/') || strchr(name, '\\'); }   /* a name of
+                                             SDL_GlobDirectory's below the folder's top level (it lists the whole tree) */
+int  brdl_is_file(const char* path);      /* a regular file, not a link */
+int  brdl_is_link(const char* path);      /* a symbolic link or junction */
+int  brdl_exe_path(char* out, int cap);   /* the running executable's path (UTF-8), whatever its name; 0 unknown */
 int  brdl_rm_tree(const char* path);      /* deletes path and all below it (8 levels), never following a link (the IMPORT
                                              screen's DELETE IMPORTED MODELS too); 1 when it is gone */
+
+/* one job's progress, cancel flag and error (the BioRand CLI's, the game update's); done and cancel are read and
+   written with __atomic builtins (any thread) */
+typedef struct BrdlJob {
+    int done, cancel;              /* bytes so far; 1: stop (curl, wget, tar killed; the step fails "cancelled") */
+    char error[400];               /* the last failure, translated (english: as written, for a thread that may run before tr_init) */
+    const char* log;               /* the log lines' prefix ("biorand-cli") */
+    const char* too_big;           /* the text for a download larger than max */
+    int allow_file, english;       /* allow_file: test aid, file:// URLs (Linux curl) */
+} BrdlJob;
+int  brdl_fail(BrdlJob* j, const char* fmt, ...);   /* 0; the text (fmt translated) in j->error, the log in English */
+/* url (brdl_url_ok) into file, at most max bytes; api: GitHub's API (its JSON also for an error status). Windows: WinHTTP,
+   Linux: curl, else wget. 1 done; 0 failed (j->error) */
+int  brdl_fetch(BrdlJob* j, const char* url, const char* file, int max, int api);
+int  brdl_sha256_file(BrdlJob* j, const char* path, char hex[65]);   /* 0 unreadable or cancelled */
+int  brdl_extract(BrdlJob* j, const char* dir, const char* arc);     /* dir/arc (zip or tar.gz) into dir/x (system tar) */
+int  brdl_move(BrdlJob* j, const char* src, const char* dst);        /* a rename (Windows: retried up to 5 s, a scanner may hold it) */
 
 /* a line of the CLI's stderr: 'P' "Progress: N% text" (*pct 0..100), 'E' "Error: text", 'W' "Warning: text",
    0 other (Info:); *text after the prefix */

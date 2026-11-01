@@ -10,6 +10,7 @@
 #include "modern.h"
 #include "../net/rdv_proto.h"
 #include "../net/biorand_dl.h"
+#include "../net/update.h"
 #include "biorand_opts.h"
 #include "../import/import.h"
 #include "lang.h"
@@ -60,7 +61,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "no_ink_ribbon", &g_config.no_ink_ribbon, 0, 1 },   /* typewriters save without an ink ribbon (co-op: the host's) */
     { "extra_objects", &g_config.extra_objects, 0, 1 },   /* extra item boxes and blue herb planters (co-op: the host's) */
     { "save_system", &g_config.save_system, 0, 1 },     /* 0 native files, 1 memory card */
-    { "update_check", &g_config.update_check, 0, 1 },  /* the newest version from the update server, once per start (net/update.h) */
+    { "update_check", &g_config.update_check, 0, 2 },  /* 0 off, 1 ask to install (the old "on"), 2 notify only: the newest version once per start (net/update.h) */
     { "native_3d", &g_config.native_3d, 0, 1 },
     { "native_tex", &g_config.native_tex, 0, 1 },
     { "hd_textures", &g_config.hd_textures, 0, 1 },
@@ -195,6 +196,7 @@ void config_load(void)
         else if (!strncmp(line, "import_", 7) && import_iso_line(line)) continue;   /* import_<key>_iso */
         else if (sscanf(line, " language = %7s", k) == 1) { for (int l = 0; l < LANG_COUNT; l++) if (!strcmp(k, lang_codes[l])) g_lang = l; continue; }   /* (lang.h) */
         else if (sscanf(line, " biorand_cli_digest = %71s", g_biorand_cli_digest) == 1) continue;   /* the installed BioRand CLI (biorand_dl.h) */
+        else if (sscanf(line, " update_skip = %31s", g_update_skip) == 1) continue;   /* SKIP THIS VERSION (update.h) */
         else if (sscanf(line, " biorand_seed = %71s", g_biorand_seed) == 1) continue;   /* the BioRand generator's options (biorand_opts.h), checked when used */
         else if (sscanf(line, " biorand_appear = %d", &g_biorand_appear) == 1) { g_biorand_appear = g_biorand_appear != 0; continue; }   /* "Randomize Played as" (biorand_opts.h) */
         else if (!strncmp(line, "cast_custom_off =", 17)) continue;   /* (below, once the imports are listed) */
@@ -264,6 +266,7 @@ static int write_ini(FILE* f, void* ud)
     for (int s = 0; s < IMPORT_SOURCES; s++) if (g_import.iso[s][0]) fprintf(f, "import_%s_iso = %s\n", import_sources[s].key, g_import.iso[s]);
     if (g_lang) fprintf(f, "language = %s\n", lang_codes[g_lang]);
     if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);
+    if (g_update_skip[0]) fprintf(f, "update_skip = %s\n", g_update_skip);
     if (g_biorand_seed[0]) fprintf(f, "biorand_seed = %s\n", g_biorand_seed);
     if (g_biorand_appear) fprintf(f, "biorand_appear = 1\n");   /* (like biorand_seed: only once set, in the --dev screen) */
     cast_off_write(off_line, f);

@@ -85,7 +85,8 @@ Windows `-mno-ms-bitfields`.
 | game (`game_thread`) | the decomp and `pc/glue` (ENHANCED SETTINGS menu, lobby, co-op incl. its UDP socket polled once per frame, cheats applied at the frame hand-off), disc reads, memory card, creating and destroying audio streams |
 | SDL audio | ADX decoding in the stream callbacks (own file handle per voice), the sound driver's 240 Hz tick, its queued commands and the synth mix |
 | portmap | UPnP/NAT-PMP while hosting (`net/portmap.c`) |
-| update | the update check: once per start, up to three HTTP requests, detached (`net/update.c`) |
+| update | the update check: once per start, up to three GitHub API requests, then up to three to our server, detached (`net/update.c`) |
+| update-install | the update's download, check and install, when asked (`net/update.c`); the download helpers are the BioRand downloader's (`net/biorand_dl.c`, one `BrdlJob` each) |
 | co-op arrival times (Windows) | waits on the co-op socket and notes when data arrived (`net_rx_us`) |
 | log (Linux, `--log`) | copies stdout/stderr into the log file |
 
@@ -846,7 +847,7 @@ options: [ENEMIES.md](ENEMIES.md#enemy-options); bindings: [Binding ini format](
 | Hardware 3D Rendering, Texture Caching, Hide Edge Models | `native_3d`, `native_tex`, `model_cull` |
 | HD Textures, HD Font, HD Menus; (no row) pack folder | `hd_textures`, `hd_textures_font`, `hd_textures_ui`, `hd_textures_dir` |
 | (no row) disc image | `iso` |
-| Skip Intro, Check For Updates, Skip Door Animations | `skip_intro`, `update_check`, `skip_doors` (0 Off, 1 Instant, 2 Skippable) |
+| Skip Intro, Check For Updates, Skip Door Animations | `skip_intro`, `update_check` (0 Off, 1 Ask to Install, 2 Notify Only; the old 1 "On" is Ask), `skip_doors` (0 Off, 1 Instant, 2 Skippable) |
 | Fast Loading, Battle Game Unlocked, Difficulty Select | `fast_loading`, `battle_unlocked`, `difficulty_select` |
 | Quick Knife, Auto-climb Stairs, Zombie Decapitation, Stack Rifle Ammo | `quick_knife`, `auto_stairs`, `head_blowoff`, `rifle_stack` |
 | (lobby GAME RULES) BIORAND, Save System, Free Typewriter Saves | `biorand`, `save_system` (0 Separate Files, 1 Memory Card), `no_ink_ribbon` |
@@ -937,10 +938,33 @@ What the options do in detail, beyond [USER_GUIDE.md](USER_GUIDE.md#settings):
 - **Return to title**: asks "Return to the title screen?" with NO preselected; works in the Battle
   Game too; changed options are kept; cancel or a right click answers NO. The title menu's OPTION
   screen does not have it.
-- **Update check**: up to three tries, a few seconds apart, then not again until the next start;
-  the game never waits for it. The request is a plain HTTP GET with
-  `User-Agent: recvx-enhanced-port/<version>`; no GitHub or other third-party requests; nothing is
-  stored. Test aids: [Environment variables](#environment-variables).
+- **Update check** (`net/update.c`, `update.h`): once per start on its own thread, never waited for.
+  First GitHub's API, `releases?per_page=5` (one HTTPS GET per attempt: WinHTTP on Windows, curl
+  else wget on Linux, as the BioRand download; pre-releases count, drafts never): the highest tag that
+  is a version, and that release's archive for this build, `recvx-enhanced-port-<v>-windows-x86.zip` or
+  `-linux-i686.tar.gz` (exact names: the `-debug` archives and the server's never match), with its
+  size and `sha256:` digest. Three attempts 0, 5 and 30 s apart (no answer, an HTTP error, the rate
+  limit's 403/429 JSON, anything that is not a release list); then the same with our server
+  (`RECVX_UPDATE_URL`, a plain HTTP GET with `User-Agent: recvx-enhanced-port/<version>`), whose
+  answer is only a version: the title line shows it, nothing is offered. The log says which source
+  answered. Nothing is cached; Off sends nothing.
+- **Update install** (`pc/glue/update_menu.c`, `update_install`): Ask to Install, a newer release
+  with an archive and not `update_skip` open a dialog once per run at the title menu (mode 30, as the
+  BIORAND screen; not during a co-op session). INSTALL starts a thread: everything happens in
+  `<exe folder>/recvx-update/` (the folder must be writable, else it stops at once): the archive (at
+  most the listed size), its SHA-256 against the listed digest (a mismatch: deleted, nothing
+  installed), `tar` into `x/`, then the archive folder's files that `upd_installable` allows (files at
+  its top except `recvx.ini`, `docs/`, `README.txt` below `mods/`; never `save/`, other `mods/`
+  content, links). The executable goes to the running one's path (`GetModuleFileNameW`,
+  `/proc/self/exe`: a renamed one keeps its name). Each old file first goes to `recvx-update/old/`:
+  Linux hard-links it there and renames the new file over the old path (atomic; the running process
+  keeps its inode), Windows moves it there (a running .exe can be renamed, not overwritten), then the
+  new file moves in. Any failure puts every old file back and the dialog offers the release page
+  (`SDL_OpenURL` on the main thread). The next start deletes `recvx-update/` (on Windows the old
+  .exe is free by then); an old file whose place is empty (a crash half-way) is put back first.
+  RESTART NOW: `SDL_EVENT_QUIT`, and at quit `recvx.ini` is written and the executable started again
+  with the same arguments in the starting directory.
+  Test aids: [Environment variables](#environment-variables).
 - **Unlock With No Key** (F2): locks act as if you carried their key, without it entering your inventory;
   switching it counts at once, also in the current room. Examining a locked door, a card reader or
   the spot for an emblem, plate or jewel uses the key there as the item screen's Use would (or the
@@ -1208,7 +1232,9 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_SKIP_CINE=n` | skip every cutscene after n game frames, as its skip button |
 | `RECVX_MOVIE=n` | play `MV_n.PSS` in place of every movie (e.g. the intro at start-up with `skip_intro = 0`) |
 | `RECVX_UPDATE_CHECK=0` | no update check (no network) and the title's newest version reads "off", as with the setting Off; the headless scripts (`layout_check.sh`, `room_test.sh`, `compare_native.sh`) set it |
-| `RECVX_UPDATE_FAKE=v0.7.0` | the title shows this as the newest version, without asking the server (screenshots) |
+| `RECVX_UPDATE_FAKE=v0.7.0` | the title shows this as the newest version, without asking anyone (screenshots) |
+| `RECVX_UPDATE_FAKE_VERSION=v0.7.0` | the running build counts as this version (the update dialog against real or test releases) |
+| `RECVX_UPDATE_GITHUB_TEST=url` | GitHub's release list from here instead (`RECVX_UPDATE_GITHUB`); a `file:///…` JSON also allows `file://` archives (Linux, curl): a made-up release for the whole install, a missing file for GitHub failing (then the server), a `{"message":…}` file for the rate limit |
 | `RECVX_UPDATE_URL_TEST=http://host[:port]/path` | ask this server instead of the built-in one (`RECVX_UPDATE_URL` in `pc/src/net/update.h`): unreachable servers and junk answers |
 
 ### Scripted input

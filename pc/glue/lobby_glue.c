@@ -51,6 +51,9 @@ void bhReturnTitle(void);
 int  pc_biorand_menu(void);             /* biorand_menu.c: the BIORAND screen, once per frame; 1 back to the title menu */
 void pc_biorand_menu_close(void);
 int  pc_import_menu(void);              /* import_menu.c: the IMPORT screen, once per frame; 1 back to the title menu */
+int  pc_update_menu(void);              /* update_menu.c: the update dialog, once per frame; 1 back to the title menu */
+void pc_update_menu_close(void);
+int  pc_update_menu_offer(void);
 void pc_import_menu_close(void);
 /* cast_list.c: the cutscene cast's "Custom" list, at its place (as our model page); 1 back */
 void cast_list_open(float x0, float x1, float y0, float h, float sc, int rows);
@@ -246,6 +249,7 @@ static float ex_row_y(int i) { return 304.0f + 32.0f * i; }   /* DisplayNewGameP
 
 static int br_screen;                   /* mode 30 is the BioRand screen (biorand_menu.c), not the lobby */
 static int im_screen;                   /* ... the IMPORT screen (import_menu.c) */
+static int up_screen;                   /* ... the update dialog (update_menu.c) */
 
 void pc_title_menu_init(void)
 {
@@ -404,6 +408,10 @@ void pc_title_mouse(int level, int flag)
     if (level == 0 && coop_biorand_offer(NULL)) {   /* a co-op guest (F3, --coop-join): the host's BioRand seed, offered on the
                                                        BIORAND screen as from its row (the lobby opens it itself: pc_lobby) */
         to_screen(&br_screen);
+        return;
+    }
+    if (level == 0 && !ex.on && g_coop.state == COOP_OFF && pc_update_menu_offer()) {   /* a newer release to install (net/update.h) */
+        to_screen(&up_screen);
         return;
     }
     if (level == 0 && ex.on) { extra_input(); return; }
@@ -1774,7 +1782,8 @@ void pc_lobby_close(void)
 {
     if (br_screen) pc_biorand_menu_close();
     if (im_screen) pc_import_menu_close();
-    br_screen = im_screen = 0;
+    if (up_screen) pc_update_menu_close();
+    br_screen = im_screen = up_screen = 0;
     lobby_close(0);
 }
 
@@ -1784,6 +1793,11 @@ int pc_lobby(void)
     int r;
     char note[64];
     if (lb.open && !br_screen && coop_biorand_offer(NULL)) br_screen = 1;   /* a guest: the host's BioRand seed, offered there */
+    if (up_screen) {   /* the update dialog (update_menu.c): 1 back to the menu */
+        title_font();
+        if ((r = pc_update_menu())) up_screen = 0;
+        return r;
+    }
     if (im_screen) {   /* the IMPORT screen (import_menu.c): 1 back to the menu */
         title_font();
         if ((r = pc_import_menu())) im_screen = 0;

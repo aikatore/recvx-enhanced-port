@@ -64,7 +64,7 @@ typedef struct {
     int  hd_textures_font;   /* the pack may replace the game's font pages too (default 0: the original font) */
     int  hd_textures_ui;     /* the pack's replacements that differ from the original (redesigned menus) are used too (default 1) */
     char hd_textures_dir[1024];   /* ini hd_textures_dir, --hd-textures DIR: the pack folder instead of mods/textures */
-    int  update_check;       /* ask the project's update server for the newest version (pc/src/net/update.c) */
+    int  update_check;       /* the newest version at start: 0 off, 1 and the title asks to install it, 2 only shown (pc/src/net/update.h) */
 } HostConfig;
 extern HostConfig g_config;
 void config_load(void);

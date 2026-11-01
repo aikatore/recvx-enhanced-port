@@ -92,6 +92,41 @@ int main(void)
         CHECK(!upd_parse_response(big, (int)sizeof(big), v, sizeof(v)));
         CHECK(!upd_parse_response("HTTP/1.0 200 OK\r\n\r\nv10.20.30", 28, v, sizeof(v)));   /* longer than ver's room */
     }
+    /* GitHub's release list: the highest non-draft version, its archive for the platform (not -debug, not the server) */
+    {
+#define DIG "sha256:3de1aa22ba31a459fd9d0ac38a7f73b3b1ac9203bbdb6055a3481f352d7a3816"
+#define AS(n, sz) "{\"name\":\"" n "\",\"size\":" #sz ",\"digest\":\"" DIG "\",\"uploader\":{\"login\":\"x\"}," \
+                  "\"browser_download_url\":\"https://github.com/aikatore/recvx-enhanced-port/releases/download/" n "\"}"
+#define REL(tag, draft, assets) "{\"tag_name\":\"" tag "\",\"draft\":" draft ",\"prerelease\":true,\"body\":\"a \\\"b\\\"\",\"assets\":[" assets "]}"
+        static const char list[] = "[" REL("v0.7.2", "true", AS("recvx-enhanced-port-0.7.2-linux-i686.tar.gz", 5)) ","   /* a draft */
+            REL("v0.6.11", "false", AS("recvx-enhanced-port-0.6.11-linux-i686.tar.gz", 6)) ","                           /* a later fix of an older line */
+            REL("v0.7.1", "false", AS("recvx-enhanced-port-0.7.1-linux-i686-debug.tar.gz", 16) "," AS("recvx-server-0.7.1-linux-x86_64.tar.gz", 5) ","
+                AS("recvx-enhanced-port-0.7.1-linux-i686.tar.gz", 3786735) "," AS("recvx-enhanced-port-0.7.1-windows-x86.zip", 3869834)) ","
+            REL("nightly", "false", "") "," REL("v0.7.0", "false", "") "]";
+        char v[32];
+        BrdlAsset a;
+        CHECK(upd_pick_release(list, (int)strlen(list), "-linux-i686", ".tar.gz", 0, v, sizeof(v), &a) && !strcmp(v, "v0.7.1"));
+        CHECK(a.size == 3786735 && !strcmp(a.digest, DIG) && strstr(a.url, "/recvx-enhanced-port-0.7.1-linux-i686.tar.gz"));
+        CHECK(upd_pick_release(list, (int)strlen(list), "-windows-x86", ".zip", 0, v, sizeof(v), &a) && a.size == 3869834);
+        CHECK(upd_pick_release(list, (int)strlen(list), "-macos", ".zip", 0, v, sizeof(v), &a) && !strcmp(v, "v0.7.1") && !a.url[0]);   /* no archive */
+        CHECK(!upd_pick_release(list, (int)strlen(list) - 1, "-linux-i686", ".tar.gz", 0, v, sizeof(v), &a));   /* cut */
+        CHECK(!upd_pick_release("{\"message\":\"API rate limit exceeded\"}", 37, "-linux-i686", ".tar.gz", 0, v, sizeof(v), &a));
+        CHECK(!upd_pick_release("[]", 2, "-linux-i686", ".tar.gz", 0, v, sizeof(v), &a));
+        CHECK(!upd_pick_release("[" REL("nightly", "false", "") "]", (int)strlen("[" REL("nightly", "false", "") "]"), "-linux-i686", ".tar.gz", 0, v, sizeof(v), &a));
+        CHECK(!upd_pick_release("<html>", 6, "-linux-i686", ".tar.gz", 0, v, sizeof(v), &a));
+        {   /* a bad digest: the version, no archive */
+            static const char bad[] = "[{\"tag_name\":\"v0.8.0\",\"draft\":false,\"assets\":[{\"name\":\"recvx-enhanced-port-0.8.0-linux-i686.tar.gz\","
+                                      "\"size\":5,\"digest\":\"sha256:XYZ\",\"browser_download_url\":\"https://github.com/a\"}]}]";
+            CHECK(upd_pick_release(bad, (int)strlen(bad), "-linux-i686", ".tar.gz", 0, v, sizeof(v), &a) && !strcmp(v, "v0.8.0") && !a.url[0]);
+        }
+    }
+    /* the archive's files that are installed */
+    CHECK(upd_installable("recvx") && upd_installable("recvx.exe") && upd_installable("LICENSE") && upd_installable("CHANGELOG.md"));
+    CHECK(upd_installable("docs/USER_GUIDE.md") && upd_installable("mods/README.txt") && upd_installable("mods/textures/README.txt"));
+    CHECK(!upd_installable("recvx.ini") && !upd_installable("save/recvx.ini") && !upd_installable("save/card0/x"));
+    CHECK(!upd_installable("mods/biorand/x.dat") && !upd_installable("mods/textures/hd.png") && !upd_installable("mods/enemies.ini"));
+    CHECK(!upd_installable("../recvx") && !upd_installable("docs/../../x") && !upd_installable("docs/./x") && !upd_installable("docs//x"));
+    CHECK(!upd_installable("") && !upd_installable("docs\\x") && !upd_installable("C:/x") && !upd_installable("other/x"));
     if (fails) { printf("%d failed\n", fails); return 1; }
     printf("update: all passed\n");
     return 0;

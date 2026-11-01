@@ -137,6 +137,10 @@ void host_fatal(const char* fmt, ...)
     exit(1);
 }
 
+static int main_argc;           /* main's arguments (UTF-8), for the restart after an update */
+static char** main_argv;
+static char start_dir[1024];   /* where the program was started: relative image paths are taken from here */
+
 void host_pump_events(void)
 {
     SDL_Event ev;
@@ -153,6 +157,7 @@ void host_pump_events(void)
         lobby_io_event(&ev);
         switch (ev.type) {
         case SDL_EVENT_QUIT:
+            update_relaunch(main_argc, main_argv, start_dir);   /* after an update's RESTART NOW (net/update.h) */
             exit(0);
         case SDL_EVENT_WINDOW_DISPLAY_CHANGED:   /* moved to another monitor: its modes for Fullscreen resolution */
         case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:   /* the desktop resized: a borderless window covers it again */
@@ -226,7 +231,6 @@ static void usage(void)
 static char log_path[1024], profile_path[1024];
 static int iso_given;   /* image from the command line / RECVX_ISO: no file selector */
 static int save_given;  /* --save-dir */
-static char start_dir[1024];   /* where the program was started: relative image paths are taken from here */
 
 static void iso_from(const char* s)
 {
@@ -325,6 +329,8 @@ int main(int argc, char** argv)
     setvbuf(stdout, NULL, _IONBF, 0); /* the game's printf diagnostics */
     ps2_memory_init();   /* first: a DLL loaded later (WinHTTP's, the GPU driver's) moves aside, one loaded before can't */
     argv = pc_utf8_argv(argc, argv);   /* paths are UTF-8 everywhere (fileio.h) */
+    main_argc = argc;
+    main_argv = argv;
     { char* cwd = SDL_GetCurrentDirectory(); if (cwd) { SDL_strlcpy(start_dir, cwd, sizeof(start_dir)); SDL_free(cwd); } }
     parse_args(argc, argv);
     home_dir();

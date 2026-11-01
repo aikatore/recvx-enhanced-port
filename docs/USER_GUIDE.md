@@ -282,7 +282,7 @@ until the right square on the white strip is.
 | Setting | Default | What it does |
 |---|---|---|
 | Skip Intro | On | boot straight to the title (next start). Off: any button skips each logo and movie |
-| Check For Updates | On | see [Update check](#update-check) |
+| Check For Updates | Ask to Install | see [Updating](#updating) |
 | Skip Door Animations | Instant | Off: played. Instant: a short load screen instead. Skippable: any button ends them |
 | Fast Loading | On | room changes without the PS2's disc waits |
 | Battle Game Unlocked | On | Battle Game (title menu, EXTRA) from the start, all five characters; saves and records unchanged |
@@ -491,17 +491,38 @@ Anywhere, Item Box Anywhere; none by default; ini `key_cheat_save`, `key_cheat_b
 In co-op only the host can spawn enemies. Both players can save anywhere. With shared loot the item
 box opens only while your partner doesn't have it open ("Your partner is using the item box.").
 
-## Update check
+## Updating
 
-With **Check For Updates** on, the game asks the project's update server once per start for the
-newest version number, in the background.
+**Check For Updates** (GAMEPLAY) has three choices:
 
-- **Sent**: one request for that number, with the game's version. Nothing else, no third parties,
-  nothing stored.
-- **Shown**: "Game Version" and "Latest Version" at the title's bottom right; the installed one
-  turns red when a newer one is out. "..." while asking, "unknown" without an answer.
-- **Off**: GAMEPLAY -> Check For Updates, or `update_check = 0` in `recvx.ini`. Then no network is
-  used outside co-op, and the title shows "off".
+- **Ask to Install** (default): at start the game looks for the newest version in the background.
+  When a newer one is out, the title screen asks once: **INSTALL**, **LATER** (asked again next
+  start) or **SKIP THIS VERSION** (not asked again until an even newer one is out).
+- **Notify Only**: no question; "Latest Version" at the title's bottom right shows it, and "Game
+  Version" turns red when you are behind.
+- **Off**: no network at all outside co-op; the title shows "off". Also `update_check = 0` in
+  `recvx.ini`.
+
+**INSTALL** downloads the release for your system (Windows or Linux) from the project's GitHub
+releases, with a progress bar you can cancel. It checks the download against the checksum GitHub
+lists and refuses it if they differ. Then it replaces the program files in the game's folder: the
+executable (under whatever name you gave it), `LICENSE`, `README.md`, `CHANGELOG.md`,
+`THIRD_PARTY_NOTICES.md`, `docs/` and the `README.txt` files in `mods/`. **RESTART NOW** starts the
+new version with the same options; LATER keeps playing the old one until you quit.
+
+Never touched: your saves and `recvx.ini` (`save/`), everything else in `mods/` (imports, the
+BioRand pack, HD textures), the BioRand program and any other file of yours. The old program files
+wait in `recvx-update/` next to the game until the next start, which deletes them.
+
+If anything goes wrong (no connection, a bad download, a folder the game cannot write to, a file in
+use), the old files are put back and the game offers to open the release page in your browser so you
+can download it yourself.
+
+**What is sent**: one request to GitHub's public API for the list of releases (GitHub sees your IP
+address, as for any download from GitHub). Only if GitHub does not answer after three tries, one
+plain request to the project's own update server for the newest version number (that answer only
+updates the title line; the game installs only what GitHub lists). Nothing about you or your game
+is sent, nothing is stored apart from a skipped version (`update_skip` in `recvx.ini`).
 
 ## Troubleshooting
 
