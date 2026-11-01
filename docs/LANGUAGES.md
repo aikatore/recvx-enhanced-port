@@ -395,7 +395,7 @@ no subtitles.
   typewriter's keys and clipboard (`ITEM1.AFS/144`), the computer's screens with words (Brazilian Portuguese
   `SYSTEM.AFS/2` texture 2). No import again: the imports stay as they are.
 - **Translated Pictures** (GAMEPLAY > GENERAL, under Subtitles, shown with an imported language; ini
-  `translated_pictures`, default 1): Off reads the archives' pictures from the disc (`pc_lang_file_dir(name)` gives
+  `translated_pictures`, default 0 since 2026-11-01): Off reads the archives' pictures from the disc (`pc_lang_file_dir(name)` gives
   no folder for `ADV.AFS/`, `MRY.AFS/`, `ITEM1.AFS/`, `ITEM2.AFS/`) and in `SYSTEM.AFS/1` and `/2` every texture
   but the fonts (`/1` texture 0, Japanese 0..3; `/2` texture 1, the computer's font) and those the bank rule keeps:
   the pictures are English (the text stays the language's), so an HD pack replaces them; only the font stays the

@@ -236,7 +236,7 @@ void pc_lang_file_opened(const char* name, int src)
    stays as the game expects it: the Turkish patch redrew both item sheets with a palette each, one showed with the
    other's colours). With Translated Pictures off the archives' pictures are the disc's files (pc_lang_file_dir) and
    in SYSTEM.AFS/1 and /2 every texture but the fonts is the disc's. */
-int g_lang_pictures = 1;
+int g_lang_pictures = 0;   /* (off by default: the English pictures, which an HD pack replaces) */
 static int picture_file(const char* name)
 {
     return !strncmp(name, "ADV.AFS/", 8) || !strncmp(name, "MRY.AFS/", 8) || !strncmp(name, "ITEM1.AFS/", 10) || !strncmp(name, "ITEM2.AFS/", 10);
