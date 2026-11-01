@@ -112,7 +112,7 @@ a camera pan as a room is entered, a lever, a close-up (many of the 600 cinema e
 ## Test aids
 
 * `RECVX_SHOW_OVERLAY=5`: the window open at start.
-* `RECVX_DEVCINE_LOG=1`: each scene's line, as Copy gives it, also in the log when the scene ends (`devcine: #2 ...`).
+* Each scene's line also goes to the log when the scene ends (`devcine: logged #2 ...`), always with `--dev` (the earlier `RECVX_DEVCINE_LOG=1` is no longer needed).
 * `RECVX_KEYS="f:F6,..."` and clicks (`f:@x:y`) drive it; Copy and a line's click log what the clipboard reads back
   (`devcine: ... copied to the clipboard, n bytes read back` and the text), Export and Clear log a line too.
 * `RECVX_DEVCINE_FIND="text"`: the Scenes tab selected at start, searched for text.
