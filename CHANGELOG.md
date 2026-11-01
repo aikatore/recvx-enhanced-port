@@ -33,8 +33,6 @@
 - **Talking faces in the cutscene cast**: when Claire, Chris, Steve or Wesker takes someone's place in a
   cutscene, their mouth now moves with the lines, and Wesker, Alexia and Rodrigo no longer keep their mouths
   shut through some characters' lines.
-- **Cutscene cast**: Claire keeps her own look during Steve's short part of her story, and when someone
-  else takes her place, her ponytail (and Wesker's sunglasses) no longer float where her head would be.
 - **Swapped models on the ground**: taller or shorter models swapped into cutscenes now stand on the floor
   instead of floating above it or sinking into it.
 - **Co-op: stairs to the residence**: after your partner watched the scene of Alfred laughing at the foot of
