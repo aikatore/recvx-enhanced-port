@@ -1045,6 +1045,102 @@ static void devcine_small(const DevCine* l, int n, int open)
     ImGui::End();
 }
 
+/* F6 "Scenes": the scene list (devcine.h DevScene), searched, one played */
+static char dc_find[96];
+static void devcat_tab(void)
+{
+    char* find = dc_find;
+    static char* lines;   /* lines: each scene's devcat_line, made again when the save menu's room names come */
+    static int sel = -1, chr, made = -1;
+    static bool hide_short;
+    static const char* const as[] = { "Auto (the part's character)", "Claire", "Chris", "As now" };
+    char path[1100], st[200], buf[160];
+    int n = devcat_count(), named = g_cheat.rooms[1][0] != 0;
+    enum { W = 400 };
+    tp_count();   /* (the first call reads the rooms; the list comes with them) */
+    if (!n) { ImGui::TextDisabled(tp_reading() ? "Reading the room files..." : "No scene list (the room files could not be read)."); return; }
+    if (made != named || !lines) {
+        if (!lines) lines = (char*)SDL_malloc((size_t)n * W);
+        if (!lines) return;
+        for (int i = 0; i < n; i++) {
+            const DevScene* s = devcat_get(i);
+            devcat_line(s, tp_room_name(tp_find(s->room / 1000, s->room / 10 % 100), 0, buf, sizeof buf), lines + (size_t)i * W, W);
+        }
+        made = named;
+    }
+    SDL_snprintf(path, sizeof path, "%s/dev_cutscene_list.txt", g_config.save_dir);
+    ImGui::SetNextItemWidth(320);
+    ImGui::InputTextWithHint("##find", "Search: room, name, ev 1:1, character, MV_005", dc_find, sizeof dc_find);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(230);
+    ImGui::Combo("Play as", &chr, as, IM_ARRAYSIZE(as));
+    ImGui::SameLine();
+    ImGui::Checkbox("Hide short shots", &hide_short);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Scenes of one or two camera shots, nothing said, no one shown (doors, levers, a look at a room).");
+    ImGui::BeginDisabled(sel < 0 || sel >= n);
+    if (ImGui::Button("PLAY")) devcat_play(sel, chr);
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Export list")) {
+        int w = devcat_write(path);
+        if (w < 0) SDL_snprintf(dc_msg, sizeof dc_msg, "Cannot write %s.", path);
+        else SDL_snprintf(dc_msg, sizeof dc_msg, "Wrote %d scenes to %s.", w, path);
+        host_log("devcine: %s\n", dc_msg);
+    }
+    devcat_status(st, sizeof st);
+    ImGui::SameLine();
+    ImGui::TextUnformatted(st[0] ? st : dc_msg);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("%d scenes from the room files (%d cutscene events no script starts are left out). PLAY teleports to the scene's room "
+                       "file (its story case), sets the story flags its script tests, switches the character played when the part needs it "
+                       "and starts the scene as its script does; the log shows it as usual. Afterwards you stay in that room. Saving "
+                       "then may break the story: the scene's flags are set out of order.", n, devcat_unused());
+    ImGui::PopStyleColor();
+    if (sel >= 0 && sel < n) {   /* what PLAY does for it */
+        const DevScene* s = devcat_get(sel);
+        int len = SDL_snprintf(buf, sizeof buf, "Started by %s", s->from == 0 ? "the room's entry script" : s->from == 1 ? "the room's script" : "event ");
+        if (s->from >= 2) len += SDL_snprintf(buf + len, sizeof buf - len, "%d", s->from - 2);
+        for (int k = 0; k < s->nflag && len < (int)sizeof buf - 1; k++)
+            len += SDL_snprintf(buf + len, sizeof buf - len, "%s%s %d %s", k ? ", " : "; needs ",
+                                s->flag[k].set == 1 ? "ev_flg" : s->flag[k].set == 2 ? "ky_flg" : s->flag[k].set == 3 ? "ed_flg" : s->flag[k].set == 7 ? "it_flg" : "mp_flg",
+                                s->flag[k].bit, s->flag[k].on ? "set" : "clear");
+        ImGui::TextDisabled("%s", buf);
+    }
+    ImGui::Separator();
+    if (ImGui::BeginChild("##devcat", ImVec2(0, 0), ImGuiChildFlags_Borders)) {
+        static int* shown;
+        int m = 0;
+        if (!shown) shown = (int*)SDL_malloc(sizeof(int) * (size_t)n);
+        for (int i = 0; shown && i < n; i++) {   /* every word of the search in the line */
+            const char* t = lines + (size_t)i * W;
+            char w[96];
+            int ok = !(hide_short && devcat_short(devcat_get(i)));
+            for (const char* f = find; ok && *f;) {
+                int k = 0;
+                while (*f == ' ') f++;
+                while (*f && *f != ' ' && k < (int)sizeof w - 1) w[k++] = *f++;
+                w[k] = 0;
+                if (k && !SDL_strcasestr(t, w)) ok = 0;
+            }
+            if (ok) shown[m++] = i;
+        }
+        ImGuiListClipper clip;
+        clip.Begin(m);
+        while (clip.Step())
+            for (int r = clip.DisplayStart; r < clip.DisplayEnd; r++) {
+                int i = shown[r];
+                ImGui::PushID(i);
+                if (ImGui::Selectable(lines + (size_t)i * W, sel == i, ImGuiSelectableFlags_AllowDoubleClick)) {
+                    sel = i;
+                    if (ImGui::IsMouseDoubleClicked(0)) devcat_play(sel, chr);
+                }
+                ImGui::PopID();
+            }
+        if (!m) ImGui::TextDisabled("No scene matches.");
+    }
+    ImGui::EndChild();
+}
+
 static void devcine_window(const DevCine* l, int n, int open)
 {
     char line[512], path[1100], key[64];
@@ -1054,6 +1150,15 @@ static void devcine_window(const DevCine* l, int n, int open)
     ImGui::SetNextWindowSize(ImVec2(900, 440), ImGuiCond_FirstUseEver);
     SDL_snprintf(line, sizeof line, "Cutscene Log (%s)###devcine", bind_code_name(BIND_KB, bind_get(B_DEVCINE, BIND_KB, 0), key, sizeof key));
     if (!ImGui::Begin(line, &devcine_visible)) { ImGui::End(); return; }
+    if (!ImGui::BeginTabBar("##devcinetabs")) { ImGui::End(); return; }
+    {   /* (after Log; test aid RECVX_DEVCINE_FIND="text": this tab open at start, searched for text) */
+        static int first = 1;
+        const char* f = first ? SDL_getenv("RECVX_DEVCINE_FIND") : nullptr;
+        if (f) SDL_strlcpy(dc_find, f, sizeof dc_find);
+        if (ImGui::BeginTabItem("Scenes", nullptr, ImGuiTabItemFlags_Trailing | (f ? ImGuiTabItemFlags_SetSelected : 0))) { devcat_tab(); ImGui::EndTabItem(); }
+        first = 0;
+    }
+    if (!ImGui::BeginTabItem("Log")) { ImGui::EndTabBar(); ImGui::End(); return; }
     if (ImGui::Checkbox("Show overlay", &show)) { g_devcine_show = show; settings_save_later(); }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The small log at the top left while this window is closed (it records either way).");
     ImGui::SameLine();
@@ -1092,6 +1197,8 @@ static void devcine_window(const DevCine* l, int n, int open)
         }
     }
     ImGui::EndChild();
+    ImGui::EndTabItem();
+    ImGui::EndTabBar();
     ImGui::End();
 }
 
