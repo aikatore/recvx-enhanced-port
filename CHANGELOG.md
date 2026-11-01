@@ -8,6 +8,7 @@
 - **Extra item boxes and herbs**: an optional setting adds item boxes and blue herb planters to some rooms. They
   work like the game's own, the planters cure poison as often as you need, and in co-op the host decides. It is
   meant to help with the randomizers, where blue herbs can be scarce early on and many items have to wait in a box.
+- **Arabic**: import it from the Arabic fan-translated disc; our menus are translated too.
 
 ### Cheats
 
@@ -32,6 +33,8 @@
   else takes her place, her ponytail (and Wesker's sunglasses) no longer float where her head would be.
 - **Swapped models on the ground**: taller or shorter models swapped into cutscenes now stand on the floor
   instead of floating above it or sinking into it.
+- **Co-op: stairs to the residence**: after your partner watched the scene of Alfred laughing at the foot of
+  the stairs to his residence, you can now follow down the stairs instead of being stuck there.
 - **Smoother Motion under water**: the views from the water at the airport's submarine dock now move as
   smoothly as the rest of the game, wavy water effect included.
 - **Item pictures in other languages**: in Turkish, some item pictures in the inventory and the item box showed

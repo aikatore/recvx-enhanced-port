@@ -153,7 +153,7 @@ int lang_sub(void)
 }
 const char* lang_dir(int l) { return l > 0 && lang_installed(l) ? info[l].dir : NULL; }
 int lang_picture(int adv) { return adv >= 0 && adv < 64 ? adv_lang[adv] : LANG_EN; }
-int lang_eu_picture(int adv) { int l = lang_picture(adv); return l == LANG_FR || l == LANG_DE || l == LANG_ES || l == LANG_TR; }
+int lang_eu_picture(int adv) { int l = lang_picture(adv); return l == LANG_FR || l == LANG_DE || l == LANG_ES || l == LANG_TR || l == LANG_AR; }
 static int data_lang(void) { return lang_installed(g_lang) ? g_lang : LANG_EN; }
 
 /* ---------------------------------------------------------------- the executable's texts */
@@ -196,6 +196,9 @@ const unsigned short* pc_lang_mes(int which, const unsigned short* us)
 {
     return which >= 0 && which < LM_COUNT && info[font_lang].mes[which] ? info[font_lang].mes[which] : us;
 }
+/* the Arabic game over question is laid out for the European executable's Spanish place (bhMainGameOver: x 184, the US
+   264; its choice cursor at the US 248 / 328) */
+float pc_lang_mes_x(int which, float us) { return which == LM_RETRY && font_lang == LANG_AR && info[font_lang].mes[which] ? 184.0f : us; }
 
 /* ---------------------------------------------------------------- files */
 static int strcasecmp_(const char* a, const char* b)
@@ -354,6 +357,18 @@ typedef struct { int lang, n; NJS_TEXNAME name[4]; NJS_TEXMEMLIST mem[4]; NJS_TE
 static XFont xf[2] = { { -1 }, { -1 } };
 static int xf_last;   /* the one used last (a third language replaces the other) */
 
+int cdvd_find_file(const char* path, uint32_t* lsn, uint32_t* size);
+static int disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n);
+/* the US font (English: the disc's SYSTEM.AFS/1, past the mods and language folders) into DMA slot `slot`; its size */
+static long us_font(int slot, unsigned char** b)
+{
+    uint32_t lsn, size, h[6];
+    if (!cdvd_find_file("\\SYSTEM.AFS;1", &lsn, &size) || !disc_read(lsn, 0, h, sizeof(h)) || memcmp(h, "AFS", 3) || h[1] < 2 ||
+        h[5] < 64 || h[5] > (16u << 20) || h[4] > size || h[5] > size - h[4] || !(*b = ps2_dma_alloc(slot, h[5])) || !disc_read(lsn, h[4], *b, h[5]))
+        return 0;
+    return (long)h[5];
+}
+
 static XFont* other_font(int l)
 {
     char p[1300];
@@ -367,9 +382,10 @@ static XFont* other_font(int l)
     x = &xf[xf_last ^= 1];
     memset(x, 0, sizeof(*x));
     x->lang = l;
-    if (!lang_dir(l)) return NULL;
-    snprintf(p, sizeof(p), "%s/SYSTEM.AFS/1", lang_dir(l));
-    if ((f = pc_fopen(p, "rb"))) {
+    snprintf(p, sizeof(p), "%s/SYSTEM.AFS/1", l == LANG_EN ? "(disc)" : lang_dir(l) ? lang_dir(l) : "");
+    if (l == LANG_EN) n = us_font(xf_last ? DMA_FONT2 : DMA_FONT, &b);   /* (the Latin letters of Arabic texts) */
+    else if (!lang_dir(l)) return NULL;
+    else if ((f = pc_fopen(p, "rb"))) {
         if (fseek(f, 0, SEEK_END) || (n = ftell(f)) < 64 || n > (16 << 20) || fseek(f, 0, SEEK_SET) ||
             !(b = ps2_dma_alloc(xf_last ? DMA_FONT2 : DMA_FONT, (uint32_t)n)) || fread(b, 1, n, f) != (size_t)n) n = 0;
         fclose(f);
@@ -407,10 +423,15 @@ static int text_font(void)
     return l == font_lang || l == LANG_EN || !other_font(l) ? font_lang : l;
 }
 int lang_font(void) { return text_font(); }
+int lang_rtl_text(void) { return data_lang() == LANG_AR; }
 
 /* a glyph's advance in language l's font */
 static float width_of(int l, int code)
 {
+    if (l == LANG_AR) {   /* its own cells (codes from LANG_AR_BASE, the digits and signs below), else the US font's */
+        int c = lang_cell(l, code);
+        return c >= 0 ? (c < info[l].nw ? info[l].w[c] : 0) : code < 108 ? FontSz[code] : 0;
+    }
     if (l == LANG_JA) return code < LANG_JA_BASE && code < info[l].nw ? info[l].w[code] : code == 0 ? 14 : lang_cell(l, code) >= 0 ? 28 : 0;
     if (l == LANG_EN) return code < 108 ? FontSz[code] : 0;
     return code < info[l].nw ? info[l].w[code] : 0;
@@ -441,8 +462,15 @@ float pc_glyph_w(int code)
     return code >= 0 && code < 126 ? FontSz[code] : 0;
 }
 
-/* a glyph's shift left of its place (the Japanese look-alikes: proportional) */
-static float shift_of(int l, int code) { return l == LANG_JA && code < LANG_JA_BASE && code < info[l].nw && info[l].ox[code] ? info[l].ox[code] - 32.0f : 0; }
+/* a glyph's shift left of its place (the Japanese look-alikes: proportional; the Arabic font's cells: their ink is at
+   about 10..27 of the 28, drawn 16 apart, so they are drawn 10 to the left: next to the US font's letters (ink 0..14)
+   neither overlapping nor apart, among themselves joined as before) */
+#define AR_SHIFT 10.0f
+static float shift_of(int l, int code)
+{
+    if (l == LANG_AR) return lang_cell(l, code) >= 0 ? -AR_SHIFT : 0;
+    return l == LANG_JA && code < LANG_JA_BASE && code < info[l].nw && info[l].ox[code] ? info[l].ox[code] - 32.0f : 0;
+}
 
 int pc_font_glyph(int code, void** texlist, float* dx)
 {
@@ -452,13 +480,31 @@ int pc_font_glyph(int code, void** texlist, float* dx)
         if (!x) return -1;
         *texlist = &x->list;
     } else l = font_lang;
+    if (l == LANG_AR && code < LANG_AR_BASE && lang_cell(l, code) < 0) {   /* the Arabic font has no Latin letters: the US font's */
+        XFont* x = other_font(LANG_EN);
+        if (!x) return -1;
+        *texlist = &x->list;
+        *dx = 0;
+        return code;
+    }
     *dx = shift_of(l, code);
     return lang_cell(l, code);
 }
 
+/* an Arabic letter at s (U+0600..U+06FF, the presentation forms U+FB50..U+FEFF) */
+static int arabic_at(const char* s)
+{
+    unsigned char a = (unsigned char)s[0], b = (unsigned char)s[1];
+    return (a >= 0xD8 && a <= 0xDB) || (a == 0xEF && b >= 0xAD && b <= 0xBB);
+}
+
 int pc_glyph_next(const char** s)
 {
-    int l = text_font(), c = lang_glyph(l, s);
+    int l = text_font(), c;
+    if (l != LANG_AR && **s && arabic_at(*s) && lang_installed(LANG_AR) && (font_lang == LANG_AR || other_font(LANG_AR)))
+        l = LANG_AR;   /* (an Arabic word in another language's text: العربية in the Subtitles setting) */
+    c = lang_glyph(l, s);
+    if (l == LANG_AR && font_lang != LANG_AR && c < LANG_AR_BASE) return c;   /* (Latin letters, digits: the loaded font's) */
     return l != font_lang && c > 0 ? LANG_OTHER(l, c) : c;
 }
 

@@ -4,10 +4,12 @@ State document of the language work: what the other releases' discs hold, how th
 Nothing from any disc is in the repository: the importer reads the player's own image of the European release
 (**SLES-50306**: French, German, Spanish), of the US release with the Russian fan translation by Brosko
 (**SLUS-20184**, patched: Russian), of the Japanese release (**SLPM-65022**: Japanese), of the European release with
-the Turkish fan translation by Patriots Çeviri (**SLES-50306**, patched: Turkish in place of Spanish) or of the US
-release with the Brazilian Portuguese fan translation by gledson999 (**SLUS-20184**, patched) and writes what it needs
-to `<import_dir>/<source>/<code>/` (default `mods/import/sles50306/fr`, `de`, `es`, `mods/import/slus20184ru/ru`,
-`mods/import/slpm65022/ja`, `mods/import/sles50306tr/tr`, `mods/import/slus20184pt/pt-BR`), as the Outbreak import does ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)). The import is
+the Turkish fan translation by Patriots Çeviri (**SLES-50306**, patched: Turkish in place of Spanish), of the US
+release with the Brazilian Portuguese fan translation by gledson999 (**SLUS-20184**, patched) or of the European release
+with the Arabic fan translation by Abdulaziz Al-Amri (SKZEZO EDITING; **SLES-50306**, patched: Arabic in place of
+Spanish) and writes what it needs to `<import_dir>/<source>/<code>/` (default `mods/import/sles50306/fr`, `de`, `es`,
+`mods/import/slus20184ru/ru`, `mods/import/slpm65022/ja`, `mods/import/sles50306tr/tr`, `mods/import/slus20184pt/pt-BR`,
+`mods/import/sles50306ar/ar`), as the Outbreak import does ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)). The import is
 in the title menu's EXTRA > IMPORT > LANGUAGES, or F9; the Language and Subtitles settings show once a language
 is imported.
 
@@ -15,21 +17,22 @@ is imported.
 
 | Step | State |
 |---|---|
-| 1. Research (this document) | done (European, Russian fan translation, Japanese, Turkish and Brazilian Portuguese fan translations) |
-| 2. Importer: IMPORT > LANGUAGES, F9, `pc/src/import/lang.c` | done: French, German, Spanish in about 7 s, 18-47 MB each; Russian 2 s, 22 MB; Japanese 3 s, 7.5 MB; Turkish 2 s, 18 MB; Brazilian Portuguese 1 s, 15 MB |
+| 1. Research (this document) | done (European, Russian fan translation, Japanese, Turkish, Brazilian Portuguese and Arabic fan translations) |
+| 2. Importer: IMPORT > LANGUAGES, F9, `pc/src/import/lang.c` | done: French, German, Spanish in about 7 s, 18-47 MB each; Russian 2 s, 22 MB; Japanese 3 s, 7.5 MB; Turkish 2 s, 18 MB; Brazilian Portuguese 1 s, 15 MB; Arabic 2 s, 22 MB |
 | 3. Runtime: the language's files, room messages, font (widths, cells, space), file pages (Japanese: pictures), the title and OPTION pictures, the executable's texts, Language setting | done |
-| 4. Cutscene subtitles, Subtitles setting: a language of its own, in its own font | done (French, German, Spanish, Russian, Japanese, Turkish, Brazilian Portuguese; English has none on any disc) |
-| 5. Our own texts: `tr()`, the table (French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese), the game fonts' letters (glyphs.c, ctest `lang`), the overlay's fonts | done (about 1320 texts) |
+| 4. Cutscene subtitles, Subtitles setting: a language of its own, in its own font | done (French, German, Spanish, Russian, Japanese, Turkish, Brazilian Portuguese, Arabic; English has none on any disc) |
+| 5. Our own texts: `tr()`, the table (French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese, Arabic), the game fonts' letters (glyphs.c, ctest `lang`), the overlay's fonts; Arabic: joined forms and right-to-left order (`lang_shape`) | done (about 1370 texts) |
 | 6. Verification | done: runs per language (below), layout check identical, Linux and Windows builds, ctest |
 
 Resume notes: research scripts (Python, capstone in a venv), the translation pipeline and the runs are in the job
 folders `/home/dev/.claude/jobs/c1d3e63f/lang/` (European), `lang2/` (Russian, Japanese: `x/ru`, `x/jp` hold the
 discs' files unpacked with `bsdtar`, `jpfont/` the Japanese glyph map's sources) and `lang3/` (Turkish, Brazilian
 Portuguese: `x/tr`, `x/pt` with the clean `x/eu`, `x/us`; `tr/` the translation pipeline: brief, chunks, `check.py`,
-`fit.py`, `merge.py`), outside the repository. Headless import: `RECVX_MODS=<out>
-RECVX_IMPORT=sles50306|slus20184ru|slpm65022|sles50306tr|slus20184pt RECVX_IMPORT_ISO=<image> build/pc/recvx "<US
-image>" --save-dir <tmp>` (exit status 0: every language imported). Then `language = de` (or `fr`, `es`, `ja`, `ru`,
-`tr`, `pt-BR`) and `subtitles = 0` (Off) / `2 + LANG_*` in recvx.ini.
+`fit.py`, `merge.py`) and `lang_ar/` (Arabic: `x/ar` the patched disc's files, `armap.py` the font's cells, `dump.py`
+its text decoded, `tr/` the Arabic pipeline with `check_ar.py`, the runs' scripts, `shots/`), outside the repository. Headless import: `RECVX_MODS=<out>
+RECVX_IMPORT=sles50306|slus20184ru|slpm65022|sles50306tr|slus20184pt|sles50306ar RECVX_IMPORT_ISO=<image> build/pc/recvx
+"<US image>" --save-dir <tmp>` (exit status 0: every language imported). Then `language = de` (or `fr`, `es`, `ja`,
+`ru`, `tr`, `pt-BR`, `ar`) and `subtitles = 0` (Off) / `2 + LANG_*` in recvx.ini.
 
 ## The European disc (SLES-50306)
 
@@ -285,17 +288,64 @@ without the Russian translation.
 **Its words**: "você" ("Acho melhor você sair daqui"), OPTION "OPÇÕES" (title) with AJUSTAR SOM / CONTROLE / TELA,
 NOVA PARTIDA, CARREGAR PARTIDA, the item box "baú", "Fita de Tinta".
 
+## The Arabic fan translation (SLES-50306, by Abdulaziz Al-Amri)
+
+The European disc with the Arabic patch ("تعريب عبدالعزيز العامري", SKZEZO EDITING): the credit is in the title
+picture (`ADV4.AFS/2`, texture 2, under the plates: "تعريب عبدالعزيز العامري" and "SKZEZO EDITING"); the disc has no
+readme and the executable no credit string. `SYSTEM.CNF` and the folders are the European disc's (`BOOT2 =
+cdrom0:\SLES_503.06;1`, `VER = 1.01`, PAL), 4.00 GB. **Arabic replaces Spanish**, as the Turkish patch does: the `SPA`
+folder (digit 4) holds the Arabic files and the executable's Spanish tables (index 3) serve it. English, French and
+German are untouched. What the patch changes, against the clean European disc:
+
+| File | Changed | What |
+|---|---|---|
+| `SLES_503.06` | 6.6 KB longer | a second load segment (`heap`, 0x1E44900, 0x19DA bytes, empty on the clean disc) with the Spanish texts the executable lacked or that the patch rewrote: `SaveLoadMessage_SPA`'s texts (its offsets point there), `pdm_mes_SPA` (DEMO PLAY), `pause_mes_SPA`, `cnt_mes_SPA` (the game over question); `pdm_palmes_SPA` rewritten in place; `bhSetPad`, `bhSysCallScreenSaver`, `bhMainGameOver` point at the new segment. No code change (the text is drawn left to right as ever) |
+| `SPA/SYSMES4.ALD` | rewritten | 183 item names, 494 system messages, the Spanish layout (its file tables) |
+| `SPA/SYSTEM4.AFS` | 1, 2 | 1: the font (below) and "تم القضاء عليك" (YOU ARE DEAD); 2: the computer's screens re-encoded (the computer's lines stay English) |
+| `ENG/SYSTEM1.AFS` | 1 | the language screen's flags (Arabic in Spanish's place) |
+| `SPA/ADV4.AFS` | 0, 1, 2, 4, 6, 7 | the warning, the Capcom logo in Arabic, the title ("الشر المقيم - كود: فيرونيكا X", Arabic plates in the Spanish layout, the credit), OPTION (Arabic plates and help), the battle game's screens; 5 and 32 are the Spanish ones (pictures without writing) |
+| `SPA/MRY4.AFS` | 40 entries | the map's words and area names in Arabic |
+| `SPA/ITEM14.AFS` / `ITEM24.AFS` | 11, 19, 30, 82, 90, 105, 114, 120, 124, 145..159 | the inventory's words; textures of item models with writing (the ammunition boxes, the ink ribbon "حبر") |
+| `SPA/RDX_LNK4.AFS` | 205 rooms | the messages (202 rooms with messages, the Spanish counts), 471 subtitles shown at once (`0xFE00`) |
+
+**The text**: the US engine's codes (`0xFF00` .. `0xFFFF` as above), glyph codes 1..149 of the patch's font. Arabic is
+written right to left and its letters join; the engine draws left to right, so the patch stores each line **in display
+order** (reversed: a line's first glyph is its last letter; numbers left to right) with **every letter already in its
+joined form** (isolated, initial, medial, final: a cell each; lam-alef ligatures). The choices (`0xFF04`) come after
+their words, where the choice cursor (code 28) is drawn: ◀ in this font. Messages are left-aligned as the engine draws
+them. The text was decoded with the font's cells (`lang_ar/armap.py`) and reads as Modern Standard Arabic ("هل تريد
+المحاولة من جديد؟", "لقد حصلت على", "بطاقة الذاكرة"), alef often without hamza ("اعدادات", "الان").
+
+**The font**: one texture as the European one (18 x 18 cells of 28), the European widths (the executable's second
+table, not patched: 16 for nearly every cell). **No Latin letters**: 0 space, 1 !, 2..6 and 27..30 signs (biohazard,
+crown, spade, heart, Umbrella; ○ ◀ ▼ "AA"), 9 ؟, 10 ء, 14 . 15 / 16..25 0-9, 26 :, and the letters from 31: per
+letter its forms in the order isolated, initial, medial, final (ت 32..35, ج 40..43, ... ي 122..125), the right-joining
+letters isolated and final (د 71, 53; ر 56, 57; ...), lam-alef 132..138, ئ 139..142, the alefs (ا 11, 143; أ 13, 144;
+إ 8, 146; final آ 145; no isolated آ), ة 126, 127, ى 130, 131, ؤ 128, 129, tatweel 63; a few out of order (final س 7,
+final ص 52, isolated د 71). The glyphs' ink is at about 10..27 of their 28-wide cells (a connecting stroke to 27),
+drawn 16 apart: the strokes of neighbouring letters meet. The table is `glyphs.c ar_letters` (Unicode presentation
+form -> cell), worked out from the cells' pictures and checked by where each cell stands in the text (a final form is
+the leftmost glyph of a word in display order, an initial one the rightmost).
+
+**Telling it from the clean European disc**: the Spanish folder's system messages write the article "al" (لـ ا: codes
+105 11 in display order) about 450 times (the clean Spanish: never; that would be "Í+"). The Arabic entry refuses the
+clean European disc ("This is the European disc without the Arabic translation."), the Turkish disc and others ("Use
+the European disc with the Arabic fan translation by Abdulaziz Al-Amri (SLES-50306)."); the European entry ("This disc
+has the Arabic translation: import it with its own entry.") and the Turkish entry refuse the Arabic disc.
+
 ## How the port uses it
 
 **Import** (`pc/src/import/lang.c`; `import_sources[]` entries `sles50306`, `slus20184ru`, `slpm65022`,
-`sles50306tr`, `slus20184pt`, category `IMPORT_CAT_LANGUAGES`): the sources table `lang_discs[]` names per disc its
+`sles50306tr`, `slus20184pt`, `sles50306ar`, category `IMPORT_CAT_LANGUAGES`): the sources table `lang_discs[]` names per disc its
 kind, its executable (checked in `SYSTEM.CNF`: another image is refused with "Use a European Resident Evil Code:
 Veronica X disc (SLES-50306).", "Use the US disc with the Russian fan translation by Brosko (SLUS-20184).", "Use a
 Japanese Biohazard Code: Veronica Kanzenban disc (SLPM-65022).", "Use the European disc with the Turkish fan
 translation by Patriots Çeviri (SLES-50306).", "Use the US disc with the Brazilian Portuguese fan translation by
 gledson999 (SLUS-20184)."), for a fan translation the clean base disc's refusal (`fan_patched`: by the patched font or
 text, above) and per language its folder, the digit of its file names and its index in the executable's tables. The
-Turkish entry is the European kind with one language, Turkish in the Spanish folder and tables; the Brazilian
+Turkish entry is the European kind with one language, Turkish in the Spanish folder and tables, and so is the Arabic
+one (its glyph codes moved up by `LANG_AR_BASE`, as the Japanese ones, in the system messages, the rooms and the
+executable's texts; `SAVELOAD.MES` and `exemes` from the patch's segment: `ar_texts`); the Brazilian
 Portuguese one is laid out as the Russian (its `exemes`, `term` and `SAVELOAD.MES` from the executable, its widths
 from `FontSz`: 108). The European discs' archives are compared with their own English, the others' with the US
 disc's (`g_lang_us_iso`). Per language, into `<code>/`:
@@ -318,7 +368,7 @@ no subtitles.
 
 **Run time** (`pc/glue/lang_glue.c`, `lang.h`):
 
-- `lang_scan` (start, after an import or a delete) lists the installed languages; ini `language = fr|de|es|ja|ru`
+- `lang_scan` (start, after an import or a delete) lists the installed languages; ini `language = fr|de|es|ja|ru|tr|pt-BR|ar`
   (English when that language is not installed), ini `subtitles` (below).
 - **The inventory's pictures** (`ITEM1.AFS` / `ITEM2.AFS` 145, read for the inventory, the item box and the file
   screen): five textures. 0 the command words and digits, 1 the frame with its words (EXIT FILE MAP ITEM, ITEM LIST,
@@ -348,7 +398,7 @@ no subtitles.
   language's** message. Rooms of the mods folder keep their text; BioRand's are translated. `lang_frame` rebuilds
   the table when Subtitles changes in a room (also from or to the US table).
 - **Subtitles in another language**: a subtitle of another language than the loaded font's gets its codes moved to
-  `LANG_OTHER(language, code)` (0x8000 + language << 11 + code, below 0xC000 for the eight languages; its space
+  `LANG_OTHER(language, code)` (0x8000 + language << 11 + code, below 0xC800 for the nine languages, clear of the control codes from 0xFE00; its space
   `0xFF01` becomes code `LANG_OTHER_SPACE`, 0x7FF). `bhDispFont` / `bhDispFontEx` ask `pc_font_glyph` for the cell to draw: such a code is
   drawn from that language's own font, the first 1 (4: Japanese) textures of its `SYSTEM.AFS/1`, read as
   `bhSetFontTexture` finds them, with its widths (`pc_font_width`). Two such fonts are kept (`other_font`: the
@@ -360,6 +410,14 @@ no subtitles.
 - Font: `message.c bhGetFontSize` and the direct `FontSz` reads (`adv.c` AdvEasyDispMessage,
   AutoSaveLoadEasyDispMessage; `system.c`) take the language font's widths while it is loaded (`pc_font_width`), a
   space (`0xFF01`) `pc_font_space` (Japanese 28).
+- **Arabic** (`LANG_AR`): the importer moves the Arabic text's codes up by `LANG_AR_BASE` (108, as the Japanese), so
+  every code below it is the US engine's own (its English texts, digits, times: the Arabic font has no Latin letters)
+  and is drawn from the **US font** (`other_font(LANG_EN)`: the disc's `SYSTEM.AFS/1`, past the mods and language
+  folders) at the US widths, except the signs 28..30 (the choice cursor: the patch's ◀). The Arabic font's cells are
+  drawn 10 to the left of their place (`shift_of`, `AR_SHIFT`: their ink starts at about 10 of 28), so they sit next
+  to the US font's letters (ink from 0) without overlapping, and the patch's messages begin at the box's edge. The game
+  over question is drawn where the European executable draws the Spanish one (`pc_lang_mes_x`: x 184, the US 264; the
+  patch's text is laid out for it). The title is the European layout (`lang_eu_picture`).
 - Japanese files: `fileview.c PageScroll` draws the page's picture (`pc_lang_file_page`: read from the disc, the
   first line where the text's first line is) instead of its text; `PlayPageCheck` gives the language's hidden pages.
 - **Textures of our own** (the US plates, the subtitle font, a file page) are TIM2s in memory as one-texture lists
@@ -379,7 +437,7 @@ no subtitles.
   the next screen: leaving OPTION reloads the title in the new language, a game start reads the system messages and
   the font, a room its messages. **Subtitles**: Off and every installed language with subtitles, whatever the game's
   language (default Off; locked "No language with subtitles is installed."); it applies at once, also in a room.
-  Ini `subtitles`: 0 Off, 2 + the language's index (`lang.h LANG_*`: fr 3, de 4, es 5, ja 6, ru 7, tr 8, pt-BR 9); 1, an older
+  Ini `subtitles`: 0 Off, 2 + the language's index (`lang.h LANG_*`: fr 3, de 4, es 5, ja 6, ru 7, tr 8, pt-BR 9, ar 10); 1, an older
   ini's On, means the game language's.
 
 **Our texts** (`pc/src/host/tr.c`, `tr_table.inc`): `tr(en)` looks the English text up (sorted table, binary search;
@@ -391,6 +449,28 @@ the overlay's ImGui labels (F1, F2, F3, F9). Not translated: names of models and
 own tables (teleport list, imported models), BioRand's seed strings, the co-op texts sent to the partner (its
 lobby note), the games' titles. Test aid: `RECVX_TR_MISSES=file` writes the texts asked for that have no row.
 
+**Arabic display order** (`glyphs.c lang_shape`, pure): the Arabic column is written as normal (logical) Arabic and
+turned once, at `tr_init`, into what the game font and ImGui draw left to right, as the patch's own text is: each
+letter in its joined form (Unicode presentation forms B, mapped to the font's cells; lam + alef one ligature;
+diacritics dropped), each line reversed, runs of Latin letters, digits and printf placeholders (`%d`, `%.4s`) kept left
+to right, brackets paired and mirrored. The bidi part is a small subset of the Unicode algorithm (strong classes;
+neutrals L between two L, else R; bracket pairs resolved by their content; no embeddings, no number separators;
+lines of at most 1024 characters): enough for menu texts. Consequences, checked by ctest `lang`:
+- **printf placeholders are filled left to right on screen**, so in display order they must come out in the English
+  order: a translation with two placeholders separated by Arabic words is worded so that the one read first is the
+  English's last (`من أصل %d لغات تم استيراد %d.` for `%d of %d languages imported.`); placeholders joined by Latin
+  or signs (`%d x %d`, `%.4s-%.4s`) form one left-to-right group and keep the English order. ctest `lang` checks the
+  conversions' order of every Arabic row after `lang_shape` (the meaning with two `%d` is the translation's job).
+- **Wrapping**: a text in display order starts at its right end, so `lobby_glue.c text_wrap` (the menus' help lines)
+  and the overlay's `wrapped()` (ImGui `TextWrapped`) take each line from the right (`lang_rtl_cut`).
+- **Pieces joined in code** go the other way round in Arabic (`lang_rtl_text`): the settings' label and its
+  "(restart needed)", the help line's lock reason, "Restart needed.", help and "Applies when you leave this menu.", the
+  F1 window's title and version, F9's language and "(cutscene subtitles)". Other joins in code (a label and a value
+  drawn in one string, a bullet before a sentence) read left to right as pieces; each piece itself is right.
+- Layout stays left-aligned (the patch's own messages are too); values sit between their arrows as in English.
+- The language's name in the settings is `العربية` in display order (`lang.c lang_names`); an Arabic word in another
+  language's text is drawn with the Arabic font (`pc_glyph_next`: the Subtitles row in any language).
+
 **Letters** (`pc/src/host/glyphs.c`, pure): our UTF-8 texts go to the game font through `pc_glyph_next` /
 `lang_glyph` for the font of the text's language (`lang_font`): the loaded one, or, while the game's font is
 still another language's (the Language setting changed in OPTION: the game loads the new font with the next
@@ -399,14 +479,16 @@ European accents at 95..149 (with the US font the letter without its accent: Fra
 letters in the six redrawn cells (the European letters those cells lost show plain), the Brazilian Portuguese
 accents at 96..107 (Ç: code 108 and then the 24-wide blank 94, two codes for one letter as the patch writes it;
 capitals with accents plain, `[ ] ~` as `( ) -`), the Russian letters (table above), the Japanese kana and kanji at `LANG_JA_BASE` + cell (、 and , show as a space, 。 as ．),
-ASCII at its US code everywhere. The Japanese font has only the game's kanji:
+the Arabic presentation forms at `LANG_AR_BASE` + cell (base letters as their isolated form, ، as a Latin comma, a
+stand-alone آ as ا: the font has no isolated one), ASCII at its US code everywhere. The Japanese font has only the game's kanji:
 our Japanese texts were reworded where a kanji was missing (kana, other kanji, katakana loanwords: 選ぶ -> えらぶ,
 字幕 -> サブタイトル, 難易度 -> 難しさ). **ctest `lang`** (`pc/tests/test_lang.c`) checks every translation against
 its language's font and lists the texts and letters a font lacks. `pc_glyphs_utf8` turns the game's text back into
 UTF-8 for the overlay with the loaded font's letters. The overlay (ImGui's default font) has ASCII and Latin-1 (also
-Brazilian Portuguese); for Japanese, Russian and Turkish (ğ ı İ ş: Latin Extended-A) it merges a font of the system
-once such a language is chosen (Windows: Meiryo, MS Gothic, Yu
-Gothic / Segoe UI, Arial; Linux: Noto Sans CJK / DejaVu Sans), else those letters stay missing.
+Brazilian Portuguese); for Japanese, Russian, Turkish (ğ ı İ ş: Latin Extended-A) and Arabic (the presentation forms
+our display-order texts use) it merges a font of the system once such a language is chosen (Windows: Meiryo, MS Gothic,
+Yu Gothic / Segoe UI, Arial; Arabic: Tahoma, Arial, Segoe UI; Linux: Noto Sans CJK / DejaVu Sans, Noto Sans Arabic),
+else those letters stay missing. Test aid: `RECVX_TEST_OVERLAY_FONT=<file>` is tried first.
 
 **Address window** (docs/ARCHITECTURE.md "Data model and memory"): the imported data (`ROOMS.MES`, the merged
 tables, the executable's texts, the Japanese glyph index) and the importer's tables are on the heap; the textures
@@ -499,6 +581,28 @@ Turkish and Brazilian Portuguese (2026-10-31, Linux, headless; job folder `lang3
   German, Spanish, Russian, Japanese again; `layout_check.sh` main build vs this build (English): identical; Windows
   build.
 
+Arabic (2026-11-01, Linux, headless; job folder `lang_ar/`, pictures in `lang_ar/shots/`):
+
+- Import: headless 2 s, 202 rooms, 471 subtitles, 103 pictures, `SAVELOAD.MES` and the executable's lines (`imp.sh`);
+  refused (`refuse.sh`): the clean European disc and the Turkish and US discs for the Arabic entry, the Arabic disc
+  for the European and the Turkish entry; the clean European disc and the Turkish disc import byte for byte as before
+  (only lang.txt's date and path differ). IMPORT > LANGUAGES lists the entry.
+- In Arabic (`title.sh`, `menus.sh`, `ingame.sh`, `extra.sh`, `dead.sh`, `scene.sh`, `pickup/langs.sh`): the title
+  (the patch's picture, plates and credit, our English plate words EXTRA, MULTIPLAYER), OPTION (Arabic plates) and
+  every ENHANCED SETTINGS page, the lobby, IMPORT, BIORAND (seed string in the US font's letters and digits); in a new
+  game the opening's subtitles, the cell's message, the inventory (Arabic words, item names, "استخدام / فحص."), the
+  FILE page and the manual, the map (السجن), the typewriter's save screen, the game over ("تم القضاء عليك" with
+  "هل تريد المحاولة من جديد؟", ◀ at Yes / No), the Ink Ribbon pickup in save 6 ("هل ستأخذ حبر ؟" with نعم / لا, "لقد
+  حصلت على حبر."). The shaping checked on screen: letters joined, words and lines in the right order, Latin and
+  numbers left to right, brackets mirrored.
+- Switching (`sw/switch_ar.sh`): English to Arabic and Arabic to English in ENHANCED SETTINGS (the page's letters
+  right at once), Turkish to Arabic and Arabic to Japanese then OPTION left and entered again (the title and OPTION in
+  the new language); F1, F2, F3, F9 in Arabic with DejaVu Sans (`RECVX_TEST_OVERLAY_FONT`: this machine has no font of
+  its own): joined, right to left, help lines wrapped from the right.
+- The other languages' titles again; `layout_check.sh` main (deb6789) vs this build (English): identical (vanilla 156,
+  enhanced 311 dumps); ctest all passed (`lang`: every Arabic translation against its font and its placeholders'
+  order, `lang_shape` cases); Windows build.
+
 ## Not done, and why
 
 - **English subtitles**: the European English rooms have only the US placeholders; the Japanese disc has Japanese
@@ -525,6 +629,14 @@ Turkish and Brazilian Portuguese (2026-10-31, Linux, headless; job folder `lang3
 - **Brazilian Portuguese**: the patch empties the pause line (`pause_mes`), so it shows nothing, as on the disc;
   capitals with accents are drawn by the patch on the line above, and our texts write them plain (the font has
   none).
+
+- **Arabic**: our menus stay left-aligned (as the patch's messages are) and their arrows, cursors and bullets keep
+  the English side; pieces our code joins into one string (outside the cases above) read left to right as pieces;
+  `lang_shape` is a subset of the bidi algorithm (no embeddings, no Arabic-Indic number rules). The patch's own layout
+  follows the European executable's Spanish positions, which the port keeps US except the game over question: the
+  file pages' text may run over the book, as for the other European languages. The computer's lines stay English (the
+  patch re-encoded the computer's font only). Digits the engine writes (item counts, times) are the US font's, the
+  patch's text keeps its own. A stand-alone آ shows as ا (the font has no isolated form; our translations avoid it).
 
 ## Notes for later
 

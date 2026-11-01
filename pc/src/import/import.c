@@ -30,6 +30,9 @@ const ImportSource import_sources[IMPORT_SOURCES] = {
     { "slus20184pt", "Resident Evil Code: Veronica X (Brazilian Portuguese fan translation)", "SLUS-20184", IMPORT_CAT_LANGUAGES,
       "Brazilian Portuguese fan translation by gledson999, with cutscene subtitles. Import it from your own disc image of the US release (SLUS-20184) with the patch.",
       "Needs the US disc image with the Brazilian Portuguese fan translation by gledson999: %s." },
+    { "sles50306ar", "Resident Evil Code: Veronica X (Arabic fan translation)", "SLES-50306", IMPORT_CAT_LANGUAGES,
+      "Arabic fan translation by Abdulaziz Al-Amri (SKZEZO EDITING), with cutscene subtitles. Import it from your own disc image of the European release (SLES-50306) with the Arabic patch.",
+      "Needs the European disc image with the Arabic fan translation by Abdulaziz Al-Amri: %s." },
 };
 
 #define ITEMS_MAX 1024

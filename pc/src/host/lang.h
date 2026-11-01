@@ -9,9 +9,9 @@
 extern "C" {
 #endif
 
-enum { LANG_EN, LANG_FR, LANG_DE, LANG_ES, LANG_JA, LANG_RU, LANG_TR, LANG_PT, LANG_COUNT };
-extern const char* const lang_codes[LANG_COUNT];   /* en fr de es ja ru tr pt-BR (folder names, ini language) */
-extern const char* const lang_names[LANG_COUNT];   /* in the language itself (UTF-8) */
+enum { LANG_EN, LANG_FR, LANG_DE, LANG_ES, LANG_JA, LANG_RU, LANG_TR, LANG_PT, LANG_AR, LANG_COUNT };
+extern const char* const lang_codes[LANG_COUNT];   /* en fr de es ja ru tr pt-BR ar (folder names, ini language) */
+extern const char* const lang_names[LANG_COUNT];   /* in the language itself (UTF-8; Arabic in display order: lang_shape) */
 
 /* Glyph codes. The Japanese font's cell c is code LANG_JA_BASE + c (the importer moves the Japanese text up);
    the codes below are the US font's, drawn with the Japanese font's look-alikes (digits, times: the US engine
@@ -19,8 +19,12 @@ extern const char* const lang_names[LANG_COUNT];   /* in the language itself (UT
    game's; our texts right after the Language setting changed) is LANG_OTHER(language, its code), drawn with that
    language's font; LANG_OTHER(l, LANG_OTHER_SPACE) is its space (0xFF01). */
 #define LANG_JA_BASE 108
+/* The Arabic font's cell c is code LANG_AR_BASE + c as well (the importer moves the Arabic text up the same way); the
+   codes below it are the US font's, drawn from the US font (its Latin letters: the Arabic font has none) or, for the
+   digits and signs the Arabic font has in the same cells, from the Arabic font */
+#define LANG_AR_BASE LANG_JA_BASE
 #define LANG_OTHER_BASE 0x8000
-#define LANG_OTHER(l, c) (LANG_OTHER_BASE + ((l) << 11) + (c))   /* (8 languages below 0xC000: clear of the control codes) */
+#define LANG_OTHER(l, c) (LANG_OTHER_BASE + ((l) << 11) + (c))   /* (9 languages below 0xC800: clear of the control codes from 0xFE00) */
 #define LANG_OTHER_SPACE 0x7FF
 
 /* the setting (ini language, LANG_*; English when the language is not installed) and Subtitles (ini subtitles:
@@ -53,6 +57,16 @@ int  lang_glyph(int l, const char** s);
 int  lang_cell(int l, int code);
 unsigned lang_char(int l, int code);
 void lang_missing(int l, const char* s, char* out, int n);
+/* Arabic (glyphs.c, pure): the UTF-8 text s in display order, as the game draws it left to right: letters joined
+   (their initial / medial / final / isolated presentation forms, lam-alef ligatures), each line reversed, runs of
+   Latin letters, digits and printf placeholders kept left to right, brackets mirrored; a text without Arabic letters
+   unchanged. Into out (n bytes); returns out. lang_rtl: s is such a display-order text (wrap it from its right end) */
+char* lang_shape(const char* s, char* out, int n);
+int  lang_rtl(const char* s);
+int  lang_rtl_text(void);             /* our texts are right to left (Arabic): pieces joined in code go in reverse */
+/* the byte where the last line of s[0, len) that is at most w wide starts (at a space; 0: all of it fits), for wrapping
+   a display-order text from its right end; width(s, n, ud) measures n bytes */
+int  lang_rtl_cut(const char* s, int len, float w, float (*width)(const char* s, int n, void* ud), void* ud);
 /* the game's text (u16 glyph codes, 0xFFFF end) as UTF-8 for the overlay, with the loaded font's letters */
 void pc_glyphs_utf8(const unsigned short* g, char* out, int n);
 
@@ -67,6 +81,7 @@ float pc_font_width(unsigned short code);           /* the language font's width
 float pc_font_space(void);                          /* the advance of a space (0xFF01) at scale 1: 14, Japanese 28 */
 int  pc_font_glyph(int code, void** texlist, float* dx);   /* bhDispFont: the cell to draw (-1 none); *texlist another font's; *dx left shift */
 const unsigned short* pc_lang_mes(int which, const unsigned short* us);   /* the executable's short texts (LM_*) */
+float pc_lang_mes_x(int which, float us);           /* ... the x the language's executable draws one at (us: the US x) */
 enum { LM_DEMO, LM_PRESS, LM_PAUSE, LM_RETRY, LM_COUNT };
 int  pc_lang_file_page(float x, float y, int file, int page);   /* fileview.c: a file page drawn as the language's picture */
 int  pc_lang_page_end(int us);                      /* fileview.c PlayPageCheck: the manual's hidden pages (US 0 1 2 4 6 7) */

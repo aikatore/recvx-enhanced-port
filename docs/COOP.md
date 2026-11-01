@@ -1001,7 +1001,8 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
 * A replay runs only as one of the receiver's own world blocks: same region, gate flag and value;
   every action an instruction start inside the block's then-part, in order. Actions that act on the
   triggering player's own game do not run (door calls, retry points, weapon/hand changes, player
-  control). A block whose actions lead to a door event is not replayed (flags only).
+  control). A block whose actions lead to a door event is not replayed (flags only), and the side that ran it
+  sends no records for it (below): the room as its scene left it is that player's alone.
 * **World records** (`EV_ATR`): the triggering side keeps a window open until the events the block
   started have ended, then sends every room record that changed (walls, triggers, floors, object
   placement in slots 4..31). The receiver takes the on/off flag and placement; type, attr and
@@ -1042,7 +1043,7 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   `ev_flg` 4, then a room-flag block's event turns trigger 12 into the door). A partner in the room got
   the flags only and kept the room as it was: the panel's trigger still opened the panel, whose answer
   blocks test `ev_flg` 15 clear, so the player stayed in it with a question nothing answers (no text);
-  the door stayed locked. Now the world flags (`ev_flg`, `ky_flg`) the partner changes while we are in
+  the door stayed locked. Now the world flags (`ev_flg`, `ky_flg`, `mp_flg`) the partner changes while we are in
   the room are noted, and once we are out of cinema mode and no world event window is open, the room's
   entry script `scd0` is walked as the interpreter takes it: its blocks' tests (`Ck`, `CmpB`, `CmpW`; a
   block with another test is left alone) choose the parts, and in the blocks that test a noted flag its
@@ -1055,6 +1056,14 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   partner through but still looked closed until the room was entered again. Nothing else of the entry script runs (models shown or hidden, enemies, items, sounds,
   lights, room flags). The partner does not see the solving player's cutscene (as before: it was not a
   world event); the door or bridge jumps to where the cutscene leaves it.
+  The map flags (`mp_flg`, which rooms were visited) count too, for the palace's passage to the residence
+  (1/10): its trigger 1 at the foot of the stairs is the door to 2/0 only once 2/0 was visited (`mp_flg` 70);
+  before, it starts the scene of Alfred's laugh, which takes that player down to 2/0 (a door event: the
+  partner gets the flags only). The partner in 1/10 kept the scene's trigger, which no longer answered:
+  stuck at the foot of the stairs until it entered 1/10 again. The scene also left trigger 1 and the door
+  0 marked as stairs in use (`attr` 0x400000) in the watcher's room; those records are no longer sent. Of
+  the other entry scripts, 0/01 0/11 2/03 3/01 set door records by `mp_flg` (the door's first-visit bits).
+  `pc/tools/coop_passage_check.sh` checks 1/10 with either player watching.
 * **An entry script that would undo a solution** (`coop_scd0`, `keep_solved`, `event.c bhInitEvent`): 9/31's
   entry script clears `ev_flg` 5 on every entry. The self-destruct terminal's code (VERONICA, `sp_evt.c`)
   sets it, and 9/30 starts the launch when entered with it set; a single player walks from the terminal
@@ -1700,3 +1709,9 @@ the joiner's hits are applied, and neither side logs STALL or ORPHAN.
 `pc/tools/coop_lugers_check.sh OUT [PORT]` (the same needs, about three minutes): the host, without sub machine
 guns, skips Steve's swap in 3/10 while the joiner, holding them, waits in 3/9; it fails unless the host gets the
 Gold Lugers and sends them, and the joiner keeps them for 3/10 and finds them there.
+
+`pc/tools/coop_passage_check.sh OUT [PORT] [host|guest]` (the same needs, about two minutes): in the palace's passage
+to the residence (1/10) the watcher (default the host) examines the trigger at the foot of the stairs, whose scene
+(Alfred's laugh) takes it to 2/0, while the other stands halfway up the passage; then the other walks to the foot of
+the stairs and presses the action button. It fails unless the other gets the flags only, its trigger becomes the
+door by the entry script, and it goes through to 2/0 too.

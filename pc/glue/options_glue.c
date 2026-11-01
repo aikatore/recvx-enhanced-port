@@ -566,7 +566,7 @@ static void draw_row(int i, int sel)
     const Setting* s = row_set(r);
     float y = i ? row_y(i) : 152.0f;
     unsigned int dim = 0xFFA0A0A0, col = sel ? pulse() : dim;
-    char label[128], val[128];
+    char label[256], val[128];   /* (Arabic: 3 bytes a letter) */
     const char* lock = s ? settings_locked(s) : NULL;
     if (lock) col = sel ? 0xFF909090 : 0xFF686868;
     if (sel) pc_ui_rect(36, y - 3, 604, y + ROW_H - 4, st.capture ? 0x50FFC040 : 0x40FFFFFF, Z_HI);
@@ -613,7 +613,9 @@ static void draw_row(int i, int sel)
         return;
     }
     case K_SET:
-        snprintf(label, sizeof(label), "%s%s", tr(s->label), (s->flags & SET_RESTART) ? tr(" (restart needed)") : "");
+        if (lang_rtl_text())   /* (right to left: the note on the label's left) */
+            snprintf(label, sizeof(label), "%s%s", (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", tr(s->label));
+        else snprintf(label, sizeof(label), "%s%s", tr(s->label), (s->flags & SET_RESTART) ? tr(" (restart needed)") : "");
         text_fit(X_LABEL, y, label, SC_ROW, 296, col);
         if (s->flags & SET_ACTION) {
             if (st.pending[r->idx]) pc_ui_text(X_VALUE, y, "(on leaving menu)", 0.5f, 0xFFE0C080);
@@ -668,9 +670,12 @@ static void draw_help(void)
     }
     case K_SET: {
         const char* lock = settings_locked(s);
-        snprintf(t, sizeof(t), "%s%s%s%s", lock ? lock : "", lock ? " " : "", (s->flags & SET_RESTART) ? tr("Restart needed. ") : "", s->help ? tr(s->help) : "");
+        char ap[160] = "";
+        if (s->flags & SET_ACTION && !lock && !(s->flags & SET_NOW)) snprintf(ap, sizeof(ap), tr("%sApplies when you leave this menu."), s->help ? " " : "");
+        if (lang_rtl_text())   /* (right to left: the parts from the left in reverse) */
+            snprintf(t, sizeof(t), "%s%s%s%s%s", ap, s->help ? tr(s->help) : "", (s->flags & SET_RESTART) ? tr("Restart needed. ") : "", lock ? " " : "", lock ? lock : "");
+        else snprintf(t, sizeof(t), "%s%s%s%s%s", lock ? lock : "", lock ? " " : "", (s->flags & SET_RESTART) ? tr("Restart needed. ") : "", s->help ? tr(s->help) : "", ap);
         if (lock) col = 0xFFFFC060;
-        if (s->flags & SET_ACTION && !lock && !(s->flags & SET_NOW)) snprintf(t + strlen(t), sizeof(t) - strlen(t), tr("%sApplies when you leave this menu."), s->help ? " " : "");
         break;
     }
     }

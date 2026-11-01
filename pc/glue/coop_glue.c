@@ -4058,8 +4058,12 @@ static void atr_put(int kind, int ix, const AtrRec* r)
    own game left its trigger asking: the Gold Luger room's switch panel (1/05; the answer starts an event
    from a block gated by room flags only) opened again and waited for an answer that its blocks, gated by
    the solved flag, no longer take (stuck in the panel, no text); the main hall's terminal (1/02) sets its
-   flag, a room-flag block then makes the door, so the partner's door stayed locked. So when the partner
-   changes world flags (ev_flg, ky_flg) while we are in the room, the entry script's record writes (walls,
+   flag, a room-flag block then makes the door, so the partner's door stayed locked. The map flags (mp_flg) too:
+   the passage to the residence (1/10) makes trigger 1 at the foot of its stairs a door to 2/0 only once 2/0 was
+   visited (mp_flg 70); before, the trigger starts the scene of Alfred's laugh, which takes the player through
+   (a door event: the partner gets the flags only), so a partner in the room kept a trigger that no longer
+   answers and could not go down to the residence until it entered 1/10 again. So when the partner
+   changes world flags (ev_flg, ky_flg, mp_flg) while we are in the room, the entry script's record writes (walls,
    triggers, floors) in the blocks that test them run again, as entering would run them, once our scene
    and any world event window are over. So do the placements of the room's objects there (an object's
    LoadWork, then its position and angles: CommonCtr 7 8 9 11 12 13 47) and effects shown or hidden
@@ -4072,8 +4076,8 @@ static int rb_key = -1;
 static void rb_mark(int w, unsigned int bits)
 {
     int key = coop_room_key() * 16 + sys->rcase;
-    if (!bits || !(w < 32 || (w >= 96 && w < 112))) return;   /* ev_flg, ky_flg */
-    used_mark(w, bits);
+    if (!bits || !(w < 32 || (w >= 96 && w < NFLAG))) return;   /* ev_flg, ky_flg, mp_flg */
+    if (w < 112) used_mark(w, bits);   /* a lever: ev_flg, ky_flg */
     if (key != rb_key) { memset(rb_bits, 0, sizeof(rb_bits)); rb_key = key; }
     rb_bits[w] |= bits;
 }
@@ -4291,15 +4295,20 @@ static void send_block(const Region* r)
 {
     const unsigned char* d = (const unsigned char*)rom->evtp;
     unsigned short ops[TRIG_OPS];
-    int n = 0, j, k;
+    int n = 0, j, k, door = 0;
     for (j = 0; j < ntrace && n < TRIG_OPS; j++) {
         unsigned int o = trace_buf[j];
         if (o >= r->then0 && o < r->then1 && !is_cond(d[o]) && !is_flow(d[o])) ops[n++] = o;
     }
+    for (j = 0; j < n; j++)
+        if (d[ops[j]] == 20 && evdoor[d[ops[j] + 3]]) door = 1;
     host_log("coop: world event block %04x fired here (gate flag %d/%d), %d actions%s\n", r->start, r->set, r->bit, n,
              have_peer && !echo_delay ? ", sent to the partner" : "");
     if (!have_peer || echo_delay) return;
-    win_open(&win_tx, ev_levels(d, ops, n));   /* what its events do to the room follows when they end */
+    /* what its events do to the room follows when they end; not for a block that takes us through a door: the
+       partner takes its flags only (coop_scd1) and its entry script builds the room from them (rebuild). Our
+       room as the scene left it is ours alone: 1/10's scene of Alfred's laugh marks trigger 1 as stairs in use */
+    if (!door) win_open(&win_tx, ev_levels(d, ops, n));
     for (j = 0; j == 0 || j < n; j += 24) {
         Event e = { 0 };
         e.type = EV_TRIG;

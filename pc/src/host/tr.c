@@ -1,5 +1,6 @@
 /* Our own texts in the language of the setting (lang.h tr(); docs/LANGUAGES.md "Our texts"): a table keyed by the
-   English text (tr_table.inc: French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese; UTF-8). A
+   English text (tr_table.inc: French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese, Arabic; UTF-8;
+   the Arabic is turned into display order once, at tr_init: lang_shape). A
    text without a row, or a language without a column (""), stays English. ImGui labels keep their "##id" (looked up without it).
    The table is not compiled: tr_table.inc's own text is in the executable outside the game's address window
    (docs/ARCHITECTURE.md "Data model and memory"; Linux: section .trtab, linked at 0x40000000; Windows: a resource,
@@ -66,6 +67,12 @@ void tr_init(void)   /* main thread, at start */
     for (size_t i = 0; i < n; i++) lines += text[i] == '\n';
     if (!(rows = calloc(lines, sizeof(*rows)))) { free(text); return; }
     n = parse(text, text + n, rows);
+    for (size_t i = 0; i < n; i++) {   /* Arabic: in display order (glyphs.c lang_shape: joined forms, right to left) */
+        const char* a = rows[i].t[LANG_AR - 1];
+        size_t len = a ? strlen(a) : 0;
+        char* o = len ? malloc(len * 3 / 2 + 8) : NULL;
+        if (o) rows[i].t[LANG_AR - 1] = lang_shape(a, o, (int)(len * 3 / 2 + 8));
+    }
     qsort(rows, n, sizeof(rows[0]), cmp_row);
     n_rows = n;
 }

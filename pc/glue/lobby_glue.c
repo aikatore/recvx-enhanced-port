@@ -75,7 +75,7 @@ enum { BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000
 /* UTF-8, the letters of the loaded font (lang.h pc_glyph_next: accents with a language's font) */
 static float adv(int c) { return c ? pc_glyph_w(c) : 11.0f; }   /* the font's space is a full cell */
 
-#define TRACK (lang_font() == LANG_RU ? 1.0f : 0.88f)   /* a little tighter than the game's messages (the Russian widths are tight) */
+#define TRACK (lang_font() == LANG_RU || lang_font() == LANG_AR ? 1.0f : 0.88f)   /* a little tighter than the game's messages (the Russian widths are tight; Arabic letters join) */
 
 static float text_w(const char* s, float sc)
 {
@@ -109,12 +109,35 @@ static void text(float x, float y, const char* s, float sc, unsigned int argb)
 
 static void text_c(float cx, float y, const char* s, float sc, unsigned int argb) { text(cx - text_w(s, sc) / 2, y, s, sc, argb); }
 
-/* at most `w` wide: the words that fit, then the next line (returns the lines drawn) */
+static float rtl_w(const char* s, int n, void* sc)
+{
+    char line[400];
+    if (n >= (int)sizeof(line)) return 1e9f;
+    memcpy(line, s, (size_t)n);
+    line[n] = 0;
+    return text_w(line, *(float*)sc);
+}
+
+/* at most `w` wide: the words that fit, then the next line (returns the lines drawn). Arabic (in display order,
+   lang.h lang_shape): its first line is the right end of the text, so lines are taken from there (lang_rtl_cut) */
 static int text_wrap(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines)
 {
-    char line[160];
+    char line[160], rl[400];
     int n = 0;
     s = tr(s);
+    if (lang_rtl(s)) {
+        for (int len = (int)strlen(s); len > 0 && n < max_lines;) {
+            int cut = lang_rtl_cut(s, len, w, rtl_w, &sc);
+            if (len - cut < (int)sizeof(rl)) {
+                memcpy(rl, s + cut, (size_t)(len - cut));
+                rl[len - cut] = 0;
+                text(x, y + n * 28 * sc * 1.05f, rl, sc, argb);
+            }
+            n++;
+            for (len = cut; len > 0 && s[len - 1] == ' '; len--) {}
+        }
+        return n;
+    }
     while (*s && n < max_lines) {
         int len = 0, fit = 0;
         while (s[len] && len < (int)sizeof(line) - 1) {
