@@ -96,26 +96,35 @@ void pc_biorand_save_accept(void* save)
 /* ---------------------------------------------------------------- "Randomize Played as" (docs/BIORAND_INGAME.md S5a)
    A new game with BioRand on and "Randomize Played as" on (g_biorand_appear) is given a "You appear as" look picked
    from the pack's seed number (cast_appear_pick: the cutscene cast's "All models" pool, imports with its "Include
-   imported models"). It is this game's, not the user's: save word BR_APPEAR holds 'A' << 24 | chr, so the game's saves
-   keep it and loading one brings it back (the region is loaded whole); a new game without it writes 0. recvx.ini's
-   coop_char (the user's own choice) never changes. It counts while BioRand is on and we are not a co-op guest (a
-   guest's look stays its own; it has the host's state, words and all); choosing a look in game drops it. */
+   imported models"): one for the whole game (1, "Same for Both"), or (2, "Per Character") one for Claire, another
+   for Chris and a third for Steve's section of Claire's part. They are this game's, not the user's: save word
+   BR_APPEAR holds 'A' << 24 | Claire's chr (the one look), BR_APPEAR2 'A' << 24 | Steve's chr << 12 | Chris's (chrs
+   < 4096) with "Per Character", else 0, so the game's saves keep them and loading one brings them back (the region is
+   loaded whole), whatever the setting says now; a new game without it writes 0. A save of a version with one look
+   has no BR_APPEAR2: the same look for all, as it was. recvx.ini's coop_char (the user's own choice) never changes.
+   They count while BioRand is on and we are not a co-op guest (a guest's look stays its own; it has the host's
+   state, words and all); choosing a look in game drops them. */
 #define BR_APPEAR 290
+#define BR_APPEAR2 291
 #define BR_APPEAR_ON 0x41000000u
 int pc_in_game(void);   /* options_glue.c */
 
 void pc_biorand_appear_new(void)
 {
-    int chr, seed = biorand_seed();
+    int chr[3], k, seed = biorand_seed(), imports = g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0;
     if (!sys) return;
-    sys->itm[BR_APPEAR] = 0;
+    sys->itm[BR_APPEAR] = sys->itm[BR_APPEAR2] = 0;
     if (!g_biorand_appear || !biorand_active() || coop_biorand() >= 0 || seed < 0) return;
-    chr = cast_appear_pick((unsigned)seed, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0);
-    sys->itm[BR_APPEAR] = BR_APPEAR_ON | (unsigned int)chr;
-    host_log("biorand: randomize played as: seed %d -> %s (chr %d, this game only)\n", seed, appear_name(chr), chr);
+    for (k = 0; k < (g_biorand_appear == 2 ? 3 : 1); k++) chr[k] = cast_appear_pick((unsigned)seed, imports, k);   /* (three different ones) */
+    sys->itm[BR_APPEAR] = BR_APPEAR_ON | (unsigned int)chr[0];
+    if (g_biorand_appear == 2) {
+        sys->itm[BR_APPEAR2] = BR_APPEAR_ON | (unsigned int)chr[2] << 12 | (unsigned int)chr[1];
+        host_log("biorand: randomize played as, per character: seed %d -> Claire %s (chr %d), Chris %s (chr %d), Steve %s (chr %d), this game only\n", seed,
+                 appear_name(chr[0]), chr[0], appear_name(chr[1]), chr[1], appear_name(chr[2]), chr[2]);
+    } else host_log("biorand: randomize played as: seed %d -> %s (chr %d, this game only)\n", seed, appear_name(chr[0]), chr[0]);
 }
 
-int pc_biorand_appear(void)
+int pc_biorand_appear(int ply)
 {
     unsigned int w;
     int chr;
@@ -123,14 +132,17 @@ int pc_biorand_appear(void)
     w = sys->itm[BR_APPEAR];
     chr = (int)(w & 0xFFFFFF);
     if ((w & 0xFF000000u) != BR_APPEAR_ON || chr < 1) return -1;
+    if (ply < 0) ply = sys->ply_id & 3;
+    w = sys->itm[BR_APPEAR2];
+    if (ply && (w & 0xFF000000u) == BR_APPEAR_ON && (int)(w >> (ply == 2 ? 12 : 0) & 0xFFF) > 0) chr = (int)(w >> (ply == 2 ? 12 : 0) & 0xFFF);   /* Chris's (Wesker: his), Steve's */
     return chr <= COOP_CHR_MAX || chr - COOP_CHR_IMPORT < __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) ? chr : -1;   /* (an import no longer listed: the user's) */
 }
 
 void pc_biorand_appear_drop(void)
 {
-    if (pc_biorand_appear() < 0) return;
-    sys->itm[BR_APPEAR] = 0;
-    host_log("biorand: randomize played as: a look chosen in game; this game's pick dropped\n");
+    if (pc_biorand_appear(0) < 0) return;
+    sys->itm[BR_APPEAR] = sys->itm[BR_APPEAR2] = 0;
+    host_log("biorand: randomize played as: a look chosen in game; this game's picks dropped\n");
 }
 
 /* the question on the load screen (ps2_LoadScreen.c DispLoadMessageSelect 12), above YES / NO (message 466) */

@@ -314,9 +314,10 @@ GAMEPLAY, under CUTSCENE CAST (and in the co-op lobby: GAME RULES, RANDOMIZER, C
 cutscenes the story characters are shown as other models; nothing else changes: the scenes, the
 voices and what happens stay as they are.
 
-* **Randomize Cutscene Cast**: On swaps the story characters (Alfred, Alexia, Steve, Rodrigo, Wesker,
-  and Claire or Chris while you play the other one) in cutscenes; a
-  character who stays in the room afterwards keeps the new look.
+* **Randomize Cutscene Cast**: On swaps the story characters (Alfred, Alexia, Steve, Rodrigo, Wesker)
+  in cutscenes; a character who stays in the room afterwards keeps the new look. Claire and Chris are never
+  swapped: in every cutscene, also while you play the other one, they show your look for them ("Character
+  Model", or BioRand's random look for that character).
 * **Model Selection**: *Cutscene Models* picks among the characters' cutscene models: their mouths
   move with the lines and their eyes look where the original character's do (the voice stays the
   original character's). *All Models* also uses the creatures and the zombies

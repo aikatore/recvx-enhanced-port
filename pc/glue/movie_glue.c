@@ -17,7 +17,8 @@
 #include "../../decomp/include/ps2/veronica/prog/ps2_dummy.h"
 #include "../../decomp/include/ps2/veronica/prog/ps2_loadtim2.h"
 
-int    movie_open(uint32_t lsn, uint32_t size);
+int    movie_open(FILE* f, uint32_t lsn, uint32_t size);
+FILE*  pc_mod_fopen(const char* name, uint32_t* size);
 void   movie_close(void);
 void   movie_pause(int paused);
 int    movie_frames_total(void);
@@ -80,9 +81,19 @@ void initAll(void)
         sceCdSearchFile(&infile.fp, name);
     }
     if (getenv("RECVX_MOVIE_TRACE") && !trace) trace = fopen(getenv("RECVX_MOVIE_TRACE"), "w");
-    if (!skip_movies && !movie_open(infile.fp.lsn, infile.fp.size)) printf("movie: cannot decode %u\n", infile.fp.lsn);
+    if (!skip_movies) {
+        /* the language's movie (Translated Pictures: lang.h pc_lang_file_dir), a mods folder's, or the disc's */
+        char name[48];
+        uint32_t size = 0;
+        FILE* f;
+        snprintf(name, sizeof(name), "MOVIE/%s", infile.fp.name);
+        if (strchr(name, ';')) *strchr(name, ';') = 0;
+        f = infile.fp.name[0] ? pc_mod_fopen(name, &size) : NULL;
+        if (!movie_open(f, f ? 0 : infile.fp.lsn, f ? size : infile.fp.size)) printf("movie: cannot decode %s\n", name);
+        if (trace) fprintf(trace, "# %s %s, %u bytes\n", name, f ? "from a file" : "from the disc", f ? size : infile.fp.size);
+    }
     movie_size(&__image_w__, &__image_h__);
-    if (trace) { fprintf(trace, "# movie at sector %u, %u bytes\n", infile.fp.lsn, infile.fp.size); trace_sound("opened"); }
+    if (trace) { fprintf(trace, "# movie at sector %u, %u bytes on the disc\n", infile.fp.lsn, infile.fp.size); trace_sound("opened"); }
 }
 
 void readMpeg(void)

@@ -507,8 +507,8 @@ in ENHANCED SETTINGS: `< ITEMS >`, the page keys (L1/R1 by name, Q/W on the keyb
   keyboard path (`RECVX_INTERP_T` in-between images): only the selection highlight moves (as in the
   lobby), and a slider's fill when its value changes.
 - `MAX_ROWS` is 30 (ROW_Z's room; ITEMS has 27).
-- **Randomize Played as**: ini `biorand_appear`, written only when 1 (like `biorand_seed`, so a game
-  without `--dev` writes nothing new). It has no settings table row (the --dev screen only), so it is
+- **Randomize Played as**: ini `biorand_appear` (0 Off, 1 Same for Both, 2 Per Character, below), written only
+  when not 0 (like `biorand_seed`, so a game that never turns it on writes nothing new). It has no settings table row (the --dev screen only), so it is
   read and written by name in `config.c`, as `biorand_seed`. S5 uses it.
 
 **Test aids** (job dir `biorand-ui/s4b/`, not committed): `run.sh` (a `--dev` run with a dummy CLI);
@@ -628,22 +628,33 @@ Test aid: `RECVX_BIORAND_ISO_TEST=<path>` gives the CLI another image (the game 
 
 **"Randomize Played as"** (`g_biorand_appear`):
 
-- The pick: `cast_appear_pick(seed, imports)` (cast.c, pure): a hash of BioRand's seed number indexes
+- The value (the row "Randomize Character Model" on EXTRA OPTIONS: Off / Same for Both / Per Character): **Same for
+  Both** (1) one look for the whole game, whoever is played (as before); **Per Character** (2) one look for Claire,
+  another for Chris and a third for Steve's section of Claire's part, all three different (Wesker, played only in
+  the Battle Game, takes Chris's). Claire's is the one look Same for Both gives for that seed.
+- The pick: `cast_appear_pick(seed, imports, c)` (cast.c, pure; c 0 Claire, 1 Chris, 2 Steve): a hash of BioRand's seed number indexes
   `cast_pool(1, imports)`, the cutscene cast's "All models" pool (humanoid catalogue looks and player files, never
   Claire's or Chris's own looks; the zombies one entry, then `cast_zombie_look(seed, 0, 7)` picks the zombie). Imports
   count only with the cast's "Include imported models" (`g_enemy_opts.cast_imports`). The result is a "You appear as"
-  chr (player file n: 1 + n; catalogue i: `appear_canon(6 + i)`; import k: `COOP_CHR_IMPORT + k`).
+  chr (player file n: 1 + n; catalogue i: `appear_canon(6 + i)`; import k: `COOP_CHR_IMPORT + k`). Chris's and
+  Steve's: the same hash with the character added, then the next entry not taken by an earlier character.
 - When: `pc_quick_start` (a new game, coop_glue.c) calls `pc_biorand_appear_new()` after `pc_biorand_stamp()`. It
   picks when "Randomize Played as" is on, BioRand is active, the pack's seed is known and we are not a co-op guest.
-  Seed 123456 gives "Zombie: base staff 3", 654321 "Wesker".
+  Seed 123456 gives "Zombie: base staff 3", 654321 "Wesker"; per character 123456 gives Claire "Zombie: Base Staff 3",
+  Chris "Alfred Ashford", Steve "Alexia (First Form)".
 - **Storage: save word `sys->itm[290]` (`BR_APPEAR`)** = `0x41000000 | chr` ('A'), else 0. It is next to BioRand's
   words 288/289 in the unused part of the item region (coop_glue.c's map updated: 290 BioRand's pick, 291..319
   unused). The new game writes it (0 when nothing was picked). It is part of the save region, so every save of that
   game holds it, and **loading a save restores it** (the region is loaded whole; checked: the save file holds
   0x4100003B at the word after BioRand's 0x4201E240). recvx.ini's `coop_char` (the user's choice) is never written.
-- Use: `pc_biorand_appear()` returns the chr while in game, BioRand is active, we are not a co-op guest and the word
-  is set (an import no longer listed: -1). coop_glue.c `my_chr()` (our look, the cutscene doubles, the voice, what the
-  partner is sent) takes it before `g_coop.chr`; so does the `appear_on` test. The F1 "You appear as" row shows it;
+  Per Character: **`sys->itm[291]` (`BR_APPEAR2`)** = `0x41000000 | Steve's chr << 12 | Chris's chr` (chrs < 4096),
+  else 0; 290 holds Claire's. So a game keeps what it was started with whatever the setting says later, and a save of
+  a version with one look (no 291) keeps one look for all, as it was. An older build reads 290 alone: Claire's look
+  for everyone.
+- Use: `pc_biorand_appear(ply)` returns the chr of character ply (-1: the one played now; 291 when set, else 290) while in game, BioRand is active, we are not a co-op guest and the word
+  is set (an import no longer listed: -1). coop_glue.c `look_of(c)` takes it before `g_coop.chr`: `my_chr()` for the
+  character played (our look, the cutscene doubles, the voice, what the partner is sent; it follows a story switch),
+  and the cutscene cast for Claire or Chris when they are not played ([ACTORS.md](ACTORS.md) "Cutscene cast"); so does the `appear_on` test. The F1 "You appear as" row shows it;
   choosing a look there drops this game's pick (`pc_biorand_appear_drop`) and becomes the user's choice as before.
 - Co-op: the host's pick is its look, and the partner sees it (as any "You appear as"). A guest's own choice stays
   its own: a guest neither picks nor reads the word (it runs on the host's state, words and all). Ponytail: a guest's

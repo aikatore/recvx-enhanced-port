@@ -10,8 +10,9 @@
  *  - coop_glue.c coop_control_remote -> actor_double_tick -> cast_tick, every tick before the objects follow
  *    their links: its face takes the record's lip sync and eyes, and the hand pieces and props the script
  *    links to its hands go to the model's hands (as for the cutscene double).
- * Nothing else changes: the record keeps its type, its motions, collision and script. The doubles of the
- * character played are "You appear as"'s (played).
+ * Nothing else changes: the record keeps its type, its motions, collision and script. Claire and Chris are never
+ * cast: the doubles of the character played are "You appear as"'s (actor_doubles), and the other one's records are
+ * given the player's look for that character instead of a pick (coop_look_model; cast.c cast_role).
  */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
@@ -26,6 +27,7 @@ void host_log(const char* fmt, ...);
 extern int coop_on;
 extern int cast_n;                      /* actor_glue.c: hooks run while > 0 */
 unsigned coop_partner_import_id(void);  /* coop_glue.c: the partner's cast_import_id, 0 none */
+int coop_look_model(int c);             /* coop_glue.c: the player's look for Claire or Chris as a model, -1 themselves */
 
 #define CSLOTS (ACTOR_SLOTS - ACTOR_CAST)
 #define RECS 128
@@ -98,7 +100,7 @@ void cast_room(const EnemyOpts* o)
         if (!(ep->flg & 0x1) || !ep->mlwP || (c = cast_character(ep->id, ep->mdlver)) < 0) continue;   /* (the character played's doubles too: played()) */
         for (j = 0; j < (int)(sizeof(kept) / sizeof(kept[0])) && !(kept[j].room == room && kept[j].rec == k); j++);
         if (j < (int)(sizeof(kept) / sizeof(kept[0]))) { host_log("cast: room %04d record %d (type %d) stays: %s\n", room, k, ep->id, kept[j].why); continue; }
-        want[k] = cast_model((unsigned)o->seed, scene, c, o->cast_all, imports, enemy_cast_off());
+        want[k] = c < 2 ? coop_look_model(c) : cast_model((unsigned)o->seed, scene, c, o->cast_all, imports, enemy_cast_off());   /* (Claire's, Chris's: never cast) */
         rec_chr[k] = (unsigned char)c;
     }
     cast_release();   /* (normally all went with the last room's textures; their buffer is free again) */
@@ -132,18 +134,16 @@ void cast_room(const EnemyOpts* o)
              o->cast_assign ? "random per cutscene" : "fixed", o->cast_all == 2 ? custom : o->cast_all ? "all models" : "cutscene models", imports ? ", imported models" : "");
 }
 
-/* a double of a character played: "You appear as" and "Swapped model in cutscenes" decide how it looks. Read when it
-   is drawn: the character played now (a story switch changes sys->ply_id after the room load: the end of bhFinishRoom);
-   the one a switch the script has set (PlayerChangeSet: cb_flg 0x80, cng_pid) is about to make played, so the scene
-   around the switch already counts it; and in co-op the partner's (its own part file), whom a scene of ours may show
-   while its game plays it; Claire also through Steve's section of her part (cast_plays). Claire while Chris is played
-   (and no switch to her is pending) is cast as any character. */
+/* how record k is drawn now (cast.c cast_role), read when it is drawn: the character played now (a story switch changes
+   sys->ply_id after the room load: the end of bhFinishRoom); the one a switch the script has set (PlayerChangeSet:
+   cb_flg 0x80, cng_pid) is about to make played, so the scene around the switch already counts it; and in co-op the
+   partner's (its own part file), whom a scene of ours may show while its game plays it. Claire's and Chris's records
+   have the player's look for them as their model (cast_room), shown unless they are the character played (then the
+   double shows it, actor_put_enemy), whether or not the game has switched to them yet (Chris in 7240 and 7220 reached
+   without 6100's switch: the game still plays Claire). */
 int coop_partner_ply(void);             /* coop_glue.c: -1 none */
-static int played(int k)
-{
-    int c = rec_chr[k];
-    return c < 4 && (cast_plays(c, sys->ply_id & 3) || ((sys->cb_flg & 0x80) && cast_plays(c, sys->cng_pid & 3)) || cast_plays(c, coop_partner_ply()));
-}
+static int role(int k) { return cast_role(rec_chr[k], sys->ply_id & 3, (sys->cb_flg & 0x80) ? sys->cng_pid & 3 : -1, coop_partner_ply()); }
+static int played(int k) { return role(k) == CAST_OWN; }
 
 /* record k is drawn as its model now */
 static int as_model(const BH_PWORK* ep, int k) { return k >= 0 && k < RECS && rec_slot[k] >= 0 && !played(k) && still(ep, k); }
@@ -242,7 +242,8 @@ int cast_draw(BH_PWORK* ep)
     return as_model(ep, k) && actor_put_as(ACTOR_CAST + rec_slot[k], ep);
 }
 
-/* --dev cutscene log (devcine_glue.c): this room visit's swaps, "r3 Alfred(94)->Tyrant, r5 Rodrigo(98)->Wesker";
+/* --dev cutscene log (devcine_glue.c): this room visit's swaps, "r3 Alfred(94)->Tyrant, r5 Rodrigo(98)->Wesker,
+   r0 Chris(92)->Hunter (your look)" (Claire's and Chris's: the player's look for them);
    the length */
 int cast_describe(char* buf, int n)
 {
@@ -252,7 +253,8 @@ int cast_describe(char* buf, int n)
     for (k = 0; k < RECS && len < n - 1; k++) {
         if (!shown(rec_slot[k])) continue;   /* (also before the first room load: rec_slot still zeros) */
         r = snprintf(buf + len, (size_t)(n - len), "%sr%d %s(%d)->%s%s", len ? ", " : "", k, chr[rec_chr[k] % CAST_CHARACTERS], rec_id[k],
-                     cast_entry_name(slot_model[rec_slot[k]]), played(k) ? " (played: as itself)" : "");
+                     cast_entry_name(slot_model[rec_slot[k]]),
+                     played(k) ? (rec_chr[k] < 2 ? " (played: the double)" : " (played: as itself)") : rec_chr[k] < 2 ? " (your look)" : "");
         len = r < 0 || r >= n - len ? n - 1 : len + r;
     }
     return len;

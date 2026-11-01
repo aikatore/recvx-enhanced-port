@@ -22,7 +22,12 @@ int cast_character(int id, int ver)
     }
 }
 
-int cast_plays(int c, int ply) { return ply >= 0 && c >= 0 && (c == ply || (ply == 2 && c == 0)); }
+int cast_role(int c, int ply, int pending, int partner)
+{
+    if (c < 0 || c >= CAST_CHARACTERS) return CAST_OWN;
+    if (c < 2) return c == ply ? CAST_OWN : CAST_LOOK;
+    return c < 4 && (c == ply || c == pending || c == partner) ? CAST_OWN : CAST_PICK;
+}
 
 static int listed(void) { return __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE); }   /* (the main thread appends) */
 static int imports_n(int imports) { return imports > 0 && imports <= listed() ? imports : 0; }
@@ -116,10 +121,11 @@ int cast_model(unsigned seed, unsigned scene, int c, int all, int imports, const
     rnd(); rnd();
     for (i = n - 1; i > 0; i--) { k = (int)(rnd() % (unsigned)(i + 1)); t = pool[i]; pool[i] = pool[k]; pool[k] = t; }   /* Fisher-Yates */
     memset(used, 0, (size_t)n);
-    /* every character in turn (all of them, so each answer is the same whichever is asked): the first model of the
+    /* every character but Claire and Chris (never cast: cast_role) in turn (all of them, so each answer is the same whichever is asked): the first model of the
        shuffle not taken and not its own; when only its own are left, it trades with an earlier character whose model
        is not its own and who may take one of those left; with the pool used up, the first not its own again */
-    for (i = 0; i < CAST_CHARACTERS; i++) {
+    pick[0] = pick[1] = -1;
+    for (i = 2; i < CAST_CHARACTERS; i++) {
         pick[i] = -1;
         for (k = 0; k < n && pick[i] < 0; k++) if (!used[k] && model_char(pool[k]) != i) pick[i] = k;
         for (k = 0; k < n && pick[i] < 0; k++) {
@@ -147,14 +153,19 @@ static int chr_of(int m)
     return appear_canon(COOP_CHR_ACTOR + m);
 }
 
-int cast_appear_pick(unsigned seed, int imports)
+int cast_appear_pick(unsigned seed, int imports, int c)
 {
-    int n = builtins_of(pool, -1), m, i;
-    unsigned h = seed * 0x9E3779B1u + 0x632BE5ABu;
-    h ^= h >> 16; h *= 0x85EBCA6Bu; h ^= h >> 13; h *= 0xC2B2AE35u; h ^= h >> 16;
+    int n = builtins_of(pool, -1), m, i, k, j, got[3];
+    if (c < 0 || c > 2) return 0;
     for (i = 0; i < imports_n(imports); i++) pool[n++] = ACTOR_MODELS + i;
-    m = pool[h % (unsigned)n];
-    if (m == CAST_ZOMBIES) m = cast_zombie_look(seed, 0, CAST_CHARACTERS);   /* (as a character of its own) */
+    for (k = 0; k <= c; k++) {   /* Claire's, then Chris's, then Steve's: each the next entry not taken (k 0: the pick of one look before) */
+        unsigned h = seed * 0x9E3779B1u + 0x632BE5ABu + (unsigned)k * 0x2545F491u;
+        h ^= h >> 16; h *= 0x85EBCA6Bu; h ^= h >> 13; h *= 0xC2B2AE35u; h ^= h >> 16;
+        got[k] = (int)(h % (unsigned)n);
+        for (j = 0; j < k; j++) if (got[j] == got[k]) { got[k] = (got[k] + 1) % n; j = -1; }   /* (n > 3) */
+    }
+    m = pool[got[c]];
+    if (m == CAST_ZOMBIES) m = cast_zombie_look(seed, 0, CAST_CHARACTERS + c);   /* (as a character of its own) */
     return chr_of(m);
 }
 

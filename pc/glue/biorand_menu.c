@@ -464,7 +464,7 @@ static void change(const Row* r, int dir)
     if (!has_value(r)) return;
     if (why) { refuse(why); return; }
     if (r->kind == K_APPEAR) {
-        g_biorand_appear ^= 1;
+        g_biorand_appear = (g_biorand_appear + dir + 3) % 3;   /* Off, Same for Both, Per Character */
         settings_save_later();
         host_log("biorand menu: randomize played as = %d\n", g_biorand_appear);
     } else if (r->kind == K_SET) settings_step(&g_settings[r->idx], dir);
@@ -859,7 +859,7 @@ static void draw_row(int i)
         value(i, y, v, col, live);
         return;
     }
-    case K_APPEAR: snprintf(v, sizeof(v), "%s", g_biorand_appear ? "On" : "Off"); break;
+    case K_APPEAR: snprintf(v, sizeof(v), "%s", g_biorand_appear == 2 ? "Per Character" : g_biorand_appear ? "Same for Both" : "Off"); break;
     case K_CUSTOM:   /* how many are checked; confirm opens the list */
         text_fit(ROW_X, y, names[r->kind], ROW_SC, VAL_X - 16 - ROW_X, col);
         text_fit(VAL_X + 12, y, cast_list_summary(cast_off, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, v, sizeof(v)), ROW_SC, 196, col);
@@ -977,7 +977,7 @@ static void help_text(char* t, int n, unsigned int* col)
         return;
     case K_CHECK: snprintf(t, n, tr("Check GitHub for the latest BioRand generator and offer to download it.")); return;
     case K_APPEAR:
-        snprintf(t, n, tr("Choose a character model for each generated seed. Saved separately from the seed string."));
+        snprintf(t, n, tr("Choose a character model for each generated seed: the same one for Claire and Chris, or one for each character. Saved separately from the seed string."));
         return;
     case K_CUSTOM: snprintf(t, n, "Choose the models the characters can appear as."); return;
     case K_RANDPG: snprintf(t, n, "%s", tr("Set the enemy randomizer, extra enemies and enemy positions. They also apply to BioRand games.")); return;

@@ -456,12 +456,29 @@ static void self_keep(void)
     }
 }
 
-/* "You appear as" for the character played now ("As played (cutscene)": its cutscene model); BioRand's "Randomize
-   Played as" pick of this game first (biorand_glue.c) */
-static int my_chr(void)
+/* "You appear as" for character c (0..3: "As played (cutscene)": its cutscene model); BioRand's "Randomize Played as"
+   pick of this game for that character first (biorand_glue.c: Claire's, Chris's, Steve's) */
+static int look_of(int c)
 {
-    int o = pc_biorand_appear();
-    return appear_played(o >= 0 ? o : g_coop.chr, sys ? sys->ply_id : 0);
+    int o = pc_biorand_appear(c);
+    return appear_played(o >= 0 ? o : g_coop.chr, c);
+}
+/* ... for the character played now */
+static int my_chr(void) { return look_of(sys ? sys->ply_id & 3 : 0); }
+
+/* the model (an actor index) for look chr on the doubles of a character whose own part file is own, -1 the game's */
+static int look_index(int chr, int own)
+{
+    int f = chr == 5 ? 4 : chr - 1;
+    return !chr ? -1 : chr >= COOP_CHR_ACTOR ? chr - COOP_CHR_ACTOR : f == own ? -1 : ACTOR_PART + f;
+}
+
+/* cast_glue.c: Claire's or Chris's records (c 0, 1) in the cutscenes of a part they are not played in show the player's
+   look for them, as their doubles do while they are: the model, -1 themselves */
+int coop_look_model(int c)
+{
+    int kept;
+    return actor_double_model(look_index(look_of(c), c), c, &kept);
 }
 
 /* at the hand-off */
@@ -470,9 +487,7 @@ static void self_frame(void)
     int own = sys->ply_id + (sys->costume & 3) * 4, want, chr = my_chr();
     if (!plp || !plp->mdl_n) return;
     if (self_mesh >= 0 && !self_ours()) self_restore();   /* the game reloaded the player */
-    if (tx_in_game)   /* in cutscenes the character played is acted by its event double */
-        actor_doubles(!chr ? -1 : chr >= COOP_CHR_ACTOR ? chr - COOP_CHR_ACTOR :
-                      (chr == 5 ? 4 : chr - 1) == own ? -1 : ACTOR_PART + (chr == 5 ? 4 : chr - 1));
+    if (tx_in_game) actor_doubles(look_index(chr, own));   /* in cutscenes the character played is acted by its event double */
     if (!tx_in_game || (sys->cb_flg & 0x1)) return;
     self_actor(chr >= COOP_CHR_ACTOR ? chr - COOP_CHR_ACTOR : -1);
     want = !chr || chr >= COOP_CHR_ACTOR ? -1 : chr == 5 ? 4 : chr - 1;
@@ -2314,9 +2329,10 @@ static void apply_snapshots(void)
                keeps a count in its low byte, sub1.c 4139 / 6636)
      256..287  IMP_SPOTS, IMP_TAKEN: it_flg bitmaps (any bits)
      288, 289  BioRand: its marker and seed, the pack's id (biorand_glue.c BR_W: any value)
-     290       BioRand "Randomize Played as": its marker and the look (biorand_glue.c BR_APPEAR: any value)
+     290, 291  BioRand "Randomize Played as": its marker and Claire's look; its marker, Chris's and Steve's looks
+               (biorand_glue.c BR_APPEAR, BR_APPEAR2: any value)
      320..359  GRANT0: pending event items (word 0 of each entry an item word, its floor in bits 24..31)
-     291..319, 360..382  unused (any value: no code reads them)
+     292..319, 360..382  unused (any value: no code reads them)
      383       the files read (fileview.c: a bit per file, 24 files, so bits 16..23 too)
    Only the item words are items: the game indexes item tables with their bits 16..23. */
 static int own_copies(void);
@@ -6901,7 +6917,7 @@ void coop_frame(void)
     }
     g_coop.at_title = sys && (sys->tk_flg & 0x8);   /* the lobby hint (overlay) */
     if (!coop_on) {   /* "You appear as" also in single player (appear_on: game.c calls coop_control_remote) */
-        appear_on = sys && plp && (g_coop.chr || pc_biorand_appear() > 0 || self_mesh >= 0 || actor_shown(0) || actor_shown(ACTOR_DOUBLE) || cast_n);   /* (cast_n: the cutscene cast's hands and faces, actor_double_tick) */
+        appear_on = sys && plp && (g_coop.chr || pc_biorand_appear(0) > 0 || self_mesh >= 0 || actor_shown(0) || actor_shown(ACTOR_DOUBLE) || cast_n);   /* (cast_n: the cutscene cast's hands and faces, actor_double_tick) */
         if (appear_on) self_frame();
         tx_in_game = 0;
         publish_status();

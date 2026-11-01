@@ -101,6 +101,7 @@ int  actor_hand_free(int who, int node);   /* 1: the source's hand node (9, 13) 
 int  actor_head(int who, float* out);   /* world position of its head node (else its highest node); 0 when none is shown */
 int  actor_head_node(int who);          /* its head node (the rig's head role), -1: none found or none shown */
 void actor_doubles(int idx);            /* at the hand-off: the appearance for the cutscene doubles */
+int  actor_double_model(int idx, int pid, int* kept);   /* the model character pid's doubles show for that appearance, -1 the game's */
 void actor_double_tick(void);           /* every tick before the objects follow their links: the double's pose, hands, face */
 int  actor_double_acting(void);         /* a cutscene double of the character played is shown (a cutscene) */
 int  actor_double_kept(void);           /* the doubles stay the game's for the chosen model: the played character's own cutscene model */

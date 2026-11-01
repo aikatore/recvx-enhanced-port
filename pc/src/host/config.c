@@ -200,7 +200,7 @@ void config_load(void)
         else if (sscanf(line, " biorand_cli_digest = %71s", g_biorand_cli_digest) == 1) continue;   /* the installed BioRand CLI (biorand_dl.h) */
         else if (sscanf(line, " update_skip = %31s", g_update_skip) == 1) continue;   /* SKIP THIS VERSION (update.h) */
         else if (sscanf(line, " biorand_seed = %71s", g_biorand_seed) == 1) continue;   /* the BioRand generator's options (biorand_opts.h), checked when used */
-        else if (sscanf(line, " biorand_appear = %d", &g_biorand_appear) == 1) { g_biorand_appear = g_biorand_appear != 0; continue; }   /* "Randomize Played as" (biorand_opts.h) */
+        else if (sscanf(line, " biorand_appear = %d", &g_biorand_appear) == 1) { g_biorand_appear = g_biorand_appear == 2 ? 2 : g_biorand_appear != 0; continue; }   /* "Randomize Played as" (biorand_opts.h) */
         else if (sscanf(line, " dev_cutscene_overlay = %d", &g_devcine_show) == 1) { g_devcine_show = g_devcine_show != 0; continue; }   /* --dev cutscene log (devcine.h) */
         else if (!strncmp(line, "cast_custom_off =", 17)) continue;   /* (below, once the imports are listed) */
         else if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, val) == 2 && bind_ini_line(k, trim(val))) continue;
@@ -271,7 +271,7 @@ static int write_ini(FILE* f, void* ud)
     if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);
     if (g_update_skip[0]) fprintf(f, "update_skip = %s\n", g_update_skip);
     if (g_biorand_seed[0]) fprintf(f, "biorand_seed = %s\n", g_biorand_seed);
-    if (g_biorand_appear) fprintf(f, "biorand_appear = 1\n");   /* (like biorand_seed: only once set, in the --dev screen) */
+    if (g_biorand_appear) fprintf(f, "biorand_appear = %d\n", g_biorand_appear);   /* (like biorand_seed: only once set, in the --dev screen) */
     if (!g_devcine_show) fprintf(f, "dev_cutscene_overlay = 0\n");   /* (only once turned off, in the --dev F6 window) */
     cast_off_write(off_line, f);
     bind_ini_write(f);
