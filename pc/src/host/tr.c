@@ -1,5 +1,6 @@
 /* Our own texts in the language of the setting (lang.h tr(); docs/LANGUAGES.md "Our texts"): a table keyed by the
-   English text (tr_table.inc: French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese, Arabic; UTF-8;
+   English text (tr_table.inc: French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese, Arabic,
+   Korean, Italian; UTF-8;
    the Arabic is turned into display order once, at tr_init: lang_shape). A
    text without a row, or a language without a column (""), stays English. ImGui labels keep their "##id" (looked up without it).
    The table is not compiled: tr_table.inc's own text is in the executable outside the game's address window

@@ -60,6 +60,7 @@ int  lang_glyph(int l, const char** s);
 int  lang_cell(int l, int code);
 unsigned lang_char(int l, int code);
 void lang_missing(int l, const char* s, char* out, int n);
+int  lang_has_char(int l, const char* s);   /* the UTF-8 character at s has a code in language l's font (not a plain stand-in) */
 /* Arabic (glyphs.c, pure): the UTF-8 text s in display order, as the game draws it left to right: letters joined
    (their initial / medial / final / isolated presentation forms, lam-alef ligatures), each line reversed, runs of
    Latin letters, digits and printf placeholders kept left to right, brackets mirrored; a text without Arabic letters

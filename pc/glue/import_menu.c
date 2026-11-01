@@ -426,6 +426,14 @@ static void draw_row(int i)
     }
 }
 
+/* an info line at SMALL_SC, scaled down to end at the rule's right end (600) when longer */
+static void info_line(float y, const char* t, unsigned int col)
+{
+    float s = SMALL_SC, w = pc_ui_text_w(t, s);
+    if (w > 600 - (ROW_X - 4)) s *= (600 - (ROW_X - 4)) / w;
+    pc_ui_text(ROW_X - 4, y, t, s, col);
+}
+
 static void draw_page(void)
 {
     static const char* const heads[] = { "IMPORT FROM OTHER GAMES", NULL, NULL };
@@ -444,17 +452,17 @@ static void draw_page(void)
         if (import_sources[im.src].need) snprintf(t, sizeof(t), tr(import_sources[im.src].need), import_sources[im.src].serial);
         else snprintf(t, sizeof(t), tr("Needs a clean European disc image of %s: %s."), "Resident Evil Code: Veronica X", import_sources[im.src].serial);
         pc_ui_text(ROW_X - 4, INFO_Y, tr("DISC"), SMALL_SC, 0xFFFFE080);
-        pc_ui_text(ROW_X - 4, INFO_Y + 16, t, SMALL_SC, 0xFFFFFFFF);
+        info_line(INFO_Y + 16, t, 0xFFFFFFFF);
         pc_ui_text(ROW_X - 4, INFO_Y + 36, tr("IMPORTED"), SMALL_SC, 0xFFFFE080);
         int old = 0;
         if (langs() > 0) snprintf(t, sizeof(t), tr("Installed: %s."), lang_list(c, sizeof(c), &old));
         else snprintf(t, sizeof(t), "%s", tr("Nothing imported yet."));
         if (old) snprintf(t + strlen(t), sizeof(t) - strlen(t), " %s", tr("An older import: import again."));
-        pc_ui_text(ROW_X - 4, INFO_Y + 52, t, SMALL_SC, old ? 0xFFFFC060 : 0xFFFFFFFF);
+        info_line(INFO_Y + 52, t, old ? 0xFFFFC060 : 0xFFFFFFFF);
     } else if (im.page == P_OPTS) {
         snprintf(t, sizeof(t), tr("Needs a clean US disc image of %s: %s."), title_of(im.src), import_sources[im.src].serial);
         pc_ui_text(ROW_X - 4, INFO_Y, tr("DISC"), SMALL_SC, 0xFFFFE080);
-        pc_ui_text(ROW_X - 4, INFO_Y + 16, t, SMALL_SC, 0xFFFFFFFF);
+        info_line(INFO_Y + 16, t, 0xFFFFFFFF);
         pc_ui_text(ROW_X - 4, INFO_Y + 36, tr("IMPORTED"), SMALL_SC, 0xFFFFE080);
         if (im.have) {
             char c[96];

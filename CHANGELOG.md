@@ -10,6 +10,7 @@
   meant to help with the randomizers, where blue herbs can be scarce early on and many items have to wait in a box.
 - **Arabic**: import it from the Arabic fan-translated disc; our menus are translated too, and the enhanced
   settings are laid out right to left.
+- **Korean and Italian**: import them from their fan-translated discs; our menus are translated too.
 - **Updates in the game**: when a new version is out, the title screen offers to download and install it,
   and to restart into it. "Check For Updates" can also just show it, or be off.
 

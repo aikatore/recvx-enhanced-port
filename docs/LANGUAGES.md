@@ -5,11 +5,14 @@ Nothing from any disc is in the repository: the importer reads the player's own 
 (**SLES-50306**: French, German, Spanish), of the US release with the Russian fan translation by Brosko
 (**SLUS-20184**, patched: Russian), of the Japanese release (**SLPM-65022**: Japanese), of the European release with
 the Turkish fan translation by Patriots Çeviri (**SLES-50306**, patched: Turkish in place of Spanish), of the US
-release with the Brazilian Portuguese fan translation by gledson999 (**SLUS-20184**, patched) or of the European release
+release with the Brazilian Portuguese fan translation by gledson999 (**SLUS-20184**, patched), of the European release
 with the Arabic fan translation by Abdulaziz Al-Amri (SKZEZO EDITING; **SLES-50306**, patched: Arabic in place of
-Spanish) and writes what it needs to `<import_dir>/<source>/<code>/` (default `mods/import/sles50306/fr`, `de`, `es`,
-`mods/import/slus20184ru/ru`, `mods/import/slpm65022/ja`, `mods/import/sles50306tr/tr`, `mods/import/slus20184pt/pt-BR`,
-`mods/import/sles50306ar/ar`), as the Outbreak import does ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)). The import is
+Spanish), of the Japanese release with a Korean fan translation (**SLPM-65022**, patched; its author is not named on
+the disc) or of the European release with the Italian fan translation by KimeraVX (**SLES-50306**, patched: Italian in
+place of French) and writes what it needs to `<import_dir>/<source>/<code>/` (default `mods/import/sles50306/fr`, `de`,
+`es`, `mods/import/slus20184ru/ru`, `mods/import/slpm65022/ja`, `mods/import/sles50306tr/tr`,
+`mods/import/slus20184pt/pt-BR`, `mods/import/sles50306ar/ar`, `mods/import/slpm65022ko/ko`,
+`mods/import/sles50306it/it`), as the Outbreak import does ([IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md)). The import is
 in the title menu's EXTRA > IMPORT > LANGUAGES, or F9; the Language and Subtitles settings show once a language
 is imported.
 
@@ -17,11 +20,11 @@ is imported.
 
 | Step | State |
 |---|---|
-| 1. Research (this document) | done (European, Russian fan translation, Japanese, Turkish, Brazilian Portuguese and Arabic fan translations) |
-| 2. Importer: IMPORT > LANGUAGES, F9, `pc/src/import/lang.c` | done: French, German, Spanish in about 7 s, 18-47 MB each; Russian 2 s, 22 MB; Japanese 3 s, 7.5 MB; Turkish 2 s, 18 MB; Brazilian Portuguese 1 s, 15 MB; Arabic 2 s, 22 MB |
-| 3. Runtime: the language's files, room messages, font (widths, cells, space), file pages (Japanese: pictures), the title and OPTION pictures, the executable's texts, Language setting | done |
-| 4. Cutscene subtitles, Subtitles setting: a language of its own, in its own font | done (French, German, Spanish, Russian, Japanese, Turkish, Brazilian Portuguese, Arabic; English has none on any disc) |
-| 5. Our own texts: `tr()`, the table (French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese, Arabic), the game fonts' letters (glyphs.c, ctest `lang`), the overlay's fonts; Arabic: joined forms and right-to-left order (`lang_shape`) | done (about 1370 texts) |
+| 1. Research (this document) | done (European, Russian fan translation, Japanese, Turkish, Brazilian Portuguese, Arabic, Korean and Italian fan translations) |
+| 2. Importer: IMPORT > LANGUAGES, F9, `pc/src/import/lang.c` | done: French, German, Spanish in about 7 s, 18-47 MB each; Russian 2 s, 22 MB; Japanese 3 s, 7.5 MB; Turkish 2 s, 18 MB; Brazilian Portuguese 1 s, 15 MB; Arabic 2 s, 22 MB; Korean 3 s, 38 MB; Italian 2 s, 48 MB |
+| 3. Runtime: the language's files, room messages, font (widths, cells, space), file pages (Japanese, Korean: pictures), the title and OPTION pictures, the executable's texts, Language setting | done |
+| 4. Cutscene subtitles, Subtitles setting: a language of its own, in its own font | done (French, German, Spanish, Russian, Japanese, Turkish, Brazilian Portuguese, Arabic, Korean, Italian; English has none on any disc) |
+| 5. Our own texts: `tr()`, the table (French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese, Arabic, Korean, Italian), the game fonts' letters (glyphs.c, ctest `lang`), the overlay's fonts; Arabic: joined forms and right-to-left order (`lang_shape`) | done (about 1400 texts) |
 | 6. Verification | done: runs per language (below), layout check identical, Linux and Windows builds, ctest |
 
 Resume notes: research scripts (Python, capstone in a venv), the translation pipeline and the runs are in the job
@@ -29,10 +32,14 @@ folders `/home/dev/.claude/jobs/c1d3e63f/lang/` (European), `lang2/` (Russian, J
 discs' files unpacked with `bsdtar`, `jpfont/` the Japanese glyph map's sources) and `lang3/` (Turkish, Brazilian
 Portuguese: `x/tr`, `x/pt` with the clean `x/eu`, `x/us`; `tr/` the translation pipeline: brief, chunks, `check.py`,
 `fit.py`, `merge.py`) and `lang_ar/` (Arabic: `x/ar` the patched disc's files, `armap.py` the font's cells, `dump.py`
-its text decoded, `tr/` the Arabic pipeline with `check_ar.py`, the runs' scripts, `shots/`), outside the repository. Headless import: `RECVX_MODS=<out>
-RECVX_IMPORT=sles50306|slus20184ru|slpm65022|sles50306tr|slus20184pt|sles50306ar RECVX_IMPORT_ISO=<image> build/pc/recvx
-"<US image>" --save-dir <tmp>` (exit status 0: every language imported). Then `language = de` (or `fr`, `es`, `ja`,
-`ru`, `tr`, `pt-BR`, `ar`) and `subtitles = 0` (Off) / `2 + LANG_*` in recvx.ini.
+its text decoded, `tr/` the Arabic pipeline with `check_ar.py`, the runs' scripts, `shots/`) and `lang_ko_it/` (Korean,
+Italian: `x/ko`, `x/it`, `x/eu` the discs' files; `kocells.py`, `koread.txt`, `kofix.txt`, `kodec.py`, `gen_ko.py` the
+Korean font's cells read and checked in the text, `kotext.txt` the Korean text decoded; `tr/` the pipeline with the
+briefs; `imp.sh`, `refuse.sh`, `title.sh`, `menus.sh`, `ingame.sh`, `extra.sh`, `impl.sh`, `sw/`, `pickup/`, `icons/`,
+`shots/`), outside the repository. Headless import: `RECVX_MODS=<out>
+RECVX_IMPORT=sles50306|slus20184ru|slpm65022|sles50306tr|slus20184pt|sles50306ar|slpm65022ko|sles50306it RECVX_IMPORT_ISO=<image>
+build/pc/recvx "<US image>" --save-dir <tmp>` (exit status 0: every language imported). Then `language = de` (or `fr`,
+`es`, `ja`, `ru`, `tr`, `pt-BR`, `ar`, `ko`, `it`) and `subtitles = 0` (Off) / `2 + LANG_*` in recvx.ini.
 
 ## The European disc (SLES-50306)
 
@@ -333,22 +340,101 @@ clean European disc ("This is the European disc without the Arabic translation."
 the European disc with the Arabic fan translation by Abdulaziz Al-Amri (SLES-50306)."); the European entry ("This disc
 has the Arabic translation: import it with its own entry.") and the Turkish entry refuse the Arabic disc.
 
+## The Korean fan translation (SLPM-65022)
+
+The Japanese disc with a Korean fan patch. Its author is named nowhere on the disc: not in the pictures (the title, the
+warning, OPTION, the file pages were all looked at), the text (every system and room message decoded), the executable
+or the volume descriptor (the Japanese disc's, Capcom); the entry calls it "Korean fan translation". `SYSTEM.CNF`,
+`DISCID.BIN` and the file list are the Japanese disc's (`BOOT2 = cdrom0:\SLPM_650.22;1`, `VER = 1.01`, NTSC), every
+file the same size as on the clean disc (1.88 GB). What the patch changes, against the clean Japanese disc:
+
+| File | Changed | What |
+|---|---|---|
+| `SLPM_650.22` | 5.7 KB, same size | `SaveLoadMessage` only (rewritten in place in Korean); DEMO PLAY and the game over's "Retry? Yes No" stay the Japanese executable's English |
+| `SYSMES.ALD` | rewritten, same layout | 183 item names, 300 system messages (the Japanese layout; message 0 and a few unused ones read "[원문 판독 필요]", and the last item name stayed Japanese) |
+| `SYSTEM.AFS` | 1 | the font (below); "YOU DIED" stays the Japanese disc's English picture |
+| `ADV.AFS` | 0, 2, 4 | the warning in Korean, the title "BIOHAZARD -CODE:Veronica-" without 完全版 (its plates are English as on the Japanese disc), OPTION (Korean key names and help; the menu words English as on the Japanese disc) |
+| `ITEM1.AFS` / `ITEM2.AFS` | 145, 160..276 | the inventory's words; **the file pages: Korean pictures** (the same 117 entries the Japanese release shows as pictures) |
+| `RDX_LNK.AFS` | rooms | the messages (the Japanese counts) and 565 subtitles shown at once (`0xFE00`) |
+| `MRY.AFS` | none | the map's words stay the Japanese disc's (its area names are English) |
+
+**The font**: the Japanese font's 4 textures, **755 cells redrawn**: 736 Hangul syllables (the ones the text uses: the
+ordinary words of the game, not the whole set; for example no 옵, 협, 칭, 릭, 퇴, 폴, 페), the signs `! " ( ) , . : [ ]`
+・ Σ α ○ 「 」 ♡ and ー (used as a hyphen: "AKー47") moved to other cells, and cell 500 blank: the text writes
+it as a wide space for indentation. The biohazard, crown, heart, spade and Umbrella signs and the S. T. A. R. cells are
+gone (the text writes S.T.A.R.S. with letters and dots); kana, the Latin letters and the digits are the
+Japanese ones, and 334 of the kanji (the Korean text uses none of them but one item name). Text: the Japanese engine's codes, a space
+`0xFF01` 28 wide between words as in the Japanese text. The cells were read from enlarged sheets and every cell the
+text uses checked in context (decoded system and room messages: 25 misread cells corrected, such as 왼/원, 허/혀,
+찮/참, 떻/똥, 든/돈); the table is `glyphs.c ko_cells` (the Japanese cells with the Korean ones in place).
+
+**The executable's save / load messages**: the patch wrote its first message from 2 bytes before its place, over the
+high half of the last message's offset: on the disc the first message ("메모리 카드(PS2)를 확인 중입니다") loses its 메
+and the last one is lost. The importer puts the first message's glyph back and takes the last message from the low
+half of its offset (`exe_saveload`, which now writes the 45 messages one after another).
+
+**Telling it from the clean Japanese disc** (both have its ID): the system messages have no hiragana (cells 54..99;
+the Japanese text is full of them). The Korean entry refuses the clean Japanese disc ("This is the Japanese disc without
+the Korean translation.") and other discs ("Use the Japanese disc with the Korean fan translation (SLPM-65022)."); the
+Japanese entry refuses the Korean disc ("This disc has the Korean translation: import it with its own entry.").
+
+**Its words**: the formal register of Korean games: "~하시겠습니까?", "~습니다", "~하십시오", 예 / 아니요, 저장 / 불러오기,
+메모리 카드, 슬롯, 아이템, 파일, 지도, 「…」 획득?, 「…」을 손에 넣었다.
+
+## The Italian fan translation (SLES-50306, by KimeraVX)
+
+The European disc with KimeraVX's Italian patch: its credit is a picture of its own, `FRA/ADV2.AFS/1` ("Patch By:
+KimeraVX", a note not to share the patched image, thanks to the testers Dom3x, Paolo D. Roger, Popplo). `SYSTEM.CNF` and
+the folders are the European disc's (`BOOT2 = cdrom0:\SLES_503.06;1`, `VER = 1.01`, PAL), 3.99 GB. **Italian replaces
+French**: the `FRA` folder (digit 2) holds the Italian files, the executable's French tables (index 1) serve it, and the
+language screen's French flag is an Italian one. The official European release has no Italian (its executable has an
+Italian slot, index 2, never filled: see the European disc); the patch does not use it. English, German and Spanish are
+untouched. What the patch changes, against the clean European disc:
+
+| File | Changed | What |
+|---|---|---|
+| `SLES_503.06` | 19 KB, same size | `SaveLoadMessage_FRA` (Italian, in place), `pdm_palmes_FRA` ("PREMI START"), `cnt_mes_FRA` ("Riprovare? Sì No"); about 30 positions of the memory card screens (`mcDisplayFileSelectWindow`, `mcDispFileName`, ...: 128 -> 100) and two of `SpriteOnOff` |
+| `FRA/SYSMES2.ALD` | rewritten | 183 item names, 494 system messages, the French layout (its file tables, not patched) |
+| `FRA/SYSTEM2.AFS` | 1 | the flags (Italian in French's place) and "SEI MORTO"; the font is the European one, unchanged (à è é ì ò ù and È are in it) |
+| `ENG/SYSTEM1.AFS`, `GER/SYSTEM5.AFS`, `SPA/SYSTEM4.AFS` | 1 | the language screen's flags |
+| `FRA/ADV2.AFS` | 0..4 | the warning, the credit picture, the title (Italian plates: PREMI START, CARICA PARTITA, NUOVA PARTITA, OPZIONI, MODALITÀ BATTAGLIA, in the French layout of the picture), OPTION |
+| `FRA/MRY2.AFS` | 39 entries | the map's words and area names in Italian |
+| `FRA/ITEM12.AFS` / `ITEM22.AFS` | 145..159 | the inventory's words, the file covers |
+| `FRA/RDX_LNK2.AFS` | rooms | the messages (202 rooms with messages) and 471 subtitles shown at once (`0xFE00`) |
+
+**Telling it from the clean European disc**: the French folder's system messages write ì and ò (codes 125, 129) 77
+times; the clean French never does (it writes ç and ê, 138 and 123, which Italian never does). The Italian entry refuses
+the clean European disc ("This is the European disc without the Italian translation.") and other discs; the European
+entry refuses the Italian disc ("This disc has the Italian translation: import it with its own entry.": its French
+would be Italian). The Turkish and Arabic discs' French is the clean one: the Italian entry refuses them as discs
+without the Italian translation, and they refuse the Italian disc likewise.
+
+**Its words**: the informal "tu" ("Premi il tasto Start", "Inserisci una Memory Card", "Hai preso"), questions as an
+infinitive ("Prendere ...?", "Sovrascrivere il salvataggio precedente?"), Sì / No, oggetto, documenti (files), mappa,
+Memory Card, salvataggio / caricamento, MODALITÀ BATTAGLIA.
+
 ## How the port uses it
 
 **Import** (`pc/src/import/lang.c`; `import_sources[]` entries `sles50306`, `slus20184ru`, `slpm65022`,
-`sles50306tr`, `slus20184pt`, `sles50306ar`, category `IMPORT_CAT_LANGUAGES`): the sources table `lang_discs[]` names per disc its
-kind, its executable (checked in `SYSTEM.CNF`: another image is refused with "Use a European Resident Evil Code:
-Veronica X disc (SLES-50306).", "Use the US disc with the Russian fan translation by Brosko (SLUS-20184).", "Use a
-Japanese Biohazard Code: Veronica Kanzenban disc (SLPM-65022).", "Use the European disc with the Turkish fan
-translation by Patriots Çeviri (SLES-50306).", "Use the US disc with the Brazilian Portuguese fan translation by
-gledson999 (SLUS-20184)."), for a fan translation the clean base disc's refusal (`fan_patched`: by the patched font or
-text, above) and per language its folder, the digit of its file names and its index in the executable's tables. The
-Turkish entry is the European kind with one language, Turkish in the Spanish folder and tables, and so is the Arabic
-one (its glyph codes moved up by `LANG_AR_BASE`, as the Japanese ones, in the system messages, the rooms and the
-executable's texts; `SAVELOAD.MES` and `exemes` from the patch's segment: `ar_texts`); the Brazilian
-Portuguese one is laid out as the Russian (its `exemes`, `term` and `SAVELOAD.MES` from the executable, its widths
-from `FontSz`: 108). The European discs' archives are compared with their own English, the others' with the US
-disc's (`g_lang_us_iso`). Per language, into `<code>/`:
+`sles50306tr`, `slus20184pt`, `sles50306ar`, `slpm65022ko`, `sles50306it`, category `IMPORT_CAT_LANGUAGES`): the
+sources table `lang_discs[]` names per disc its kind, its executable (checked in `SYSTEM.CNF`: another image is refused
+with "Use a European Resident Evil Code: Veronica X disc (SLES-50306).", "Use the US disc with the Russian fan
+translation by Brosko (SLUS-20184).", "Use a Japanese Biohazard Code: Veronica Kanzenban disc (SLPM-65022).", "Use the
+European disc with the Turkish fan translation by Patriots Çeviri (SLES-50306).", "Use the US disc with the Brazilian
+Portuguese fan translation by gledson999 (SLUS-20184).", "Use the Japanese disc with the Korean fan translation
+(SLPM-65022).", "Use the European disc with the Italian fan translation by KimeraVX (SLES-50306)."), for a fan
+translation the clean base disc's refusal (`fan_patched`: by the patched font or text, above) and per language its
+folder, the digit of its file names and its index in the executable's tables. The entries of the clean discs refuse a
+fan translation's disc of their base ("This disc has the ... translation: import it with its own entry."; the European
+entry: Turkish, Arabic, Italian; the Japanese: Korean). The Turkish entry is the European kind with one language,
+Turkish in the Spanish folder and tables, and so are the Arabic one (its glyph codes moved up by `LANG_AR_BASE`, as the
+Japanese ones, in the system messages, the rooms and the executable's texts; `SAVELOAD.MES` and `exemes` from the
+patch's segment: `eu_texts`) and the Italian one (in the French folder and tables; its `exemes`, the PAL start line and
+the game over question, from the French ones the patch rewrote: `eu_texts`); the Brazilian Portuguese one is laid out
+as the Russian (its `exemes`, `term` and `SAVELOAD.MES` from the executable, its widths from `FontSz`: 108); the Korean
+one is the Japanese kind (its file pictures, its look-alikes measured in its own font, its `SAVELOAD.MES`). The European
+discs' archives are compared with their own English, the others' with the US disc's (`g_lang_us_iso`). Every entry's
+description names its base disc's game code. Per language, into `<code>/`:
 
 | File | From | How |
 |---|---|---|
@@ -356,19 +442,21 @@ disc's (`g_lang_us_iso`). Per language, into `<code>/`:
 | `SYSTEM.AFS/1` (`/2`) | `SYSTEM<d>.AFS` entry 1; entries from 1 | the effect textures with the language's font and its game over picture; Russian: the computer's font |
 | `ADV.AFS/n`, `MRY.AFS/n`, `ITEM1.AFS/n`, `ITEM2.AFS/n` | the language's archives | the entries that differ from English; the Japanese title is its picture in the US file (the US plates: the title's layout reads them) |
 | `ROOMS.MES` | `RDX_LNK<d>.AFS` | every room's message table, by room index (`"RMES"`, version, count, offset/size pairs) |
-| `SAVELOAD.MES` | the executable | `SaveLoadMessage` (Russian, Japanese) |
-| `lang.txt` | the executable | written last (a folder without it is not offered), first line `# recvx language 2`: the font's widths (European 162, Russian 192, Japanese: the look-alikes' widths and `offsets`), the file tables, the number of subtitles; Japanese `fpics` (the file pictures' first entry), `pageend` (`PlayPageCheck`'s); Russian `exemes` (demo, PAL start, pause, retry lines as u16 hex), `term` (the computer's lines) |
+| `SAVELOAD.MES` | the executable | `SaveLoadMessage` (Russian, Brazilian Portuguese, Japanese, Korean, Arabic), its 45 messages one after another |
+| `lang.txt` | the executable | written last (a folder without it is not offered), first line `# recvx language 2`: the font's widths (European 162, Russian 192, Japanese and Korean: the look-alikes' widths and `offsets`), the file tables, the number of subtitles; Japanese and Korean `fpics` (the file pictures' first entry), `pageend` (`PlayPageCheck`'s); Russian `exemes` (demo, PAL start, pause, retry lines as u16 hex), `term` (the computer's lines) |
 
 The Japanese text's glyph codes are moved up by `LANG_JA_BASE` (108): codes below it are the US font's, which the US
 engine writes itself (digits and times, the item counts, `cnt_mes`, our texts' Latin letters), and are drawn with the
 Japanese font's look-alike (glyphs.c `lang_cell`: the letter, else its full-width form, the signs by hand), at the
 width of its ink (measured at the import: `widths`, `offsets`), shifted left by its cell's margin (`bhDispFont`); the
-Japanese text's own cells keep their 28. The European English is not installed: its text is the US text, and it has
-no subtitles.
+Japanese text's own cells keep their 28. The Korean text's codes are moved up the same way and drawn the same way, with
+the Korean font's look-alikes (its signs moved: `ko_signs`); a US code without one there (`/ + = ~ < > _` ...: the
+patch dropped the Japanese ／ and signs) is drawn from the **US font** at the US width, as the Arabic text's Latin letters
+are. The European English is not installed: its text is the US text, and it has no subtitles.
 
 **Run time** (`pc/glue/lang_glue.c`, `lang.h`):
 
-- `lang_scan` (start, after an import or a delete) lists the installed languages; ini `language = fr|de|es|ja|ru|tr|pt-BR|ar`
+- `lang_scan` (start, after an import or a delete) lists the installed languages; ini `language = fr|de|es|ja|ru|tr|pt-BR|ar|ko|it`
   (English when that language is not installed), ini `subtitles` (below).
 - **Pictures** (the language's `SYSTEM.AFS/1`, `/2`, `ADV.AFS/n`, `MRY.AFS/n`, `ITEM1.AFS/n`, `ITEM2.AFS/n`): only the
   textures with the language's writing are the language's. `adx.c ADXF_OpenAfs` asks `pc_lang_disc_parts` for a
@@ -385,8 +473,8 @@ no subtitles.
     keys scrambled; now the disc's, and the HD pack's), the English map pictures (`MRY.AFS`, all but 1..4), the
     title's, OPTION's and the battle game's pictures without writing (`ADV.AFS/1`, `/2`, `/4`, `/5`, `/32`), two
     effect textures (`SYSTEM.AFS/1`).
-  - French, German, Spanish, Arabic: 12 effect textures of `SYSTEM.AFS/1` (the European disc re-encoded them).
-  - Japanese: 11 textures of `SYSTEM.AFS/1` (the same pictures; the kanji pages among them).
+  - French, German, Spanish, Arabic, Italian: 12 effect textures of `SYSTEM.AFS/1` (the European disc re-encoded them).
+  - Japanese: 11 textures of `SYSTEM.AFS/1` (the same pictures; the kanji pages among them); Korean: 8.
   - Russian, Brazilian Portuguese: nothing (their other pictures all carry writing; the Russian typewriter's
     selection boxes, `ITEM1.AFS/144` texture 2, have 16 colours of their second palette changed).
   The rest is the language's: the fonts, the inventory's words, frame and status screen (`ITEM?.AFS/145` 0..2), the
@@ -397,7 +485,7 @@ no subtitles.
 - **Translated Pictures** (GAMEPLAY > GENERAL, under Subtitles, shown with an imported language; ini
   `translated_pictures`, default 0 since 2026-11-01): Off reads the archives' pictures from the disc (`pc_lang_file_dir(name)` gives
   no folder for `ADV.AFS/`, `MRY.AFS/`, `ITEM1.AFS/`, `ITEM2.AFS/`) and in `SYSTEM.AFS/1` and `/2` every texture
-  but the fonts (`/1` texture 0, Japanese 0..3; `/2` texture 1, the computer's font) and those the bank rule keeps:
+  but the fonts (`/1` texture 0, Japanese and Korean 0..3; `/2` texture 1, the computer's font) and those the bank rule keeps:
   the pictures are English (the text stays the language's), so an HD pack replaces them; only the font stays the
   language's. It applies to the files loaded next (the next screen).
 - Files: `audio/adx.c mod_open_path` looks for a file the game opens (by name, or `ARCHIVE.AFS/n`) in BioRand's
@@ -417,9 +505,10 @@ no subtitles.
   language's** message. Rooms of the mods folder keep their text; BioRand's are translated. `lang_frame` rebuilds
   the table when Subtitles changes in a room (also from or to the US table).
 - **Subtitles in another language**: a subtitle of another language than the loaded font's gets its codes moved to
-  `LANG_OTHER(language, code)` (0x8000 + language << 11 + code, below 0xC800 for the nine languages, clear of the control codes from 0xFE00; its space
+  `LANG_OTHER(language, code)` (0x8000 + language << 11 + code, below 0xD800 for the eleven languages, clear of the
+  control codes from 0xFE00 up to fifteen: a static assert in glyphs.c; the Korean codes reach 1403, below 0x7FF; its space
   `0xFF01` becomes code `LANG_OTHER_SPACE`, 0x7FF). `bhDispFont` / `bhDispFontEx` ask `pc_font_glyph` for the cell to draw: such a code is
-  drawn from that language's own font, the first 1 (4: Japanese) textures of its `SYSTEM.AFS/1`, read as
+  drawn from that language's own font, the first 1 (4: Japanese, Korean) textures of its `SYSTEM.AFS/1`, read as
   `bhSetFontTexture` finds them, with its widths (`pc_font_width`). Two such fonts are kept (`other_font`: the
   subtitles' and our texts' languages, each in its own `ps2_dma_alloc` slot). Their colours are the ones the game
   shows (`font_colours`): the game draws its font with the palette bank (`palbuf`) its PLI chunk names, which a
@@ -437,8 +526,15 @@ no subtitles.
   to the US font's letters (ink from 0) without overlapping, and the patch's messages begin at the box's edge. The game
   over question is drawn where the European executable draws the Spanish one (`pc_lang_mes_x`: x 184, the US 264; the
   patch's text is laid out for it). The title is the European layout (`lang_eu_picture`).
-- Japanese files: `fileview.c PageScroll` draws the page's picture (`pc_lang_file_page`: read from the disc, the
-  first line where the text's first line is) instead of its text; `PlayPageCheck` gives the language's hidden pages.
+- Japanese and Korean files: `fileview.c PageScroll` draws the page's picture (`pc_lang_file_page`: the language's
+  folder's `ITEM1.AFS/n` / `ITEM2.AFS/n` (the Korean pages, whatever Translated Pictures says: they are the files'
+  text), else the disc's (the Japanese pages are on the US disc); the first line where the text's first line is)
+  instead of its text; `PlayPageCheck` gives the language's hidden pages.
+- Korean: a US code without a look-alike cell (`lang_cell` -1) is drawn from the US font (`pc_font_glyph`, as Arabic's
+  Latin letters) at its US width (`width_of`); the game's own Korean text never writes one.
+- Italian: the title is the European layout (`lang_eu_picture`; the French picture's two-row PRESS START is not used:
+  the Italian plate is one row), the game over question at the US place (the European executable draws only the
+  Spanish one elsewhere).
 - **Textures of our own** (the US plates, the subtitle font, a file page) are TIM2s in memory as one-texture lists
   (`NJS_TEXMEMLIST` pointing at the TIM2, drawn by `Ps2TexLoad`, outside the texture heap: `njLoadTexture` would
   find the loaded language's texture, every copy has the same global index). Their memory is mapped above the
@@ -456,7 +552,8 @@ no subtitles.
   the next screen: leaving OPTION reloads the title in the new language, a game start reads the system messages and
   the font, a room its messages. **Subtitles**: Off and every installed language with subtitles, whatever the game's
   language (default Off; locked "No language with subtitles is installed."); it applies at once, also in a room.
-  Ini `subtitles`: 0 Off, 2 + the language's index (`lang.h LANG_*`: fr 3, de 4, es 5, ja 6, ru 7, tr 8, pt-BR 9, ar 10); 1, an older
+  Ini `subtitles`: 0 Off, 2 + the language's index (`lang.h LANG_*`: fr 3, de 4, es 5, ja 6, ru 7, tr 8, pt-BR 9, ar 10,
+  ko 11, it 12); 1, an older
   ini's On, means the game language's.
 
 **Our texts** (`pc/src/host/tr.c`, `tr_table.inc`): `tr(en)` looks the English text up (sorted table, binary search;
@@ -494,7 +591,10 @@ lines of at most 1024 characters): enough for menu texts. Consequences, checked 
   right where they stand. Other screens (title menus, co-op lobby, BIORAND, IMPORT, the dialogs, F1) stay
   left-aligned, as the patch's own messages are; values sit between their arrows as in English.
 - The language's name in the settings is `العربية` in display order (`lang.c lang_names`); an Arabic word in another
-  language's text is drawn with the Arabic font (`pc_glyph_next`: the Subtitles row in any language).
+  language's text is drawn with the Arabic font (`pc_glyph_next`: the Subtitles row in any language). The same holds
+  for the other scripts (`script_at`): a Hangul, Cyrillic, kana or kanji letter the text's font lacks is drawn with the
+  Korean, Russian or Japanese font when that language is installed (한국어, Русский, 日本語 in the Language and Subtitles
+  rows and in IMPORT's "Installed:" line of another language).
 
 **Letters** (`pc/src/host/glyphs.c`, pure): our UTF-8 texts go to the game font through `pc_glyph_next` /
 `lang_glyph` for the font of the text's language (`lang_font`): the loaded one, or, while the game's font is
@@ -504,16 +604,21 @@ European accents at 95..149 (with the US font the letter without its accent: Fra
 letters in the six redrawn cells (the European letters those cells lost show plain), the Brazilian Portuguese
 accents at 96..107 (Ç: code 108 and then the 24-wide blank 94, two codes for one letter as the patch writes it;
 capitals with accents plain, `[ ] ~` as `( ) -`), the Russian letters (table above), the Japanese kana and kanji at `LANG_JA_BASE` + cell (、 and , show as a space, 。 as ．),
+the Korean font's Hangul syllables at `LANG_JA_BASE` + cell (`ko_cells`; ASCII at its US code: the look-alike, else the US
+font's letter), the Italian accents as the French ones,
 the Arabic presentation forms at `LANG_AR_BASE` + cell (base letters as their isolated form, ، as a Latin comma, a
 stand-alone آ as ا: the font has no isolated one), ASCII at its US code everywhere. The Japanese font has only the game's kanji:
 our Japanese texts were reworded where a kanji was missing (kana, other kanji, katakana loanwords: 選ぶ -> えらぶ,
-字幕 -> サブタイトル, 難易度 -> 難しさ). **ctest `lang`** (`pc/tests/test_lang.c`) checks every translation against
+字幕 -> サブタイトル, 難易度 -> 難しさ). The Korean font has only the 736 syllables of the patch's text: our Korean texts were
+written with them (the translators' `check.py` lists a row's missing syllables; reworded: 협력 플레이 -> 2인 플레이,
+캐릭터 -> 인물, 3인칭 -> 후방 시점, 폴더 -> 디렉터리, 스페인어 -> 에스파냐어, 옵션 -> 설정). **ctest `lang`** (`pc/tests/test_lang.c`) checks every translation against
 its language's font and lists the texts and letters a font lacks. `pc_glyphs_utf8` turns the game's text back into
 UTF-8 for the overlay with the loaded font's letters. The overlay (ImGui's default font) has ASCII and Latin-1 (also
-Brazilian Portuguese); for Japanese, Russian, Turkish (ğ ı İ ş: Latin Extended-A) and Arabic (the presentation forms
-our display-order texts use) it merges a font of the system once such a language is chosen (Windows: Meiryo, MS Gothic,
-Yu Gothic / Segoe UI, Arial; Arabic: Tahoma, Arial, Segoe UI; Linux: Noto Sans CJK / DejaVu Sans, Noto Sans Arabic),
-else those letters stay missing. Test aid: `RECVX_TEST_OVERLAY_FONT=<file>` is tried first.
+Brazilian Portuguese, Italian); for Japanese, Korean, Russian, Turkish (ğ ı İ ş: Latin Extended-A) and Arabic (the
+presentation forms our display-order texts use) it merges a font of the system once such a language is chosen
+(Windows: Meiryo, MS Gothic, Yu Gothic / Korean: Malgun Gothic, Gulim / Segoe UI, Arial; Arabic: Tahoma, Arial, Segoe
+UI; Linux: Noto Sans CJK / Korean also NanumGothic, Baekmuk Gulim / DejaVu Sans, Noto Sans Arabic), else those letters
+stay missing. Test aid: `RECVX_TEST_OVERLAY_FONT=<file>` is tried first.
 
 **Address window** (docs/ARCHITECTURE.md "Data model and memory"): the imported data (`ROOMS.MES`, the merged
 tables, the executable's texts, the Japanese glyph index) and the importer's tables are on the heap; the textures

@@ -486,18 +486,24 @@ int pc_font_glyph(int code, void** texlist, float* dx)
     return lang_cell(l, code);
 }
 
-/* an Arabic letter at s (U+0600..U+06FF, the presentation forms U+FB50..U+FEFF) */
-static int arabic_at(const char* s)
+/* the language whose font has the script of the UTF-8 letter at s: Arabic (U+0600..U+06FF, the presentation forms
+   U+FB50..U+FEFF), Hangul syllables (U+AC00..U+D7A3), Cyrillic (U+0400..U+047F), kana and kanji (U+3040..U+30FF,
+   U+4E00..U+9FFF); -1 another */
+static int script_at(const char* s)
 {
     unsigned char a = (unsigned char)s[0], b = (unsigned char)s[1];
-    return (a >= 0xD8 && a <= 0xDB) || (a == 0xEF && b >= 0xAD && b <= 0xBB);
+    if ((a >= 0xD8 && a <= 0xDB) || (a == 0xEF && b >= 0xAD && b <= 0xBB)) return LANG_AR;
+    if ((a == 0xEA && b >= 0xB0) || a == 0xEB || a == 0xEC || (a == 0xED && b < 0x9F)) return LANG_KO;
+    if (a == 0xD0 || a == 0xD1) return LANG_RU;
+    if ((a == 0xE3 && b >= 0x81 && b <= 0x83) || (a >= 0xE4 && a <= 0xE9)) return LANG_JA;
+    return -1;
 }
 
 int pc_glyph_next(const char** s)
 {
-    int l = text_font(), c;
-    if (l != LANG_AR && **s && arabic_at(*s) && lang_installed(LANG_AR) && (font_lang == LANG_AR || other_font(LANG_AR)))
-        l = LANG_AR;   /* (an Arabic word in another language's text: العربية in the Subtitles setting) */
+    int l = text_font(), c, w = **s ? script_at(*s) : -1;
+    if (w >= 0 && w != l && !lang_has_char(l, *s) && lang_installed(w) && (font_lang == w || other_font(w)))
+        l = w;   /* (a word in another language's letters, in its font: العربية, 한국어, Русский, 日本語 as setting values) */
     c = lang_glyph(l, s);
     if (l == LANG_AR && font_lang != LANG_AR && c < LANG_AR_BASE) return c;   /* (Latin letters, digits: the loaded font's) */
     return l != font_lang && c > 0 ? LANG_OTHER(l, c) : c;

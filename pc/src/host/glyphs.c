@@ -296,6 +296,13 @@ int lang_glyph(int l, const char** s)
     return code_of(l, '?', &plain) >= 0 ? code_of(l, '?', &plain) : 0;
 }
 
+int lang_has_char(int l, const char* s)
+{
+    unsigned plain;
+    if (!*s) return 1;
+    return code_of(l, utf8_next(&s), &plain) >= 0;
+}
+
 void lang_missing(int l, const char* s, char* out, int n)
 {
     static char sh[4096];   /* (pure, single threaded: the tests and the tools) */
