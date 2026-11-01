@@ -635,6 +635,9 @@ abbreviated (e.g. German ERW. EINSTELLUNGEN). Rows that still do not fit are sca
 (`text_fit`); help lines wrap to their 3 lines. Japanese: kana and kanji are 28 wide (twice a US letter) but the
 texts are short; Latin letters (titles, names, numbers) take their own widths. Russian: the patch's tight widths.
 Turkish: the European font and widths; Brazilian Portuguese: the US font's widths (as English), its accents 14-18.
+Korean: every syllable 28 wide as a kanji, a space ours 10 (the game's text 28): our labels about as long as the
+Japanese ones (checked with `tr/fit.py` and on screen). Italian: the European font and widths (as French); the IMPORT
+screen's DISC and IMPORTED lines are scaled down to the rule's end when longer (all languages).
 
 ## Verification
 
@@ -736,6 +739,31 @@ Arabic (2026-11-01, Linux, headless; job folder `lang_ar/`, pictures in `lang_ar
   enhanced 311 dumps); ctest all passed (`lang`: every Arabic translation against its font and its placeholders'
   order, `lang_shape` cases); Windows build.
 
+Korean and Italian (2026-11-01, Linux, headless; job folder `lang_ko_it/`, pictures in `lang_ko_it/shots/`):
+
+- Import (`imp.sh`): Korean 3 s, 202 rooms, 565 subtitles, 248 pictures (the file pages among them), `SAVELOAD.MES`;
+  Italian 2 s, 202 rooms, 471 subtitles, 311 pictures, `exemes` press and retry. Refused (`refuse.sh`): the clean
+  Japanese disc, the US and the European disc for the Korean entry; the Korean disc for the Japanese and the Russian
+  entry; the clean European, the Turkish, the Arabic and the Korean disc for the Italian entry; the Italian disc for the
+  European, Turkish and Arabic entries. The other discs imported again: byte for byte as before but lang.txt's date (the
+  rooms' padding bytes, uninitialised before, are now zero). IMPORT > LANGUAGES lists both entries with their texts
+  (`impl.sh`).
+- In Korean and Italian (`title.sh`, `menus.sh`, `ingame.sh`, `extra.sh`, `pickup/langs.sh`), Translated Pictures on
+  and off: the title (Korean: BIOHAZARD without 完全版, the US plates; Italian: CARICA PARTITA / NUOVA PARTITA / OPZIONI,
+  the European copyright block), OPTION and every ENHANCED SETTINGS page, the lobby, IMPORT, BIORAND; in a new game the
+  opening's subtitles, the cell's message, the inventory (words, item names, help), the FILE page and the manual
+  (Korean: its own page pictures), the map, the typewriter, the game over (YOU DIED / Retry? Yes No; SEI MORTO /
+  Riprovare? Sì No), the Ink Ribbon pickup in save 6 (「잉크 리본」 획득? ▶예 아니요; Prendere Nastro? ▶Sì No, the
+  "taken" message).
+- Item pictures (`icons/`: every item, 6 per bag, against English): Korean identical with Translated Pictures on and
+  off; Italian identical but the list's own word (ELENCO OGGETTI) with it on.
+- Switching (`sw/switch.sh`): English to Korean and to Italian in ENHANCED SETTINGS (the page's letters right at once),
+  Japanese to Korean, Korean to Italian; Italian with Subtitles 한국어 (the Korean name in the Korean font in Italian
+  text); F1 in Korean with Noto Sans CJK (`RECVX_TEST_OVERLAY_FONT`: this machine has no Hangul font) and in Italian.
+- The other languages' titles again; `layout_check.sh` main (a2fadf8) vs this build (English): identical; ctest all
+  passed (`lang`: every Korean and Italian translation against its font, the Korean cells and look-alikes); Windows
+  build.
+
 ## Not done, and why
 
 - **English subtitles**: the European English rooms have only the US placeholders; the Japanese disc has Japanese
@@ -753,7 +781,8 @@ Arabic (2026-11-01, Linux, headless; job folder `lang_ar/`, pictures in `lang_ar
 - **Japanese**: the US disc's later memory card messages (451..493) have no Japanese counterpart (English); the OPTION
   picture has no green arrows (key configuration TYPE); the title's plates are the US ones (the Japanese plates are
   English and laid out otherwise); the computer is English, as on the Japanese disc.
-- **Italian**: planned by Capcom (the executable has its tables) but not on the disc.
+- **Italian (official)**: planned by Capcom (the executable has its tables) but not on the disc; the fan translation
+  (below) uses the French slot instead.
 - **Turkish**: the patch's executable texts (the game over's retry question, the PRESS START line, one boot memory
   card message) are written one byte off and read wrongly on the disc too: not taken (English, as for the other
   European languages); the map's pictures are the English ones on the disc; the save / load screens' boot messages
@@ -770,6 +799,18 @@ Arabic (2026-11-01, Linux, headless; job folder `lang_ar/`, pictures in `lang_ar
   file pages' text may run over the book, as for the other European languages. The computer's lines stay English (the
   patch re-encoded the computer's font only). Digits the engine writes (item counts, times) are the US font's, the
   patch's text keeps its own. A stand-alone آ shows as ا (the font has no isolated form; our translations avoid it).
+- **Korean**: the author of the patch is not named on the disc (the entry and the docs say "Korean fan translation").
+  What the patch left Japanese or English stays so, as on its disc: "YOU DIED" and the game over's "Retry? Yes No",
+  DEMO PLAY, the map's words, the title's and OPTION's menu words (English plates), OPTION's background banner with
+  完全版, one item name in Japanese, a few unused system messages reading "[원문 판독 필요]". Our Korean texts use only
+  the 736 syllables of the patch's font (reworded where one was missing); a US sign the font lacks (`/ + = ~`) is the
+  US font's, a little lighter and narrower than the Korean letters. The computer's lines stay English (the Japanese
+  disc's).
+- **Italian**: its save / load screens' texts (`SaveLoadMessage_FRA`, rewritten by the patch) are about twice the size
+  of the US table the port's game reads and laid out for the European executable's positions: not taken (English, as
+  for the clean European languages); the positions the patch moved on the memory card screens are not taken either
+  (the port keeps the US layout). The French picture's two-row PRESS START is the Italian one-row plate (drawn as in
+  English). The computer's lines stay English (as for the European languages).
 
 ## Notes for later
 
