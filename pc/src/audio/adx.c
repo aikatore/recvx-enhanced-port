@@ -158,6 +158,9 @@ int adx_afs_locate(int ptid, int fid, uint32_t* lsn, uint32_t* size)
     return 1;
 }
 
+/* the AFS file of partition ptid (ITEM1.AFS), NULL none (lang_glue.c: a language's file pages) */
+const char* adx_afs_name(int ptid) { return ptid >= 0 && ptid < MAX_PT && pt[ptid].name[0] ? pt[ptid].name : NULL; }
+
 /* bytes [off, off + n) of the disc file at sector lsn (also lang_glue.c) */
 int adx_disc_read(uint32_t lsn, uint32_t off, void* dst, uint32_t n)
 {

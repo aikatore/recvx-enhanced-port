@@ -136,7 +136,7 @@ void lang_scan(void)
                 else exe_line(x, line);
             }
             fclose(f);
-            x->ok = (x->nw >= 108 || l == LANG_JA) && nf == 24 && nh == 24;   /* (the Japanese font: one width, below) */
+            x->ok = (x->nw >= 108 || lang_cjk(l)) && nf == 24 && nh == 24;   /* (the Japanese and Korean fonts: one width, below) */
             if (!x->ok) host_log("lang: %s is incomplete: not offered\n", p);
         }
     }
@@ -156,7 +156,7 @@ int lang_sub(void)
 }
 const char* lang_dir(int l) { return l > 0 && lang_installed(l) ? info[l].dir : NULL; }
 int lang_picture(int adv) { return adv >= 0 && adv < 64 ? adv_lang[adv] : LANG_EN; }
-int lang_eu_picture(int adv) { int l = lang_picture(adv); return l == LANG_FR || l == LANG_DE || l == LANG_ES || l == LANG_TR || l == LANG_AR; }
+int lang_eu_picture(int adv) { int l = lang_picture(adv); return l == LANG_FR || l == LANG_DE || l == LANG_ES || l == LANG_TR || l == LANG_AR || l == LANG_IT; }
 static int data_lang(void) { return lang_installed(g_lang) ? g_lang : LANG_EN; }
 
 /* ---------------------------------------------------------------- the executable's texts */
@@ -245,7 +245,7 @@ int pc_lang_disc_parts(const char* name, FILE* f, uint32_t size, uint32_t lsn, u
 {
     static char logged[32];
     int sys1 = !strcasecmp_(name, "SYSTEM.AFS/1"), sys2 = !strcasecmp_(name, "SYSTEM.AFS/2"), n = 0;
-    uint64_t keep = sys1 ? (data_lang() == LANG_JA ? 0xF : 1) : sys2 ? 2 : 0;   /* the fonts (the computer's: /2's texture 1) */
+    uint64_t keep = sys1 ? (lang_cjk(data_lang()) ? 0xF : 1) : sys2 ? 2 : 0;   /* the fonts (the computer's: /2's texture 1) */
     unsigned char *l, *d;
     if (!picture_file(name) && !sys1 && !sys2) return 0;
     if (size > (16u << 20) || dsize > (16u << 20)) return 0;
@@ -390,7 +390,7 @@ static XFont* other_font(int l)
         for (int i = 0; ef_info[i].flg != (unsigned)-1 && dp < b + n; i++)
             if (ef_info[i].flg & 1) { dp += sz; if (dp + 4 > b + n) break; sz = pc_rd32(dp); dp += 4; }
         dp = (unsigned char*)(((uintptr_t)dp + 31) & ~(uintptr_t)31);
-        if (dp < b + n) x->n = tim_chunks(dp, (uint32_t)(b + n - dp), tims, l == LANG_JA ? 4 : 1);
+        if (dp < b + n) x->n = tim_chunks(dp, (uint32_t)(b + n - dp), tims, lang_cjk(l) ? 4 : 1);
         if (x->n) font_colours(dp, (uint32_t)(b + n - dp), tims, x->n);
     }
     if (!x->n) { host_log("lang: the font of %s cannot be read (%s)\n", lang_names[l], p); return NULL; }
@@ -426,11 +426,12 @@ static float width_of(int l, int code)
         int c = lang_cell(l, code);
         return c >= 0 ? (c < info[l].nw ? info[l].w[c] : 0) : code < 108 ? FontSz[code] : 0;
     }
-    if (l == LANG_JA) return code < LANG_JA_BASE && code < info[l].nw ? info[l].w[code] : code == 0 ? 14 : lang_cell(l, code) >= 0 ? 28 : 0;
+    if (l == LANG_KO && code > 0 && code < LANG_JA_BASE && lang_cell(l, code) < 0) return FontSz[code];   /* (no look-alike: the US font's) */
+    if (lang_cjk(l)) return code < LANG_JA_BASE && code < info[l].nw ? info[l].w[code] : code == 0 ? 14 : lang_cell(l, code) >= 0 ? 28 : 0;
     if (l == LANG_EN) return code < 108 ? FontSz[code] : 0;
     return code < info[l].nw ? info[l].w[code] : 0;
 }
-static float space_of(int l) { return l == LANG_JA ? 28 : 14; }
+static float space_of(int l) { return lang_cjk(l) ? 28 : 14; }
 
 /* a code of another language's font (lang.h LANG_OTHER): its language, *code its own code; -1 none */
 static int other_of(int* code)
@@ -463,7 +464,7 @@ float pc_glyph_w(int code)
 static float shift_of(int l, int code)
 {
     if (l == LANG_AR) return lang_cell(l, code) >= 0 ? -AR_SHIFT : 0;
-    return l == LANG_JA && code < LANG_JA_BASE && code < info[l].nw && info[l].ox[code] ? info[l].ox[code] - 32.0f : 0;
+    return lang_cjk(l) && code < LANG_JA_BASE && code < info[l].nw && info[l].ox[code] ? info[l].ox[code] - 32.0f : 0;
 }
 
 int pc_font_glyph(int code, void** texlist, float* dx)
@@ -474,7 +475,7 @@ int pc_font_glyph(int code, void** texlist, float* dx)
         if (!x) return -1;
         *texlist = &x->list;
     } else l = font_lang;
-    if (l == LANG_AR && code < LANG_AR_BASE && lang_cell(l, code) < 0) {   /* the Arabic font has no Latin letters: the US font's */
+    if ((l == LANG_AR || l == LANG_KO) && code < LANG_AR_BASE && lang_cell(l, code) < 0) {   /* the Arabic font has no Latin letters, the Korean no / + ...: the US font's */
         XFont* x = other_font(LANG_EN);
         if (!x) return -1;
         *texlist = &x->list;
@@ -554,9 +555,12 @@ int lang_us_plates(int adv)
     return 1;
 }
 
-/* ---------------------------------------------------------------- file pages as pictures (Japanese)
+/* ---------------------------------------------------------------- file pages as pictures (Japanese, Korean)
    ITEM1.AFS / ITEM2.AFS (sys->itm_partid) entry fpics + fsheader[file] + page: a 512 x 512 picture of the page's
-   text, as the Japanese release shows them; its first line where the text's first line is (64). */
+   text, as the Japanese release shows them; its first line where the text's first line is (64). The language's own
+   (the Korean patch redrew them: its folder), else the disc's (the US disc has the Japanese ones), whatever
+   Translated Pictures says (they are the files' text). */
+const char* adx_afs_name(int ptid);   /* (audio/adx.c) */
 static struct { int entry, part; NJS_TEXNAME name; NJS_TEXMEMLIST mem; NJS_TEXLIST list; } fpage = { -1, -1 };
 
 int pc_lang_file_page(float x, float y, int file, int page)
@@ -572,16 +576,26 @@ int pc_lang_file_page(float x, float y, int file, int page)
         fpage.entry = entry;
         fpage.part = (int)sys->itm_partid;
         fpage.list.nbTexture = 0;
-        if (adx_afs_locate((int)sys->itm_partid, entry, &lsn, &size) && size > 64 && size < (2u << 20)) {
-            unsigned char* d = ps2_dma_alloc(DMA_FPAGE, size);
+        char p[1300];
+        FILE* f = NULL;
+        long n = 0;
+        if (adx_afs_name((int)sys->itm_partid)) {
+            snprintf(p, sizeof(p), "%s/%s/%d", li->dir, adx_afs_name((int)sys->itm_partid), entry);
+            for (char* c = p + strlen(li->dir); *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;   /* (upper-case names, as adx.c) */
+            if ((f = pc_fopen(p, "rb")) && (fseek(f, 0, SEEK_END) || (n = ftell(f)) <= 64 || n >= (2 << 20) || fseek(f, 0, SEEK_SET))) n = 0;
+        }
+        if (n || (adx_afs_locate((int)sys->itm_partid, entry, &lsn, &size) && size > 64 && size < (2u << 20))) {
+            unsigned char* d = ps2_dma_alloc(DMA_FPAGE, n ? (uint32_t)n : size);
+            if (n) size = (uint32_t)n;
             if (d) {
-                if (disc_read(lsn, 0, d, size) && tim_chunks(d, size, tims, 1) == 1) {
+                if ((n ? fread(d, 1, size, f) == size : disc_read(lsn, 0, d, size)) && tim_chunks(d, size, tims, 1) == 1) {
                     tex_set(&fpage.name, &fpage.mem, tims[0]);
                     fpage.list.textures = &fpage.name;
                     fpage.list.nbTexture = 1;
                 }
             }
         }
+        if (f) fclose(f);
         if (!fpage.list.nbTexture) host_log("lang: the file page picture %d cannot be read\n", entry);
     }
     if (fpage.list.nbTexture) {

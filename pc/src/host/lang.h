@@ -9,22 +9,25 @@
 extern "C" {
 #endif
 
-enum { LANG_EN, LANG_FR, LANG_DE, LANG_ES, LANG_JA, LANG_RU, LANG_TR, LANG_PT, LANG_AR, LANG_COUNT };
-extern const char* const lang_codes[LANG_COUNT];   /* en fr de es ja ru tr pt-BR ar (folder names, ini language) */
+enum { LANG_EN, LANG_FR, LANG_DE, LANG_ES, LANG_JA, LANG_RU, LANG_TR, LANG_PT, LANG_AR, LANG_KO, LANG_IT, LANG_COUNT };
+extern const char* const lang_codes[LANG_COUNT];   /* en fr de es ja ru tr pt-BR ar ko it (folder names, ini language) */
 extern const char* const lang_names[LANG_COUNT];   /* in the language itself (UTF-8; Arabic in display order: lang_shape) */
 
 /* Glyph codes. The Japanese font's cell c is code LANG_JA_BASE + c (the importer moves the Japanese text up);
    the codes below are the US font's, drawn with the Japanese font's look-alikes (digits, times: the US engine
    writes them). A letter in another language's font than the loaded one (a subtitle in another language than the
    game's; our texts right after the Language setting changed) is LANG_OTHER(language, its code), drawn with that
-   language's font; LANG_OTHER(l, LANG_OTHER_SPACE) is its space (0xFF01). */
+   language's font; LANG_OTHER(l, LANG_OTHER_SPACE) is its space (0xFF01). The Korean font is the Japanese one with
+   about 740 cells redrawn as Hangul (the fan translation's): the same codes (LANG_JA_BASE + cell, look-alikes below);
+   a US code without a look-alike there (/, +, ...) is drawn from the US font. */
 #define LANG_JA_BASE 108
+#define lang_cjk(l) ((l) == LANG_JA || (l) == LANG_KO)   /* the Japanese font's layout: 4 textures, cells 28 wide */
 /* The Arabic font's cell c is code LANG_AR_BASE + c as well (the importer moves the Arabic text up the same way); the
    codes below it are the US font's, drawn from the US font (its Latin letters: the Arabic font has none) or, for the
    digits and signs the Arabic font has in the same cells, from the Arabic font */
 #define LANG_AR_BASE LANG_JA_BASE
 #define LANG_OTHER_BASE 0x8000
-#define LANG_OTHER(l, c) (LANG_OTHER_BASE + ((l) << 11) + (c))   /* (9 languages below 0xC800: clear of the control codes from 0xFE00) */
+#define LANG_OTHER(l, c) (LANG_OTHER_BASE + ((l) << 11) + (c))   /* (11 languages below 0xD800, at most 15 below 0xF800: clear of the control codes from 0xFE00) */
 #define LANG_OTHER_SPACE 0x7FF
 
 /* the setting (ini language, LANG_*; English when the language is not installed) and Subtitles (ini subtitles:

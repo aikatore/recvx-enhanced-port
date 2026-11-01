@@ -1,6 +1,7 @@
 /* ctest "lang": every translation of our own texts (src/host/tr_table.inc) shows with its language's game font
    (src/host/glyphs.c): no letter the font lacks (the Japanese font has the kana and only the kanji the game uses,
-   the Russian one the Cyrillic letters, the European one its accents, the Arabic one the letters' joined forms).
+   the Russian one the Cyrillic letters, the European one its accents, the Arabic one the letters' joined forms, the
+   Korean one the Hangul syllables its fan translation uses).
    Lists the texts and letters otherwise. Arabic (in display order, lang_shape): the printf placeholders are filled
    left to right on screen, so they must come out in the English order. */
 #include "../src/host/lang.h"
@@ -12,7 +13,7 @@ static const TrRow rows[] = {
 #include "../src/host/tr_table.inc"
 };
 
-static const char* const codes[LANG_COUNT] = { "en", "fr", "de", "es", "ja", "ru", "tr", "pt-BR", "ar" };
+static const char* const codes[LANG_COUNT] = { "en", "fr", "de", "es", "ja", "ru", "tr", "pt-BR", "ar", "ko", "it" };
 int g_lang;                                        /* (lang_glue.c) */
 int lang_installed(int l) { return l >= 0 && l < LANG_COUNT; }
 
@@ -61,6 +62,29 @@ int main(void)
     bad += check(lang_shape("\xD9\x84\xD8\xA7 F1 (%d)", sh, sizeof(sh)), "F1 (%d) \xEF\xBB\xBB", "lang_shape(la F1 (%d))");   /* لا */
     bad += check(lang_shape("\xD9\x85\xD9\x86 %d x %d\n\xD9\x84\xD8\xA7", sh, sizeof(sh)), "%d x %d \xEF\xBB\xA6\xEF\xBB\xA3\n\xEF\xBB\xBB", "lang_shape(two lines)");   /* من, لا */
     bad += check(lang_shape("English (%s) stays", sh, sizeof(sh)), "English (%s) stays", "lang_shape(no Arabic)");
+    {   /* Korean: the Hangul cells (한국어, lang.c lang_names), the look-alikes of the US codes (A, ?, the choice cursor),
+           a US code without one (/: the US font's, cell -1); Italian: its accents in the European font */
+        static const struct { int l; const char* s; int code, cell; unsigned ch; } g[] = {
+            { LANG_KO, "\xED\x95\x9C", LANG_JA_BASE + 499, 499, 0xD55C },   /* 한 */
+            { LANG_KO, "\xEC\x96\xB4", LANG_JA_BASE + 258, 258, 0xC5B4 },     /* 어 */
+            { LANG_KO, "A", 33, 0, 'A' }, { LANG_KO, "?", 31, 227, '?' }, { LANG_KO, "/", 15, -1, '/' },
+            { LANG_JA, "/", 15, 215, '/' }, { LANG_IT, "\xC3\xAC", 125, 125, 0xEC }, { LANG_IT, "\xC3\xB2", 129, 129, 0xF2 },
+        };
+        char m[64];
+        for (size_t i = 0; i < sizeof(g) / sizeof(g[0]); i++) {
+            const char* s = g[i].s;
+            int c = lang_glyph(g[i].l, &s);
+            if (c != g[i].code || lang_cell(g[i].l, c) != g[i].cell || lang_char(g[i].l, c) != g[i].ch) {
+                printf("%s \"%s\": code %d cell %d char %X, expected %d %d %X\n", codes[g[i].l], g[i].s, c, lang_cell(g[i].l, c),
+                       lang_char(g[i].l, c), g[i].code, g[i].cell, g[i].ch);
+                bad++;
+            }
+        }
+        lang_missing(LANG_KO, "\xED\x95\x9C\xEA\xB5\xAD\xEC\x96\xB4", m, sizeof(m));
+        bad += check(m, "", "Korean letters of the language's name");
+        lang_missing(LANG_IT, "Italiano \xC3\xA0\xC3\xA8\xC3\xA9\xC3\xAC\xC3\xB2\xC3\xB9\xC3\x88", m, sizeof(m));
+        bad += check(m, "", "Italian letters");
+    }
     /* tr() reads the table from the executable's copy of the file (src/host/tr.c): the same rows as compiled here */
     tr_init();
     for (g_lang = 1; g_lang < LANG_COUNT; g_lang++)

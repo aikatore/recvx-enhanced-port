@@ -11,10 +11,15 @@
               the 24-wide blank 94 after it), ° 59; no capitals with accents (the patch writes them plain)
      Japanese the Japanese font's 1296 cells (4 textures of 324) at LANG_JA_BASE + cell: kana, the kanji the game
               uses, full-width Latin, digits and signs; the codes below LANG_JA_BASE (the US font's, which the US
-              engine writes) are drawn with the look-alike cells */
+              engine writes) are drawn with the look-alike cells
+     Korean   the fan translation's font: the Japanese one with about 740 cells redrawn (Hangul, a few signs moved),
+              the same codes; a US code without a look-alike cell is drawn from the US font (lang_glue.c)
+     Italian  the European font (the fan translation's, in the French folder) */
 #include "lang.h"
 #include <stdlib.h>
 #include <string.h>
+
+_Static_assert(LANG_OTHER(LANG_COUNT - 1, LANG_OTHER_SPACE) < 0xFE00, "LANG_OTHER codes reach the control codes");
 
 /* the European font's letters (codes 95..149); the US font has none of them (plain: the letter without its accent) */
 static const struct { unsigned short u, code; char plain; } accents[] = {
@@ -126,15 +131,55 @@ static const char ja_cells[] =
         "院稼蒸兼暑折標網叩悲圧繰益些涙昨夜偵机件訪黒担狂耳叫捨国殊冷忘汗造掻席震蘇悔怖酷瞳図庭左髪乱痛衛塔歪式激痙両"
     ;
 #define JA_CELLS 1296
+/* the Korean fan translation's font (\001 also: the blank cell its text writes as a wide space); its Hangul are the
+   syllables the patch's text uses */
+static const char ko_cells[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz▶▼"
+        "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんがぎぐげござじず"
+        "ぜぞだ컨컴でどばびぶべ흐ぱ몰ぷ몸몹ぁ앨못ぇ몽ゃ♡ょっアイウエオカキクケコサシスセ즉タチ즌テトナニ!ネノハ컷フ"
+        "묘즐マ케ムメモ지ユ\"ラリルレロ켓(ン局ガ표グ무ゴザジ묵묶직ダ야문デドバビブベボパ푸プ),ァィーェォャュ묻ッ."
+        "0123456789－？！．・ー:製풀품「」[]・％Σα○물진흑油질켜약뭐양「뭔」가어각간갇갈감억갑값\001갔강"
+        "갖언같개거걱건걸검：’게겠겨격얻뭘견므결겹겼미경곁얼민계믿고곡곤곧골곳밀짐풍퓨프흔플\001\001공과관광괜밑괴교구국"
+        "後바開始南박피島製코엄行大古照콜査絵쿠一供小쿤給업군男操굴室흘밖없見俺知合퀴흡집来크前生今助下엇部分궁会흥픽"
+        "誰큭込…반達事実加권外切받필발짓밝귀흩像台었징에付中方水짜희壁停균内그手力所貴様핏不방배度극근発히可能撃準備"
+        "힌乗째員백思하밸定뱃積必要時代当버子械쨌用意학言번物画橋쩌早쩍書힘벌人겁持重作業엘別押奇妙글쪽금立真文엠向飛"
+        "出同범것법模급口赤여終了큰한\001긋기긴긷길벗쫓上베息까깐깜깨我꺄何꺅벨할꺼墓地함껏場역껑클합認연無最쯤항石銀掛"
+        "열毛顔께々女胸景心配逃機多脱妹世礼残追刻屋連해肖핸陶염兄彼飾찍現찢였차戦착껴벼찬영꼭키꽂벽꽃꽤킨꿈通完全꿔찮"
+        "뀌옆끄했豪예家族死킬華타落끊絶悪運변体置끌행戻親気별끗향옛오병自끝끼感탁対허보탄옥応以탈学決탐찰복難나참온待"
+        "본間올類볼素材창봉味봐引난날成調봤낡남消化跡形入奴부분불色찾除붉붙攻채탓태브택블漏납옷험空港鉄와탱注壊状책났"
+        "비目터헤빈盤回動制낮턴챙빛蓋내빠낸光閉送혀낼완처昇왔왕빡빨냈텀텅変並電源点描현情報基냐打輸極進빼빽테냥뺄혈왜"
+        "너搭혔使止텐넉単외왼先요템뼈뿐쁜滅욕主토爆破사용火넌널側呼移넘척넣우네避階倉庫降녀산倒년살념荷삽상녕노녹놀욱"
+        "反톡운警놈형울새농움높천톱놓웃워색샘놔철생着格원호뇽누첨눈통월혹눌첫恐右눠뉴느는늘念任샷능서웠석늦늬투섞退혼"
+        "理니닌確선展청트설닐웨님車扉닛특홀窪다위器단닫튼示달弾유섬保닮육담답당起닿율성으홈세대더윽체은長蟻덕쳐던덤덮"
+        "틀研究데델도독돌王동換本화돼私을됐음되응의眠特쳤이된父験셈인될名티工됩일셋두둔파身둘확읽둠셔잃둡임션둥뒀입초"
+        "셨소安잇뒤속穴뒷총드손있잉득잊든性자작들末仕잔管송쇄최쇠듯잖抜추수関宝숙등잘순디환딘따잠毒축딱출灯활판解땅때"
+        "装떠춤잡술황貼御충숨숫회획떤쉘떨떻떼쉬팔뗄또青팜똑元血춰薬뚜簡뚫쉽在슈況뛰뜨뜬뜻장厳具危鍵丈夫라슐재락란足스"
+        "랄람슨쟁랍저취랑래랜램효슬습랩랫美랭량적전러럭異승束시容런急럴식측満층金属패럼럽신렀量후절실싫有常렇레렉렐팩"
+        "려력련렷렸敵령치례로록친침롤段롭流심십젊점카칸롯팬롱싶싸싹접뢰퍼充替료칼싼루정젖제룩約젠役固룸류険他펄륙캐륭"
+        "르젤져른道塞캔쌍쌓써쏘를緊졌조쏠쏴족쑤존름릅쓰훈릇리좀종린릴캘좋좌훌쓸씨아휴편캡죄죠주악림폐안립앉않品알죽압"
+        "링준마줄막만았앞많애圧말맙망맞맡매맨机맷머먹먼멀커멈捨중殊줘액멋앤멍멎메줬멘怖멤며図면左쥐흉멸명모목式포몬폭"
+    ;
 
 /* the US font's codes below LANG_JA_BASE drawn with the Japanese font: the look-alike cell (-1 none) */
 static const struct { unsigned char code; short cell; } ja_signs[] = {
     { 3, 306 }, { 4, 307 }, { 6, 308 }, { 10, 309 }, { 93, 310 }, { 30, 311 }, { 28, 52 }, { 29, 53 }, { 32, 240 },
     { 60, 242 }, { 62, 230 }, { 91, 232 }, { 92, 233 }, { 94, 239 }, { 2, 294 }, { 7, 280 },
 };
-static struct { unsigned u; short cell; } * ja_index;   /* the cells' characters, sorted (heap) */
-static short ja_alias[LANG_JA_BASE];
-static int ja_n;
+/* ... with the Korean font (its signs moved; no biohazard, crown, heart, spade, Umbrella, "AA", ×, 〜) */
+static const struct { unsigned char code; short cell; } ko_signs[] = {
+    { 28, 52 }, { 29, 53 }, { 32, 244 }, { 62, 240 }, { 91, 243 }, { 92, 242 }, { 2, 171 }, { 7, 280 },
+};
+typedef struct { unsigned u; short cell; } CjkChar;
+typedef struct Cjk {
+    const char* cells;
+    const struct { unsigned char code; short cell; } * signs;
+    int nsigns, n;
+    CjkChar* index;              /* the cells' characters, sorted (heap) */
+    short alias[LANG_JA_BASE];
+} Cjk;
+static Cjk cjk[2] = { { ja_cells, (const void*)ja_signs, sizeof(ja_signs) / sizeof(ja_signs[0]) },
+                      { ko_cells, (const void*)ko_signs, sizeof(ko_signs) / sizeof(ko_signs[0]) } };
+static Cjk* cjk_of(int l) { return &cjk[l == LANG_KO]; }
 
 static unsigned utf8_next(const char** s)
 {
@@ -150,35 +195,36 @@ static unsigned utf8_next(const char** s)
 }
 static int cmp_u(const void* a, const void* b) { unsigned x = *(const unsigned*)a, y = *(const unsigned*)b; return x < y ? -1 : x > y; }
 
-static void ja_init(void)
+static Cjk* cjk_init(int l)
 {
-    const char* s = ja_cells;
-    if (ja_index || !(ja_index = malloc(JA_CELLS * sizeof(*ja_index)))) return;
+    Cjk* f = cjk_of(l);
+    const char* s = f->cells;
+    if (f->index || !(f->index = malloc(JA_CELLS * sizeof(*f->index)))) return f;
     for (int c = 0; c < JA_CELLS && *s; c++) {
         unsigned u = utf8_next(&s);
         int dup = 0;
-        for (int k = 0; k < ja_n && !dup; k++) dup = ja_index[k].u == u;   /* (a few kanji twice: the first) */
-        if (u != 1 && !dup) { ja_index[ja_n].u = u; ja_index[ja_n++].cell = (short)c; }
+        for (int k = 0; k < f->n && !dup; k++) dup = f->index[k].u == u;   /* (a few kanji twice: the first) */
+        if (u != 1 && !dup) { f->index[f->n].u = u; f->index[f->n++].cell = (short)c; }
     }
-    qsort(ja_index, ja_n, sizeof(*ja_index), cmp_u);
+    qsort(f->index, f->n, sizeof(*f->index), cmp_u);
     for (int c = 0; c < LANG_JA_BASE; c++) {
         unsigned u = c < 95 ? (unsigned)c + 32 : 0;
         int cell = -1;
-        for (size_t k = 0; k < sizeof(ja_signs) / sizeof(ja_signs[0]); k++) if (ja_signs[k].code == c) cell = ja_signs[k].cell;
-        for (int k = 0; cell < 0 && u > 32 && k < ja_n; k++)   /* the character, else its full-width form */
-            if (ja_index[k].u == u || ja_index[k].u == u + 0xFEE0) cell = ja_index[k].cell;
-        ja_alias[c] = (short)cell;
+        for (int k = 0; k < f->nsigns; k++) if (f->signs[k].code == c) cell = f->signs[k].cell;
+        for (int k = 0; cell < 0 && u > 32 && k < f->n; k++)   /* the character, else its full-width form */
+            if (f->index[k].u == u || f->index[k].u == u + 0xFEE0) cell = f->index[k].cell;
+        f->alias[c] = (short)cell;
     }
+    return f;
 }
-static int ja_find(unsigned u)
+static int cjk_find(int l, unsigned u)
 {
-    int lo = 0, hi;
-    ja_init();
-    hi = ja_n;
+    Cjk* f = cjk_init(l);
+    int lo = 0, hi = f->index ? f->n : 0;
     while (lo < hi) {
         int mid = (lo + hi) / 2;
-        if (ja_index[mid].u == u) return ja_index[mid].cell;
-        if (ja_index[mid].u < u) lo = mid + 1; else hi = mid;
+        if (f->index[mid].u == u) return f->index[mid].cell;
+        if (f->index[mid].u < u) lo = mid + 1; else hi = mid;
     }
     return -1;
 }
@@ -186,10 +232,9 @@ static int ja_find(unsigned u)
 int lang_cell(int l, int code)
 {
     if (l == LANG_AR) return code >= LANG_AR_BASE ? (code - LANG_AR_BASE < 324 ? code - LANG_AR_BASE : -1) : ar_own(code) ? code : -1;   /* (-1: the US font's) */
-    if (l != LANG_JA) return code;
-    ja_init();
+    if (!lang_cjk(l)) return code;
     if (code >= LANG_JA_BASE) return code - LANG_JA_BASE < JA_CELLS ? code - LANG_JA_BASE : -1;
-    return code >= 0 ? ja_alias[code] : -1;
+    return code >= 0 ? cjk_init(l)->alias[code] : -1;   /* (Korean: -1 is the US font's letter) */
 }
 
 /* the code of character c in language l's font; -1 none (*plain: the letter to show instead, 0 none) */
@@ -198,11 +243,11 @@ static int code_of(int l, unsigned c, unsigned* plain)
     int lost = 0;
     *plain = 0;
     if (c == ' ' || c == 0x3000 || (l == LANG_JA && (c == 0x3001 || c == ','))) return 0;   /* (Japanese: 、 and , as a space, as the game's text) */
-    if (l == LANG_JA) {
+    if (lang_cjk(l)) {
         int cell;
         if (c == 0x3002) c = 0xFF0E;   /* 。: the game's ． */
-        if (c > 32 && c < 127) return lang_cell(l, (int)c - 32) >= 0 ? (int)c - 32 : -1;
-        if ((cell = ja_find(c)) >= 0) return LANG_JA_BASE + cell;
+        if (c > 32 && c < 127) return lang_cell(l, (int)c - 32) >= 0 || l == LANG_KO ? (int)c - 32 : -1;   /* (Korean: the US font's) */
+        if ((cell = cjk_find(l, c)) >= 0) return LANG_JA_BASE + cell;
         if (c >= 0xFF01 && c <= 0xFF5E && lang_cell(l, (int)c - 0xFEE0 - 32) >= 0) return (int)c - 0xFEE0 - 32;
         for (int i = 0; i < N_ACCENTS; i++) if (accents[i].u == c) *plain = (unsigned char)accents[i].plain;
         return -1;
@@ -228,7 +273,7 @@ static int code_of(int l, unsigned c, unsigned* plain)
     }
     for (int i = 0; i < N_ACCENTS; i++) {
         if (accents[i].u != c) continue;
-        if ((l == LANG_FR || l == LANG_DE || l == LANG_ES || (l == LANG_TR && !lost)) && accents[i].code) return accents[i].code;
+        if ((l == LANG_FR || l == LANG_DE || l == LANG_ES || l == LANG_IT || (l == LANG_TR && !lost)) && accents[i].code) return accents[i].code;
         if (c == 0xAE && l == LANG_EN) return 95;   /* (the US font's ®) */
         *plain = (unsigned char)accents[i].plain;
         return -1;
@@ -271,8 +316,8 @@ void lang_missing(int l, const char* s, char* out, int n)
 
 unsigned lang_char(int l, int code)
 {
-    if (l == LANG_JA && code >= LANG_JA_BASE) {
-        const char* s = ja_cells;
+    if (lang_cjk(l) && code >= LANG_JA_BASE) {
+        const char* s = cjk_of(l)->cells;
         unsigned u = '?';
         for (int c = 0; c <= code - LANG_JA_BASE && *s; c++) u = utf8_next(&s);
         return u == 1 ? '?' : u;
@@ -297,7 +342,7 @@ unsigned lang_char(int l, int code)
     }
     if (l == LANG_PT) return '?';
     if (l == LANG_TR) for (size_t i = 0; i < sizeof(tr_letters) / sizeof(tr_letters[0]); i++) if (tr_letters[i].code == code) return tr_letters[i].u;
-    if (l == LANG_EN || l == LANG_JA || l == LANG_AR) return code == 95 ? 0xAE : '?';   /* (the US codes) */
+    if (l == LANG_EN || lang_cjk(l) || l == LANG_AR) return code == 95 ? 0xAE : '?';   /* (the US codes) */
     for (int i = 0; i < N_ACCENTS; i++) if (accents[i].code == code) return accents[i].u;
     return '?';
 }

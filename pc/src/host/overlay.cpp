@@ -952,9 +952,10 @@ static void import_window(void)
     ImGui::End();
 }
 
-/* our texts in other languages (lang.h): the default font has ASCII and Latin-1 (French, German, Spanish, Portuguese); the
-   letters of Japanese, Russian, Turkish and Arabic (its presentation forms: our Arabic texts are in display order,
-   lang_shape) come from a font of the system, merged in once such a language is chosen (none found: they stay missing) */
+/* our texts in other languages (lang.h): the default font has ASCII and Latin-1 (French, German, Spanish, Portuguese,
+   Italian); the letters of Japanese, Korean, Russian, Turkish and Arabic (its presentation forms: our Arabic texts are in
+   display order, lang_shape) come from a font of the system, merged in once such a language is chosen (none found: they
+   stay missing) */
 static void lang_fonts(void)
 {
     static const char* const ar[] = { "C:/Windows/Fonts/tahoma.ttf", "C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/segoeui.ttf",
@@ -963,11 +964,15 @@ static void lang_fonts(void)
     static const char* const ja[] = { "C:/Windows/Fonts/meiryo.ttc", "C:/Windows/Fonts/msgothic.ttc", "C:/Windows/Fonts/YuGothM.ttc",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc", NULL };
+    static const char* const ko[] = { "C:/Windows/Fonts/malgun.ttf", "C:/Windows/Fonts/gulim.ttc", "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/TTF/NanumGothic.ttf", "/usr/share/fonts/truetype/nanum/NanumGothic.ttf", "/usr/share/fonts/nanum/NanumGothic.ttf",
+        "/usr/share/fonts/TTF/gulim.ttf", "/usr/share/fonts/truetype/baekmuk/gulim.ttf", NULL };
     static const char* const ru[] = { "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf", NULL };
     static bool done[LANG_COUNT];
     int l = lang_installed(g_lang) ? g_lang : LANG_EN;
-    if ((l != LANG_JA && l != LANG_RU && l != LANG_TR && l != LANG_AR) || done[l]) return;   /* (Turkish: ğ ı İ ş, Latin Extended-A) */
+    if ((l != LANG_JA && l != LANG_KO && l != LANG_RU && l != LANG_TR && l != LANG_AR) || done[l]) return;   /* (Turkish: ğ ı İ ş, Latin Extended-A) */
     done[l] = true;
     ImGuiIO& io = ImGui::GetIO();
     if (io.Fonts->Fonts.empty()) io.Fonts->AddFontDefault();
@@ -977,7 +982,7 @@ static void lang_fonts(void)
         c.MergeMode = true;
         if (SDL_GetPathInfo(test, NULL) && io.Fonts->AddFontFromFileTTF(test, 13.0f, &c)) { host_log("overlay: the letters of %s from %s\n", lang_codes[l], test); return; }
     }
-    for (const char* const* p = l == LANG_JA ? ja : l == LANG_AR ? ar : ru; *p; p++) {
+    for (const char* const* p = l == LANG_JA ? ja : l == LANG_KO ? ko : l == LANG_AR ? ar : ru; *p; p++) {
         ImFontConfig c;
         c.MergeMode = true;
         if (SDL_GetPathInfo(*p, NULL) && io.Fonts->AddFontFromFileTTF(*p, 13.0f, &c)) { host_log("overlay: the letters of %s from %s\n", lang_codes[l], *p); return; }

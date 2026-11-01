@@ -17,12 +17,13 @@ ImportProgress g_import_progress;
 volatile int g_import_reload;
 const ImportSource import_sources[IMPORT_SOURCES] = {
     { "outbreak2", "Resident Evil Outbreak File #2", "SLUS-20984", IMPORT_CAT_CHARACTERS, NULL, NULL },
-    { "sles50306", "Resident Evil Code: Veronica X (Europe)", "SLES-50306", IMPORT_CAT_LANGUAGES, NULL, NULL },
+    { "sles50306", "Resident Evil Code: Veronica X (Europe)", "SLES-50306", IMPORT_CAT_LANGUAGES,
+      "French, German and Spanish, with cutscene subtitles. Import them from your own disc image of the European release (SLES-50306).", NULL },
     { "slus20184ru", "Resident Evil Code: Veronica X (Russian fan translation)", "SLUS-20184", IMPORT_CAT_LANGUAGES,
-      "Russian fan translation by Brosko. Import it from your own disc image of the US release with the patch.",
+      "Russian fan translation by Brosko, with cutscene subtitles. Import it from your own disc image of the US release (SLUS-20184) with the Russian patch.",
       "Needs the US disc image with the Russian fan translation by Brosko: %s." },
     { "slpm65022", "Biohazard Code: Veronica Kanzenban (Japan)", "SLPM-65022", IMPORT_CAT_LANGUAGES,
-      "Japanese, with cutscene subtitles. Import it from your own disc image of the Japanese release.",
+      "Japanese, with cutscene subtitles. Import it from your own disc image of the Japanese release (SLPM-65022).",
       "Needs a Japanese disc image of Biohazard Code: Veronica Kanzenban: %s." },
     { "sles50306tr", "Resident Evil Code: Veronica X (Turkish fan translation)", "SLES-50306", IMPORT_CAT_LANGUAGES,
       "Turkish fan translation by Patriots \xC3\x87" "eviri, with cutscene subtitles. Import it from your own disc image of the European release (SLES-50306) with the Turkish patch.",
@@ -33,6 +34,12 @@ const ImportSource import_sources[IMPORT_SOURCES] = {
     { "sles50306ar", "Resident Evil Code: Veronica X (Arabic fan translation)", "SLES-50306", IMPORT_CAT_LANGUAGES,
       "Arabic fan translation by Abdulaziz Al-Amri (SKZEZO EDITING), with cutscene subtitles. Import it from your own disc image of the European release (SLES-50306) with the Arabic patch.",
       "Needs the European disc image with the Arabic fan translation by Abdulaziz Al-Amri: %s." },
+    { "slpm65022ko", "Biohazard Code: Veronica Kanzenban (Korean fan translation)", "SLPM-65022", IMPORT_CAT_LANGUAGES,
+      "Korean fan translation, with cutscene subtitles. Import it from your own disc image of the Japanese release (SLPM-65022) with the Korean patch.",
+      "Needs the Japanese disc image with the Korean fan translation: %s." },
+    { "sles50306it", "Resident Evil Code: Veronica X (Italian fan translation)", "SLES-50306", IMPORT_CAT_LANGUAGES,
+      "Italian fan translation by KimeraVX, with cutscene subtitles. Import it from your own disc image of the European release (SLES-50306) with the Italian patch.",
+      "Needs the European disc image with the Italian fan translation by KimeraVX: %s." },
 };
 
 #define ITEMS_MAX 1024
