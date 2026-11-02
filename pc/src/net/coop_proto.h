@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 35                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 36                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -38,7 +38,8 @@ extern "C" {
                                            33: Pose.opts2 (more game rules): OPT2_EXTRA_OBJECTS;
                                            34: the cutscene cast never picks for Claire and Chris (they show each player's own
                                            look), so the same seed picks other models for the rest;
-                                           35: the cutscene cast also draws the creatures only cutscenes show (Nosferatu in 6040, ...) */
+                                           35: the cutscene cast also draws the creatures only cutscenes show (Nosferatu in 6040, ...);
+                                           36: EneSnap.root (SNAP_ROOT_STILL: the motion moves the enemy, its root stays put) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
 #define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */
@@ -342,6 +343,9 @@ typedef struct Event {
     } u;
 } Event;
 
+enum { SNAP_ROOT_STILL = 1,            /* the root node's x/z are 0 after the step: its motion's travel moved the enemy
+                                           (bhEne_GetTranslateMtn), the puppet's root is put back as well */
+       SNAP_ROOT_ALL = 1 };
 typedef struct EneSnap {
     uint8_t idx, mode[4];
     int8_t mdl;                         /* mlwP as an index into the enemy's own mdl[] */
@@ -351,7 +355,8 @@ typedef struct EneSnap {
     int32_t ax, ay, az;
     int32_t mtn_no, frm_no, mtn_md;
     int16_t hokan_count;
-    uint8_t id, pad;                    /* the enemy's type (BH_PWORK.id): applied only to a slot holding the same type */
+    uint8_t id;                         /* the enemy's type (BH_PWORK.id): applied only to a slot holding the same type */
+    uint8_t root;                       /* SNAP_ROOT_* (protocol 36) */
     int32_t hokan_rate, hp;
     float watr[7];                      /* hit capsule (NJS_CAPSULE) */
 } EneSnap;

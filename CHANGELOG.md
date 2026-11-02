@@ -22,6 +22,7 @@
   his part begins.
 - **Retry after a game over**: choosing Yes no longer crashes in rooms with an extra item box or herb planter.
 - **Pushing while running**: running into a box or chest of drawers now pushes it, as walking does.
+- **Co-op zombies**: the joining player now sees zombies move their arms and head as the host does, without odd poses.
 
 ## 0.7.2 (2026-11-01)
 

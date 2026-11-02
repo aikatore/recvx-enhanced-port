@@ -57,7 +57,7 @@ int coop_check_dgram(const void* buf, int n, int* nev, int* nene, int* ext)
 
 int coop_check_snap(const EneSnap* s)
 {
-    if (s->idx >= COOP_ENE_SLOTS || s->mdl < -1 || s->mdl >= 16 || s->id >= 100 || s->pad) return COOP_BAD_FIELD;   /* id: bhJumpEnemy[100] */
+    if (s->idx >= COOP_ENE_SLOTS || s->mdl < -1 || s->mdl >= 16 || s->id >= 100 || (s->root & ~SNAP_ROOT_ALL)) return COOP_BAD_FIELD;   /* id: bhJumpEnemy[100] */
     if (s->mnw != MNW_ROOM && s->mnw != MNW_KEEP && (s->mnw < 0 || s->mnw >= COOP_MNW_MAX)) return COOP_BAD_FIELD;
     if (s->mtn_no < 0 || s->mtn_no >= COOP_MNW_MAX || s->frm_no < 0) return COOP_BAD_FIELD;
     if (!fin(s->px) || !fin(s->py) || !fin(s->pz) || !fins(s->watr, 7)) return COOP_BAD_FLOAT;

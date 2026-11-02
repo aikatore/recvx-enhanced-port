@@ -5,7 +5,7 @@ over the internet or a LAN (UDP). Co-op is an optional addon: with it off the ga
 as without it (every hook is `#ifdef TARGET_PC` and `if (coop_on)`).
 
 Part 1 is for players: how to host, join and play. Part 2 is the reference: architecture,
-protocol 35, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
+protocol 36, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
 [USER_GUIDE.md](USER_GUIDE.md) (settings, controls), [ACTORS.md](ACTORS.md) (models and voices),
 [ENEMIES.md](ENEMIES.md) (enemy options), [ARCHITECTURE.md](ARCHITECTURE.md),
 [BUILDING.md](BUILDING.md).
@@ -924,8 +924,17 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   seized partner takes the throw's landing (80) as a hit (`en15.c`).
 * **Puppets (joiner)**: an enemy runs its own AI once for its initialising step; after that, while
   the host is in the same room, it takes the host's snapshots (explicit fields: flags, position,
-  angles, modes, motion, frame, blend, hp, hit capsule; pointers as indices). Linked parts with a
-  model of their own are not animated. Snapshots are not used during door transitions. Enemies
+  angles, modes, motion, frame, blend, hp, hit capsule, whether the root stays put; pointers as indices). Linked
+  parts with a model of their own are not animated. A zombie is two works on one model (`en01.c`): its body poses
+  all 18 nodes, then its upper half (a linked zombie, `exp0 + 0x40` bit 31) poses nodes 8 on (arms, head) with a
+  motion of its own (the reach, the hit reactions; the body's motion + 200) and computes the model. The puppet's
+  upper half was never posed: the joiner's zombies showed the body motion's upper tracks (arms hanging while the
+  host's reached, arms up or twisted while hit, an upper body standing still in a stagger). Now it plays its motion on
+  nodes 8 on as `bhEne01_SetMotion` does. **Root**: a motion that moves the enemy (`bhEne_GetTranslateMtn`) puts the
+  root node's x and z back to 0 after it; the puppet's root kept the motion's travel on top of the host's position,
+  which has it already (a zombie stepping into a turn or getting up drawn up to half a metre off). The snapshot says
+  so (`SNAP_ROOT_STILL`) and the puppet's root (node 8 for a zombie's upper half) is put back the same way. A puppet
+  shows the frame the host's step advanced to, one frame ahead of the host's picture. Snapshots are not used during door transitions. Enemies
   driven by the joiner's own event run its local AI during it. A puppet morphs (`mdflg` 2) only with
   the two shapes its own code picks (`obj_a`, `obj_b`); Alexia's tentacles have none on the guest
   and are drawn unmorphed (before, the guest crashed in her second form's fight).
@@ -1347,10 +1356,10 @@ send time minus the echoed datagram's arrival. Sample = arrival - our clock - th
 smoothed (EWMA 0.1). The name tag's point goes with the recorded frame (`stream_point`) and is
 interpolated with the in-between frames; it snaps on camera cuts and in vanilla mode.
 
-## Protocol 35
+## Protocol 36
 
-`COOP_VERSION` is **35**; both players need builds with the same version (a mismatch is reported,
-e.g. "The host uses co-op compatibility version 34; yours is 35. Use matching game builds."). The co-op server does not
+`COOP_VERSION` is **36**; both players need builds with the same version (a mismatch is reported,
+e.g. "The host uses co-op compatibility version 35; yours is 36. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
 tag, `EV_OWN`; 17 trade requests; 18 voices; 19 the game rules `OPT_IMPORTANT`, `OPT_NO_RIBBON`,
@@ -1365,7 +1374,7 @@ and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid
 `Pose.opts`, so a further rule needs a field of its own); 24 enemy slots 0..254 (`COOP_ENE_SLOTS`, the PC's
 255 slots) in every slot field, and `EV_FX` marks its `FX_*` references in `refs` (the bytes 253..255 are slots now); 25 `Pose.use`, the trigger the sender is using (one player at a puzzle at a time, see "Puzzles"; the pose grew to 112 bytes); 26 `EneSnap.id`, the enemy type in the slot: a snapshot applies only to a slot holding the same type (`hokan_count` is 16 bits now; the snapshot stays 100 bytes); 27 `PoseExt.br`, `br_seed`, `br_id` (BioRand: the host's choice and each side's pack; `Pose.opts` has no free bit, so a field of its own; the extension grew to 104 bytes); 28 direct sessions are encrypted after a handshake bound to the whole join code (`PKT_HELLO`, `PKT_HELLO_ACK`, see "Security"), so `Pose.auth`, the 32-bit join-code proof, is gone (`rsv`, zero), the goodbye's `COOP_REJ_STATE`, and a generic `EV_FX` only for the effects co-op sends, each field checked (see "Effects and voices"); 29 the cutscene cast: `EV_EOPTS` carries `cast`, `cast_all`, `cast_assign`, `cast_imports` (the event stays 88 bytes) and `PoseExt.imp_id`, the sender's imported models (the extension grew to 108 bytes); 30 `EV_BRSEED`, the host's BioRand seed string and CLI checksum (a guest can generate the host's pack, see "BioRand"; the pose and extension are unchanged); 31 `EV_CASTOFF`, the host's cutscene cast "Custom" list, and `EV_EOPTS` `cast_all` 2 (Custom); 32 the cutscene cast's pools without the player files that have a talking twin (Claire's, Chris's, Steve's, Wesker's: their cutscene models stand for them, [ACTORS.md](ACTORS.md) "Talking twins"), so the same seed picks other models and the `EV_CASTOFF` bits name other entries (the event is unchanged); 33 `Pose.opts2`, more game rules
 in the first of the pose's spare bytes (`OPT2_EXTRA_OBJECTS` 1, see "Extra item boxes and herbs"; unknown bits refused; the pose stays 112
-bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1435,7 +1444,8 @@ and the room files' names and sizes; 0 no pack). A joiner whose `br_id` differs 
 
 Slot (0..254), `mode[4]`, model index (`mlwP` as index into the enemy's `mdl[]`, -1..15), motion set (offset
 0..511 from the enemy's own set, `MNW_ROOM`, `MNW_KEEP`), `flg flg2 stflg mdflg`, position, angles,
-`mtn_no` (< 512), `frm_no`, `mtn_md`, `hokan_count` (16 bits), the enemy type `id` (< 100) and a zero byte, `hokan_rate`,
+`mtn_no` (< 512), `frm_no`, `mtn_md`, `hokan_count` (16 bits), the enemy type `id` (< 100), `root` (`SNAP_ROOT_STILL` 1: the root
+node's x and z are 0 after the step; other bits refused), `hokan_rate`,
 hp, hit capsule `watr[7]`. The receiver applies an active slot's snapshot only to an enemy of the same `id` (the slot
 layouts differ where one side made an enemy the other did not: a moth's leader, children, eggs), and not a new
 enemy's (`mode[0]` 0) to one whose own Init ran.
@@ -1691,6 +1701,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_TSCREEN="hostframe:act,..."` | Trade screen actions: `k` trade key, `s<cell>` select, `r` confirm, `l` leave, `d` Disconnect, `i` log inventory, `c<cell>` / `cp<cell>` cursor ours / partner's, `a` confirm on cursor, `b` cancel, `w<cell>` request (`w-1` withdraw), `o` offer the requested, `x<cell>` wrong request, `P<hex>` pad presses, `M<x>/<y>[l\|r]` mouse. |
 | `RECVX_COOP_TS_LOSE="s<n>"` / `"d<n>"` | Host's n-th `TS_SWAP` / joiner's n-th `TS_DONE` not sent. |
 | `RECVX_TRADE_TRACE=1` | Every 10 frames: enemies frozen?, a hash of their state. |
+| `RECVX_ENEMY_POSE=1` | At every frame each zombie's motion, its upper half's, root, joint angles (`epose`) and joints as drawn from its position (`emtx`), with the host frame they show (the joiner's: its last snapshot's) and whether the step ran here (`pc/tools/coop_enemy_sync_check.sh`). |
 | `RECVX_ENEMY_TRACE=dist` | One line per step of every living enemy within `dist` units of a player: type, target (`H`, `h` while the partner is no target, `P`), distances, modes, motion, whether each player counts as busy, run here or puppet, its flags (`fl`: 0x20 hittable) and `stflg`, a guest puppet's frames since the host's state (`age`); on the host also an `atk` line per attack on the partner. |
 | `RECVX_TEST_JOIN="n,..."` / `RECVX_TEST_STOP="n,..."` | F3 Join / Disconnect at the n-th frame hand-off. |
 | `RECVX_TEST_TITLE=n` | Back to the title from a game (as game over "No"). |
@@ -1721,6 +1732,13 @@ the joiner's hits are applied, and neither side logs STALL or ORPHAN.
 `pc/tools/coop_lugers_check.sh OUT [PORT]` (the same needs, about three minutes): the host, without sub machine
 guns, skips Steve's swap in 3/10 while the joiner, holding them, waits in 3/9; it fails unless the host gets the
 Gold Lugers and sends them, and the joiner keeps them for 3/10 and finds them there.
+
+`pc/tools/coop_enemy_sync_check.sh OUT [PORT] [ITEM:COUNT]` (the same needs, about two minutes): both in 0/6, the joiner
+fires at its zombies (handgun, or e.g. `8:1` the knife, `6:60` the grenade launcher) with `RECVX_ENEMY_POSE=1` on
+both sides; each of the joiner's zombie poses is compared with the host's of the same frame (or the next). It fails
+unless the joiner's hits land, under 3% of the poses have a drawn joint more than a unit off, no zombie is off for 25
+frames in a row, no puppet shows the same host frame for 15 frames in a row, and neither side logs STALL or ORPHAN
+(before the upper half was posed, nearly every pose was off).
 
 `pc/tools/coop_passage_check.sh OUT [PORT] [host|guest]` (the same needs, about two minutes): in the palace's passage
 to the residence (1/10) the watcher (default the host) examines the trigger at the foot of the stairs, whose scene

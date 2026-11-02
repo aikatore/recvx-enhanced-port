@@ -942,7 +942,7 @@ still picks from the files too: it sets the player's own look, and that one talk
 * `recvx.ini`: an older *Custom* list's lines for the files (`cast_custom_off = Steve`, `Chris`, ...) name no
   entry now and are ignored (dropped at the next save); the cutscene models' own lines (`Steve (Cutscene Model)`)
   keep counting, so a look unchecked under that name stays unchecked.
-* Co-op: protocol 32 (see the version history in [COOP.md](COOP.md) "Protocol 35"): the positions of the `EV_CASTOFF` bits and the picks from a seed changed.
+* Co-op: protocol 32 (see the version history in [COOP.md](COOP.md) "Protocol 36"): the positions of the `EV_CASTOFF` bits and the picks from a seed changed.
 
 ### Custom
 

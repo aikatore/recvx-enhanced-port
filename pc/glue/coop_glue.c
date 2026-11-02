@@ -908,6 +908,8 @@ _Static_assert(12288 / sizeof(MN_WORK) == COOP_MNW_MAX, "an enemy's motion set: 
 static unsigned char owned[PC_ENE_SLOTS], owned_child[PC_ENE_SLOTS], estate[ESTATE_SIZE], estate_out[ESTATE_SIZE];   /* received / being sent */
 static unsigned short own_wait[PC_ENE_SLOTS];    /* host: the guest's frames in our room without a snapshot of a grab it runs */
 static unsigned int snap_at[PC_ENE_SLOTS];       /* guest: our frame at which the slot last took the host's state */
+static unsigned int pose_seq[PC_ENE_SLOTS];       /* guest: the host frame of the slot's last snapshot */
+static unsigned char step_ran[PC_ENE_SLOTS];      /* the slot's last step ran its AI here (else a puppet's) */
 static CoopXfer estate_x;               /* EV_ESTATE chunks into estate[] */
 static unsigned short xfer_tid;         /* our last transfer id (blob, estate) */
 static void queue_event(Event* e);
@@ -1442,19 +1444,68 @@ static int grips_us(BH_PWORK* ep)
            (ep->id != 1 || holding(ep));
 }
 
+/* a zombie's upper half (en01.c: a linked id 1 whose exp0 0x40 has bit 31; mlwP its body's model) */
+static int zombie_half(const BH_PWORK* ep)
+{
+    const BH_PWORK* body = (const BH_PWORK*)ep->lkwkp;
+    return ep->id == 1 && ep->exp0 && (*(int*)(ep->exp0 + 0x40) & 0x80000000) && ene_slot(ep->lkwkp) < PC_ENE_SLOTS && body->mlwP &&
+           ep->mlwP >= body->mdl && ep->mlwP < body->mdl + 16 && ep->mlwP->obj_num > 8;
+}
+/* the node a motion's travel moves the enemy by instead (bhEne_GetTranslateMtn: its x/z put back to 0 after the motion
+   step): the root of a model of its own, node 8 for a zombie's upper half; NULL none */
+static NJS_CNK_OBJECT* travel_node(BH_PWORK* ep)
+{
+    if (!ep->mlwP || !ep->mlwP->objP) return NULL;
+    if (zombie_half(ep)) return &ep->mlwP->objP[8];
+    return ep->mlwP >= ep->mdl && ep->mlwP < ep->mdl + 16 ? ep->mlwP->objP : NULL;
+}
+static unsigned char snap_root[PC_ENE_SLOTS];     /* the other side's EneSnap.root of the slot (or ours, frozen) */
+static int root_flag(BH_PWORK* ep)                /* EneSnap.root of our enemy */
+{
+    NJS_CNK_OBJECT* o = travel_node(ep);
+    return o && !o->pos[0] && !o->pos[2] ? SNAP_ROOT_STILL : 0;
+}
+static void root_still(BH_PWORK* ep)
+{
+    NJS_CNK_OBJECT* o = (snap_root[ep - ene] & SNAP_ROOT_STILL) ? travel_node(ep) : NULL;
+    if (o) o->pos[0] = o->pos[2] = 0.0f;
+}
 /* puppet: the other side's motion and frame, our joints and matrices. Only for an enemy that
    owns its model: helper enemies (e.g. a zombie's parts, ids 31..38) point mlwP at their
    parent's model and must not animate it. */
 static int puppet_step(BH_PWORK* ep)
 {
+    BH_PWORK* body = (BH_PWORK*)ep->lkwkp;
+    /* A zombie is two works on one model (en01.c): the body poses all 18 nodes with its motion, then its upper half
+       poses nodes 8.. (the arms, the head) with a motion of its own - the reach, the hit reactions (mtn_no2: the body's + 200) - and computes the body's matrices
+       (bhEne01_SetMotion, bhEne01_CalcEnemy). The puppet's upper half was never posed: the guest's zombies showed the
+       body motion's upper tracks (arms hanging while the host's reached, arms up or twisted in hit reactions). */
+    if (zombie_half(ep)) {
+        ML_WORK* m = ep->mlwP;
+        if (mtn_ok(ep, ep->mnwP, ep->mtn_no, ep->frm_no) && ep->mnwP[ep->mtn_no].obj_num <= m->obj_num - 8) {
+            m->objP += 8; m->owP += 8; m->obj_num -= 8;
+            bhSetMotion(ep, 0, ep->mtn_md, ep->mtn_tp);
+            m->obj_num += 8; m->owP -= 8; m->objP -= 8;
+            root_still(ep);
+        }
+        bhCalcModel(body);
+        if (!(ep->flg & 0x80)) {   /* let go of its body (bhEne01_CalcEnemy): its own nodes from its own place */
+            m->objP += 8; m->owP += 8; m->obj_num -= 8;
+            bhCalcModel(ep);
+            m->obj_num += 8; m->owP -= 8; m->objP -= 8;
+        }
+        return 1;
+    }
     if (ep->mlwP < ep->mdl || ep->mlwP >= ep->mdl + 16) return 1;
     /* (a set has 512 motions; a linked part with a model of its own - a zombie's cap or bomb -
        shares its parent's set, whose motions have more tracks than the part has nodes: playing
        one writes past its nodes, which crashed the guest; it follows its link) */
     if (ep->mnwP && ep->mtn_no < (unsigned int)set_left(ep, ep->mnwP) && ep->mnwP[ep->mtn_no].datP && ep->frm_no >= 0 &&
         (ep->frm_no >> 16) < (int)ep->mnwP[ep->mtn_no].frm_num && !(ep->flg & 0x80) &&
-        ep->mnwP[ep->mtn_no].obj_num <= ep->mlwP->obj_num)
+        ep->mnwP[ep->mtn_no].obj_num <= ep->mlwP->obj_num) {
         bhSetMotion(ep, 0, ep->mtn_md, ep->mtn_tp);
+        root_still(ep);   /* (else its travel showed twice: the host's position has it already) */
+    }
     bhCalcModel(ep);
     return 1;
 }
@@ -1563,7 +1614,10 @@ static int enemy_begin(BH_PWORK* ep)
     enemy_frame = frame_no;
     /* both players in the trade screen (host setting): no AI step, the pose held (the guest's puppets
        hold the unchanged snapshots); not an enemy's own initialising step */
-    if (frozen && ep->mode0) return puppet_step(ep);
+    if (frozen && ep->mode0) {
+        if (owned[i] != is_host) snap_root[i] = root_flag(ep);   /* (one we run: held as its step left it) */
+        return puppet_step(ep);
+    }
     if (owned[i]) return is_host ? puppet_step(ep) : 0;   /* a grab the client runs */
     if (is_host) {
         int held = proxy_ok && partner_held(), cool_p = coop_atk_cooling(&atk[i][1], frame_no), k = ene_slot(ep->lkwkp);
@@ -2077,6 +2131,7 @@ void pc_enemy_watch(BH_PWORK* ep, int i, int ran)
     int s[6] = { *(int*)&ep->mode0, (int)ep->mtn_no, ep->frm_no, 0, 0, ep->hp };
     memcpy(&s[3], &ep->px, 4); memcpy(&s[4], &ep->pz, 4);
     if (i < 0 || i >= PC_ENE_SLOTS) return;
+    step_ran[i] = ran;
     enemy_trace(ep, i, ran);
     if (frozen) { watch[i].still = 0; return; }   /* the trade screen holds it */
     if (memcmp(s, watch[i].sig, sizeof(s))) { memcpy(watch[i].sig, s, sizeof(s)); watch[i].still = 0; return; }
@@ -2090,6 +2145,33 @@ void pc_enemy_watch(BH_PWORK* ep, int i, int ran)
     if (plp && holding(ep) && plp->mnwP == ep->mnwP && plp->mnwP != plp->mnwPb && (plp->mode0 == 4 || plp->mode0 == 6)) player_let_go();
     pc_enemy_unhold(ep);
     host_log("watchdog: enemy %d was stuck in its grab: back to standing\n", i);
+}
+
+/* test aid RECVX_ENEMY_POSE=1: at the hand-off, every zombie's motion, root and joint angles as its step left them and
+   its joints as drawn (from its position), with the host frame they show (host: this one; guest: the snapshot's) and
+   whether the step ran here: pc/tools/coop_enemy_sync_check.sh compares the guest's with the host's */
+static void pose_trace(void)
+{
+    static int on = -1;
+    int i, k;
+    if (on < 0) on = getenv("RECVX_ENEMY_POSE") && atoi(getenv("RECVX_ENEMY_POSE"));
+    if (!on || !sys || !coop_on || echo_delay || !same_room() || (sys->cb_flg & 0x5)) return;
+    for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
+        BH_PWORK* ep = &ene[i];
+        BH_PWORK* c = ep->exp0 ? (BH_PWORK*)ep->exp1 : NULL;
+        if (!(ep->flg & 0x1) || ep->id != 1 || (ep->flg & 0x80) || !ep->mode0 || !ep->mlwP || !ep->mlwP->objP || (ep->stflg & 0x41000000)) continue;
+        if (ene_slot(c) >= PC_ENE_SLOTS) c = NULL;
+        fprintf(stderr, "epose %c seq=%u s=%d m=%d.%d mtn=%u f=%d cmtn=%d cf=%d hp=%d run=%d p0=%.2f,%.2f,%.2f a=", is_host ? 'H' : 'G', is_host ? frame_no : pose_seq[i], i,
+                ep->mode0, ep->mode1, ep->mtn_no, ep->frm_no >> 16, c ? (int)c->mtn_no : -1, c ? c->frm_no >> 16 : -1, ep->hp, step_ran[i],
+                ep->mlwP->objP[0].pos[0], ep->mlwP->objP[0].pos[1], ep->mlwP->objP[0].pos[2]);
+        for (k = 0; k < (int)ep->mlwP->obj_num && k < 18; k++)
+            fprintf(stderr, "%04x%04x%04x%c", ep->mlwP->objP[k].ang[0] & 0xFFFF, ep->mlwP->objP[k].ang[1] & 0xFFFF, ep->mlwP->objP[k].ang[2] & 0xFFFF, k < 17 ? ',' : '\n');
+        if (k < 18) fputc('\n', stderr);
+        fprintf(stderr, "emtx %c seq=%u s=%d j=", is_host ? 'H' : 'G', is_host ? frame_no : pose_seq[i], i);   /* the joints as drawn, from the enemy's position */
+        for (k = 0; k < (int)ep->mlwP->obj_num && k < 18; k++)
+            fprintf(stderr, "%.1f/%.1f/%.1f%c", ep->mlwP->owP[k].mtx[12] - ep->px, ep->mlwP->owP[k].mtx[13] - ep->py, ep->mlwP->owP[k].mtx[14] - ep->pz, k < 17 ? ',' : '\n');
+        if (k < 18) fputc('\n', stderr);
+    }
 }
 
 /* host, at the hand-off: snapshot of every enemy slot of the room */
@@ -2127,6 +2209,7 @@ static int build_snapshots(EneSnap* out)
         s->mtn_no = ep->mtn_no; s->frm_no = ep->frm_no; s->mtn_md = ep->mtn_md;
         s->hokan_count = (int16_t)ep->hokan_count; s->hokan_rate = ep->hokan_rate; s->hp = ep->hp;
         s->id = ep->id < 100 ? ep->id : 0;
+        s->root = (ep->flg & 0x1) ? root_flag(ep) : 0;
         memcpy(s->watr, &ep->watr, sizeof(s->watr));
     }
     return n;
@@ -2280,6 +2363,8 @@ static void apply_snapshots(void)
         }
         if (!s->mode[0]) continue;   /* a new enemy there whose Init has not run: ours ran, it would run again (its children twice) */
         snap_at[s->idx] = frame_no;
+        snap_root[s->idx] = s->root;
+        pose_seq[s->idx] = rx.seq;
         mnw_set(ep, s->mnw);
         if (s->mdl >= 0 && ep->mdl[s->mdl].objP) ep->mlwP = &ep->mdl[s->mdl];
         if ((int)ep->mtn_no != s->mtn_no) { ep->hokan_count = s->hokan_count ? s->hokan_count + 1 : 0; ep->hokan_rate = s->hokan_rate; }
@@ -6968,6 +7053,7 @@ void coop_frame(void)
         have_rx = frame_no > (unsigned)echo_delay;
     } else {
         enemy_epoch();
+        pose_trace();
         capture_hits();   /* before the snapshots overwrite the puppets' hit bits */
         if (join_dns) join_resolve();
         receive();
