@@ -21,6 +21,7 @@
   In every cutscene they look the way you play them, also while you play the other one, for example Chris when
   his part begins.
 - **Retry after a game over**: choosing Yes no longer crashes in rooms with an extra item box or herb planter.
+- **Pushing while running**: running into a box or chest of drawers now pushes it, as walking does.
 
 ## 0.7.2 (2026-11-01)
 

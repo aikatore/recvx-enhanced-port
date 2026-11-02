@@ -89,7 +89,7 @@ KEY CONFIG type A; other types move the game's actions between the PS2 buttons.
 | Weapon shortcuts ([below](#weapon-shortcuts)) | 1-8; hold C | hold right stick click |
 
 On the keyboard, 9 and 0 are the PS2's L2 and R2. Walking into stairs climbs them (Auto-climb
-Stairs).
+Stairs). Walking or running into a box (or other pushable object) pushes it; on the PS2 only walking did.
 
 ### Modern controls (fixed cameras)
 
