@@ -39,6 +39,7 @@ void njRotateXYZ(NJS_MATRIX* m, Angle angx, Angle angy, Angle angz);
 #include "../../decomp/include/ps2/veronica/prog/pwksub.h"
 #include "../../decomp/include/ps2/veronica/prog/objitm.h"
 #include "../src/host/actors.h"
+#include "../src/host/tps.h"
 #include "../src/host/placer.h"
 #include "../src/import/impmodel.h"
 #include "../include/pc_parse.h"
@@ -1543,6 +1544,10 @@ static BH_PWORK* shadow_step(Shadow* s, BH_PWORK* src, int from)
         plp = keep;
         s->obj[9].ang[1] = -910;
         bhCalcModel(&s->w);
+    }
+    {   /* "Move While Aiming": the source's legs walking under its motion (tps_glue.c), in this set's walk */
+        const TpsLegs* l = src == plp ? &tps_legs_me : &tps_legs_p2;
+        if (l->w > 0 && l->mtn >= 0 && l->mtn < 100 && s->mth[l->mtn].datP && s->mth[l->mtn].obj_num <= 22) tps_legs(&s->w, s->mth, l);
     }
     tps_bend(&s->w, s->pitch);
     return &s->w;

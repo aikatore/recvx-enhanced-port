@@ -1625,6 +1625,7 @@ static void scope_look(void)
    floor checks run after it in bhControlPlayer as for any step. */
 extern char PlyTrsZ[6][3];   /* player.c: the walks' travel tables (bhGetTransZ) by motion and injury */
 TpsLegs tps_legs_me;         /* our legs this tick (the co-op pose sends them; a gender-matched copy plays them too) */
+TpsLegs tps_legs_p2;         /* the co-op partner's, as its pose sent them (coop_glue.c) */
 #define LEG_YAW DEG(55.0f)   /* the hips turned at most this far from the aim (sideways: the feet slide the rest) */
 #define LEG_RATE 0.6f        /* of the walk's speed and frame rate */
 #define LEG_EASE 0.3f        /* the legs blended in and out per tick */
@@ -1648,7 +1649,7 @@ static void aim_walk(void)
     if (ok) {
         float md = wrap(yaw - atan2f(aw_r, aw_f) * (32768.0f / 3.14159265f)), rel = wrap(md - (short)plp->ay), ly, spd, *trsz;
         int dm = x->dmlvl < 0 ? 0 : x->dmlvl > 2 ? 2 : x->dmlvl, tp = x->wpntp & 1, mtn, n, f, k;
-        back = fabsf(rel) > (back ? DEG(95.0f) : DEG(105.0f));   /* sideways: forward (a stick near it does not flip between them) */
+        back = fabsf(rel) > (back ? DEG(100.0f) : DEG(115.0f));   /* sideways: forward (a stick near it does not flip between them) */
         mtn = PlMtnAct[tp][dm][back ? 4 : 2];
         n = plp->mnwPb && plp->mnwPb[mtn].datP ? (int)plp->mnwPb[mtn].frm_num : 0;
         trsz = n ? (float*)bhGetTransZ(PlyTrsZ[back][dm]) : NULL;
@@ -1675,6 +1676,7 @@ static void aim_walk(void)
             if (plp->flg & 0x40000) plp->flg &= ~0x40000, unfixed = 1;   /* the aim's feet stay put (bhFixPosition): not walking */
         }
     }
+    l->on = ok;
     on = ok ? 1.0f : 0.0f;
     l->w += (on - l->w) * LEG_EASE;
     if (!ok && l->w < 0.02f) {

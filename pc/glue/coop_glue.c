@@ -36,6 +36,7 @@ int ikou3(BH_PWORK* epw, NJS_POINT3* pos, int add_dir);   /* zonzon.c (its heade
 #include "../src/host/cheat.h"
 #include "../src/host/bindings.h"
 #include "../src/host/actors.h"
+#include "../src/host/tps.h"
 #include "../src/host/cast.h"
 #include "../src/host/enemies.h"
 #include "../src/host/biorand.h"
@@ -768,12 +769,20 @@ void coop_control_remote(void)
     /* its aim pitch: the upper body bent as its third-person free aim bends it (the fixed cameras' aim up/down is
        in its motion), eased over the poses; straight from a build without it */
     p2_pitch += (coop_pitch_get(rx.pflg) * COOP_PITCH_STEP - p2_pitch) * 0.5f;
+    {   /* its legs walking under its aim ("Move While Aiming"), eased in and out as the sender eases its own */
+        TpsLegs* l = &tps_legs_p2;
+        l->on = rx.legs_frm != 0;
+        if (l->on) l->mtn = coop_legs_mtn(rx.legs), l->frm = (rx.legs_frm - 1) << 16, l->yaw = coop_legs_yaw(rx.legs);
+        l->w += ((float)l->on - l->w) * 0.3f;
+        if (!l->on && l->w < 0.02f) l->w = 0;
+    }
 pose:
     if (!set) return;
     if (p2_other_mesh) keep_bones(&ply2.mdl[0], p2_bone);
     bhSetMotion(&ply2, 0, ply2.mtn_md, ply2.mtn_tp);
     if (p2_wpn == 1) lighter_arm();
     bhCalcModel(&ply2);
+    tps_legs(&ply2, ply2.mnwPb, &tps_legs_p2);
     tps_bend(&ply2, p2_pitch);   /* (arms, head, weapons and the muzzle flash follow) */
     /* its hit capsule, as player.c sets ours every frame: most enemies' attacks (dogs, Hunters, Tyrant,
        Bandersnatch, Nosferatu, the zombie's lunge) test it - left at 0,0,0 they all missed the stand-in */
@@ -7021,6 +7030,8 @@ void coop_frame(void)
                             coop_pitch_bits(v > COOP_PITCH_MAX ? COOP_PITCH_MAX : v < -COOP_PITCH_MAX ? -COOP_PITCH_MAX : v));   /* the aim pitch */
         tx.flr = (unsigned char)(plp->flr_no + 3);
     }
+    tx.legs = tps_legs_me.on ? coop_legs_pack(tps_legs_me.mtn, tps_legs_me.yaw) : 0;   /* walking under the aim (tps_glue.c) */
+    tx.legs_frm = tx_in_game && tps_legs_me.on ? (uint8_t)((tps_legs_me.frm >> 16) + 1) : 0;
     tx.busy = !sys || (sys->tk_flg & 0x28) || (sys->ss_flg & 0x400000) || (sys->cb_flg & 0x1) ? BUSY_NONE :   /* title, (re)start, demo, a door: gone */
               !tx_in_game ? ((sys->cb_flg & 0x40000) ? BUSY_BOX : BUSY_MENU) : !(tx.flags & PF_VISIBLE) ? BUSY_EVENT : BUSY_NONE;
     if (tx.busy == BUSY_NONE && tx_in_game && g_trade.phase == TRADE_OPEN) tx.busy = BUSY_TRADE;

@@ -502,7 +502,16 @@ static void test_dgrams(void)
     BADP(q.rcase = 255, COOP_BAD_FIELD);
     BADP(q.pflg = 0xFF, COOP_OK);                 /* hit/held and the aim pitch: every value */
     BADP(q.use = 255, COOP_OK);                   /* the trigger in use + 1: every value (0 none) */
-    BADP(q.spare[1] = 1, COOP_BAD_FIELD);         /* the spare bytes: zero */
+    BADP(q.legs = 255, COOP_OK);                  /* the legs under the aim: every value */
+    BADP(q.legs_frm = 255, COOP_OK);
+    {   /* the legs: the walk and its turn back as sent */
+        int m, y;
+        for (m = 0; m < 20; m += m == 3 ? 13 : 1)
+            for (y = -15; y <= 15; y++) {
+                uint8_t v = coop_legs_pack(m, y * COOP_LEGS_STEP + (y > 0 ? 100 : y < 0 ? -100 : 0));
+                CHECK(coop_legs_mtn(v) == m && coop_legs_yaw(v) == y * COOP_LEGS_STEP);
+            }
+    }
     {   /* the aim pitch in pflg's spare bits: every step back as sent, hit/held kept; a build before it sends straight */
         int v;
         for (v = -COOP_PITCH_MAX; v <= COOP_PITCH_MAX; v++) {

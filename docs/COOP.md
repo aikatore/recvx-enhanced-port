@@ -5,7 +5,7 @@ over the internet or a LAN (UDP). Co-op is an optional addon: with it off the ga
 as without it (every hook is `#ifdef TARGET_PC` and `if (coop_on)`).
 
 Part 1 is for players: how to host, join and play. Part 2 is the reference: architecture,
-protocol 36, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
+protocol 37, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
 [USER_GUIDE.md](USER_GUIDE.md) (settings, controls), [ACTORS.md](ACTORS.md) (models and voices),
 [ENEMIES.md](ENEMIES.md) (enemy options), [ARCHITECTURE.md](ARCHITECTURE.md),
 [BUILDING.md](BUILDING.md).
@@ -868,7 +868,11 @@ motion and bends spine and chest (`tps_calc_model`, [THIRDPERSON.md](THIRDPERSON
 the sender puts that bend's pitch (`tps_aim_pitch`) into `Pose.pflg`'s spare bits (6 bits, about 2
 degrees a step) and the receiver eases towards it (half the way per frame) and bends the partner's model
 the same way (`tps_bend` after its `bhCalcModel`, and on its gender-matched copy and "Character Model"
-model through `actor_source`): arms, head, both weapons and the muzzle flash follow. Hair (Claire) and Wesker's piece get
+model through `actor_source`): arms, head, both weapons and the muzzle flash follow. **Legs under the aim**: with "Move While
+Aiming" ([THIRDPERSON.md](THIRDPERSON.md#moving-while-aiming)) the sender walks with the weapon raised; its pose
+carries the weapon motion, and `Pose.legs` / `legs_frm` the walk its legs play under it (which walk, its frame, the
+hips' turn). The receiver eases them in and out as the sender does and poses the partner's legs with `tps_legs`
+after its `bhCalcModel` (and on the gender-matched copy); the position arrives as always. Hair (Claire) and Wesker's piece get
 private object work. The partner's lighter gets the arm IK, its own flame and room light slot 3 (a
 slot no game code uses), so both can hold one. Footsteps and shots play from flags in the pose; the
 partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
@@ -1356,10 +1360,10 @@ send time minus the echoed datagram's arrival. Sample = arrival - our clock - th
 smoothed (EWMA 0.1). The name tag's point goes with the recorded frame (`stream_point`) and is
 interpolated with the in-between frames; it snaps on camera cuts and in vanilla mode.
 
-## Protocol 36
+## Protocol 37
 
-`COOP_VERSION` is **36**; both players need builds with the same version (a mismatch is reported,
-e.g. "The host uses co-op compatibility version 35; yours is 36. Use matching game builds."). The co-op server does not
+`COOP_VERSION` is **37**; both players need builds with the same version (a mismatch is reported,
+e.g. "The host uses co-op compatibility version 36; yours is 37. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
 tag, `EV_OWN`; 17 trade requests; 18 voices; 19 the game rules `OPT_IMPORTANT`, `OPT_NO_RIBBON`,
@@ -1374,7 +1378,7 @@ and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid
 `Pose.opts`, so a further rule needs a field of its own); 24 enemy slots 0..254 (`COOP_ENE_SLOTS`, the PC's
 255 slots) in every slot field, and `EV_FX` marks its `FX_*` references in `refs` (the bytes 253..255 are slots now); 25 `Pose.use`, the trigger the sender is using (one player at a puzzle at a time, see "Puzzles"; the pose grew to 112 bytes); 26 `EneSnap.id`, the enemy type in the slot: a snapshot applies only to a slot holding the same type (`hokan_count` is 16 bits now; the snapshot stays 100 bytes); 27 `PoseExt.br`, `br_seed`, `br_id` (BioRand: the host's choice and each side's pack; `Pose.opts` has no free bit, so a field of its own; the extension grew to 104 bytes); 28 direct sessions are encrypted after a handshake bound to the whole join code (`PKT_HELLO`, `PKT_HELLO_ACK`, see "Security"), so `Pose.auth`, the 32-bit join-code proof, is gone (`rsv`, zero), the goodbye's `COOP_REJ_STATE`, and a generic `EV_FX` only for the effects co-op sends, each field checked (see "Effects and voices"); 29 the cutscene cast: `EV_EOPTS` carries `cast`, `cast_all`, `cast_assign`, `cast_imports` (the event stays 88 bytes) and `PoseExt.imp_id`, the sender's imported models (the extension grew to 108 bytes); 30 `EV_BRSEED`, the host's BioRand seed string and CLI checksum (a guest can generate the host's pack, see "BioRand"; the pose and extension are unchanged); 31 `EV_CASTOFF`, the host's cutscene cast "Custom" list, and `EV_EOPTS` `cast_all` 2 (Custom); 32 the cutscene cast's pools without the player files that have a talking twin (Claire's, Chris's, Steve's, Wesker's: their cutscene models stand for them, [ACTORS.md](ACTORS.md) "Talking twins"), so the same seed picks other models and the `EV_CASTOFF` bits name other entries (the event is unchanged); 33 `Pose.opts2`, more game rules
 in the first of the pose's spare bytes (`OPT2_EXTRA_OBJECTS` 1, see "Extra item boxes and herbs"; unknown bits refused; the pose stays 112
-bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. 37 `Pose.legs` and `legs_frm` in the two spare bytes (third person "Move While Aiming": the legs walking under the aim, see "Pose"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1413,7 +1417,7 @@ over its datagrams.
 | 32-39 | `chr`, `costume`, `stg`, `rom`, `pos` (room entry point), `opts` (host's game rules: `OPT_INDIVIDUAL` 1, `OPT_TRADE_FREEZE` 2, `OPT_IMPORTANT` 4, `OPT_NO_RIBBON` 8, `OPT_SKIP_SYNC` 16, `OPT_GAMEOVER_BOTH` 32, `OPT_SKIP_DETECTOR` 64, `OPT_QUICK_START` 128), `regroup` (host counter), `mfile` (sender's own part file - 10) |
 | 40-91 | position (3 floats), angles (3 ints), `mtn_no`, `frm_no` (the frame shown, before the step's advance: `actor_frame`), `mtn_md`, `hokan_count`, `hokan_rate`, `wpnr_no`, `hp`, `mode0`, `mode1`, `nev`, `nene` |
 | 92-107 | `stflg`, `ev_ack` (highest event id applied from the peer), `mset` (`MSET_OWN` -1, `MSET_ROOM` -2, `MSET_NONE` -3, or an enemy slot 0..254), `busy` (`BUSY_NONE/EVENT/MENU/BOX/TRADE`), `reject` (`PKT_BYE`, `PKT_REJECT`) or, in `PKT_POSE`, `rcase` (the room case of the room the sender is in + 1, 0 not sent; same room means the same case too, and the follow loads it), `voice_n`, `voice`, `pflg` (`flg & 6`: hit / held; bits 0 and 3-7 the aim pitch, -31..31 steps of 60/31 degrees, 0 straight or not sent: `coop_pitch_get`), `flr` (`flr_no + 3`, 0 not sent) |
-| 108-111 | `use` (the room trigger the sender examined and is held by + 1, 0 none: the partner does not take it meanwhile), `opts2` (host's further game rules: `OPT2_EXTRA_OBJECTS` 1; other bits refused), 2 spare bytes (zero, else refused) |
+| 108-111 | `use` (the room trigger the sender examined and is held by + 1, 0 none: the partner does not take it meanwhile), `opts2` (host's further game rules: `OPT2_EXTRA_OBJECTS` 1; other bits refused), `legs` (the walk under the aim: bits 0-1 which walk, bit 2 backward, bits 3-7 the hips' turn in steps of 4 degrees: `coop_legs_*`), `legs_frm` (its frame + 1, 0: none) |
 
 `flags`: `PF_IN_GAME` 1, `PF_VISIBLE` 2, `PF_ROOM_MTN` 4, `PF_WANT_BLOB` 8 (joiner asks for the
 game state), `PF_EXT` 16 (a `PoseExt` follows), `PF_CINE` 32 (in a cutscene its skip button could
