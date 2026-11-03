@@ -909,9 +909,12 @@ static int pad_sticks(unsigned int* pad)
             float ax = lx, ay = ly, dx, dy;
             if (modern_stick(&rx, &ry, g_tps.pad_dead_look / 100.0f, 2.0f) > 0) recenter = 0, stick_moved = 1;
             if (aim_free && tps_cam_active) {
+                if (aim_walk_ok()) {   /* "Move While Aiming": the left stick walks (as it walks: linear past its dead zone) */
+                    modern_stick(&ax, &ay, g_tps.pad_dead_move / 100.0f, 1.0f);
+                    aw_f = ay, aw_r = ax, ax = ay = 0;
+                }
                 modern_stick(&ax, &ay, g_tps.pad_dead_move / 100.0f, 2.0f);
                 tps_pad_dpad(&dx, &dy);
-                if (aim_walk_ok()) aw_f = ay, aw_r = ax, ax = ay = 0;   /* "Move While Aiming": the left stick walks */
                 rx += ax + dx; ry += ay + dy;
                 rx = rx > 1 ? 1 : rx < -1 ? -1 : rx;
                 ry = ry > 1 ? 1 : ry < -1 ? -1 : ry;
@@ -1673,12 +1676,16 @@ static void aim_walk(void)
                     plp->stflg |= 0x200;   /* (enemies hear it) */
                 }
             last_frm = f;
-            if (plp->flg & 0x40000) plp->flg &= ~0x40000, unfixed = 1;   /* the aim's feet stay put (bhFixPosition): not walking */
         }
     }
     l->on = ok;
     on = ok ? 1.0f : 0.0f;
     l->w += (on - l->w) * LEG_EASE;
+    if (plp->mode0 != 1 || plp->mode1 != 1) l->w = 0;   /* hit, grabbed, the weapon down: the game's own motion at once */
+    /* the weapon modes fix the feet where they stand (flg 0x40000, bhFixPosition: the drawn foot of the last tick kept
+       in place); with the legs walking that put the character back each step, and lowering the weapon (which sets it
+       again) slid it by the stride */
+    if (l->w > 0 && (plp->flg & 0x40000)) plp->flg &= ~0x40000, unfixed = 1;
     if (!ok && l->w < 0.02f) {
         if (l->w > 0) l->w = 0;
         else if (unfixed) {   /* a tick after the legs are back in the aim's stance: its feet fixed again, as the mode set them */
