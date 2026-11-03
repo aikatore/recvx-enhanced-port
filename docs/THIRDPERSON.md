@@ -553,7 +553,7 @@ Setting "Move While Aiming" (THIRD PERSON page, ini `tps_aim_walk`, off by defau
 still while the weapon is raised and while reloading. With it on, in third person:
 
 * **When**: the weapon raised with free aim (every weapon, the knife and the quick knife; not with "Aim Assist"
-  and the mouse, whose W / S aim up and down), firing, slashing, a shot's follow-up motion, the reload (raised, and
+  and the mouse or Classic gamepad controls: the lock-on, whose W / S aim up and down), firing, slashing, a shot's follow-up motion, the reload (raised, and
   the reload of a lowered weapon, [Gamepad](#gamepad) "Reload"). Not while lowering it (mode2
   68), nor in the scope (sniper rifle, linear launcher). Hits, grabs and damage end it at once, as they end the aim.
 * **Input** (`tps_pad`, `pad_sticks`): W / A / S / D, or the left stick (both gamepad schemes; linear past its dead
@@ -673,7 +673,7 @@ it does not, with the guest's option off it does as before).
 * Aim poses: free aim bends the straight pose up to 60 degrees of pitch. No laser sight.
 * Move While Aiming: sideways the hips turn at most 55 degrees and the feet slide the rest (the game has no
   side step); the upper body keeps the weapon motion's pose, so it does not sway with the steps. Not with "Aim
-  Assist" and the mouse.
+  Assist"'s lock-on (the mouse, Classic gamepad controls).
 * The crosshair goes down to 60 degrees: from the shoulder (16.5 units up) it meets the floor
   about 9.5 units ahead, so a crawling zombie nearer than that cannot be put under it (the shot
   goes at the floor behind it; with "Precise Shots" off the game's wide hit test may still reach it).
