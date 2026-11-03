@@ -141,6 +141,15 @@ static int main_argc;           /* main's arguments (UTF-8), for the restart aft
 static char** main_argv;
 static char start_dir[1024];   /* where the program was started: relative image paths are taken from here */
 
+/* the title menu's EXIT (lobby_glue.c, game thread): the main thread closes as for the window's close button */
+void host_quit(void)
+{
+    SDL_Event e;
+    SDL_zero(e);
+    e.type = SDL_EVENT_QUIT;
+    SDL_PushEvent(&e);
+}
+
 void host_pump_events(void)
 {
     SDL_Event ev;

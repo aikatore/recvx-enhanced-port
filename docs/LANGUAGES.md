@@ -159,7 +159,7 @@ re-encodes of the US ones (25 frames a second, the same sizes and sound) with no
 About 100 places test the language (layouts of the file screen, map, computer terminal, ranking, title and
 option plates). The port keeps the US layout; text that is longer in a language may sit closer to the edges.
 The title's menu words are in the title picture (`ADV.AFS/2`, texture 2: one plate per word); the port's own
-title rows (EXTRA, MULTIPLAYER, BIORAND, IMPORT) are cut letter by letter from the US plates
+title rows (EXTRA, MULTIPLAYER, EXIT, BIORAND, IMPORT) are cut letter by letter from the US plates
 (`lobby_glue.c plate_word`). The European pictures have other words on their plates, so the US letters are not
 where those cuts expect them (only EXTREAM's, which EXTRA uses, are at the same place in every picture); the port
 keeps the US plates' texture for our words (below).
@@ -577,7 +577,7 @@ are. The European English is not installed: its text is the US text, and it has 
   as a scratchpad or physical PS2 one). Marked to stay original with an HD pack (`pc_tex_keep_original`).
 - The European title picture: its copyright is one block (`DisplayTitleBg` skips the US second block: `lang_eu_picture`),
   the French PRESS START has two rows (`DisplayPressStartPlate`). Our own plate words stay English, in the US
-  plates' letters, in every language: the title rows MULTIPLAYER, EXTRA, BIORAND and IMPORT, and in OPTION ENHANCED
+  plates' letters, in every language: the title rows MULTIPLAYER, EXTRA, EXIT, BIORAND and IMPORT, and in OPTION ENHANCED
   SETTINGS, RETURN TO TITLE, EXIT and the question's YES / NO (the game's own plates are the language's). With
   another language's picture loaded (`lang_picture`), `lang_us_plates` reads resource 2 of the disc's `ADV.AFS/2` or
   `/4` (the title's texture 1, OPTION's texture 0; past the mods and language folders; reread when the screen changes)

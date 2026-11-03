@@ -946,7 +946,10 @@ below `GEN_WARN_MB` (5 GB) a Yes/No warning (`A_DISK`, after GENERATE's own ques
 in the mods folder. BioRand needs about 4 GB while it runs. Generate anyway?"; unknown (-1): nothing. Test aid:
 `RECVX_BIORAND_FREE_MB_TEST=<MB>` (`biorand_mods_free_mb`).
 
-**EXTRA** (`lobby_glue.c`): the title menu is LOAD GAME, NEW GAME, OPTION, EXTRA, MULTIPLAYER. EXTRA
+**EXTRA** (`lobby_glue.c`): the title menu is LOAD GAME, NEW GAME, OPTION, EXTRA, MULTIPLAYER, EXIT (since
+2026-11-03; six rows 26 px apart from y 234, drawn 7/8 high, to stay above the copyright; EXIT, ModeCommandId 6, asks
+"Quit the game?" in RETURN TO TITLE's box as mode 30, `qt_screen`, and YES closes the game as the window's close
+button does: `host.c host_quit`). EXTRA
 (ModeCommandId 5, which CheckButton ignores) opens a submenu in level 0 itself, laid out as the difficulty screen
 (the word EXTRA where MODE SELECT is, rows at 304 + 32 i): BIORAND (`--dev`), BATTLE GAME (`ExtraFlag`: a cleared
 game or the setting), IMPORT (`--dev`, docs/IMPORT_OUTBREAK.md "IMPORT screen"). With none of them there is no

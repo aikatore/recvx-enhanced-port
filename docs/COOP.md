@@ -36,7 +36,7 @@ Ways to start a session:
 
 ## Lobby
 
-Choose **MULTIPLAYER** in the title menu (its last row; keyboard, gamepad or mouse). The lobby is
+Choose **MULTIPLAYER** in the title menu (the row above EXIT; keyboard, gamepad or mouse). The lobby is
 drawn in the game's own style; your model turns in a 3D preview on the left. It goes in steps:
 
 **Step 1: how to connect, and host or join.**

@@ -53,8 +53,8 @@ They override the saved settings for that run. All options: ARCHITECTURE.md, "Co
 
 ### Title menu
 
-The title menu has **LOAD GAME**, **NEW GAME**, **OPTION**, **EXTRA** and **MULTIPLAYER**
-([Co-op quick start](#co-op-quick-start)).
+The title menu has **LOAD GAME**, **NEW GAME**, **OPTION**, **EXTRA**, **MULTIPLAYER**
+([Co-op quick start](#co-op-quick-start)) and **EXIT**, which closes the game after asking.
 
 - **EXTRA** holds **BATTLE GAME**. It appears once Battle Game is unlocked (a cleared game, or
   **Battle Game Unlocked** in Gameplay); without it there is no EXTRA row.

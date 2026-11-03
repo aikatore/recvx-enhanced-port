@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Menus
+
+- **EXIT on the title screen**: the title menu has an EXIT entry at the bottom that closes the game after asking.
+
 ## 0.7.3 (2026-11-03)
 
 ### New

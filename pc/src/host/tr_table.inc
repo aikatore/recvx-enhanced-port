@@ -1415,3 +1415,4 @@
 { "CHRIS'S MODEL", { "MODELE DE CHRIS", "MODELL FÜR CHRIS", "MODELO DE CHRIS", "クリスのモデル", "МОДЕЛЬ КРИСА", "CHRIS'İN MODELİ", "MODELO DO CHRIS", "نموذج كريس", "크리스 모델", "MODELLO DI CHRIS" } },
 { "CLAIRE", { "CLAIRE", "CLAIRE", "CLAIRE", "クレア", "КЛЭР", "CLAIRE", "CLAIRE", "كلير", "클레어", "CLAIRE" } },
 { "CHRIS", { "CHRIS", "CHRIS", "CHRIS", "クリス", "КРИС", "CHRIS", "CHRIS", "كريس", "크리스", "CHRIS" } },
+{ "Quit the game?", { "Quitter le jeu ?", "Spiel beenden?", "¿Salir del juego?", "ゲームを終了しますか？", "Выйти из игры?", "Oyundan çıkılsın mı?", "Sair do jogo?", "هل تريد الخروج من اللعبة؟", "게임을 종료하시겠습니까?", "Uscire dal gioco?" } },
