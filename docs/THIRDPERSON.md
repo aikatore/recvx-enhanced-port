@@ -621,8 +621,8 @@ it does not, with the guest's option off it does as before).
 
 * **Room geometry**: some corners have no wall, ceiling or back side; looking there shows the
   clear colour. With the back to a wall the camera comes close to the character's head (view and
-  aim stay put). Alpha strips (railings, grates) and objects that are not part of the room model
-  (doors, pushable boxes, enemies) do not move the camera.
+  aim stay put). Alpha strips (railings, grates), models placed in the room (pushable boxes,
+  items) and enemies do not move the camera.
 * Aim poses: free aim bends the straight pose up to 60 degrees of pitch. No laser sight.
 * The crosshair goes down to 60 degrees: from the shoulder (16.5 units up) it meets the floor
   about 9.5 units ahead, so a crawling zombie nearer than that cannot be put under it (the shot
