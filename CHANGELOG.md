@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- **Translated Voices**: a new setting plays the title screen's call from the Japanese, Korean and Italian discs
+  you imported. It is off by default.
+
 ## 0.7.3 (2026-11-03)
 
 ### New

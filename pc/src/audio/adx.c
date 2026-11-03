@@ -365,7 +365,7 @@ void ADXT_StartAfs(void* h, int ptid, int fid)
     t->paused = 0;
     t->stat = ADXT_STAT_PLAYING;
     t->voice = audio_stream_start_adx(mod ? path : g_config.iso_path, mod ? 0 : (uint64_t)lsn * SECTOR, size, t->vol);
-    host_log("adxt: start %d/%d (%u Hz, %u ch, %u samples, loop %d) voice %d\n", ptid, fid, t->rate, t->channels, t->total, t->loop, t->voice);
+    host_log("adxt: start %d/%d (%u Hz, %u ch, %u samples, loop %d) voice %d%s%s\n", ptid, fid, t->rate, t->channels, t->total, t->loop, t->voice, mod ? " from " : "", mod ? path : "");
 }
 
 static uint64_t played_samples(AdxTalk* t)
