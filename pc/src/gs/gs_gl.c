@@ -54,6 +54,7 @@ static RenderTarget rts[MAX_RT];
 enum { FIRST_NONE, FIRST_COVER, FIRST_READ };
 static struct { int how, x0, y0, x1, y1; } first[MAX_RT];   /* COVER: area overwritten (physical pixels, x0..x1-1) */
 static uint64_t frame_no;
+static int scene_smooth, scene_dith;   /* Dithering: the 3D scene being drawn keeps its fraction; the image is dithered (gs_scene_begin) */
 static uint32_t stat_prims, stat_flushes, stat_reloads, stat_decodes, stat_decode_px;
 uint64_t gs_frame_count(void) { extern uint64_t stream_game_frames(void); return stream_game_frames(); }
 
@@ -125,18 +126,20 @@ typedef struct {
 static DrawState batch_state;
 static int batch_valid;
 
-static GLuint vao, vbo, present_prog, present_vao, svao, svbo;
+static GLuint vao, vbo, present_vao, svao, svbo;
 /* the GS program in variants, compiled at start: the shader with only the branches a draw takes
-   (V_ATEST alpha test, V_TEX texture, V_REGION region clamp/repeat, V_FOG fog). Without the alpha
+   (V_ATEST alpha test, V_TEX texture, V_REGION region clamp/repeat, V_FOG fog; V_SMOOTH Dithering's
+   finer colour, compiled when first used, gs_scene_begin). Without the alpha
    test the shader has no discard, so the GPU tests depth before shading (hidden pixels cost
    nothing); the others save the work and registers of the branches. The arithmetic of a taken
    branch is the same in every variant. */
-enum { V_ATEST = 1, V_TEX = 2, V_REGION = 4, V_FOG = 8, NPROG = 16 };
+enum { V_ATEST = 1, V_TEX = 2, V_REGION = 4, V_FOG = 8, V_SMOOTH = 16, NPROG = 32 };
 typedef struct { GLint rt_size, rt_margin, tme, tfx, tcc, fst, texsize, fge, fogcol, ate, atst, aref,
-                 tex, tex_alpha_scale, texofs, premul, zscale, clamp_mode, clamp_vals, afail_pass, rt16; } ProgUni;
+                 tex, tex_alpha_scale, texofs, premul, zscale, clamp_mode, clamp_vals, afail_pass, rt16, smooth; } ProgUni;
 static GLuint progs[NPROG];
 static ProgUni pu[NPROG], *pcur = &pu[0];
-static GLint up_tex, up_rect, up_pic, up_ss;
+static GLuint present_progs[2];   /* without, with DITH */
+static GLint up_tex[2], up_rect[2], up_pic[2], up_ss[2];
 
 static const char* vs_src =
     "#version 330 core\n"
@@ -166,6 +169,9 @@ static const char* fs_src =   /* (after "#version" and the variant's #defines) *
     "uniform float u_aref, u_tex_alpha_scale;\n"
     "uniform vec2 u_texsize; uniform vec4 u_texofs; uniform vec4 u_fogcol;\n"
     "uniform ivec4 u_clamp_mode; uniform vec4 u_clamp_vals; uniform vec4 u_rt16;\n"
+    "#if SMOOTH\n"
+    "uniform float u_smooth;\n"
+    "#endif\n"
     "layout(location=0) out vec4 o_col;\n"
     "vec2 wrap(vec2 tc){\n"
     "  vec2 t = tc;\n"
@@ -179,6 +185,9 @@ static const char* fs_src =   /* (after "#version" and the variant's #defines) *
     "}\n"
     "void main(){\n"
     "  vec4 c = v_col * 255.0;\n"     /* GS 0..255 integer domain */
+    "#if SMOOTH\n"
+    "  vec3 tfr = vec3(0.0), tsl = vec3(0.0);\n"
+    "#endif\n"
     "#if TEX\n"
     "  {\n"
     "    vec2 tc = (u_fst != 0) ? v_stq.xy : (v_stq.xy / v_stq.z) * u_texsize;\n"
@@ -189,6 +198,10 @@ static const char* fs_src =   /* (after "#version" and the variant's #defines) *
     "      t.rgb = floor(clamp(t.rgb, 0.0, 255.0) / 8.0) * 8.0;\n"
     "      t.a = (t.a >= 127.5) ? u_rt16.z : ((u_rt16.w != 0.0 && t.r + t.g + t.b == 0.0) ? 0.0 : u_rt16.y);\n"
     "    }\n"
+    "#if SMOOTH\n"
+    "    tfr = t.rgb - floor(t.rgb + 0.07);\n"
+    "    tsl = (u_tfx == 1) ? vec3(1.0) : c.rgb / 128.0;\n"
+    "#endif\n"
     "    vec4 r;\n"
     "    if (u_tfx == 0) { r.rgb = t.rgb * c.rgb / 128.0; r.a = (u_tcc != 0) ? t.a * c.a / 128.0 : c.a; }\n"
     "    else if (u_tfx == 1) { r.rgb = t.rgb; r.a = (u_tcc != 0) ? t.a : c.a; }\n"
@@ -198,9 +211,27 @@ static const char* fs_src =   /* (after "#version" and the variant's #defines) *
     "  }\n"
     "#endif\n"
     "#if FOG\n"
-    "  { float f = clamp(v_fog, 0.0, 255.0); c.rgb = (f * c.rgb + (255.0 - f) * u_fogcol.rgb) / 256.0; }\n"
+    "  { float f = clamp(v_fog, 0.0, 255.0); c.rgb = (f * c.rgb + (255.0 - f) * u_fogcol.rgb) / 256.0;\n"
+    "#if SMOOTH\n"
+    "    tsl *= f / 256.0;\n"
     "#endif\n"
+    "  }\n"
+    "#endif\n"
+    /* u_smooth (Dithering, gs_scene_begin): 0 the GS's truncation to whole levels. 1 (the 3D scene):
+       a value between two levels keeps its fraction, half a level lower, so a gradient runs through
+       the middle of the steps the truncation makes (the same brightness on average); a whole value
+       stays. 2 (a draw reading a render target, e.g. the display copy): the texel's fraction from 1
+       blends the results of its two levels, each as the GS computes it (a whole texel: as 0, with
+       the 16F target's rounding of k/255 below k snapped back to k). Alpha, which tests compare,
+       stays whole. */
+    "#if SMOOTH\n"
+    "  c.a = floor(c.a + 0.0001);\n"
+    "  if (u_smooth == 0.0) c.rgb = floor(c.rgb + 0.0001);\n"
+    "  else if (u_smooth == 1.0) c.rgb = mix(max(c.rgb - 0.5, 0.0), floor(c.rgb + 0.0001), lessThan(abs(c.rgb - floor(c.rgb + 0.5)), vec3(0.001)));\n"
+    "  else c.rgb = mix(floor(c.rgb - tfr * tsl + 0.0001), floor(c.rgb + (1.0 - tfr) * tsl + 0.0001), tfr * step(0.07, tfr));\n"
+    "#else\n"
     "  c = floor(c + 0.0001);\n"
+    "#endif\n"
     "#if ATEST\n"
     "  if (u_ate != 0) {\n"
     "    bool pass = true;\n"
@@ -235,9 +266,13 @@ static const char* present_vs =
    u_ss: taps across and down, the step between them (draw_display): one bilinear tap per window
    pixel while the picture is enlarged; reduced (an Internal Resolution above the window), an even
    grid over the pixel's footprint, so every texel counts (supersampling) instead of a bilinear
-   sample of every few. */
-static const char* present_fs =
-    "#version 330 core\n"
+   sample of every few.
+   DITH (Dithering, a frame with a 3D scene: gs_scene_begin; the second program): a threshold per
+   window pixel (interleaved gradient noise, Jimenez 2014: evenly spread, no visible grid), fixed on the screen (no crawl, the same in in-between images), rounds the fraction a 3D
+   draw kept (u_smooth) up or down, so the gradient between two 8-bit levels shows as a fine
+   pattern instead of a step. A pixel already on an 8-bit level before the calibration (text, menus,
+   2D, flat colours: integer GS output) is written as without it. */
+static const char* present_fs =   /* (after "#version" and DITH) */
     "in vec2 v_uv; uniform sampler2D u_tex; uniform vec4 u_pic, u_ss; out vec4 o;\n"
     "void main(){\n"
     "  vec3 c = vec3(0.0);\n"
@@ -246,7 +281,14 @@ static const char* present_fs =
     "    for (int i = 0; i < nx; i++)\n"
     "      c += clamp(texture(u_tex, v_uv + vec2(float(i) - 0.5 * float(nx - 1), float(j) - 0.5 * float(ny - 1)) * u_ss.zw).rgb, 0.0, 1.0);\n"
     "  c /= float(nx * ny);\n"
+    "#if DITH\n"
+    "  vec3 lv = abs(c * 255.0 - floor(c * 255.0 + 0.5));\n"   /* off an 8-bit level (16F keeps k/255 to 0.07) */
+    "#endif\n"
     "  if (u_pic.w != 0.0) c = clamp((pow(c, vec3(u_pic.z)) - 0.5) * u_pic.y + 0.5 + u_pic.x, 0.0, 1.0);\n"
+    "#if DITH\n"
+    "  float t = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n"
+    "  c = mix(c, floor(c * 255.0 + t) / 255.0, step(0.1, lv));\n"
+    "#endif\n"
     "  o = vec4(c, 1.0);\n"
     "}\n";
 
@@ -290,6 +332,19 @@ unsigned int gs_gl_compile(const char* vs, const char* fs) { return compile(vs, 
 
 static void* gl_getproc(const char* name) { return (void*)SDL_GL_GetProcAddress(name); }
 
+static void prog_build(int v)
+{
+    static char fs[8192];
+    if ((v & V_REGION) && !(v & V_TEX)) return;
+    SDL_snprintf(fs, sizeof(fs), "#version 330 core\n#define ATEST %d\n#define TEX %d\n#define REGION %d\n#define FOG %d\n#define SMOOTH %d\n%s",
+                 !!(v & V_ATEST), !!(v & V_TEX), !!(v & V_REGION), !!(v & V_FOG), !!(v & V_SMOOTH), fs_src);
+    progs[v] = compile(vs_src, fs);
+#define U(n) pu[v].n = glGetUniformLocation(progs[v], "u_" #n)
+    U(rt_size); U(rt_margin); U(tme); U(tfx); U(tcc); U(fst); U(texsize); U(fge); U(fogcol); U(ate); U(atst); U(aref);
+    U(tex); U(tex_alpha_scale); U(texofs); U(premul); U(zscale); U(clamp_mode); U(clamp_vals); U(afail_pass); U(rt16); U(smooth);
+#undef U
+}
+
 void gs_renderer_init(void)
 {
     if (!gl_load(gl_getproc)) host_fatal("OpenGL 3.3 is required. Update your graphics driver.");
@@ -297,22 +352,16 @@ void gs_renderer_init(void)
     if (!gs_mem_selftest()) host_fatal("Graphics setup failed. Restart the game.");
     gs_reset();
 
-    for (int v = 0; v < NPROG; v++) {
-        static char fs[8192];
-        if ((v & V_REGION) && !(v & V_TEX)) continue;
-        SDL_snprintf(fs, sizeof(fs), "#version 330 core\n#define ATEST %d\n#define TEX %d\n#define REGION %d\n#define FOG %d\n%s",
-                     !!(v & V_ATEST), !!(v & V_TEX), !!(v & V_REGION), !!(v & V_FOG), fs_src);
-        progs[v] = compile(vs_src, fs);
-#define U(n) pu[v].n = glGetUniformLocation(progs[v], "u_" #n)
-        U(rt_size); U(rt_margin); U(tme); U(tfx); U(tcc); U(fst); U(texsize); U(fge); U(fogcol); U(ate); U(atst); U(aref);
-        U(tex); U(tex_alpha_scale); U(texofs); U(premul); U(zscale); U(clamp_mode); U(clamp_vals); U(afail_pass); U(rt16);
-#undef U
+    for (int v = 0; v < V_SMOOTH; v++) prog_build(v);
+    for (int d = 0; d < 2; d++) {
+        static char fs[4096];
+        SDL_snprintf(fs, sizeof(fs), "#version 330 core\n#define DITH %d\n%s", d, present_fs);
+        present_progs[d] = compile(present_vs, fs);
+        up_tex[d] = glGetUniformLocation(present_progs[d], "u_tex");
+        up_rect[d] = glGetUniformLocation(present_progs[d], "u_rect");
+        up_pic[d] = glGetUniformLocation(present_progs[d], "u_pic");
+        up_ss[d] = glGetUniformLocation(present_progs[d], "u_ss");
     }
-    present_prog = compile(present_vs, present_fs);
-    up_tex = glGetUniformLocation(present_prog, "u_tex");
-    up_rect = glGetUniformLocation(present_prog, "u_rect");
-    up_pic = glGetUniformLocation(present_prog, "u_pic");
-    up_ss = glGetUniformLocation(present_prog, "u_ss");
 
     glGenVertexArrays(1, &vao);
     glGenVertexArrays(1, &svao);
@@ -1030,7 +1079,7 @@ static void reload_replay(RenderTarget* rt, uint32_t epoch)
    it in between: replays draw into their own targets), so that image becomes the start image
    and the next final image goes into the other one. A copy only when that does not hold (a
    partial frame drew into it, the scale, the margins or the display buffer changed). */
-static struct { GLuint tex, fbo; int pw, ph; } img[2];
+static struct { GLuint tex, fbo; int pw, ph, dith; } img[2];   /* dith: Dithering at present (scene_dith) */
 static int fin, sti, fin_fresh;    /* final and start image; fin_fresh: img[fin] is the display target */
 static uint32_t fin_fbp, fin_fbw;
 static int start_valid;
@@ -1164,7 +1213,7 @@ void gs_flush(void)
     const DrawState* st = &batch_state;
     TexMemo *replay_memo = NULL, *record_memo = NULL;
     uint32_t fbp, fbw, fpsm, fbmsk;
-    int premul = 0, tme, afail;
+    int premul = 0, tme, afail, from_rt = 0;
     if (gs_flush_blocked) return;
     uint64_t test;
     if (!batch_valid || vcount == 0) { vcount = 0; nsruns = 0; return; }
@@ -1231,7 +1280,9 @@ void gs_flush(void)
         if (notex < 0) notex = SDL_getenv("RECVX_DBG_NOTEX") != NULL;
         t = (st->prim >> 4) & 1 && !notex;
         int v = ((st->ctx.test & 1) && ((st->ctx.test >> 1) & 7) != 1 ? V_ATEST : 0) | (t ? V_TEX : 0) |
-                (t && ((cl & 3) >= 2 || (cl >> 2) >= 2) ? V_REGION : 0) | ((st->prim >> 5) & 1 ? V_FOG : 0);
+                (t && ((cl & 3) >= 2 || (cl >> 2) >= 2) ? V_REGION : 0) | ((st->prim >> 5) & 1 ? V_FOG : 0) |
+                (scene_smooth || scene_dith ? V_SMOOTH : 0);
+        if (!progs[v]) prog_build(v);
         pcur = &pu[v];
         glUseProgram(progs[v]);
     }
@@ -1291,6 +1342,7 @@ void gs_flush(void)
             }
         }
         rt_touch(srt);
+        from_rt = srt && srt != cur_rt;
         GLint filt = ((st->ctx.tex1 >> 5) & 1) ? GL_LINEAR : GL_NEAREST;
         int wms = st->ctx.clamp & 3, wmt = (st->ctx.clamp >> 2) & 3;
         glActiveTexture(GL_TEXTURE0);
@@ -1336,6 +1388,7 @@ void gs_flush(void)
     uni1i(pcur->ate, (int)(test & 1));
     uni1i(pcur->atst, (int)((test >> 1) & 7));
     uni1f(pcur->aref, (float)((test >> 4) & 0xFF));
+    uni1f(pcur->smooth, from_rt ? (scene_smooth || scene_dith ? 2.0f : 0.0f) : (float)scene_smooth);
 
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -1600,7 +1653,7 @@ void gs_window_to_screen(float px, float py, float* x, float* y)
 }
 
 /* the 640x480 display area of a render-target texture to the window */
-static void draw_display(GLuint tex, int rt_vw, int rt_vh)
+static void draw_display(GLuint tex, int rt_vw, int rt_vh, int dith)
 {
     int ww, wh;
     SDL_GetWindowSizeInPixels(g_window, &ww, &wh);
@@ -1618,25 +1671,26 @@ static void draw_display(GLuint tex, int rt_vw, int rt_vh)
         int vx, vy, vw, vh;
         display_rect(ww, wh, &vx, &vy, &vw, &vh, &dw);
         glViewport(vx, vy, vw, vh);
-        glUseProgram(present_prog);
+        dith = !!dith;
+        glUseProgram(present_progs[dith]);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, tex);
         /* a replay target may have been sampled by a draw with TEX1's NEAREST filter */
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glUniform1i(up_tex, 0);
+        glUniform1i(up_tex[dith], 0);
         {
             float b, k, ig;
             int on = picture(&b, &k, &ig);
-            glUniform4f(up_pic, b, k, ig, on ? 1.0f : 0.0f);
+            glUniform4f(up_pic[dith], b, k, ig, on ? 1.0f : 0.0f);
         }
         {
             float x0 = g_margin_x && dw > 640.0f ? 0.0f : (float)g_margin_x;
             float rx = dw * g_scale / vw, ry = dh * g_scale / vh;   /* texels per window pixel */
             int nx = rx > 1.0f ? (int)ceilf(rx) : 1, ny = ry > 1.0f ? (int)ceilf(ry) : 1;
             nx = nx > 8 ? 8 : nx; ny = ny > 8 ? 8 : ny;
-            glUniform4f(up_rect, x0 / rt_vw, 0.0f, (x0 + dw) / rt_vw, dh / rt_vh);
-            glUniform4f(up_ss, (float)nx, (float)ny, dw / rt_vw / vw / nx, dh / rt_vh / vh / ny);
+            glUniform4f(up_rect[dith], x0 / rt_vw, 0.0f, (x0 + dw) / rt_vw, dh / rt_vh);
+            glUniform4f(up_ss[dith], (float)nx, (float)ny, dw / rt_vw / vw / nx, dh / rt_vh / vh / ny);
         }
         glBindVertexArray(present_vao);
         glDrawArrays(0x0005 /* GL_TRIANGLE_STRIP */, 0, 4);
@@ -1846,36 +1900,54 @@ void gs_replay_capture(unsigned int exec_tex, uint32_t fbp, uint32_t fbw, uint32
     rcap[k].exec = exec_tex; rcap[k].live = 1;
 }
 
+/* Dithering (g_config.dithering), at the start of an executed frame or in-between image: a frame
+   with a 3D scene (aa_split found one) draws it without the GS's truncation to whole 8-bit levels
+   (u_smooth: rgb only; alpha, which tests compare, stays whole) until gs_scene_aa, and the present
+   pass dithers that image (u_dith). */
+void gs_scene_begin(int scene)
+{
+    gs_flush();
+    scene_smooth = scene && g_config.dithering;
+    scene_dith = 0;
+}
+
 /* Anti-aliasing (aa.c), where the stream says the frame's 3D is complete (stream.c aa_split):
    the target FBP/FBW filtered into a spare texture, which then becomes the target (the two swap,
-   as the replay targets do), so nothing is copied. Executed frames and their replays alike. */
+   as the replay targets do), so nothing is copied. Executed frames and their replays alike. Then
+   Dithering's Deband (aa.c deband_fs) the same way. */
 void gs_scene_aa(uint32_t fbp, uint32_t fbw)
 {
     static GLuint tex, fbo;
     static int pw, ph;
-    extern void aa_apply(int mode, unsigned int src, unsigned int dst_fbo, int w, int h);
+    extern void aa_apply(int mode, unsigned int src, unsigned int dst_fbo, int w, int h, float scale);
     RenderTarget* rt;
-    GLuint t, f;
     gs_flush();
-    if (!g_config.anti_aliasing || !(rt = rt_find(fbp, fbw))) return;
-    ensure_target(&tex, &fbo, &pw, &ph, rt->pw, rt->ph);
-    glDisable(GL_SCISSOR_TEST);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
-    clip_distances(0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, rt->tex);   /* (a draw may have sampled it with TEX1's NEAREST) */
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    aa_apply(g_config.anti_aliasing, rt->tex, fbo, rt->pw, rt->ph);
-    t = rt->tex; f = rt->fbo;
-    rt->tex = tex; rt->fbo = fbo;
-    tex = t; fbo = f;
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);   /* the spare keeps no depth (one of another size would cut the filter's output) */
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
-    fb_forget();
-    glBindVertexArray(vao);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    scene_dith = scene_smooth;   /* the 2D on top: whole 8-bit levels again, as the GS writes them */
+    scene_smooth = 0;
+    if (!(rt = rt_find(fbp, fbw))) return;
+    for (int pass = 0; pass < 2; pass++) {
+        int mode = pass ? (scene_dith && g_config.dithering == 2 ? 3 : 0) : g_config.anti_aliasing;
+        GLuint t, f;
+        if (!mode) continue;
+        ensure_target(&tex, &fbo, &pw, &ph, rt->pw, rt->ph);
+        glDisable(GL_SCISSOR_TEST);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+        clip_distances(0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, rt->tex);   /* (a draw may have sampled it with TEX1's NEAREST) */
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        aa_apply(mode, rt->tex, fbo, rt->pw, rt->ph, g_scale);
+        t = rt->tex; f = rt->fbo;
+        rt->tex = tex; rt->fbo = fbo;
+        tex = t; fbo = f;
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);   /* the spare keeps no depth (one of another size would cut the filter's output) */
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+        fb_forget();
+        glBindVertexArray(vao);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
 }
 
 /* ---------------- movies (pc/src/movie) ---------------- */
@@ -2050,7 +2122,8 @@ void gs_frame_executed(int interpolate)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         fin_fresh = 1; fin_fbp = rt->fbp; fin_fbw = rt->fbw;
         final_vw = rt->vw; final_vh = rt->vh;
-        if (dump_on()) { draw_display(img[fin].tex, final_vw, final_vh); dump_frame(0); }   /* RECVX_DUMP_FRAMES: the real image */
+        img[fin].dith = scene_dith;
+        if (dump_on()) { draw_display(img[fin].tex, final_vw, final_vh, img[fin].dith); dump_frame(0); }   /* RECVX_DUMP_FRAMES: the real image */
         final_dumped = 1;
         if (interpolate) { snapshot_valid = rt_snapshot(); gs_native_cache_upload(); }
     } else {
@@ -2111,13 +2184,13 @@ uint64_t gs_present(const struct Frame* cur, float t)
         stream_replay(cur, t);
         gt_mark(GT_RD);
         rt = rt_find(gs.disp_fbp, gs.disp_fbw ? gs.disp_fbw : 10);
-        draw_display(rt ? rt->tex : 0, rt ? rt->vw : 640, rt ? rt->vh : 512);
+        draw_display(rt ? rt->tex : 0, rt ? rt->vw : 640, rt ? rt->vh : 512, scene_dith);
         overlay_render();
         if (!interp_dumped) { dump_frame(1); interp_dumped = 1; }
         gt_mark(GT_DD);
         rt_restore();
     } else {
-        draw_display(final_vw ? img[fin].tex : 0, final_vw ? final_vw : 640, final_vw ? final_vh : 512);
+        draw_display(final_vw ? img[fin].tex : 0, final_vw ? final_vw : 640, final_vw ? final_vh : 512, final_vw && img[fin].dith);
         overlay_render();
         if (!final_dumped) { dump_frame(0); final_dumped = 1; }
         dump_window();

@@ -407,6 +407,43 @@ image): 2x +0.3 / +1.1 ms FXAA, +0.8 / +1.8 ms SMAA; 4x +3 / +2 ms, +6 / +5 ms; 
 +15 ms (in-between images then no longer fit). With an Internal Resolution well above the window
 the supersampled picture hardly needs it.
 
+**Dithering** (`dithering`: Off, On, Deband) against colour banding, which a CRT hid on the PS2.
+Where the steps come from (measured in the graveyard 0/2, the prison yard 0/3, the lamp-lit room 1/3
+and the Antarctic corridor 6/3, float dumps of the 16F targets): every GS draw ends with the GS's
+truncation to whole 8-bit levels (`floor` in the fragment shader), so lighting and fog gradients
+come out as plateaus a level apart, also where the inputs (interpolated vertex colours and fog,
+texels times colour / 128) vary smoothly; the 16F targets then hold only whole levels and their
+extra precision never shows. Without the truncation 61-77 % of the scene's channel values lie
+between two levels. On top, some textures carry their own steps (gradients in 16-colour palettes,
+plateaus 2-3 levels apart, e.g. the graveyard's fogged wall), which no output precision removes.
+On: a frame with a 3D scene (the split of `stream.c aa_split`, now also found for Dithering) draws
+its 3D without the truncation (`gs_gl.c` variant `V_SMOOTH`, uniform `u_smooth` 1: a value between
+two levels keeps its fraction, half a level lower, so the gradient runs through the middle of the
+GS's steps and the average brightness stays; whole values, alpha and the alpha test stay as the GS
+computes them). The 2D after the split is truncated as before. Draws that read a render target
+(the display copy into the display buffer at the end of the frame, effects) take the texel's
+fraction across: the GS results of its two neighbouring levels, blended by it (`u_smooth` 2). The
+present pass then rounds the kept fraction up or down by a threshold per window pixel (interleaved
+gradient noise; `present_fs` with `DITH`), after the supersampling and the picture calibration: the pattern is fixed
+on the screen, so it does not crawl or flicker, and in-between images get the same one. A pixel on a
+whole level before the calibration (text, menus, flat colours) is written as without it, so frames
+without a 3D scene (title, menus, inventory, map, movies) are bit-identical to Off. Deband: after the
+anti-aliasing at the split, `aa.c deband_fs` takes four taps on a circle of 12 game pixels (radius and
+angle from the pixel's place in a 4x4 tile), read from a copy of the scene at the game's resolution so
+that neighbouring pixels' reads stay together in the texture cache, and where all four are within
+3.5 levels of the pixel replaces it with their average; edges and stronger texture detail stay, faint texture detail is softened a
+little. A quirk of the 16F targets: a whole level k/255 is stored a little below k on GPUs that
+round to half precision towards zero (radeonsi: every value measured), so with the truncation a
+render-target copy loses one level (Off's display copy darkens the picture by about one level);
+On's copy snaps whole texels back to their level and is exact, as the GS's, so On is up to a level
+brighter than Off, the PS2's brightness. Off compiles and runs exactly the shaders it had
+(`layout_check.sh` identical) and costs nothing (no stream scan, no pass). Cost (Ryzen 9800X3D iGPU,
+graveyard 0/2, GPU time, another program loading the GPU at the same time, so the smallest of the
+2-second samples): On's dither in the present pass +0.02 ms at 1080p, +0.1-0.4 ms at 4K; its
+3D-scene shaders below the noise (about 1 ms between samples). Deband per executed frame and
+in-between image: about +1 ms at 2x, +5 ms at 4x (the game-resolution copy and five reads per pixel;
+full-resolution taps cost 15-20 ms at 4x).
+
 `glGetError` is read only every 64th executed frame (reading it after every flush made the
 render thread wait for the driver's GL thread).
 

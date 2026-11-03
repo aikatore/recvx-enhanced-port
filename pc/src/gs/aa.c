@@ -398,9 +398,41 @@ static const char* smaa_blend_fs =
     "  o = vec4(SMAANeighborhoodBlendingPS(uv, off, u_src, u_blend).rgb, texelFetch(u_src, ivec2(gl_FragCoord.xy), 0).a);\n"
     "}\n";
 
-static GLuint vao, p_fxaa, p_edges, p_weights, p_blend, t_area, t_search;
+/* Deband (Dithering "Deband", gs_gl.c gs_scene_aa): steps baked into the game's textures (gradients
+   in 16-colour palettes) are several 8-bit levels high and flat in between, so dithering alone keeps
+   them. Four taps on a circle of 12 game pixels, at right angles (radius and angle fixed per screen
+   pixel by its place in a 4x4 tile: no crawl, the same in in-between images), read from a copy at
+   the game's resolution (u_small, one bilinear tap per game pixel): the taps of neighbouring pixels
+   stay together in the texture cache (full-resolution taps with a random direction per pixel cost
+   20 ms at 4x on an integrated GPU, with the tile 15 ms); where all four are within 3.5 levels of the pixel (a
+   flat area or a small step) their average replaces it, else (an edge, texture detail) the pixel
+   stays. Alpha is copied. The fraction it makes is shown by the dither at present. */
+static const char* deband_fs =
+    AA_HEAD
+    "uniform sampler2D u_src, u_small; uniform float u_range;\n"
+    "void main(){\n"
+    "  ivec2 p = ivec2(gl_FragCoord.xy);\n"
+    "  vec4 c = texelFetch(u_src, p, 0);\n"
+    "  ivec2 q = p & 3; int x = q.x ^ q.y;\n"
+    "  float k = float(((x & 1) << 3) | ((q.y & 1) << 2) | (x & 2) | ((q.y & 2) >> 1));\n"   /* 4x4 Bayer: 16 neighbours, 16 directions */
+    "  float d = u_range * (0.5 + 0.5 * fract(k * 0.618034)), a = k * (1.5707963 / 16.0);\n"
+    "  vec2 r = vec2(cos(a), sin(a)) * d, uv = gl_FragCoord.xy;\n"
+    "  vec3 s0 = textureLod(u_small, (uv + r) * u_metrics.xy, 0.0).rgb, s1 = textureLod(u_small, (uv - r) * u_metrics.xy, 0.0).rgb;\n"
+    "  vec3 s2 = textureLod(u_small, (uv + vec2(-r.y, r.x)) * u_metrics.xy, 0.0).rgb, s3 = textureLod(u_small, (uv + vec2(r.y, -r.x)) * u_metrics.xy, 0.0).rgb;\n"
+    "  vec3 m = max(max(abs(s0 - c.rgb), abs(s1 - c.rgb)), max(abs(s2 - c.rgb), abs(s3 - c.rgb)));\n"
+    "  o = vec4(max(max(m.r, m.g), m.b) < 3.5 / 255.0 ? (s0 + s1 + s2 + s3) * 0.25 : c.rgb, c.a);\n"
+    "}\n";
+
+static const char* copy_fs =   /* the deband's game-resolution copy: one bilinear tap per pixel */
+    AA_HEAD
+    "uniform sampler2D u_src;\n"
+    "void main(){ o = textureLod(u_src, gl_FragCoord.xy * u_metrics.xy, 0.0); }\n";
+
+static GLuint vao, p_fxaa, p_edges, p_weights, p_blend, p_deband, p_copy, t_area, t_search;
 static GLuint t_edges, f_edges, t_weights, f_weights;
 static int tw, th;
+static GLuint t_small, f_small;
+static int sw, sh;
 
 static GLuint smaa_prog(const char* fs)
 {
@@ -446,10 +478,10 @@ static void pass(GLuint p, int w, int h)
     glDrawArrays(0x0005 /* GL_TRIANGLE_STRIP */, 0, 4);
 }
 
-/* mode 1 FXAA, 2 SMAA: src (w x h, linear filtering) into dst_fbo (as large). The caller turns off
+/* mode 1 FXAA, 2 SMAA, 3 deband (scale: pixels per game pixel): src (w x h, linear filtering) into dst_fbo (as large). The caller turns off
    scissor, depth test, blending and clip distances; afterwards texture unit 0 is active and this
    file's VAO bound. */
-void aa_apply(int mode, unsigned int src, unsigned int dst_fbo, int w, int h)
+void aa_apply(int mode, unsigned int src, unsigned int dst_fbo, int w, int h, float scale)
 {
     if (!vao) {
         static unsigned char area[AA_AREA_W * AA_AREA_H * 2], search[AA_SEARCH_W * AA_SEARCH_H];
@@ -458,6 +490,8 @@ void aa_apply(int mode, unsigned int src, unsigned int dst_fbo, int w, int h)
         p_edges = smaa_prog(smaa_edges_fs);
         p_weights = smaa_prog(smaa_weights_fs);
         p_blend = smaa_prog(smaa_blend_fs);
+        p_deband = gs_gl_compile(aa_vs, deband_fs);
+        p_copy = gs_gl_compile(aa_vs, copy_fs);
         aa_area_table(area);
         aa_search_table(search);
         t_area = tex(GL_RG8, AA_AREA_W, AA_AREA_H, GL_RG, area, GL_LINEAR);
@@ -466,6 +500,8 @@ void aa_apply(int mode, unsigned int src, unsigned int dst_fbo, int w, int h)
         glUseProgram(p_edges); uni(p_edges, "u_src", 0);
         glUseProgram(p_weights); uni(p_weights, "u_edges", 1); uni(p_weights, "u_area", 2); uni(p_weights, "u_search", 3);
         glUseProgram(p_blend); uni(p_blend, "u_src", 0); uni(p_blend, "u_blend", 1);
+        glUseProgram(p_deband); uni(p_deband, "u_src", 0); uni(p_deband, "u_small", 1);
+        glUseProgram(p_copy); uni(p_copy, "u_src", 0);
     }
     glBindVertexArray(vao);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -477,9 +513,20 @@ void aa_apply(int mode, unsigned int src, unsigned int dst_fbo, int w, int h)
     }
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, src);
-    if (mode == 1) {
+    if (mode == 3) {
+        int w1 = (int)(w / scale + 0.5f), h1 = (int)(h / scale + 0.5f);
+        if (sw != w1 || sh != h1) { target(&t_small, &f_small, 0x881A /* GL_RGBA16F */, GL_RGBA, w1, h1); sw = w1; sh = h1; }
+        glBindFramebuffer(GL_FRAMEBUFFER, f_small);
+        glViewport(0, 0, w1, h1);
+        pass(p_copy, w1, h1);
+        glViewport(0, 0, w, h);
+        glActiveTexture(GL_TEXTURE0 + 1); glBindTexture(GL_TEXTURE_2D, t_small);
+        glActiveTexture(GL_TEXTURE0);
+        glUseProgram(p_deband); glUniform1f(glGetUniformLocation(p_deband, "u_range"), 12.0f * scale);
+    }
+    if (mode != 2) {
         glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
-        pass(p_fxaa, w, h);
+        pass(mode == 3 ? p_deband : p_fxaa, w, h);
         return;
     }
     glClearColor(0, 0, 0, 0);

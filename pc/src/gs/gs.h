@@ -78,6 +78,7 @@ void     gs_local_to_local(void);
 void     gs_rt_to_mem(uint32_t bp, uint32_t bw, uint32_t psm, uint32_t x, uint32_t y, uint32_t w, uint32_t h);
 unsigned int gs_capture_rt(uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, int wide);   /* GL texture of the RT area (0,0)-(w,h); wide: widened by hor+ about x w/2 */
 void gs_replay_capture(unsigned int exec_tex, uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, int wide);   /* in a replay: as gs_capture_rt, bound in place of exec_tex until the replay ends */
+void gs_scene_begin(int scene);   /* an executed frame or in-between image starts; scene: it has a 3D scene (aa_split) */
 void gs_scene_aa(uint32_t fbp, uint32_t fbw);   /* anti-aliasing of the 3D in that render target, mid-frame (stream.c aa_split) */
 /* textures at TBP tbp are movie frame index (pc/src/movie) until the next executed frame */
 void     gs_movie_bind(uint32_t tbp, int index);

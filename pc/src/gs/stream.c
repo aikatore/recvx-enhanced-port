@@ -423,7 +423,7 @@ static void aa_split(Frame* f)
     int tagged = 0, def = 0, n3 = 0, after = 0;
     static int trace = -1;
     f->aa_ev = NOEV;
-    if (!g_config.anti_aliasing) return;
+    if (!g_config.anti_aliasing && !g_config.dithering) return;
     if (trace < 0) trace = SDL_getenv("RECVX_AA_TRACE") != NULL;
     for (int pass = 0; pass < 2; pass++) {
         fr[0] = gs.ctx[0].frame; fr[1] = gs.ctx[1].frame; ofs[0] = gs.ctx[0].xyoffset; ofs[1] = gs.ctx[1].xyoffset;
@@ -508,6 +508,7 @@ void stream_exec(Frame* f)
     gs_tex_epoch = 0;
     hdpack_frame(f->fade);
     aa_split(f);
+    gs_scene_begin(f->aa_ev != NOEV);
     for (size_t i = 0; i < f->nev; i++) {
         const Ev* e = &f->ev[i];
         if (i == f->aa_ev) gs_scene_aa(f->aa_fbp, f->aa_fbw);
@@ -1156,6 +1157,7 @@ void stream_replay(const Frame* r, float t)
     gs_replay_begin();
     int in_def = 0;
     gs_tex_epoch = 0;
+    gs_scene_begin(r->aa_ev != NOEV);
     for (size_t i = 0; i < r->nev; i++) {
         const Ev* e = &r->ev[i];
         if (i == r->aa_ev) gs_scene_aa(r->aa_fbp, r->aa_fbw);   /* where the executed frame ran it */
