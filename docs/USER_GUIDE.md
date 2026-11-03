@@ -350,6 +350,7 @@ Weapon Shortcuts (on, [Weapon shortcuts](#weapon-shortcuts)), then the bindings.
 | Lighting and Fog | Smooth | fades when the room's camera cut changes. Original: changes with each camera cut, as the original |
 | Aim Assist | Off | Off: free aim. On: the game's lock-on (gamepad: aim assist) |
 | Precise Shots | On | free-aim shots hit only where the crosshair meets the body; head hits do more damage |
+| Move While Aiming | Off | walk slowly with the weapon raised, firing, slashing or reloading: W/A/S/D or the left stick move you (forward, back, sideways), the arms keep aiming; not with Aim Assist and the mouse |
 | Gamepad Controls | Modern | see [Third person with a gamepad](#third-person-with-a-gamepad) |
 
 Also: field of view, camera distance, height and shoulder, mouse and stick speeds, invert Y,

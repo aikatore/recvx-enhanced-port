@@ -13,6 +13,8 @@
 
 ### Third person
 
+- **Move While Aiming** (optional, off by default): walk slowly while aiming, firing, using the knife or
+  reloading, in any direction. The arms keep aiming or reloading while the legs walk.
 - **Quick turn turns the camera**: the camera now turns around together with the character, in both mouse
   camera styles and with a gamepad, so you look the new way right away.
 - **Camera in tight places**: the camera no longer slips through walls and ceilings that you can see but

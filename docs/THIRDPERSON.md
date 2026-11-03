@@ -111,7 +111,7 @@ camera behind, no camera stick). The game's own turn while aiming cannot move fr
 the left stick), aims while the weapon is raised, at the stick aiming speed as in Modern; with
 "Aim Assist" Classic keeps the game's lock-on. In both schemes, while aiming freely, the left
 stick and the d-pad also move the crosshair (left / right turn it, up / down raise and lower it, as
-they turn and tilt the original aim); in the scope the game turns by them itself and only the right
+they turn and tilt the original aim; with [Move While Aiming](#moving-while-aiming) the left stick walks instead); in the scope the game turns by them itself and only the right
 stick is added. Modern, as the RE2/RE4 remakes (button map:
 [USER_GUIDE.md](USER_GUIDE.md#third-person)):
 
@@ -187,6 +187,7 @@ unit (the character is about 17 units tall).
 | Crosshair | `tps_crosshair` | 1 |
 | Aim Assist (0 = free aim) | `tps_auto_aim` | 0 |
 | Precise Shots ([Precise Shots](#precise-hits)) | `tps_precise_hits` | 1 |
+| Move While Aiming ([Moving while aiming](#moving-while-aiming)) | `tps_aim_walk` | 0 |
 | Mouse Camera Style (0 = Behind Character, 1 = Free Camera) | `tps_free_camera` | 0 |
 | Gamepad Controls (0 = Classic, 1 = Modern) | `tps_pad_controls` | 1 |
 | Horizontal / Vertical Camera Speed (percent; 100 = 180 / 120 degrees a second) | `tps_pad_sens_x`, `tps_pad_sens_y` | 100 |
@@ -202,7 +203,7 @@ unit (the character is about 17 units tall).
 |---|---|
 | `RECVX_TPS_MOUSE="frame:dx:dy,..."` | moves the mouse dx/dy counts per game frame from that presented frame on |
 | `RECVX_VPAD="frame:input+input,..."` | a virtual gamepad ([ARCHITECTURE.md](ARCHITECTURE.md)): sticks as `leftx=0.5+lefty=-1` (up is negative), triggers `+lefttrigger`; a trigger after another input needs its own `+` (`+lefttrigger++righttrigger`) |
-| `RECVX_TPS_TRACE=1` | logs the gamepad per frame ("tps: pad": the sticks past their dead zones, the walk direction, facing, camera, quick turn, the enemy nearest the crosshair) and its aim assist ("tps: assist"), the free aim per frame, each shot's direction and wall hit against the crosshair target ("SHOT"), the drawn weapon's barrel with "Character Model", the camera ("tps: cam A\|B": yaw, pitch, the player's position, the model's root, the point followed and the eye), the aim height given to the game, the scope per frame ("tps: scope": `ay`, `wax`, the field of view, the turn of the mouse and right stick in game units, the enemy nearest the centre in degrees, the enemies' health), each shot of a dual weapon ("tps: DUAL R\|L": the arms' yaws aimed and shown, the enemy under the crosshair and the other arm's, the aim height, each enemy's health, degrees off the facing and distance), each gun hit ("tps: HIT": weapon, enemy, joint, damage, precise or the game's test, the enemy's state), each precise test that met a body ("tps: PRECISE": joint, volume, along which ray), a zombie's head burst ("tps: HEAD BURST"); `=2` also keeps the camera on the enemy the game locked on to (dual weapons: the nearest of their lock-on), also in the scope, and logs per shot how far the crosshair passed from that enemy's body ("tps: SHOT at enemy") |
+| `RECVX_TPS_TRACE=1` | logs the walk under the aim per frame ("tps: aimwalk": modes, the input, the legs' walk motion, frame, turn and weight, the position), the gamepad per frame ("tps: pad": the sticks past their dead zones, the walk direction, facing, camera, quick turn, the enemy nearest the crosshair) and its aim assist ("tps: assist"), the free aim per frame, each shot's direction and wall hit against the crosshair target ("SHOT"), the drawn weapon's barrel with "Character Model", the camera ("tps: cam A\|B": yaw, pitch, the player's position, the model's root, the point followed and the eye), the aim height given to the game, the scope per frame ("tps: scope": `ay`, `wax`, the field of view, the turn of the mouse and right stick in game units, the enemy nearest the centre in degrees, the enemies' health), each shot of a dual weapon ("tps: DUAL R\|L": the arms' yaws aimed and shown, the enemy under the crosshair and the other arm's, the aim height, each enemy's health, degrees off the facing and distance), each gun hit ("tps: HIT": weapon, enemy, joint, damage, precise or the game's test, the enemy's state), each precise test that met a body ("tps: PRECISE": joint, volume, along which ray), a zombie's head burst ("tps: HEAD BURST"); `=2` also keeps the camera on the enemy the game locked on to (dual weapons: the nearest of their lock-on), also in the scope, and logs per shot how far the crosshair passed from that enemy's body ("tps: SHOT at enemy") |
 | `RECVX_TPS_AIM_AT=f`, `=cN`, `...:side:up` | with `RECVX_TPS_TRACE=2`, where on that enemy: `f` along its hit capsule (0 = `c1`, for a zombie the head, 1 = `c2`, its legs; default 0.5), `cN` the middle of volume N of its joint table ([Precise Shots](#precise-hits); a zombie: `c0` hips to chest, `c4` the head); `:side:up` adds that many units beside it (right of the view, negative left) and above |
 | `RECVX_TPS_ORBIT=degrees` | turns only the view about the player (side views; aim unchanged, camera ignores walls) |
 | `RECVX_ATMOS_TRACE=1` | logs each game frame's cut, the game's fog, lights and filter, the player's view depth from the view drawn and from the cut camera, and the fog shown with our camera (range in view depth) and what "smooth" shows |
@@ -546,6 +547,52 @@ Free aim now sets them every tick (`dual_aim`, after `aim_at_crosshair`; not whi
   height). The partner draws our motions and our aim pitch (the bend, [COOP.md](COOP.md#pose-and-the-partners-model)),
   without the arms' turn.
 
+## Moving while aiming
+
+Setting "Move While Aiming" (THIRD PERSON page, ini `tps_aim_walk`, off by default). In the original you stand
+still while the weapon is raised and while reloading. With it on, in third person:
+
+* **When**: the weapon raised with free aim (every weapon, the knife and the quick knife; not with "Aim Assist"
+  and the mouse, whose W / S aim up and down), firing, slashing, a shot's follow-up motion, the reload (raised, and
+  the reload of a lowered weapon, [Gamepad](#gamepad) "Reload"). Not while lowering it (mode2
+  68), nor in the scope (sniper rifle, linear launcher). Hits, grabs and damage end it at once, as they end the aim.
+* **Input** (`tps_pad`, `pad_sticks`): W / A / S / D, or the left stick (both gamepad schemes; linear past its dead
+  zone, so half pushed walks at half speed), towards their direction seen from the camera, as camera A walks. While
+  it is on they no longer reach the game's directions (its turn while aiming, the arrows' and Classic's stick bits:
+  free aim already overrode them); the left stick no longer moves the crosshair (the d-pad still does). The aim
+  stays on the crosshair (`aim_at_crosshair` after the step).
+* **Speed and step** (`aim_walk`, after the mode handler in `bhControlPlayer`): the game's walk (`PlMtnAct` walk:
+  motion 0 / 1 by `wpntp`, 2 / 3 hurt) or its backward walk (16..19) at 0.6 of its frame rate, moving by its
+  travel per frame (`PlyTrsZ` through `bhGetTransZ`) times 0.6, so the feet keep step: about 0.23 units a frame
+  forward or sideways (the walk: 0.39), 0.16 backwards (the game's backward walk: 0.27). In water 0.8 of that, as
+  the walks. Footsteps play on the walks' frames (`PlFootSnd`, and `stflg 0x200`: enemies hear them). The game's
+  wall, enemy and floor checks run after it as for any step (`flg 0x10`, `bhCheckEnemies`, `bhCheckFloorP`):
+  walls, boxes and enemies stop the character, floors and slopes carry it. Stairs are climbed only with the weapon
+  down (the climb is the game's own move): with it raised they stop the character like a wall. Doors and
+  examining need the action button, which fires while aiming, so nothing is opened by walking into it.
+* **The feet**: the weapon modes keep the feet where they stand (`flg 0x40000`: `bhFixPosition` moves the
+  character so the drawn foot stays put). With the legs walking that pulled the character back each step, and
+  lowering the weapon, which sets it again, slid it by a stride. It is cleared while the legs are blended in and
+  set again a tick after they are out, if the weapon is still raised.
+* **Legs and upper body** (`tps_legs`, from `tps_calc_model` in place of `bhCalcModel`): after the weapon motion
+  is posed and computed, its upper body's world orientation is kept (node 2, spine, as a world matrix: chest, arms,
+  head and weapons hang from it), the hips and legs (nodes 0, 1, 14..21) are posed from the walk (`bhSetMotion`
+  on a copy of the work, so the weapon motion's frame and blend stay), blended in and out over about 6 ticks,
+  and the tree is computed again (`O_WORK flg 1` on the root, turned, and on node 2). The node angles are put
+  back: the game's motion state never sees the legs. Free aim's bend (`bend`) then keeps the hips and legs as
+  they are (`flg 1` on them too; identical when no legs walk). Forward: the walk; backward (more than 115 degrees
+  off the facing, back to forward under 100): the backward walk; sideways: the walk with the hips turned towards
+  the movement, at most 55 degrees off the aim (the feet slide the rest), as the backward walk's do for the back
+  diagonals. The upper body keeps the aim, shots and recoil, the knife's slashes and the reload as their motions
+  have them.
+* **Other models**: "Character Model" with the retargeting reads the posed matrices, so it walks as well; a
+  gender-matched pose (another set's motions, `actor_glue.c shadow_step`) plays the same walk from its own set
+  under its motion. Steve and Wesker (Battle Game) walk with their own sets.
+* **Co-op**: the pose sends the walk (`Pose.legs`, `legs_frm`: which walk, its frame, the hips' turn; protocol 37,
+  [COOP.md](COOP.md)); the partner's model plays it under the weapon motion the same way. Position and aim pitch
+  arrive as before.
+* Off, the fixed cameras, the scope: unchanged (frame-identical runs aiming, walking, firing and reloading).
+
 ## Precise hits
 
 Setting "Precise Shots" (THIRD PERSON page, ini `tps_precise_hits`, on by default). Off, and with the
@@ -624,6 +671,9 @@ it does not, with the guest's option off it does as before).
   aim stay put). Alpha strips (railings, grates), models placed in the room (pushable boxes,
   items) and enemies do not move the camera.
 * Aim poses: free aim bends the straight pose up to 60 degrees of pitch. No laser sight.
+* Move While Aiming: sideways the hips turn at most 55 degrees and the feet slide the rest (the game has no
+  side step); the upper body keeps the weapon motion's pose, so it does not sway with the steps. Not with "Aim
+  Assist" and the mouse.
 * The crosshair goes down to 60 degrees: from the shoulder (16.5 units up) it meets the floor
   about 9.5 units ahead, so a crawling zombie nearer than that cannot be put under it (the shot
   goes at the floor behind it; with "Precise Shots" off the game's wide hit test may still reach it).
