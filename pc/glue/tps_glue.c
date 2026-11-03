@@ -737,10 +737,23 @@ static unsigned toggle_closes(void)
 unsigned int tps_pad(unsigned int pad)
 {
     unsigned k;
-    int scope;
+    int scope, menu;
     if (sys->ss_flg & 0x400000) return pad;   /* attract demo playback */
     pad |= toggle_closes();
     k = tps_input_keys(plp && pad_sticks(&pad));
+    /* a menu, message or pick-up (the game frozen) or the trade screen: the movement keys are its d-pad, as in
+       camera B (camera A's walk below gave them all "forward", the cursor only went up) */
+    menu = !(sys->sp_flg & 0x40) || pc_trade_screen();
+    {   /* a movement key held as a sub-screen (inventory, item box, files, map, save screen) or the trade screen opens
+           or closes counts for neither until let go: no cursor step as it opens, no step forward as it closes */
+        static int was;
+        static unsigned stale;
+        int sub = (sys->ts_flg & 0x80) || pc_trade_screen();
+        if (sub != was) stale = k & (TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT);
+        was = sub;
+        stale &= k;
+        k &= ~stale;
+    }
     pad_steer = (pad & 0xF) != 0 && !pad_cam;   /* (the gamepad: its stick, or a d-pad turn: the camera stays) */
     scope = in_scope();
     {   /* the scope: the recenter row (right stick click) switches the zoom (the game's "change aim" bit 0x80,
@@ -759,7 +772,7 @@ unsigned int tps_pad(unsigned int pad)
         was = now;
     }
     move_keys = 0;
-    if (g_tps.free_cam && tps_cam_active && plp && plp->mode1 == 0 && !(k & TPS_K_QUICKTURN)) {
+    if (g_tps.free_cam && tps_cam_active && !menu && plp && plp->mode1 == 0 && !(k & TPS_K_QUICKTURN)) {
         /* camera A: any direction walks forward, tps_player turns the character towards it */
         move_keys = k & (TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT);
         k &= ~move_keys;

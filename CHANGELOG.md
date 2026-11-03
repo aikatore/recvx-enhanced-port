@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Third-person keys in menus**: with Free Camera, W, A, S and D move the cursor in every direction in the item
+  box, files, map and other menus, not only up, and the mouse wheel scrolls the item box without lagging.
+
 ## 0.7.3 (2026-11-03)
 
 ### New
