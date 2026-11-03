@@ -162,6 +162,7 @@ static void margins(void)
         CHECK(box[0] == -30 && box[1] == -4 && box[2] == 10 && box[3] == -15 && box[4] == 2 && box[5] == 14);
         CHECK(pc_margin_inside(doll, 1, box) == 1);
         CHECK(pc_margin_inside(doll, 2.5f, box) == 0);   /* reaching out of it */
+        CHECK(pc_margin_inside(doll, 1.2f, box) == 1);   /* by less than a quarter of its radius (1/5: the ship in a corner niche) */
         CHECK(pc_margin_inside(pot, 1, box) == 0);
     }
 }
