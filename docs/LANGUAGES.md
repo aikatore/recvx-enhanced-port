@@ -544,7 +544,7 @@ are. The European English is not installed: its text is the US text, and it has 
   Japanese logo) are pictures too (`picture_whole`): with it off, the disc's. It applies to the files loaded next (the
   next screen, the next room, the next movie).
 - **Translated Voices** (GAMEPLAY > GENERAL, under Translated Pictures, shown when an imported language has a sound
-  of its own: `lang_has_voices`, its folder has `ADV.AFS/3`; ini `translated_voices`, default 0): On plays the
+  of its own: `lang_has_voices`, its folder has `ADV.AFS/3`; ini `translated_voices`, default 1 since 2026-11-03): On plays the
   language's title call (`pc_lang_file_dir`: `ADV.AFS/3` follows this setting, not Translated Pictures); Off the disc's.
   `ADXT_StartAfs` streams it from the file (the log's `adxt: start 3/3 ... from <folder>/ADV.AFS/3`), as a mods
   folder's sound. It applies to the next title call. The cutscene voices are the disc's either way, with subtitles in

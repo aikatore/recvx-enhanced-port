@@ -4,8 +4,8 @@
 
 ### New
 
-- **Translated Voices**: a new setting plays the title screen's call from the Japanese, Korean and Italian discs
-  you imported. It is off by default.
+- **Translated Voices**: with Japanese, Korean or Italian imported, the title screen's call is played in that
+  language. A new setting can turn it off.
 
 ### Menus
 
