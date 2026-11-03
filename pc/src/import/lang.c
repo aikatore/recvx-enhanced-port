@@ -3,7 +3,8 @@
      SYSMES.ALD                      item names and system messages in the US order (European: rebuilt, the
                                      language's file pages appended; lang.txt "fsheader" points at them)
      SYSTEM.AFS/1 (/2)               the effect textures with the language's font (the computer's font)
-     ADV.AFS/n MRY.AFS/n ITEM1.AFS/n ITEM2.AFS/n   the pictures with writing (entries that differ from English)
+     ADV.AFS/n MRY.AFS/n ITEM1.AFS/n ITEM2.AFS/n   the pictures with writing (entries that differ from English);
+                                     ADV.AFS/3 is a sound: the title call (Japanese, Korean, Italian: Translated Voices)
      ROOMS.MES                       every room's message table (by room index; bhSetRoom takes it)
      SAVELOAD.MES                    the executable's save / load messages (adv.c SaveLoadMessage), if they differ
      RM_0000.RDX                     the US room with the opening's text crawl of the language (Russian, Brazilian Portuguese)

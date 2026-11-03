@@ -27,6 +27,7 @@ is imported.
 | 5. Our own texts: `tr()`, the table (French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese, Arabic, Korean, Italian), the game fonts' letters (glyphs.c, ctest `lang`), the overlay's fonts; Arabic: joined forms and right-to-left order (`lang_shape`) | done (about 1400 texts) |
 | 6. Verification | done: runs per language (below), layout check identical, Linux and Windows builds, ctest |
 | 7. Movies and the opening's text crawl (see "Movies") | done: the Russian and Brazilian Portuguese text crawl, the Japanese movies' logo; no disc has a movie with translated text |
+| 8. Voices (see "Voices"), Translated Voices | done: the title call of the Japanese, Korean and Italian discs; no disc has dubbed dialogue |
 
 Resume notes: research scripts (Python, capstone in a venv), the translation pipeline and the runs are in the job
 folders `/home/dev/.claude/jobs/c1d3e63f/lang/` (European), `lang2/` (Russian, Japanese: `x/ru`, `x/jp` hold the
@@ -179,7 +180,7 @@ What the patch changes, against the clean US disc:
 | `MRY.AFS` | 37 of 0..67 | the map screens' names |
 | `ITEM1.AFS` / `ITEM2.AFS` | 144..159, 277..281 / 144..159, 277 | the inventory's words, the files' covers |
 | `RDX_LNK.AFS` | 196 rooms (839 MB) | the messages (same counts in every room) and 473 subtitles (463 shown at once, `0xFE00`); rooms repacked: their PRS streams end with the data, without the end mark (`pc_prs_expand_ex` lax); textures: the opening's text crawl (3 textures of `RM_0000`, 85..87: imported, see "Movies"; a fourth there, 88, has no writing) and one non-text texture in 134 rooms |
-| `VOICE1.AFS`, `MOVIE/*.PSS` | all movies re-encoded (larger) | no Russian in them (see "Movies"): not taken |
+| `VOICE1.AFS`, `MOVIE/*.PSS` | entry 342; all movies re-encoded (larger) | no Russian in them (see "Movies", "Voices"): not taken |
 
 **Telling it from the clean US disc**: the patched `bhGetFontSize` counts 192 glyphs (US: 108) and reads a new table of
 widths at 0x3033A0 (free space in `sceSynthesizerSamples`). The importer finds the function by its instructions
@@ -425,7 +426,7 @@ and looked at; job folder `langmovies/`: `hash.sh`, `mvdump.c`, `scan.py`):
 | Disc | Movies that differ | What differs | Taken |
 |---|---|---|---|
 | Brazilian Portuguese (SLUS-20184) | none | byte for byte the US movies | nothing to take |
-| Russian (SLUS-20184) | all 18 (1.18 GB, the US 627 MB) | re-encoded from another source, full height (320x352 where the US has 320x176), the same sound; `MV_003` (the video on the monitor) and `MV_016` (the title screen's demo) are other cuts, `MV_015` (credits) has no "PlayStation 2" staff page. No Russian anywhere | no (not a translation) |
+| Russian (SLUS-20184) | all 18 (1.18 GB, the US 627 MB) | re-encoded from another source, full height (320x352 where the US has 320x176), the same sound (the US PCM sample for sample; `MV_003`'s, silent on the US disc, is quiet piano music); `MV_003` (the video on the monitor) and `MV_016` (the title screen's demo) are other cuts, `MV_015` (credits) has no "PlayStation 2" staff page. No Russian anywhere | no (not a translation) |
 | European (SLES-50306) | all 18 (531 MB) | PAL: 25 frames a second (the port's player paces at 29.97), the same pictures and sound; the credits say "STAFF FOR CONSOLE VERSION" (US: "PlayStation 2"). English, one set for all its languages | no |
 | Turkish, Arabic, Italian (SLES-50306) | none against the clean European disc | the patches left the movies alone | nothing to take |
 | Japanese (SLPM-65022) | `MV_015` (130.5 MB), `MV_016` (11.7 MB) | the logo "BIOHAZARD -CODE:Veronica- 完全版" in the credits' first seconds and at the demo's end; the rest the same | yes (Japanese) |
@@ -439,6 +440,29 @@ game draws it in `RM_0000` from three of the room's textures (85..87, 512x512, t
 Russian and the Brazilian Portuguese patches translated those three pictures; no other disc did (the European
 languages, Japanese and Korean show the English crawl, the European ones with the crawl as subtitles, `RM_0000`
 34..36; the Arabic `RM_0000` changes one item label, 78, not the crawl). The import takes them (below).
+
+## Voices
+
+Every disc's sounds compared with its base disc's (the job folder `langvoices/`: `cmp.py` the audio archives entry by
+entry, `adxscan.py` every ADX of the other archives, `mvcmp.py` the movies' sound decoded, `euvoice*.py` the European
+voices decoded and matched): `VOICE1.AFS`, `VOICE2.AFS` (the spoken lines), `BGM1/2.AFS`
+(music), `MULTSPQ1/2.AFS` with `.IDX` (each room's sound effects, the player characters' voice banks), `COMMON.MLT`,
+every other ADX entry (`ADV.AFS` 3 and 8..31; 3 is the title call) and the movies' sound.
+
+| Disc | Sounds that differ | What | Taken |
+|---|---|---|---|
+| Russian (SLUS-20184) | `VOICE1.AFS/342`; `MV_003`'s sound | 342, 0.2 s of silence on the US disc, holds a copy of the English line `VOICE1.AFS/524` (1.8 s); `MV_003` (the video on the monitor) has quiet piano music where the US one is silent. No Russian voice anywhere: every other sound is the US one, byte for byte (the movies' PCM sample for sample) | no |
+| Brazilian Portuguese (SLUS-20184) | none | | |
+| Japanese (SLPM-65022) | `ADV.AFS/3` | the title call (`adv.c TitleCall`, on PRESS START): the Japanese release's own recording (its name is Biohazard), 3.5 s (US: 4.3 s). The voices, music and sound effects are the US ones, byte for byte: English | yes |
+| Korean (SLPM-65022) | none against the Japanese disc | the Japanese title call (against the US disc: `ADV.AFS/3`) | yes (the Japanese one) |
+| European (SLES-50306) | `VOICE?.AFS` (343 and 291 entries, the US 525 and 515), 26 + 25 of `BGM?.AFS`, 36 + 34 of `MULTSPQ?.AFS` | one set at the root for all its languages: the US recordings in English, the US silent placeholders dropped, some lines joined or cut otherwise (most entries match a US one sample for sample, the rest by their speech's timing); PAL re-encodes of music and effects. The title call is the US one | no (not a language's) |
+| Turkish, Arabic (SLES-50306) | none against the clean European disc | | |
+| Italian (SLES-50306) | `FRA/ADV2.AFS/3` | the patch's own title call (4.2 s; another recording than the English one, louder) | yes |
+
+No disc has dubbed dialogue: the spoken lines are English on every disc, so the cutscenes' mouth shapes (timed to
+the English lines) fit as before, and subtitles of any language go with them as they did. The import already took
+`ADV.AFS/3` with the pictures (`pictures`: every entry that differs from the base disc's English; 187 KB Japanese and
+Korean, 224 KB Italian) since the first imports of these languages, so no import again.
 
 ## How the port uses it
 
@@ -519,6 +543,12 @@ are. The European English is not installed: its text is the US text, and it has 
   language's. The rooms and movies of the language's folder (`RM_0000.RDX`: the opening's text crawl; `MOVIE/`: the
   Japanese logo) are pictures too (`picture_whole`): with it off, the disc's. It applies to the files loaded next (the
   next screen, the next room, the next movie).
+- **Translated Voices** (GAMEPLAY > GENERAL, under Translated Pictures, shown when an imported language has a sound
+  of its own: `lang_has_voices`, its folder has `ADV.AFS/3`; ini `translated_voices`, default 0): On plays the
+  language's title call (`pc_lang_file_dir`: `ADV.AFS/3` follows this setting, not Translated Pictures); Off the disc's.
+  `ADXT_StartAfs` streams it from the file (the log's `adxt: start 3/3 ... from <folder>/ADV.AFS/3`), as a mods
+  folder's sound. It applies to the next title call. The cutscene voices are the disc's either way, with subtitles in
+  any language; in co-op each player hears their own.
 - Movies: `movie_glue.c initAll` opens `MOVIE/<name>` through `mod_open_path` (`pc_mod_fopen`: BioRand's pack, the
   mods folder, the language's folder with Translated Pictures on), else the disc's sectors; `player.c movie_open`
   streams from that file. The trace (`RECVX_MOVIE_TRACE`) names where it came from.

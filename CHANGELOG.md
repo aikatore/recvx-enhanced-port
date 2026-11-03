@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### New
+
+- **Translated Voices**: a new setting plays the title screen's call from the Japanese, Korean and Italian discs
+  you imported. It is off by default.
+
 ### Menus
 
 - **EXIT on the title screen**: the title menu has an EXIT entry at the bottom that closes the game after asking.

@@ -231,6 +231,7 @@ static void picture_reset(void) { g_config.brightness = 0; g_config.contrast = 1
 /* Language: English and the installed languages (lang.h), in LANG_* order; Subtitles */
 static int lang_n(void) { int n = 0; for (int l = 0; l < LANG_COUNT; l++) n += lang_installed(l); return n; }
 static int lang_any(void) { return lang_n() > 1; }   /* the rows only with an imported language */
+static int voices_any(void) { for (int l = 1; l < LANG_COUNT; l++) if (lang_has_voices(l)) return 1; return 0; }   /* ... one with a sound of its own */
 static int lang_at(int v) { for (int l = 0; l < LANG_COUNT; l++) if (lang_installed(l) && v-- == 0) return l; return LANG_EN; }
 static int lang_get(void) { int v = 0; for (int l = 0; l < g_lang && l < LANG_COUNT; l++) v += lang_installed(l); return lang_installed(g_lang) ? v : 0; }
 static void lang_set(int v) { g_lang = lang_at(v); }
@@ -408,6 +409,8 @@ const Setting g_settings[] = {
       .help = "Cutscene subtitles in this language, also with the game in another one." },
     { SP_GAMEPLAY, "Translated Pictures", V(g_lang_pictures), 0, 1, 1, .shown = lang_any,
       .help = "Pictures with writing in the language (menus, maps, labels). Off shows the English ones, which an HD texture pack can replace." },
+    { SP_GAMEPLAY, "Translated Voices", V(g_lang_voices), 0, 1, 1, .shown = voices_any,
+      .help = "Voice recordings in the language where its disc has them (the title screen's call). Off plays the original ones." },
     { SP_GAMEPLAY, "Skip Intro", V(g_config.skip_intro), 0, 1, 1, .flags = SET_RESTART, .help = "Go straight to the title screen. Off lets you skip each logo and movie with a button press." },
     { SP_GAMEPLAY, "Check For Updates", V(g_config.update_check), 0, 2, 1, (const char* const[]){ "Off", "Ask to Install", "Notify Only" }, .apply = update_start,
       .help = "Check for a newer game version at startup. Ask to Install offers to download and install it on the title screen; Notify Only just shows it there." },

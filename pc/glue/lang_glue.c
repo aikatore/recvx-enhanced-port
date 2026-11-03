@@ -33,6 +33,7 @@ int g_lang, g_subtitles;
 typedef struct Term { int tab, idx; char* s; } Term;
 typedef struct LangInfo {
     int ok, subs, nw, fpics, nterm, ver;   /* ver: lang.txt's "# recvx language" (1: item messages cut, lang_old_import) */
+    int voices;                      /* its folder has a sound of its own (voice_file) */
     int pageend[6], npageend;        /* the playing manual's hidden pages per stage of the story (PlayPageCheck) */
     char dir[1200];
     unsigned char w[256], ox[256];   /* widths; shifts + 32 (offsets|: Japanese; 0 none) */
@@ -138,6 +139,8 @@ void lang_scan(void)
             fclose(f);
             x->ok = (x->nw >= 108 || lang_cjk(l)) && nf == 24 && nh == 24;   /* (the Japanese and Korean fonts: one width, below) */
             if (!x->ok) host_log("lang: %s is incomplete: not offered\n", p);
+            snprintf(p, sizeof(p), "%s/ADV.AFS/3", x->dir);
+            if ((f = pc_fopen(p, "rb"))) { x->voices = 1; fclose(f); }
         }
     }
     /* ponytail: the old lists' texts stay allocated (the game may still show one); a few KB per import or delete */
@@ -154,6 +157,7 @@ int lang_old_import(int l)
     return l > 0 && lang_installed(l) && ((l != LANG_RU && info[l].ver < 2) || ((l == LANG_RU || l == LANG_PT || l == LANG_JA) && info[l].ver < 3));
 }
 int lang_has_subtitles(int l) { return lang_installed(l) && info[l].subs; }
+int lang_has_voices(int l) { return lang_installed(l) && info[l].voices; }
 int lang_sub(void)
 {
     int l = g_subtitles == 1 ? g_lang : g_subtitles - 2;
@@ -271,9 +275,14 @@ static int picture_whole(const char* name)
     size_t n = strlen(name);
     return !strncmp(name, "MOVIE/", 6) || (n > 4 && !strcasecmp_(name + n - 4, ".RDX"));
 }
+/* a language's sound (docs/LANGUAGES.md "Voices"): the title call, ADV.AFS/3 (adv.c TitleCall), the one sound a
+   language's disc changes (Japanese and Korean: the Japanese release's, Italian: the patch's); Translated Voices plays it */
+int g_lang_voices = 0;   /* (off by default: the disc's) */
+static int voice_file(const char* name) { return !strcmp(name, "ADV.AFS/3"); }
 /* the language of a file the game is about to read: its folder (NULL: the disc's) */
 const char* pc_lang_file_dir(const char* name)
 {
+    if (voice_file(name)) return g_lang_voices ? lang_dir(data_lang()) : NULL;
     return !g_lang_pictures && (picture_file(name) || picture_whole(name)) ? NULL : lang_dir(data_lang());
 }
 
