@@ -6,6 +6,11 @@
 
 - **EXIT on the title screen**: the title menu has an EXIT entry at the bottom that closes the game after asking.
 
+### Third person
+
+- **Quick turn turns the camera**: the camera now turns around together with the character, in both mouse
+  camera styles and with a gamepad, so you look the new way right away.
+
 ### Fixes
 
 - **Third-person keys in menus**: with Free Camera, W, A, S and D move the cursor in every direction in the item

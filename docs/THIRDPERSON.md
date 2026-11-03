@@ -47,10 +47,13 @@ Setting "Mouse Camera Style" (THIRD PERSON page, ini `tps_free_camera`):
   Shift runs. Aiming turns the character to the camera direction (free aim: at once, through
   the crosshair as in B; with "Aim Assist": towards the camera unless the game locks on);
   after aiming the camera stays where it looked. The quick-turn key does the game's quick
-  turn (S + Shift runs towards the camera). Arrow keys (and the gamepad with Classic gamepad
+  turn (S + Shift runs towards the camera); the camera turns with the character. Arrow keys (and the gamepad with Classic gamepad
   controls) keep tank controls; while they steer, the camera follows behind as in B.
 
-Doors, events and cutscenes put the camera behind the character again in both. A/B are this
+Doors, events and cutscenes put the camera behind the character again in both. The game's quick
+turn (`player.c bhCPM2_act_bak/bk2`: `flg 0x4100000`, `ay` turned by 180 degrees over 8 game frames)
+turns the camera's yaw by the same steps in every style, so the view faces the new direction when
+the turn ends. A/B are this
 document's short names for the two values, not the game's KEY CONFIG types.
 
 ### Scope

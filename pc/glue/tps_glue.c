@@ -253,6 +253,14 @@ void tps_camera(void)
 
     aim = aiming() && !lock_aim();
     g_tps.aiming = aiming();
+    {   /* the game's quick turn (player.c bhCPM2_act_bak/bk2: flg 0x4100000, ay turned to ay + 180 degrees over 8
+           frames, both bits cleared with the last step): the camera turns with the character, step by step, in
+           every style (camera A and the gamepad keep their yaw otherwise) */
+        static int ay0, was;
+        int now = plp->mode1 == 0 && (plp->flg & 0x4100000) == 0x4100000;
+        if (now || was) yaw = wrap(yaw + (short)(plp->ay - ay0));
+        ay0 = plp->ay; was = now;
+    }
     if (!(sys->sp_flg & 0x40)) mouse_dx = mouse_dy = stick_yaw = stick_pitch = 0;   /* frozen (above): no mouse look */
     if (recenter > 0 && !aiming()) {   /* gamepad: the camera eases behind the character */
         recenter--;
