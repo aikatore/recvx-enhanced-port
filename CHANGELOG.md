@@ -14,6 +14,8 @@
 
 ### Third person
 
+- **Move While Aiming** (optional, off by default): walk slowly while aiming, firing, using the knife or
+  reloading, in any direction. The arms keep aiming or reloading while the legs walk.
 - **Quick turn turns the camera**: the camera now turns around together with the character, in both mouse
   camera styles and with a gamepad, so you look the new way right away.
 - **Camera in tight places**: the camera no longer slips through walls and ceilings that you can see but
@@ -24,6 +26,8 @@
 
 - **Third-person keys in menus**: with Free Camera, W, A, S and D move the cursor in every direction in the item
   box, files, map and other menus, not only up, and the mouse wheel scrolls the item box without lagging.
+- **Floating models at the widescreen edges**: a few display pieces, such as the model ship in the Gold Luger
+  room, no longer hang in the air at the sides of the screen without the wall they belong to.
 
 ## 0.7.3 (2026-11-03)
 

@@ -12,6 +12,9 @@
 #include "../../decomp/include/ps2/veronica/prog/ps2_NinjaCnk.h"
 #include "../../decomp/include/ps2/veronica/prog/ps2_NaFog.h"
 #include "../../decomp/include/ps2/veronica/prog/playpch.h"
+#include "../../decomp/include/ps2/veronica/prog/Motion.h"
+#include "../../decomp/include/ps2/veronica/prog/hitchk.h"
+#include "../../decomp/include/ps2/veronica/prog/sdfunc.h"
 #include "../src/host/tps.h"
 #include "../src/host/modern.h"
 #include "../src/host/bindings.h"
@@ -56,6 +59,8 @@ static int stick_moved;           /* the right stick moved this frame (pc_input_
 static int pad_move;              /* the left stick walks this frame: tps_player turns towards pad_target */
 static float pad_target;
 static int recenter;              /* game frames left of the camera easing behind the character */
+static float aw_f, aw_r;          /* "Move While Aiming": this frame's walk under the aim, forward / right seen from the camera (-1..1) */
+static int aim_walk_ok(void);
 
 /* a camera in `cam`: position, angles, view vector, eye */
 typedef struct { float px, py, pz, vx, vy, vz, wpx, wpy, wpz; int ax, ay, az; float ln; int pers; } View;
@@ -893,6 +898,7 @@ static int pad_sticks(unsigned int* pad)
     if (!g_tps.pad_modern) pad_cam = 0;
     stick_yaw = stick_pitch = 0;
     stick_moved = pad_move = 0;
+    aw_f = aw_r = 0;
     {   /* the right stick turns the camera (Modern) and aims. Classic keeps the game's buttons, whose turn while aiming
            cannot move free aim's crosshair (the shot follows the crosshair), so there the right stick (free in every key
            type: the game reads only the left one) aims too. In both, while aiming freely, the left stick and the d-pad
@@ -903,6 +909,10 @@ static int pad_sticks(unsigned int* pad)
             float ax = lx, ay = ly, dx, dy;
             if (modern_stick(&rx, &ry, g_tps.pad_dead_look / 100.0f, 2.0f) > 0) recenter = 0, stick_moved = 1;
             if (aim_free && tps_cam_active) {
+                if (aim_walk_ok()) {   /* "Move While Aiming": the left stick walks (as it walks: linear past its dead zone) */
+                    modern_stick(&ax, &ay, g_tps.pad_dead_move / 100.0f, 1.0f);
+                    aw_f = ay, aw_r = ax, ax = ay = 0;
+                }
                 modern_stick(&ax, &ay, g_tps.pad_dead_move / 100.0f, 2.0f);
                 tps_pad_dpad(&dx, &dy);
                 rx += ax + dx; ry += ay + dy;
@@ -1015,6 +1025,13 @@ unsigned int tps_pad(unsigned int pad)
         k &= ~move_keys;
         if (!!(move_keys & TPS_K_FWD) != !!(move_keys & TPS_K_BACK) || !!(move_keys & TPS_K_LEFT) != !!(move_keys & TPS_K_RIGHT))
             pad |= 0x1;
+    }
+    if (!menu && aim_walk_ok()) {   /* "Move While Aiming": the movement keys walk under the aim (tps_player aim_walk), the
+                                       game's directions (its turn while aiming, the arrows, Classic's stick) do nothing */
+        aw_f += !!(k & TPS_K_FWD) - !!(k & TPS_K_BACK);
+        aw_r += !!(k & TPS_K_RIGHT) - !!(k & TPS_K_LEFT);
+        k &= ~(TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT);
+        pad &= ~0xF;
     }
     if (k & TPS_K_FWD) pad |= 0x21;   /* as the d-pad: also aim up/down (game auto-aim) */
     if (k & TPS_K_BACK) pad |= 0x42;
@@ -1603,6 +1620,136 @@ static void scope_look(void)
     }
 }
 
+/* "Move While Aiming" (docs/THIRDPERSON.md "Moving while aiming"): with the weapon raised (free aim; the knife too),
+   firing, slashing or reloading, the movement keys or the left stick walk slowly towards their direction seen from
+   the camera, the aim staying on the crosshair. The legs play the game's walk (forward, sideways with the hips turned
+   up to LEG_YAW) or its backward walk at LEG_RATE of its speed, its travel per frame as the game's walk takes it
+   (PlyTrsZ), so the feet keep step; the upper body keeps the weapon motion (tps_legs). The game's own wall, enemy and
+   floor checks run after it in bhControlPlayer as for any step. */
+extern char PlyTrsZ[6][3];   /* player.c: the walks' travel tables (bhGetTransZ) by motion and injury */
+TpsLegs tps_legs_me;         /* our legs this tick (the co-op pose sends them; a gender-matched copy plays them too) */
+TpsLegs tps_legs_p2;         /* the co-op partner's, as its pose sent them (coop_glue.c) */
+#define LEG_YAW DEG(55.0f)   /* the hips turned at most this far from the aim (sideways: the feet slide the rest) */
+#define LEG_RATE 0.6f        /* of the walk's speed and frame rate */
+#define LEG_EASE 0.3f        /* the legs blended in and out per tick */
+
+/* the movement keys / left stick walk under the aim: the weapon raised (not lowering it, nor the scope), free aim or
+   the reload of a lowered weapon, normal play */
+static int aim_walk_ok(void)
+{
+    return g_tps.aim_walk && tps_cam_active && plp && plp->mode0 == 1 && plp->mode1 == 1 && plp->mode2 != 68 && plp->mode2 != 71 &&
+           (reload_at_rest() || !lock_aim()) && !(plp->flg & 6) && pc_in_play(plp, 0);
+}
+
+static void aim_walk(void)
+{
+    static int unfixed, back, last_frm;
+    TpsLegs* l = &tps_legs_me;
+    EXP_WORK* x = (EXP_WORK*)plp->exp0;
+    float m = sqrtf(aw_f * aw_f + aw_r * aw_r), on;
+    int ok = aim_walk_ok() && m > 0.05f && x;
+    if (m > 1) aw_f /= m, aw_r /= m, m = 1;
+    if (ok) {
+        float md = wrap(yaw - atan2f(aw_r, aw_f) * (32768.0f / 3.14159265f)), rel = wrap(md - (short)plp->ay), ly, spd, *trsz;
+        int dm = x->dmlvl < 0 ? 0 : x->dmlvl > 2 ? 2 : x->dmlvl, tp = x->wpntp & 1, mtn, n, f, k;
+        back = fabsf(rel) > (back ? DEG(100.0f) : DEG(115.0f));   /* sideways: forward (a stick near it does not flip between them) */
+        mtn = PlMtnAct[tp][dm][back ? 4 : 2];
+        n = plp->mnwPb && plp->mnwPb[mtn].datP ? (int)plp->mnwPb[mtn].frm_num : 0;
+        trsz = n ? (float*)bhGetTransZ(PlyTrsZ[back][dm]) : NULL;
+        if (!trsz) ok = 0;
+        else {
+            if (l->w <= 0 || l->mtn != mtn) l->frm = back ? 25 << 16 : 5 << 16, last_frm = -1;   /* where the game's walks start */
+            l->mtn = mtn;
+            l->frm = (l->frm + (int)(LEG_RATE * m * 65536.0f)) % (n << 16);
+            f = l->frm >> 16;
+            spd = fabsf(trsz[f + 1]) * LEG_RATE * m;
+            if (plp->stflg & 0x100000) spd *= 0.8f;   /* in water, as the walks */
+            plp->px -= spd * sinf(RAD(md));
+            plp->pz -= spd * cosf(RAD(md));
+            ly = back ? wrap(rel + 32768.0f) : rel;
+            ly = ly > LEG_YAW ? LEG_YAW : ly < -LEG_YAW ? -LEG_YAW : ly;
+            l->yaw += (int)((ly - l->yaw) * 0.35f);
+            for (k = 0; k < 2 && f != last_frm; k++)   /* footsteps on the walks' frames (bhCPM2_act_wlk / bak) */
+                if (f == PlFootSnd[sys->ply_id & 3][k][back ? 2 : 0]) {
+                    const float* foot = plp->mlwP->owP[k ? 21 : 17].mtx;
+                    CallPlayerFootStepSe(bhCheckFloorSound(plp, plp->flr_no, foot[12], foot[14]), 0, 1);
+                    plp->stflg |= 0x200;   /* (enemies hear it) */
+                }
+            last_frm = f;
+        }
+    }
+    l->on = ok;
+    on = ok ? 1.0f : 0.0f;
+    l->w += (on - l->w) * LEG_EASE;
+    if (plp->mode0 != 1 || plp->mode1 != 1) l->w = 0;   /* hit, grabbed, the weapon down: the game's own motion at once */
+    /* the weapon modes fix the feet where they stand (flg 0x40000, bhFixPosition: the drawn foot of the last tick kept
+       in place); with the legs walking that put the character back each step, and lowering the weapon (which sets it
+       again) slid it by the stride */
+    if (l->w > 0 && (plp->flg & 0x40000)) plp->flg &= ~0x40000, unfixed = 1;
+    if (!ok && l->w < 0.02f) {
+        if (l->w > 0) l->w = 0;
+        else if (unfixed) {   /* a tick after the legs are back in the aim's stance: its feet fixed again, as the mode set them */
+            if (plp->mode0 == 1 && plp->mode1 == 1) plp->flg |= 0x40000;
+            unfixed = 0;
+        }
+        l->yaw = 0;
+    }
+    if (trace && (ok || l->w > 0))
+        printf("tps: aimwalk frame %u mode %d/%d/%d input %.2f %.2f legs mtn %d frm %d yaw %.1f w %.2f at (%.2f %.2f %.2f) ay %.1f\n",
+               (unsigned)gs_frame_count(), plp->mode1, plp->mode2, plp->mode3, aw_f, aw_r, l->mtn, l->frm >> 16,
+               l->yaw * (360.0f / 65536.0f), l->w, plp->px, plp->py, plp->pz, (short)plp->ay * (360.0f / 65536.0f));
+}
+
+static void turn(float* m, const float* u, const float* c, float a);
+
+/* The legs walking under another motion (the zombie's upper half, en01.c, the other way round): the hips and legs
+   (nodes 0, 1, 14..21) from the walk l->mtn of `set` blended in by l->w, turned by l->yaw about the root, while the
+   upper body (node 2 on: spine, chest, arms, head) keeps the world orientation p's own motion gave it, so the aim and
+   the weapon motions (shots, slashes, the reload) stay as they are, only carried along. The caller has just posed
+   and computed p (bhCalcModel); its matrices are posed again, its motion state (node angles) is left as it was. */
+void tps_legs(BH_PWORK* p, MN_WORK* set, const TpsLegs* l)
+{
+    ML_WORK* ml = p->mlwP;
+    NJS_CNK_OBJECT* o;
+    O_WORK* ow;
+    struct { float pos[3]; int ang[3]; } keep[22];
+    float a2[12], w = l->w;
+    BH_PWORK t;
+    int i, j, n;
+    if (w <= 0 || !set || !ml || ml->obj_num < 22 || l->mtn < 0 || l->mtn >= 100 || !set[l->mtn].datP || set[l->mtn].obj_num > 22) return;
+    o = ml->objP; ow = ml->owP;
+    n = (int)set[l->mtn].frm_num;
+    if (n <= 0) return;
+    memcpy(a2, ow[2].mtx, sizeof(a2));   /* the upper body's axes as its motion has them */
+    for (i = 0; i < 22; i++) { memcpy(keep[i].pos, o[i].pos, sizeof(keep[i].pos)); memcpy(keep[i].ang, o[i].ang, sizeof(keep[i].ang)); }
+    t = *p;   /* (a work of its own: the frame and blend of p's motion stay) */
+    t.mnwP = set; t.mtn_no = l->mtn; t.frm_no = l->frm % (n << 16); t.hokan_count = 0;
+    bhSetMotion(&t, 0, 0, NULL);
+    for (i = 0; i < 22; i++) {
+        if (i >= 2 && i < 14) {   /* the upper body: p's own */
+            memcpy(o[i].pos, keep[i].pos, sizeof(keep[i].pos)); memcpy(o[i].ang, keep[i].ang, sizeof(keep[i].ang));
+            continue;
+        }
+        for (j = 0; j < 3; j++) {
+            o[i].pos[j] = keep[i].pos[j] + (o[i].pos[j] - keep[i].pos[j]) * w;
+            o[i].ang[j] = keep[i].ang[j] + (int)((short)(o[i].ang[j] - keep[i].ang[j]) * w);
+        }
+    }
+    bhCalcModel(p);
+    if (l->yaw) {   /* the hips turned towards a sideways walk, about the root, upright in the character's frame */
+        float u[3], c[3], len = sqrtf((*p->mtx)[4] * (*p->mtx)[4] + (*p->mtx)[5] * (*p->mtx)[5] + (*p->mtx)[6] * (*p->mtx)[6]);
+        for (j = 0; j < 3; j++) { u[j] = (*p->mtx)[4 + j] / len; c[j] = ow[0].mtx[12 + j]; }
+        turn(ow[0].mtx, u, c, RAD(l->yaw * w));
+        ow[0].flg |= 1;
+        bhCalcModel(p);
+    }
+    memcpy(ow[2].mtx, a2, sizeof(a2));   /* (its place: from the walking hips) */
+    ow[2].flg |= 1;
+    bhCalcModel(p);
+    ow[0].flg &= ~1; ow[2].flg &= ~1;
+    for (i = 0; i < 22; i++) { memcpy(o[i].pos, keep[i].pos, sizeof(keep[i].pos)); memcpy(o[i].ang, keep[i].ang, sizeof(keep[i].ang)); }
+}
+
 /* player.c bhControlPlayer, right after the mode handler (before the auto-turn, the motion
    and bhCalcModel): mouse X turns the character, or the camera while aiming freely */
 void tps_player(void)
@@ -1625,6 +1772,7 @@ void tps_player(void)
     }
     /* (the scope's first tick still has our camera: the free aim below points the scope at the crosshair's target) */
     if (!tps_cam_active && plp->mode0 == 1 && plp->mode1 == 1 && plp->mode2 == 71) { scope_look(); return; }
+    aim_walk();
     if (!tps_cam_active || plp->mode0 != 1 || (plp->mode1 == 0 && plp->mode2 > 13) || reload_at_rest()) { frac = 0; return; }
     if (trace && plp->mode1 == 1)
         printf("tps: weapon mode %d/%d motion %d frame %d/%d at (%.1f %.1f) ay %.1f hand y %.1f\n", plp->mode2, plp->mode3, plp->mtn_no, plp->frm_no >> 16,
@@ -1724,9 +1872,18 @@ static void bend(BH_PWORK* p, float a)
     turn(ow[3].mtx, u, c, a);
     for (int j = 0; j < 3; j++) c[j] = ow[3].mtx[12 + j];
     turn(ow[3].mtx, u, c, a);
-    ow[2].flg |= 1; ow[3].flg |= 1;
+    for (int k = 0; k < p->mlwP->obj_num && k < 22; k++)   /* the hips and legs as they are (tps_legs: walking) */
+        if (k < 4 || k >= 14) ow[k].flg |= 1;
     bhCalcModel(p);
-    ow[2].flg &= ~1; ow[3].flg &= ~1;
+    for (int k = 0; k < p->mlwP->obj_num && k < 22; k++)
+        if (k < 4 || k >= 14) ow[k].flg &= ~1;
+}
+
+/* bhCalcModel of our player, with the legs walking under the aim ("Move While Aiming") */
+static void calc(void)
+{
+    bhCalcModel(plp);
+    tps_legs(plp, plp->mnwPb, &tps_legs_me);
 }
 
 void tps_calc_model(void)
@@ -1736,7 +1893,7 @@ void tps_calc_model(void)
     float a, dx, dz, ofs[3];
     int on = tps_cam_active && !lock_aim() && plp->mode0 == 1 && plp->mode1 == 1 && plp->mode2 != 68 && !reload_at_rest();
 
-    bhCalcModel(plp);
+    calc();
     bend_a = 0;
     w += (on - w) * 0.35f;
     if (w < 0.01f || plp->mlwP->obj_num <= 9) { aim_corr = 0; return; }
@@ -1789,14 +1946,14 @@ void tps_calc_model(void)
             pe = fabsf(e); pt = t;
             t += e;
             t = t > 1.047f ? 1.047f : t < -1.047f ? -1.047f : t;
-            bhCalcModel(plp);   /* (unbent) */
+            calc();   /* (unbent) */
             bend(plp, w * t / 2);
         }
         if (steady) goal = t - t0;
         aim_corr += (goal - aim_corr) * 0.35f;
         t = t0 + aim_corr;
         t = t > 1.047f ? 1.047f : t < -1.047f ? -1.047f : t;
-        bhCalcModel(plp);   /* (unbent) */
+        calc();   /* (unbent) */
         bend_a = w * t / 2;
         bend(plp, bend_a);
     }

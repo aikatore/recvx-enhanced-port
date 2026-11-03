@@ -175,8 +175,10 @@ static inline int pc_margin_rule(int mode, const VU1_STRIP_BUF* v, int n, float 
 
 /* A hidden part left out of the margins takes along the hidden parts below it in the room's tree
    whose bounding sphere lies inside its box (view space: x, y, z low, then high): what it holds,
-   as the dolls on the shelves of a cabinet (2/5). Room trees also group parts beside each other
-   (1/0: a flower pot under a terrace part; 1/7: pillars along a wall), which stay. */
+   as the dolls on the shelves of a cabinet (2/5). A sphere is loose around its model, so it may
+   reach out by a quarter of its radius: the ship in the niche of 1/5's corner wall stood in the
+   margin without its niche. Room trees also group parts beside each other (1/0: a flower pot
+   under a terrace part; 1/7: pillars along a wall), which stay. */
 static inline void pc_margin_bounds(const VU1_STRIP_BUF* v, int n, float* box)
 {
     box[0] = box[1] = box[2] = 1e30f;
@@ -191,6 +193,7 @@ static inline void pc_margin_bounds(const VU1_STRIP_BUF* v, int n, float* box)
 }
 static inline int pc_margin_inside(const float* c, float r, const float* box)
 {
+    r *= 0.75f;   /* a quarter of its radius may reach out */
     for (int k = 0; k < 3; k++)
         if (c[k] - r < box[k] || c[k] + r > box[3 + k]) return 0;
     return 1;

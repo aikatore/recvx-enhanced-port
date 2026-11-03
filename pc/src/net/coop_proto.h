@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 36                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 37                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -39,7 +39,8 @@ extern "C" {
                                            34: the cutscene cast never picks for Claire and Chris (they show each player's own
                                            look), so the same seed picks other models for the rest;
                                            35: the cutscene cast also draws the creatures only cutscenes show (Nosferatu in 6040, ...);
-                                           36: EneSnap.root (SNAP_ROOT_STILL: the motion moves the enemy, its root stays put) */
+                                           36: EneSnap.root (SNAP_ROOT_STILL: the motion moves the enemy, its root stays put);
+                                           37: Pose.legs, legs_frm (third person "Move While Aiming": the legs walking under the aim) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
 #define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */
@@ -106,7 +107,9 @@ typedef struct Pose {
     uint8_t use;                        /* the room trigger (etc record) the sender examined and is busy with + 1, 0 none:
                                            the partner may not examine it meanwhile (a puzzle, a terminal) */
     uint8_t opts2;                      /* host: OPT2_*, more game rules (protocol 33) */
-    uint8_t spare[2];
+    uint8_t legs;                       /* "Move While Aiming" (protocol 37): the walk under the aim, coop_legs_*: bits 0-1 the
+                                           walk (base motion PlMtnAct walk/back + 0..3), bit 2 backward, bits 3-7 the hips' turn */
+    uint8_t legs_frm;                   /* its frame + 1; 0: no legs walking under the aim */
 } Pose;
 /* Pose.pflg's other bits (receivers before them read pflg & 6): the pitch the sender's upper body is bent by
    (third-person free aim; the fixed cameras' aim up/down is a motion), -31..31 steps of COOP_PITCH_STEP radians */
@@ -114,6 +117,16 @@ typedef struct Pose {
 #define COOP_PITCH_STEP (1.0471976f / COOP_PITCH_MAX)   /* free aim's limit, 60 degrees */
 static inline int coop_pitch_get(uint8_t pflg) { return ((int8_t)(pflg & 0xF8) >> 2) | (pflg & 1); }
 static inline uint8_t coop_pitch_bits(int v) { return (uint8_t)((v & 1) | (v >> 1 & 0x1F) << 3); }
+/* Pose.legs: the hips' turn in steps of COOP_LEGS_STEP game units (-15..15: 60 degrees) */
+#define COOP_LEGS_STEP 728
+static inline uint8_t coop_legs_pack(int mtn, int yaw)
+{
+    int b = mtn >= 16, y = (yaw + (yaw >= 0 ? COOP_LEGS_STEP / 2 : -COOP_LEGS_STEP / 2)) / COOP_LEGS_STEP;
+    y = y > 15 ? 15 : y < -15 ? -15 : y;
+    return (uint8_t)(((mtn - (b ? 16 : 0)) & 3) | b << 2 | (y & 0x1F) << 3);
+}
+static inline int coop_legs_mtn(uint8_t v) { return (v & 3) + (v & 4 ? 16 : 0); }   /* (the walks: 0..3, backward 16..19) */
+static inline int coop_legs_yaw(uint8_t v) { return ((int8_t)(v & 0xF8) >> 3) * COOP_LEGS_STEP; }
 enum { COOP_REJ_CODE = 1, COOP_REJ_BUSY = 2, COOP_REJ_REMOVED = 3,   /* REMOVED: in a goodbye, the host removed us */
        COOP_REJ_BIORAND = 4,            /* in a guest's goodbye: its BioRand pack is not the host's (protocol 27) */
        COOP_REJ_STATE = 5 };            /* in a guest's goodbye: the host's game state failed its checks (protocol 28) */

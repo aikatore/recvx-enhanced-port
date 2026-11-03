@@ -340,6 +340,10 @@ void  tps_calc_model(void);
 struct BH_PWORK;
 void  tps_bend(struct BH_PWORK* p, float pitch);   /* the free-aim bend by pitch (radians) on a display copy (actor_glue.c), the partner */
 float tps_aim_pitch(void);   /* the pitch of our free-aim bend this tick (radians, 0: none) */
+struct MN_WORK;
+struct TpsLegs;   /* (tps.h) */
+extern struct TpsLegs tps_legs_me, tps_legs_p2;   /* "Move While Aiming": our legs, the co-op partner's as its pose sent them */
+void  tps_legs(struct BH_PWORK* p, struct MN_WORK* set, const struct TpsLegs* l);   /* the legs walking under p's motion */
 #include "ps2sdk_shim.h"
 #include "ps2_hw.h"
 #define u_long ps2_u_long

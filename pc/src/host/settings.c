@@ -488,6 +488,7 @@ const Setting g_settings[] = {
     { SP_TPS, "Aim Assist", V(g_tps.auto_aim), 0, 1, 1, .help = "Use lock-on aim. Modern gamepad controls use gentle aim assistance instead. Off gives full free aim." },
     { SP_TPS, "Precise Shots", V(g_tps.precise), 0, 1, 1,
       .help = "Shots must hit the enemy's body. Headshots deal more damage; zombie heads only burst on a headshot." },
+    { SP_TPS, "Move While Aiming", V(g_tps.aim_walk), 0, 1, 1, .help = "Walk slowly while aiming, attacking or reloading instead of standing still." },
     { SP_TPS, "Gamepad Controls", V(g_tps.pad_modern), 0, 1, 1, tps_pad_names, .group = "GAMEPAD",
       .help = "Modern uses the left stick to move and the right to look and aim. Classic uses tank controls." },
     { SP_TPS, "Horizontal Camera Speed", V(g_tps.pad_sens_x), 10, 300, 5, .fmt = "%d%%", .help = "Set horizontal camera speed. At 100%, a full stick turn covers 180 degrees per second." },
