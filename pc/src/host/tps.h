@@ -18,6 +18,7 @@ typedef struct TpsConfig {
     int invert_y, crosshair;
     int auto_aim;             /* 1 = keep the game's lock-on when raising the weapon */
     int precise;              /* "Precise hits": free-aim shots hit only the enemies' bodies (tps_glue.c pc_precise_hits) */
+    int aim_walk;             /* "Move While Aiming": walk slowly while aiming or reloading, the legs walking under the aim (tps_glue.c) */
     int atmos;                /* light and fog: 1 = smooth (fades between the cuts' settings), 0 = per cut */
     int free_cam;             /* mouse/keyboard camera: 0 = B (behind the character, the mouse turns it),
                                  1 = A (free: the mouse orbits the camera, WASD walk relative to it) */
