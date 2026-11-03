@@ -176,7 +176,15 @@ static unsigned status_screen(void)
         return grid(st, !(swork.statusflg & 0x40), (sys->cb_flg & 0x180000) ? 4 : -1, CANCEL);
     if (st->subscreenmode == 4 && st->testmode == 2) {   /* item box: the box list scrolls */
         unsigned r = (left ? CONFIRM : 0) | (right ? CANCEL : 0);
-        return r | (st->number == 0 && !(sys->st_flg & 0x200) ? wheel_press() : 0);
+        if (wheel && !r && st->number == 0 && !(sys->st_flg & 0x200)) {
+            /* a notch: the list slides its row in one frame and steps in the next (ItemBox: slide speed 38 / row
+               height 38; the d-pad's 19 slides two frames and steps on the third), so a quick turn no longer
+               trails behind */
+            st->number = wheel > 0 ? 38 : -38;
+            r = wheel > 0 ? UP : DOWN;   /* (its arrow lights up) */
+            wheel += wheel > 0 ? -1 : 1;
+        }
+        return r;
     }
     return fallback();   /* file view, pick-up dialog, ... */
 }
