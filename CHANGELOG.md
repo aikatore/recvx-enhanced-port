@@ -25,6 +25,8 @@
 
 - **Third-person keys in menus**: with Free Camera, W, A, S and D move the cursor in every direction in the item
   box, files, map and other menus, not only up, and the mouse wheel scrolls the item box without lagging.
+- **Floating models at the widescreen edges**: a few display pieces, such as the model ship in the Gold Luger
+  room, no longer hang in the air at the sides of the screen without the wall they belong to.
 
 ## 0.7.3 (2026-11-03)
 
