@@ -253,9 +253,43 @@ unit (the character is about 17 units tall).
   pop at the screen edges while turning (the original test ignores how far an off-axis
   sphere's outline reaches; see ARCHITECTURE.md "Widescreen").
 * Rooms are modelled for their camera angles: from elsewhere some walls are missing, single-sided
-  or untextured. The camera is kept inside the collision walls (`bhCheckL2Wall`): the shoulder
-  point is pulled in sideways if it is in a wall, the eye slides forward along the view ray in
-  front of the first wall behind the shoulder.
+  or untextured. See "Camera collision".
+
+## Camera collision
+
+The collision walls say where actors walk, not what is drawn. The camera's wall test
+(`bhCheckL2Wall` with `0x400`, the bullets' test) skips odd wall types, and ceilings are in no
+wall at all: in the vault under the palace dock's stairs (1/13, walls 70/71 its sides, type 1 of
+room height; the ceiling only in the room model, 19.6 units at the crown, 10 at the sides) the
+camera turned out through the sides and rose over the top, showing the vault from outside. So the
+camera (`tps_glue.c view`) also tests the room model:
+
+* **The room model as obstacle**: at the first camera frame in a room (`enemy_room_gen`) its
+  object tree is walked as `njCnkEasyDrawObject` draws it (every part: third person shows the
+  cuts' hidden ones), vertex chunks 51/41 into world space, strips 64..69 into triangles, without
+  the alpha strips (`NJD_FST_UA`: railings, grates, glass, which the eye may pass), each part with
+  a bounding sphere; 3000..5500 triangles per room. Rays test them from both sides (a single-sided
+  surface seen from behind is what showed the outside). Heap, freed when the camera stops. A
+  frame's camera costs about 0.05 ms.
+* **Pivot**: a ray from the chest (8 units up) to above the head; a ceiling lowers the head point
+  under it.
+* **Shoulder**: the shoulder point is pulled in sideways from the head point before collision
+  walls and the room model.
+* **Arm**: the eye is placed on an arm towards the wanted eye, to the first wall or room part (a
+  unit before it), and then nearer while the near plane would reach a surface beside, above or
+  below it (its half width and height at 1 unit, widened in hor+ widescreen, plus a quarter
+  unit). Walking, the arm starts a quarter of the way from the head to the shoulder point, so a
+  shortened arm keeps the character in the picture beside the way ahead (sliding along the view
+  ray, the character left the picture with the back to a wall); with free aim it starts at the
+  shoulder point, so the screen centre stays on the crosshair's ray. The two blend as aiming
+  starts and ends (0.35 a frame).
+* **Easing**: the lowered pivot and the shortened arm go into the way at once (the view never goes
+  through) and back out by 12% of the rest a game frame. Unobstructed the camera is the same as
+  before (frame-identical in open places).
+* No fade of room parts near the camera: with the eye kept in front of every room part on its
+  way to the character, nothing of the room model is left between them, and fading the room's
+  strips would need them drawn after the characters without depth writes (the native path draws
+  in the game's order, the in-between images replay that order).
 
 ## Design
 
@@ -297,7 +331,8 @@ unit (the character is about 17 units tall).
   pull the camera in as always. Largest camera move in a frame on stairs or a ledge now about
   2 units (walking: 1).
 * Camera collision never feeds back into the aim: the crosshair ray starts at the wall-free
-  shoulder point, and the camera position depends only on the player's position.
+  shoulder point, and the camera position depends only on the player's position (and the eased
+  collision state, "Camera collision").
 * Mouse: SDL relative mode while third person is on, the window has focus and no overlay window
   is open, unless a screen with mouse support has it ("Mouse In Menus", `menu_mouse.c`
   `menu_mouse_cursor`). That screen flag never outlasts play: the game thread publishes each frame
@@ -585,8 +620,9 @@ it does not, with the guest's option off it does as before).
 ## Limits
 
 * **Room geometry**: some corners have no wall, ceiling or back side; looking there shows the
-  clear colour. With the back to a wall the camera slides forward up to the shoulder, so the
-  character can leave the picture (view and aim stay put).
+  clear colour. With the back to a wall the camera comes close to the character's head (view and
+  aim stay put). Alpha strips (railings, grates) and objects that are not part of the room model
+  (doors, pushable boxes, enemies) do not move the camera.
 * Aim poses: free aim bends the straight pose up to 60 degrees of pitch. No laser sight.
 * The crosshair goes down to 60 degrees: from the shoulder (16.5 units up) it meets the floor
   about 9.5 units ahead, so a crawling zombie nearer than that cannot be put under it (the shot

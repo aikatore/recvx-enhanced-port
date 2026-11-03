@@ -10,6 +10,9 @@
 
 - **Quick turn turns the camera**: the camera now turns around together with the character, in both mouse
   camera styles and with a gamepad, so you look the new way right away.
+- **Camera in tight places**: the camera no longer slips through walls and ceilings that you can see but
+  that are not solid to the game, such as the vault under the stairs at the palace's submarine dock. It moves
+  closer or lower instead, keeps the character in the picture and eases back out afterwards.
 
 ### Fixes
 

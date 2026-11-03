@@ -126,10 +126,14 @@ void tps_player_mode(void)
 
 static int dual_e;   /* (dual weapons, below) */
 extern int enemy_room_gen;   /* enemyopt_glue.c: room loads so far */
+static void mesh_free(void);
+static float col_drop, col_pull, col_aim;
 static void deactivate(void)
 {
     dual_e = -1;
     atmos_off();
+    mesh_free();
+    col_drop = col_pull = col_aim = 0;
     tps_player_mode();
     if (!tps_cam_active) return;
     tps_cam_active = g_tps.cam_active = g_tps.aiming = cut_cam_ok = 0;
@@ -148,6 +152,8 @@ void tps_game_exit(void)
     aim_h = 0;
     recenter = 0;
     tps_cam_active = g_tps.cam_active = g_tps.aiming = g_tps.pad_play = cut_cam_ok = 0;
+    mesh_free();
+    col_drop = col_pull = col_aim = 0;
 }
 
 /* the weapon raised; not the reload of a lowered weapon (reload_glue.c), which keeps the walking camera */
@@ -209,27 +215,250 @@ static void clear_of_walls(const NJS_POINT3* a, NJS_POINT3* b)
     sys->apos = apos; sys->ahtp = ahtp;
 }
 
+/* ---- The room model as the camera's obstacle (docs/THIRDPERSON.md "Camera collision") ----
+   The collision walls say where actors walk, not what is drawn: the vault under the palace dock's
+   stairs (1/13) has odd walls for sides, which the camera's wall test skips (bullets pass them),
+   and no wall for its ceiling, so the camera turned out through its sides and rose over its top.
+   The room model's triangles are read once per room (world space, by room part with a bounding
+   sphere; not the alpha strips: railings, grates, glass) and the camera's rays test them from
+   both sides. Heap only, freed when third person stops (address window). */
+typedef struct { float c[3], r; int t0, n; } MeshPart;
+static float* mesh_t;        /* 9 floats per triangle */
+static MeshPart* mesh_p;
+static int mesh_nt, mesh_np, mesh_tcap, mesh_pcap, mesh_gen = -1;
+static const void* mesh_obj;
+
+static void mesh_free(void)
+{
+    free(mesh_t); free(mesh_p);
+    mesh_t = NULL; mesh_p = NULL;
+    mesh_nt = mesh_np = mesh_tcap = mesh_pcap = 0;
+    mesh_gen = -1;
+}
+
+/* one room part: its vertex chunks (51 njCnkCvVnPs2, 41 CV_VN) into world space, its strips
+   (64..69; docs/modding/ROOM_FORMAT.md "MLB models and the room model") into triangles */
+static void mesh_model(const NJS_CNK_MODEL* md, NJS_MATRIX* m)
+{
+    const unsigned char* p;
+    float* w;
+    int nv = 0, t0 = mesh_nt;
+    if (!md->vlist || !md->plist) return;
+    for (p = (const unsigned char*)md->vlist; *p != 255; p += 4 + 4 * *(const unsigned short*)(p + 2)) {
+        int end = *(const unsigned short*)(p + 4) + *(const unsigned short*)(p + 6);
+        if (end > nv) nv = end;
+    }
+    if (!nv || !(w = calloc((size_t)nv, 3 * sizeof(float)))) return;
+    for (p = (const unsigned char*)md->vlist; *p != 255; p += 4 + 4 * *(const unsigned short*)(p + 2)) {
+        int first = *p == 51 ? 64 : *p == 41 ? 8 : 0, stride = *p == 51 ? 32 : 24;
+        int i0 = *(const unsigned short*)(p + 4), n = *(const unsigned short*)(p + 6);
+        for (int i = 0; first && i < n; i++)
+            njCalcPoint(m, (NJS_POINT3*)(p + first + stride * i), (NJS_POINT3*)&w[3 * (i0 + i)]);
+    }
+    for (p = (const unsigned char*)md->plist; *p != 255;) {
+        int t = *p, size = *(const unsigned short*)(p + 2);
+        if (t < 8) { p += 2; continue; }
+        if (t < 16) { p += 4; continue; }
+        if (t < 64) { p += 4 + 2 * size; continue; }
+        if (!(p[1] & 0x08)) {   /* (not NJD_FST_UA: alpha) */
+            const unsigned char* q = p + 6;
+            int ns = *(const unsigned short*)(p + 4) & 0x3FFF, user = *(const unsigned short*)(p + 4) >> 14;
+            int uv = t == 65 || t == 66 || t == 68 || t == 69;
+            for (int s = 0; s < ns; s++) {
+                int cnt = abs(*(const short*)q), ix[3] = { 0, 0, 0 };
+                q += 2;
+                for (int i = 0; i < cnt; i++) {
+                    ix[0] = ix[1]; ix[1] = ix[2]; ix[2] = *(const unsigned short*)q;
+                    q += 2 + (uv ? 4 : 0) + (i >= 2 ? 2 * user : 0);
+                    if (i < 2 || ix[0] >= nv || ix[1] >= nv || ix[2] >= nv) continue;
+                    if (mesh_nt == mesh_tcap) {
+                        float* g = realloc(mesh_t, (size_t)(mesh_tcap = mesh_tcap ? 2 * mesh_tcap : 4096) * 9 * sizeof(float));
+                        if (!g) { free(w); return; }
+                        mesh_t = g;
+                    }
+                    for (int k = 0; k < 3; k++) memcpy(&mesh_t[9 * mesh_nt + 3 * k], &w[3 * ix[k]], 3 * sizeof(float));
+                    mesh_nt++;
+                }
+            }
+        }
+        p += 4 + 2 * size;
+    }
+    free(w);
+    if (mesh_nt > t0 && mesh_np == mesh_pcap) {
+        MeshPart* g = realloc(mesh_p, (size_t)(mesh_pcap = mesh_pcap ? 2 * mesh_pcap : 64) * sizeof(MeshPart));
+        if (!g) { mesh_nt = t0; return; }
+        mesh_p = g;
+    }
+    if (mesh_nt > t0) {   /* bounding sphere: the box's middle, the farthest corner */
+        MeshPart* pt = &mesh_p[mesh_np++];
+        float lo[3] = { 1e30f, 1e30f, 1e30f }, hi[3] = { -1e30f, -1e30f, -1e30f }, r2 = 0;
+        for (int i = 9 * t0; i < 9 * mesh_nt; i++) { lo[i % 3] = fminf(lo[i % 3], mesh_t[i]); hi[i % 3] = fmaxf(hi[i % 3], mesh_t[i]); }
+        for (int k = 0; k < 3; k++) pt->c[k] = (lo[k] + hi[k]) / 2, r2 += (hi[k] - pt->c[k]) * (hi[k] - pt->c[k]);
+        pt->r = sqrtf(r2);
+        pt->t0 = t0; pt->n = mesh_nt - t0;
+    }
+}
+
+/* the room's object tree as njCnkEasyDrawObject draws it (all parts: third person shows the cuts' hidden ones) */
+static void mesh_walk(const NJS_CNK_OBJECT* o, NJS_MATRIX* parent)
+{
+    for (; o; o = o->sibling) {
+        NJS_MATRIX m;
+        unsigned f = o->evalflags;
+        memcpy(&m, parent, sizeof(m));
+        if (!(f & 1)) njTranslate(&m, o->pos[0], o->pos[1], o->pos[2]);
+        if (!(f & 2)) {
+            if (f & 0x20) { njRotateY(&m, o->ang[1]); njRotateX(&m, o->ang[0]); njRotateZ(&m, o->ang[2]); }
+            else { njRotateZ(&m, o->ang[2]); njRotateY(&m, o->ang[1]); njRotateX(&m, o->ang[0]); }
+        }
+        if (!(f & 4)) njScale(&m, o->scl[0], o->scl[1], o->scl[2]);
+        if (o->model) mesh_model(o->model, &m);
+        if (!(f & 0x10) && (!(f & 0x100) || o->model)) mesh_walk(o->child, &m);
+    }
+}
+
+static void mesh_room(void)
+{
+    NJS_MATRIX m;
+    if (mesh_gen == enemy_room_gen && mesh_obj == rom->mdl.objP) return;
+    mesh_gen = enemy_room_gen; mesh_obj = rom->mdl.objP;
+    mesh_nt = mesh_np = 0;
+    if (!rom->mdl.objP) return;
+    njUnitMatrix(&m);
+    mesh_walk(rom->mdl.objP, &m);
+    if (trace) printf("tps: room model for the camera: %d triangles in %d parts\n", mesh_nt, mesh_np);
+}
+
+/* the first hit of the segment a..b with the room model, from either side: its fraction of the way, 1: none */
+static float mesh_ray(const float* a, const float* b)
+{
+    float d[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, m[3], hl2, best = 1;
+    for (int k = 0; k < 3; k++) m[k] = a[k] + d[k] / 2;
+    hl2 = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) / 4;
+    for (int i = 0; i < mesh_np; i++) {
+        const MeshPart* pt = &mesh_p[i];
+        float dx = pt->c[0] - m[0], dy = pt->c[1] - m[1], dz = pt->c[2] - m[2], rr = pt->r + sqrtf(hl2);
+        if (dx * dx + dy * dy + dz * dz > rr * rr) continue;
+        for (const float* t = &mesh_t[9 * pt->t0]; t < &mesh_t[9 * (pt->t0 + pt->n)]; t += 9) {   /* Moller-Trumbore */
+            float e1[3] = { t[3] - t[0], t[4] - t[1], t[5] - t[2] }, e2[3] = { t[6] - t[0], t[7] - t[1], t[8] - t[2] };
+            float pv[3] = { d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0] };
+            float det = e1[0] * pv[0] + e1[1] * pv[1] + e1[2] * pv[2], inv, tv[3], qv[3], u, v, h;
+            if (fabsf(det) < 1e-9f) continue;
+            inv = 1 / det;
+            tv[0] = a[0] - t[0]; tv[1] = a[1] - t[1]; tv[2] = a[2] - t[2];
+            u = (tv[0] * pv[0] + tv[1] * pv[1] + tv[2] * pv[2]) * inv;
+            if (u < 0 || u > 1) continue;
+            qv[0] = tv[1] * e1[2] - tv[2] * e1[1]; qv[1] = tv[2] * e1[0] - tv[0] * e1[2]; qv[2] = tv[0] * e1[1] - tv[1] * e1[0];
+            v = (d[0] * qv[0] + d[1] * qv[1] + d[2] * qv[2]) * inv;
+            if (v < 0 || u + v > 1) continue;
+            h = (e2[0] * qv[0] + e2[1] * qv[1] + e2[2] * qv[2]) * inv;
+            if (h >= 0 && h < best) best = h;
+        }
+    }
+    return best;
+}
+
+/* b moved towards a to `margin` units before the room model, if it is in the way */
+static void clear_of_mesh(const NJS_POINT3* a, NJS_POINT3* b, float margin)
+{
+    float len = sqrtf((b->x - a->x) * (b->x - a->x) + (b->y - a->y) * (b->y - a->y) + (b->z - a->z) * (b->z - a->z));
+    float h = len > 0.01f ? mesh_ray(&a->x, &b->x) : 1, k;
+    if (h >= 1) return;
+    k = (h * len - margin) / len;
+    if (k < 0) k = 0;
+    b->x = a->x + (b->x - a->x) * k; b->y = a->y + (b->y - a->y) * k; b->z = a->z + (b->z - a->z) * k;
+}
+
+/* camera collision, eased: the pivot lowered under a ceiling (units) and the arm to the eye
+   shortened (fraction). Into the way at once (the view never goes through), back out by
+   EASE_OUT of the rest a frame */
+#define EASE_OUT 0.12f
+/* free room beside and above/below the eye: the near plane's half width and height (1 unit away,
+   tps_camera; widened in hor+ widescreen) and a quarter unit */
+static float eye_side, eye_up;
+#define EYE_SIDE eye_side
+#define EYE_UP eye_up
+/* col_aim: 0 the arm starts at the head (walking), 1 at the shoulder point (free aim), eased */
+static float obstruct(float* st, float raw)
+{
+    *st = raw > *st ? raw : *st + (raw - *st) * EASE_OUT;
+    return *st;
+}
+
+/* how much of the arm from o to the eye e is free: to the first wall or room part (a unit
+   before it), then back a unit at a time while the side (right axis rx, rz), top or bottom of
+   the eye is closer than EYE_SIDE / EYE_UP */
+static float arm(const NJS_POINT3* o, const NJS_POINT3* e, float rx, float rz)
+{
+    NJS_POINT3 b = *e;
+    float len = sqrtf((e->x - o->x) * (e->x - o->x) + (e->y - o->y) * (e->y - o->y) + (e->z - o->z) * (e->z - o->z)), d;
+    if (len < 0.01f) return 1;
+    clear_of_walls(o, &b);
+    clear_of_mesh(o, &b, 1.0f);
+    for (d = sqrtf((b.x - o->x) * (b.x - o->x) + (b.y - o->y) * (b.y - o->y) + (b.z - o->z) * (b.z - o->z)); d > 0; d -= 1.0f) {
+        float f = d / len, p[3] = { o->x + (e->x - o->x) * f, o->y + (e->y - o->y) * f, o->z + (e->z - o->z) * f };
+        const float pr[4][3] = { { p[0] + rx * EYE_SIDE, p[1], p[2] + rz * EYE_SIDE }, { p[0] - rx * EYE_SIDE, p[1], p[2] - rz * EYE_SIDE },
+                                 { p[0], p[1] + EYE_UP, p[2] }, { p[0], p[1] - EYE_UP, p[2] } };
+        int i;
+        for (i = 0; i < 4 && mesh_ray(p, pr[i]) >= 1; i++) {}
+        if (i == 4) break;
+    }
+    return d > 0 ? d / len : 0;
+}
+
 /* camera for the current yaw/pitch: dir = viewing direction, sh = the shoulder point (the aim
-   ray starts there), eye = behind it on the ray through it. Walls pull a camera shoulder point
-   in sideways (only if the shoulder itself is in a wall) and slide the eye forward along the
-   ray; `sh` stays the wall-free one, so camera collision never moves the aim or the facing.
-   Depends on the player's position only (the followed point: follow). */
-static void view(NJS_POINT3* eye, NJS_POINT3* dir, NJS_POINT3* sh)
+   ray starts there), eye = behind it on the ray through it. Walls and the room model lower the
+   pivot under a ceiling and pull the camera's shoulder point in sideways; then the arm to the eye
+   shortens until the eye has free room around it: walking, the arm from a quarter of the way from
+   the head to the shoulder point, so the character stays in the picture beside the way ahead; with free aim the eye slides along the
+   view ray, so the screen centre stays on the crosshair's ray. `sh` stays the wall-free one, so
+   camera collision never moves the aim or the facing. Depends on the player's position only
+   (the followed point: follow). place: tps_camera's once a frame, which places the eye and moves
+   the eased state; 0: the direction and shoulder point only (the aim), eye without collision. */
+static void view(NJS_POINT3* eye, NJS_POINT3* dir, NJS_POINT3* sh, int place)
 {
     float s = sinf(RAD(yaw)), c = cosf(RAD(yaw)), sp = sinf(RAD(pitch)), cp = cosf(RAD(pitch));
     float k = actor_cam_scale();   /* "You appear as" a taller or shorter model: its height (1: the character's) */
-    float side = (g_tps.left ? -g_tps.shoulder : g_tps.shoulder) / 10.0f * k;
+    float side = (g_tps.left ? -g_tps.shoulder : g_tps.shoulder) / 10.0f * k, d = cur_dist, f, raw = 1;
     const NJS_POINT3* o = fol_move ? &fol : (const NJS_POINT3*)&plp->px;
-    NJS_POINT3 at, csh;
+    NJS_POINT3 at, csh, lo, e;
 
     /* forward (-sin, 0, -cos), right (cos, 0, -sin) */
     dir->x = -s * cp; dir->y = sp; dir->z = -c * cp;
     at.x = o->x; at.y = o->y + g_tps.height / 10.0f * k; at.z = o->z;
     sh->x = at.x + c * side; sh->y = at.y; sh->z = at.z - s * side;
-    csh = *sh;
+    if (!place) { eye->x = sh->x - dir->x * d; eye->y = sh->y - dir->y * d; eye->z = sh->z - dir->z * d; return; }
+    if (no_cam_walls) {
+        csh = *sh;
+        clear_of_walls(&at, &csh);
+        eye->x = csh.x - dir->x * d; eye->y = csh.y - dir->y * d; eye->z = csh.z - dir->z * d;
+        return;
+    }
+    mesh_room();
+    eye_up = tanf(RAD(DEG(cur_fov)) / 2) * 0.75f;
+    eye_side = eye_up / 0.75f * pc_hor_scale() + 0.25f;
+    eye_up += 0.25f;
+    {   /* a ceiling over the head (from the chest up): the pivot below it */
+        NJS_POINT3 top = { at.x, at.y + EYE_UP, at.z };
+        lo = at; lo.y = o->y + 8.0f * k;
+        clear_of_mesh(&lo, &top, 0);
+        at.y -= obstruct(&col_drop, at.y + EYE_UP - top.y);
+        if (at.y < lo.y) at.y = lo.y;
+    }
+    csh.x = sh->x; csh.y = at.y; csh.z = sh->z;
     clear_of_walls(&at, &csh);
-    eye->x = csh.x - dir->x * cur_dist; eye->y = csh.y - dir->y * cur_dist; eye->z = csh.z - dir->z * cur_dist;
-    if (!no_cam_walls) clear_of_walls(&csh, eye);
+    clear_of_mesh(&at, &csh, EYE_SIDE);
+    e.x = csh.x - dir->x * d; e.y = csh.y - dir->y * d; e.z = csh.z - dir->z * d;
+    col_aim += ((aiming() && !lock_aim() ? 1.0f : 0.0f) - col_aim) * 0.35f;
+    if (col_aim < 0.01f) col_aim = 0;
+    if (col_aim > 0.99f) col_aim = 1;
+    at.x += (csh.x - at.x) * 0.25f; at.z += (csh.z - at.z) * 0.25f;   /* (the walking arm's start: a quarter of the way to the shoulder point) */
+    if (col_aim < 1) raw = arm(&at, &e, c, -s);
+    if (col_aim > 0) raw = fminf(raw, arm(&csh, &e, c, -s));
+    f = 1 - obstruct(&col_pull, 1 - raw);
+    eye->x = (at.x + (e.x - at.x) * f) * (1 - col_aim) + (csh.x + (e.x - csh.x) * f) * col_aim;
+    eye->y = (at.y + (e.y - at.y) * f) * (1 - col_aim) + (csh.y + (e.y - csh.y) * f) * col_aim;
+    eye->z = (at.z + (e.z - at.z) * f) * (1 - col_aim) + (csh.z + (e.z - csh.z) * f) * col_aim;
 }
 
 static void look(float sens, float stick_sens)
@@ -282,7 +511,7 @@ void tps_camera(void)
         float y0 = yaw;
         if (orbit < 0) no_cam_walls = (orbit = getenv("RECVX_TPS_ORBIT") ? DEG(atof(getenv("RECVX_TPS_ORBIT"))) : 0) != 0;
         yaw += orbit;
-        view(&eye, &dir, &sh);
+        view(&eye, &dir, &sh, 1);
         cam.ay = (short)(int)-yaw;
         yaw = y0;
     }
@@ -969,7 +1198,7 @@ static int nearest_enemy(float* oy, float* op, int* walled)
     NJS_LINE line;
     ATR_WORK* ahtp;
     float best = -1, t[3] = { 0, 0, 0 }, len;
-    view(&eye, &dir, &sh);
+    view(&eye, &dir, &sh, 0);
     for (int i = 0; i < sys->ewk_n; i++) {
         const NJS_CAPSULE* c = &ene[i].watr;
         float x = (c->c1.x + c->c2.x) / 2 - sh.x, y = (c->c1.y + c->c2.y) / 2 - sh.y, z = (c->c1.z + c->c2.z) / 2 - sh.z, ey, ep;
@@ -1013,7 +1242,7 @@ static void aim_at_crosshair(void)
     float dist = 1000.0f, wall, len, h, r = WpnTab[plp->wpnr_no].r;
     int ay, prec = pc_precise_hits();
 
-    view(&eye, &dir, &sh);
+    view(&eye, &dir, &sh, 0);
     line.px = sh.x; line.py = sh.y; line.pz = sh.z;
     line.vx = dir.x * dist; line.vy = dir.y * dist; line.vz = dir.z * dist;
     apos = sys->apos; ahtp = sys->ahtp;
@@ -1413,7 +1642,7 @@ void tps_player(void)
         if (aim_aid_on()) {   /* at RECVX_TPS_AIM_AT */
             NJS_POINT3 eye, dir, sh;
             float dx, dy, dz, p[3];
-            view(&eye, &dir, &sh);
+            view(&eye, &dir, &sh, 0);
             aim_aid(&sh.x, p);
             dx = p[0] - sh.x; dy = p[1] - sh.y; dz = p[2] - sh.z;
             yaw = atan2f(-dx, -dz) * (32768.0f / 3.14159265f);
