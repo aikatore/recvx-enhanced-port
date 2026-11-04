@@ -300,7 +300,7 @@ game keeps for its movable objects' extra records (a room that has them full get
 ### Test aid
 
 `RECVX_EXTRAS="f:op[:arg],..."`, game frames: `goto:k[:d]` (stand in front of the k-th placement of this room
-and case, facing it, `d` units farther; also with the rule off), `poison`, `pad:hex` (game pad bits for one
+and case, facing it, `d` units farther; also with the rule off), `poison` (`poison:2`: Nosferatu's, `stflg` 0x200000), `pad:hex` (game pad bits for one
 frame: `b00` the action button / confirm), `hold:hex:n` (for n frames: `21` forward, `1000` cancel), `ok` (confirm,
 only while a message shows), `log` (the room's extras, the player, poison, the box screen, the planter's state).
 

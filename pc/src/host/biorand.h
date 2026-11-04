@@ -53,7 +53,7 @@ int  biorand_mods_free_mb(void);      /* the mods folder (created) has this much
 int  biorand_iso_known(void);         /* the game's disc image path is set */
 int  biorand_generate(const char* seed_string);   /* the private settings.json, then the CLI's thread (biorand_cli_generate):
                                                      1 started, 0 a job runs, -1 settings.json not written */
-void biorand_frame(void);             /* game thread, every frame: rifle ammo stacking (biorand_glue.c) */
+void biorand_frame(void);             /* game thread, every frame: rifle ammo stacking, Nosferatu's poison ending with him (biorand_glue.c) */
 
 /* game thread (biorand_glue.c): the save words, a co-op guest's start inventory */
 void pc_biorand_stamp(void);                       /* the game state's save words: the current BioRand state */

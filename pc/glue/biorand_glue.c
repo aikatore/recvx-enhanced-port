@@ -7,6 +7,7 @@
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
 #include "../../decomp/include/ps2/veronica/prog/item.h"
+#include "../../decomp/include/ps2/veronica/prog/flag.h"
 #include "../src/host/biorand.h"
 #include "../src/host/lang.h"
 #include "../src/host/biorand_opts.h"
@@ -21,6 +22,8 @@
 
 void host_log(const char* fmt, ...);
 
+int pc_in_game(void);   /* options_glue.c */
+
 /* "Rifle ammo stacks" (GAMEPLAY), always while BioRand is on (biorand_rifle_stack): the stack flag of the rifle and
    assault rifle bullets (item.c itemdata 40, 42) */
 void biorand_frame(void)
@@ -28,6 +31,19 @@ void biorand_frame(void)
     unsigned short on = biorand_rifle_stack() ? 0x200 : 0;
     itemdata[40].type = (itemdata[40].type & ~0x200) | on;
     itemdata[42].type = (itemdata[42].type & ~0x200) | on;
+    /* Nosferatu's poison (stflg 0x200000, en15.c PoisonAttack; herbs don't cure it) ends with him (ed_flg 205) in a
+       BioRand game. The story cures it as Chris in 9/15: RM_6100 sets ev_flg 307 while Claire is poisoned, and there
+       Chris brings the Serum (PlayerPoison2Cr clears Claire's saved ply_stflg[0]). With doors on BioRand takes the
+       switch to Chris out of RM_6100 and 9/15 out of the game: Claire played on poisoned for good. As BioRand's own
+       PS2 patch with doors on (DisableNosferatuPoison), she is then as if never poisoned, 307 too (9/15, if reached,
+       plays the unpoisoned scene). Each game cures its own player; 307 reaches the co-op partner as any world flag.
+       Also mends a save made poisoned. */
+    if (pc_in_game() && biorand_active() && bhCkFlg(sys->ed_flg, 205) && ((plp->stflg | sys->ply_stflg[0]) & 0x200000)) {
+        plp->stflg &= ~0x200000;
+        sys->ply_stflg[0] &= ~0x200000;
+        bhCrFlg(sys->ev_flg, 307);
+        host_log("biorand: Nosferatu is dead: Claire's poison cured (ev_flg 307 cleared)\n");
+    }
 }
 
 /* ---------------------------------------------------------------- the save
@@ -107,7 +123,6 @@ void pc_biorand_save_accept(void* save)
 #define BR_APPEAR 290
 #define BR_APPEAR2 291
 #define BR_APPEAR_ON 0x41000000u
-int pc_in_game(void);   /* options_glue.c */
 
 void pc_biorand_appear_new(void)
 {
