@@ -50,6 +50,11 @@ int  lang_us_plates(int adv);
 /* our texts in the language of the setting (the English text when there is none); tr_init sorts the table (start) */
 const char* tr(const char* en);
 void tr_init(void);
+/* Translate Overlay Windows (ini translate_overlay; 0, the default: the ImGui windows F1, F2, F3, F6, F9 in English).
+   tr_overlay(1) before the overlay's frame, tr_overlay(0) after: on this thread tr() keeps English unless the
+   setting is on; the game's own menus, drawn on the game thread, stay in the language */
+extern int g_tr_overlay;
+void tr_overlay(int on);
 /* UTF-8 text in the game font: the next glyph code of *s (advances it; -1 at the end; 0 a space). Letters use the
    codes of the text language's font (lang_font(): the European accents, Cyrillic, kana and kanji; LANG_OTHER while
    the game's loaded font is still another language's), else the plain letter or '?'. */

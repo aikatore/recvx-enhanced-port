@@ -535,7 +535,7 @@ are. The European English is not installed: its text is the US text, and it has 
   over picture, the Arabic item model labels (ammunition boxes, ink ribbon: `ITEM1.AFS/11` ... `/124`), the Russian
   typewriter's keys and clipboard (`ITEM1.AFS/144`), the computer's screens with words (Brazilian Portuguese
   `SYSTEM.AFS/2` texture 2). No import again: the imports stay as they are.
-- **Translated Pictures** (GAMEPLAY > GENERAL, under Subtitles, shown with an imported language; ini
+- **Translated Pictures** (LANGUAGE, under Subtitles, shown with an imported language; ini
   `translated_pictures`, default 0 since 2026-11-01): Off reads the archives' pictures from the disc (`pc_lang_file_dir(name)` gives
   no folder for `ADV.AFS/`, `MRY.AFS/`, `ITEM1.AFS/`, `ITEM2.AFS/`) and in `SYSTEM.AFS/1` and `/2` every texture
   but the fonts (`/1` texture 0, Japanese and Korean 0..3; `/2` texture 1, the computer's font) and those the bank rule keeps:
@@ -543,7 +543,7 @@ are. The European English is not installed: its text is the US text, and it has 
   language's. The rooms and movies of the language's folder (`RM_0000.RDX`: the opening's text crawl; `MOVIE/`: the
   Japanese logo) are pictures too (`picture_whole`): with it off, the disc's. It applies to the files loaded next (the
   next screen, the next room, the next movie).
-- **Translated Voices** (GAMEPLAY > GENERAL, under Translated Pictures, shown when an imported language has a sound
+- **Translated Voices** (LANGUAGE, under Translated Pictures, shown when an imported language has a sound
   of its own: `lang_has_voices`, its folder has `ADV.AFS/3`; ini `translated_voices`, default 1 since 2026-11-03): On plays the
   language's title call (`pc_lang_file_dir`: `ADV.AFS/3` follows this setting, not Translated Pictures); Off the disc's.
   `ADXT_StartAfs` streams it from the file (the log's `adxt: start 3/3 ... from <folder>/ADV.AFS/3`), as a mods
@@ -612,7 +612,9 @@ are. The European English is not installed: its text is the US text, and it has 
   another language's picture loaded (`lang_picture`), `lang_us_plates` reads resource 2 of the disc's `ADV.AFS/2` or
   `/4` (the title's texture 1, OPTION's texture 0; past the mods and language folders; reread when the screen changes)
   and makes it the current texture list for the letters.
-- **Language** (GAMEPLAY > GENERAL, F1 and ENHANCED SETTINGS): English and the installed languages in their own
+- **Language** (the LANGUAGE page, F1 and ENHANCED SETTINGS; the page, after GAMEPLAY, is shown only with an imported
+  language, `settings_page_shown`, and holds Language, Subtitles, Translated Pictures, Translated Voices and Translated
+  Overlay Windows): English and the installed languages in their own
   names; locked "No other language is installed." or, in a game, "Change it on the title screen." It applies from
   the next screen: leaving OPTION reloads the title in the new language, a game start reads the system messages and
   the font, a room its messages. **Subtitles**: Off and every installed language with subtitles, whatever the game's
@@ -629,6 +631,15 @@ bindings' names, the formats of the screens' `snprintf`s, the co-op status and n
 the overlay's ImGui labels (F1, F2, F3, F9). Not translated: names of models and rooms the port lists from its
 own tables (teleport list, imported models), BioRand's seed strings, the co-op texts sent to the partner (its
 lobby note), the games' titles. Test aid: `RECVX_TR_MISSES=file` writes the texts asked for that have no row.
+
+**Translated Overlay Windows** (LANGUAGE, ini `translate_overlay`, default 0): the overlay's ImGui windows (F1, F2,
+F3, F6, F9, the object placer, the frame counter) stay English unless it is on. `overlay_render` calls
+`tr_overlay(1)` before its frame and `tr_overlay(0)` after; while set, `tr()` on that thread (the render thread, a
+thread-local flag) returns the English text unless the setting is on, so the settings' labels, values, help and lock
+reasons in F1 are English too while ENHANCED SETTINGS and the other game-drawn screens (game thread) stay in the
+language. Off, the F1 title and F9's language list are left to right (`ov_rtl`). Texts made elsewhere and only shown
+by a window (the co-op connection status, the import's progress, the game's own item and room texts) stay in the
+language either way, so the overlay still merges a system font for their letters (`lang_fonts`).
 
 **Arabic display order** (`glyphs.c lang_shape`, pure): the Arabic column is written as normal (logical) Arabic and
 turned once, at `tr_init`, into what the game font and ImGui draw left to right, as the patch's own text is: each

@@ -10,8 +10,9 @@
 extern "C" {
 #endif
 
-enum { SP_DISPLAY, SP_GAMEPLAY, SP_CONTROLS, SP_TPS, SP_AUDIO, SP_APPEAR, SP_COOP, SP_EXTRAS, SP_COUNT };   /* in menu order */
+enum { SP_DISPLAY, SP_GAMEPLAY, SP_LANG, SP_CONTROLS, SP_TPS, SP_AUDIO, SP_APPEAR, SP_COOP, SP_EXTRAS, SP_COUNT };   /* in menu order */
 extern const char* const settings_pages[SP_COUNT];
+int settings_page_shown(int page);   /* LANGUAGE: only with an imported language */
 
 enum {
     SET_RESTART = 1,      /* takes effect at the next start */

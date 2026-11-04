@@ -459,9 +459,9 @@ static void move_sel(int dir)
     CallSystemSe(0, 2);
 }
 
-static void set_page(int p)
+static void set_page(int dir)   /* the next shown page that way */
 {
-    st.page = (p + SP_COUNT) % SP_COUNT;
+    do st.page = (st.page + dir + SP_COUNT) % SP_COUNT; while (!settings_page_shown(st.page));
     st.sel = 0; st.top = 0;
     CallSystemSe(0, 2);
 }
@@ -473,7 +473,7 @@ static void change(const Row* r, int dir)
 {
     const Setting* s = row_set(r);
     switch (r->kind) {
-    case K_PAGE: set_page(st.page + dir); return;
+    case K_PAGE: set_page(dir); return;
     case K_DEVICE: st.dev ^= 1; st.slot = 0; CallSystemSe(0, 2); return;
     case K_BIND: st.slot = (dir > 0) != rtl; CallSystemSe(0, 2); return;   /* (right to left: the second binding on the left) */
     case K_SET:
@@ -497,7 +497,7 @@ static int activate(const Row* r)
 {
     const Setting* s = row_set(r);
     switch (r->kind) {
-    case K_PAGE: set_page(st.page + 1); return 0;
+    case K_PAGE: set_page(1); return 0;
     case K_DEVICE: change(r, 1); return 0;
     case K_BIND: capture_begin(r->idx); return 0;
     case K_RESET:
@@ -586,7 +586,11 @@ static void draw_row(int i, int sel)
         pc_ui_text(320 - w / 2, y - 2, t, 0.72f, sel ? pulse() : 0xFFE8E0C0);
         pc_ui_arrow(320 - w / 2 - 14, y + 9, -1, col);
         pc_ui_arrow(320 + w / 2 + 14, y + 9, 1, col);
-        snprintf(t, sizeof(t), "%d/%d", st.page + 1, SP_COUNT);
+        {   /* (the shown pages) */
+            int at = 0, n = 0;
+            for (int p = 0; p < SP_COUNT; p++) if (settings_page_shown(p)) { n++; at += p <= st.page; }
+            snprintf(t, sizeof(t), "%d/%d", at, n);
+        }
         text_m(560, y + 2, t, 0.45f, 0xFF909090);
         text_m(48, y + 2, page_keys(t, sizeof(t)), 0.45f, 0xFF909090);
         return;
@@ -748,8 +752,8 @@ static int input(int port)
         return 0;
     }
     if (mt.right) { CallSystemSe(0, 0); return 1; }
-    if (press & P_L1) set_page(st.page - 1);
-    else if (press & P_R1) set_page(st.page + 1);
+    if (press & P_L1) set_page(-1);
+    else if (press & P_R1) set_page(1);
     else if (rept & P_UP) move_sel(-1);
     else if (rept & P_DOWN) move_sel(1);
     else if (rept & P_LEFT) change(&rows[st.sel], -1);

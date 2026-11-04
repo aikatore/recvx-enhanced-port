@@ -100,6 +100,9 @@ int overlay_event(const void* e)
             ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN || ev->type == SDL_EVENT_MOUSE_BUTTON_UP || ev->type == SDL_EVENT_MOUSE_WHEEL);
 }
 
+/* our texts here are right to left (Arabic, with Translate Overlay Windows on) */
+static bool ov_rtl(void) { return g_tr_overlay && lang_rtl_text(); }
+
 /* the rows of a page of the shared table (settings.c): all of them, or on the pages that have
    their own windows (CO-OP: F3, EXTRAS: F2) the ones flagged SET_F1. Values are applied by
    settings_poll (next pumped frame) and recvx.ini written once they stop changing. true = changed */
@@ -168,7 +171,7 @@ static bool settings_imgui(int page, bool all = true)
         const char* lock = settings_locked(s);
         char label[256], val[96];   /* (Arabic: 3 bytes a letter) */
         int v = settings_get(s), hi = settings_hi(s), st = s->step > 0 ? s->step : 1;
-        if (lang_rtl_text())   /* (right to left: the note on the label's left) */
+        if (ov_rtl())   /* (right to left: the note on the label's left) */
             SDL_snprintf(label, sizeof label, "%s%s##set%d", (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", tr(s->label), i);
         else SDL_snprintf(label, sizeof label, "%s%s##set%d", tr(s->label), (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", i);
         ImGui::BeginDisabled(lock != nullptr);
@@ -302,7 +305,7 @@ static void settings_window(void)
     ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(460, 0), ImGuiCond_FirstUseEver);
     char title[160];
-    if (lang_rtl_text()) SDL_snprintf(title, sizeof title, RECVX_VERSION "%s###f1", tr("Resident Evil Code: Veronica X  -  settings (F1)  -  "));
+    if (ov_rtl()) SDL_snprintf(title, sizeof title, RECVX_VERSION "%s###f1", tr("Resident Evil Code: Veronica X  -  settings (F1)  -  "));
     else SDL_snprintf(title, sizeof title, "%s" RECVX_VERSION "###f1", tr("Resident Evil Code: Veronica X  -  settings (F1)  -  "));
     if (!ImGui::Begin(title, &visible)) { ImGui::End(); return; }
 
@@ -311,6 +314,7 @@ static void settings_window(void)
         ImGui::TextDisabled(tr("Resolution: %d x %d | %.1f FPS"), ww, wh, ImGui::GetIO().Framerate);
     }
     if (ImGui::CollapsingHeader(tr("Gameplay"), ImGuiTreeNodeFlags_DefaultOpen)) changed |= settings_imgui(SP_GAMEPLAY);
+    if (settings_page_shown(SP_LANG) && ImGui::CollapsingHeader(tr("Language"), ImGuiTreeNodeFlags_DefaultOpen)) changed |= settings_imgui(SP_LANG);
     if (ImGui::CollapsingHeader(tr("Controls"))) controls_section();
     if (ImGui::CollapsingHeader(tr("Third Person"), ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= settings_imgui(SP_TPS);
@@ -883,8 +887,8 @@ static void import_window(void)
             }
             for (int l = 1; l < LANG_COUNT; l++)
                 if (lang_installed(l) && lang_dir(l) && !SDL_strncmp(lang_dir(l), dir, SDL_strlen(dir)))
-                    ImGui::BulletText("%s%s", lang_rtl_text() && lang_has_subtitles(l) ? tr(" (cutscene subtitles)") : lang_names[l],
-                                      !lang_has_subtitles(l) ? "" : lang_rtl_text() ? lang_names[l] : tr(" (cutscene subtitles)"));   /* (right to left: the note first) */
+                    ImGui::BulletText("%s%s", ov_rtl() && lang_has_subtitles(l) ? tr(" (cutscene subtitles)") : lang_names[l],
+                                      !lang_has_subtitles(l) ? "" : ov_rtl() ? lang_names[l] : tr(" (cutscene subtitles)"));   /* (right to left: the note first) */
             ImGui::PopID();
             continue;
         }
@@ -1208,7 +1212,7 @@ static void devcine_window(const DevCine* l, int n, int open)
     ImGui::End();
 }
 
-void overlay_render(void)
+static void overlay_frame(void)
 {
     if (!ready) return;
     lang_fonts();
@@ -1281,4 +1285,11 @@ void overlay_render(void)
     }
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void overlay_render(void)
+{
+    tr_overlay(1);   /* our windows in English unless Translate Overlay Windows is on (lang.h) */
+    overlay_frame();
+    tr_overlay(0);
 }

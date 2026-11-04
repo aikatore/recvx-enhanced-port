@@ -108,13 +108,17 @@ static void miss(const char* en)
     if ((f = fopen(path, "a"))) { fprintf(f, "%s\n", en); fclose(f); }
 }
 
+int g_tr_overlay;
+static _Thread_local int english;   /* this thread draws the overlay windows, which stay English (lang.h tr_overlay) */
+void tr_overlay(int on) { english = on && !g_tr_overlay; }
+
 const char* tr(const char* en)
 {
     static char buf[8][512];
     static unsigned k;
     const char* id;
     const TrRow* r;
-    int l = lang_installed(g_lang) ? g_lang : LANG_EN;
+    int l = !english && lang_installed(g_lang) ? g_lang : LANG_EN;
     if (!l || !en || !*en) return en;
     id = strstr(en, "##");
     r = find(en, id ? (size_t)(id - en) : strlen(en));

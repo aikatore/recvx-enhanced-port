@@ -10,6 +10,8 @@
 
 ### Menus
 
+- **LANGUAGE page**: the language settings have their own page in the Enhanced Settings. The F1, F2, F3 and F9
+  windows now stay in English; a new setting there shows them in the game's language.
 - **EXIT on the title screen**: the title menu has an EXIT entry at the bottom that closes the game after asking.
 - **BioRand EXTRA OPTIONS**: the cutscene cast and Randomize Character Model moved to the RANDOMIZER page, now
   grouped under headings. EXTRA OPTIONS can set your character models for Claire and Chris, from a list, without

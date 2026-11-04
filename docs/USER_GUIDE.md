@@ -336,6 +336,18 @@ voices and what happens stay as they are.
   Model", "Custom Cutscene Model"). Alexia asleep in her capsule keeps her own look.
 * In co-op the host's settings and seed count, so both players see the same cast.
 
+### Language
+
+Shown once you have imported another language (title menu, IMPORT, or F9; see LANGUAGES.md).
+
+| Setting | Default | What it does |
+|---|---|---|
+| Language | English | the game's text, from the next screen; change it on the title screen |
+| Subtitles | Off | cutscene subtitles in any installed language that has them |
+| Translated Pictures | Off | pictures with writing (menus, maps, labels) in the language. Off: the English ones, which an HD pack can replace |
+| Translated Voices | On | the language's title screen call, where its disc has one |
+| Translated Overlay Windows | Off | the F1, F2, F3 and F9 windows in the language. Off: they stay English; the game's own menus are translated either way |
+
 ### Controls
 
 Input Devices and Gamepad ([above](#input-source-and-local-co-op)), Vibration Strength (100%), Mouse

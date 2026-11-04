@@ -112,6 +112,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "subtitles", &g_subtitles, 0, 1 + LANG_COUNT },     /* cutscene subtitles: 0 off, 1 the game language's, 2 + LANG_* (lang.h) */
     { "translated_pictures", &g_lang_pictures, 0, 1 },    /* the language's pictures with writing: 0 the disc's (lang.h) */
     { "translated_voices", &g_lang_voices, 0, 1 },        /* the language's sounds (the title call): 0 the disc's (lang.h) */
+    { "translate_overlay", &g_tr_overlay, 0, 1 },         /* the F1, F2, F3, F6, F9 windows in the language: 0 English (lang.h) */
     { "tps", (int*)&g_tps.on, 0, 1 },
     { "tps_fov", &g_tps.fov, 30, 130 },
     { "tps_aim_fov", &g_tps.aim_fov, 20, 130 },
