@@ -1036,8 +1036,13 @@ the same in Claire's part and in Chris's.
   head (the source's rig roles 4, 5: `actor_src_head`) is hidden while it is drawn as its model, all its
   nodes (`cast_glue.c parts_hide`, `NJD_EVAL_HIDE`, as the hand pieces), and shown again at the next tick,
   so they are back whenever the record is drawn as itself. The other objects linked to cast records sit on
-  their hands (checked in 0000, 0030, 1020, 3100, 3210, 7030, 7220, 8030, 9150, 9320). Test aid
-  `RECVX_CAST_PARTS=0`: the parts kept.
+  their hands (checked in 0000, 0030, 1020, 3100, 3210, 7030, 7220, 8030, 9150, 9320). The same for the
+  double of the character played drawn as the player's look ("Character Model", Per Character, BioRand's
+  pick; `actor_double_tick` -> `cast_double_parts`): Claire's ponytail stayed on it in her own part (9150:
+  behind Alexia's or Wesker's head); there from object 3, `sys->obwp[2]` being the look's own head part
+  (`self_cine_hair`). Kept on a player file of the record's own character (Claire's other costumes): it
+  has no head part of its own, the record's is its (before, Claire's Model set to her second costume showed
+  her without a ponytail in Chris's part). Test aid `RECVX_CAST_PARTS=0`: the parts kept.
 * **Zero-length bones**: Rodrigo's and the hazmat man's shoulders are two nodes at one place, and the
   arm's rotation is the second's (see "Retargeting"). Taken from the first, the models on Rodrigo kept
   their upper arms near their rest pose, raised like a T-pose, while his hung down or lay on the table.
