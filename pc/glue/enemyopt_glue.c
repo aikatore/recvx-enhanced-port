@@ -36,6 +36,8 @@ void variant_room(void);
 void cast_room(const EnemyOpts* o);   /* cast_glue.c */
 void spawn_keep_texlist(const NJS_TEXLIST* l);
 void bhCheckEneWorkNum(void);   /* eneset.h */
+void bhStFlg(unsigned int* flg, unsigned int bit);   /* flag.h */
+int bhCkFlg(unsigned int* flg, unsigned int bit);
 
 EnemyOpts g_enemy_opts = { .variety = 1, .events = 1 };   /* settings (F1, recvx.ini) */
 static EnemyOpts host_opts;             /* a co-op guest's: the host's */
@@ -97,12 +99,12 @@ static void rnd_seed(unsigned int a, unsigned int b)
     if (!rng) rng = 1;
     rnd(); rnd();
 }
-static int spot_player;                 /* find_spot avoids the player too (at run time, not at the room load) */
 int room_file_now(void) { return sys->stg_no * 1000 + sys->rom_no * 10 + sys->rcase; }
 
 /* what the room script does with each record (pc/tools/enemies.py classifies the same way) */
 enum { REC_EVENT = 1, REC_SHOWN = 2, REC_HP = 4 };
 static unsigned char rec_flags[128];
+static short rec_kill[128];             /* each record's kill bit as the entry script hides it by (EneSetCk; -1: none, it comes back on every visit) */
 static const ActorModel* rand_src[128];   /* randomized records: where their new type comes from */
 static unsigned short rand_var[128];    /* and which enemy variant they became (0: none) */
 static int all_dead_check;              /* the script counts kills (DieEventCk): "all dead" doors */
@@ -115,6 +117,7 @@ static void scan_script(void)
     unsigned int offs[256], first, o, end;
     int n = 0, i, j;
     memset(rec_flags, 0, sizeof(rec_flags));
+    memset(rec_kill, 0xFF, sizeof(rec_kill));
     all_dead_check = rm_flg_used = 0;
     if (!base) return;
     first = tab[0];
@@ -145,6 +148,7 @@ static void scan_script(void)
             case 153: case 208: rec_flags[p[1] & 127] |= REC_HP; break;   /* EnemyHpUp, EneLifeSetM */
             case 36: if (p[1] == 1) rec_flags[p[2] & 127] |= REC_SHOWN; break;   /* InitModelSet */
             case 33: all_dead_check = 1; break;   /* DieEventCk */
+            case 34: if (rec_kill[p[1] & 127] < 0) rec_kill[p[1] & 127] = (short)((p[2] | p[3] << 8) & 0x1FF); break;   /* EneSetCk rec, bit */
             case 4: case 5: {   /* Ck / Set rm_flg (bit n: mask 0x80000000 >> n) */
                 int b = (p[2] | p[3] << 8) & 0x3FF;
                 if (p[1] == 4 && b >= 29 && b <= 31) rm_flg_used = 1;
@@ -161,16 +165,13 @@ static void scan_script(void)
 }
 
 /* a free spot near (x, z) on floor `flr`: no wall between it and the spot (plus a body's width
-   beyond), away from the player; 1 = found */
-static int near_entry(float x, float z, int player)
+   beyond), away from the entry positions; 1 = found. Only the room file and the draws decide it (not where
+   the player stands), so a room gets the same spots on every visit. */
+static int near_entry(float x, float z)
 {
     int i;
     for (i = 0; i < rom->pos_n; i++) {
         float dx = x - rom->posp[i].px, dz = z - rom->posp[i].pz;
-        if (dx * dx + dz * dz < 40.0f * 40.0f) return 1;
-    }
-    if (player) {
-        float dx = x - plp->px, dz = z - plp->pz;
         if (dx * dx + dz * dz < 40.0f * 40.0f) return 1;
     }
     return 0;
@@ -184,7 +185,7 @@ static int find_spot(float x, float y, float z, int flr, float rmin, float rmax,
         float r = rmin + (rmax - rmin) * (float)(rnd() & 1023) / 1023.0f;
         float tx = x + r * sinf(a), tz = z + r * cosf(a);
         NJS_POINT3 p1 = { x, y + 10.0f, z }, p2 = { x + (r + 8.0f) * sinf(a), y + 10.0f, z + (r + 8.0f) * cosf(a) };
-        if (near_entry(tx, tz, spot_player)) continue;
+        if (near_entry(tx, tz)) continue;
         if (bhCollisionCheckLine2(&p1, &p2, 0x4400, (char)flr)) continue;
         *ox = tx; *oz = tz;
         return 1;
@@ -474,42 +475,64 @@ void enemy_room_finished(void)
     scan_script();
     memset(rand_src, 0, sizeof(rand_src));
     memset(rand_var, 0, sizeof(rand_var));
-    spot_player = 0;
     if (o->rand) randomize(o);
     if (o->place) place(o);
-    spot_player = 1;
 }
 
 /* ---------------------------------------------------------------- (a) extra enemies */
 /* types that roam freely and die like any enemy */
 static int extra_type(int id) { return id == 1 || id == 3 || id == 4 || id == 5 || id == 9 || id == 22 || id == 26; }
 
-/* Test aid RECVX_ENEMY_KILL=n: from n game frames into each room, every 20 frames each living enemy of the room's
-   records (ids 1..30, in its AI, shown) takes a heavy hit as from the player's weapon (weapon.c bhCheckGunAtari: hit
-   flag, joint, damage); logs each death (flg & 2: what the script's DieCk turns into its kill bit) and, at the next
-   room, how many of the room's enemies died. */
+static struct { unsigned char slot, id; short bit; } xtra[3];   /* the room's extra enemies and their dead flags (-1: none) */
+static int xtra_n, xtra_gen = -1;
+
+/* Test aid RECVX_ENEMY_KILL=n[:r|:x]: from n game frames into each room, every 20 frames each living enemy of the room's
+   records (ids 1..30, in its AI, shown) and its extra enemies takes a heavy hit as from the player's weapon (weapon.c
+   bhCheckGunAtari: hit flag, joint, damage); ":r" only the records, ":x" only the extras. Logs the living ones at n,
+   each death (flg & 2: what the script's DieCk turns into its kill bit) and, at the next room, how many died. */
 static void kill_test(void)
 {
-    static int n = -2, gen = -1, t, hit[128], died[128], room;
-    int k, h = 0, d = 0;
-    if (n == -2) n = getenv("RECVX_ENEMY_KILL") ? atoi(getenv("RECVX_ENEMY_KILL")) : -1;
+    static int n = -2, only, gen = -1, t, hit[PC_ENE_SLOTS], died[PC_ENE_SLOTS], room;
+    int k, i, h = 0, d = 0, slots[128 + 3], ns = 0, nrec;
+    char line[700];
+    if (n == -2) {
+        const char* e = getenv("RECVX_ENEMY_KILL");
+        n = e ? atoi(e) : -1;
+        only = e && strchr(e, ':') ? strchr(e, ':')[1] : 0;
+    }
     if (n < 0 || !sys || !plp || !rom || (sys->gm_flg & 0x9) || (sys->cb_flg & 0x1)) return;
     if (gen != enemy_room_gen) {
-        for (k = 0; k < 128; k++) { h += hit[k]; d += died[k]; }
+        for (k = 0; k < PC_ENE_SLOTS; k++) { h += hit[k]; d += died[k]; }
         if (h) printf("test: room %04d: %d of %d enemies hit died\n", room, d, h);
         gen = enemy_room_gen; t = 0; room = room_file_now();
         memset(hit, 0, sizeof(hit)); memset(died, 0, sizeof(died));
     }
     if (++t < n) return;
-    for (k = 0; k < rom->ene_n && k < 128; k++) {
-        BH_PWORK* ep = &ene[k];
-        if (!(ep->flg & 0x1) || ep->id < 1 || ep->id > 30) continue;
-        if ((ep->flg & 0x2) && hit[k] && !died[k]) { died[k] = 1; printf("test: room %04d record %d (type %d) died after %d frames\n", room, k, ep->id, t - n); }
+    for (k = 0; k < rom->ene_n && k < 128; k++) slots[ns++] = k;
+    nrec = ns;
+    for (i = 0; xtra_gen == enemy_room_gen && i < xtra_n; i++) slots[ns++] = xtra[i].slot;
+    if (t == n) {   /* who is there */
+        int ln = 0, bits = 0;
+        for (i = 0; i < 32; i++) bits += __builtin_popcount(sys->ed_flg[i]);
+        ln = snprintf(line, sizeof(line), "test: room %04d (%d ed_flg bits set) living enemies at frame %d:", room, bits, n);
+        for (i = 0; i < ns && ln < (int)sizeof(line) - 24; i++) {
+            const BH_PWORK* ep = &ene[slots[i]];
+            if ((ep->flg & 0x3) == 0x1 && !(ep->stflg & 0x1000000) && ep->id >= 1 && ep->id <= 30)
+                ln += snprintf(line + ln, sizeof(line) - ln, " %s%d:%d", i >= nrec ? "extra@" : "", slots[i], ep->id);
+        }
+        printf("%s\n", line);
+    }
+    for (i = 0; i < ns; i++) {
+        BH_PWORK* ep = &ene[k = slots[i]];
+        int extra = i >= nrec;
+        if (!(ep->flg & 0x1) || ep->id < 1 || ep->id > 30 || (only == 'r' && extra) || (only == 'x' && !extra)) continue;
+        if ((ep->flg & 0x2) && hit[k] && !died[k]) { died[k] = 1; printf("test: room %04d %s %d (type %d) died after %d frames\n", room, extra ? "extra in slot" : "record", k, ep->id, t - n); }
         if ((ep->flg & 0x2) || (ep->stflg & 0x1000000) || ep->mode0 == 5 || (t - n) % 20) continue;
         hit[k] = 1;
         ep->flg |= 0x4;
         ep->dpx = ep->px; ep->dpy = ep->py + 10.0f; ep->dpz = ep->pz;
-        ep->wpnr_no = plp->wpnr_no;
+        ep->wpnr_no = plp->wpnr_no >= 2 ? plp->wpnr_no : 2;   /* (no weapon or the knife: the handgun's; an anatomist's death by
+                                                                    a weapon without a death action keeps its move's mode2, en26.c) */
         ep->djnt_no = ep->mlwP && ep->mlwP->obj_num > 1 ? 1 : 0;
         ep->dam[ep->djnt_no] += 500;
         ep->comb_flg |= 0x10;
@@ -543,39 +566,64 @@ static void headshot_test(void)
     }
 }
 
+/* An extra enemy is remembered dead like the record it copies: ed_flg EXTRA_DEAD + the kill bit the room's entry script
+   hides that record by (EneSetCk), set when the extra dies, and it stays away while that is set. EneSetCk tests only
+   bits 0..511 (retail uses 0..357, rooms built with pc/tools up to 511), so 512..1023 are free; they are saved and
+   shared in co-op as the other ed_flg bits. An extra of a record the script does not hide when dead (no EneSetCk, as
+   the Battle Game's) comes back with the room, as that record does. */
+#define EXTRA_DEAD 512
+
 void enemy_extras_frame(void)
 {
     static int done_gen = -1;
     const EnemyOpts* o;
-    int cand[128], nc = 0, k, made = 0;
+    int cand[128], nc = 0, k, made = 0, room;
     kill_test();
     headshot_test();
-    if (done_gen == enemy_room_gen || !sys || !plp || !rom) return;
+    if (!sys || !plp || !rom) return;
+    if (xtra_gen == enemy_room_gen && !coop_is_guest())   /* (a guest gets the host's flags) */
+        for (k = 0; k < xtra_n; k++) {
+            const BH_PWORK* ep = &ene[xtra[k].slot];
+            if (xtra[k].bit >= 0 && (ep->flg & 0x3) == 0x3 && ep->id == xtra[k].id && !bhCkFlg(sys->ed_flg, xtra[k].bit)) {
+                bhStFlg(sys->ed_flg, xtra[k].bit);
+                host_log("enemies: the extra enemy in slot %d died: ed_flg %d set\n", xtra[k].slot, xtra[k].bit);
+            }
+        }
+    if (done_gen == enemy_room_gen) return;
     o = enemy_opts();
     if (!o->extra || coop_is_guest()) { done_gen = enemy_room_gen; return; }
     if (!(sys->tk_flg & 0x80) || !(sys->sp_flg & 0x2) || (sys->gm_flg & 0x9) || (sys->cb_flg & 0x1)) return;   /* the room runs */
-    done_gen = enemy_room_gen;
-    for (k = 0; k < rom->ene_n && k < 128; k++) {
-        BH_PWORK* ep = &ene[k];
-        if (!(ep->flg & 0x1) || (ep->flg & 0x2) || (ep->stflg & 0x1000000) || ep->mode0 == 5 || !extra_type(ep->id) || rec_flags[k]) continue;
-        cand[nc++] = k;
-    }
-    rnd_seed((unsigned)o->seed, (unsigned)room_file_now() * 7u + 1u);
+    done_gen = xtra_gen = enemy_room_gen;
+    xtra_n = 0;
+    room = room_file_now();
+    /* the same extras on every visit: the room file alone picks the candidates (dead records too: their extras have
+       flags of their own) and each extra has its own draws, so one that stays dead moves no other */
+    for (k = 0; k < rom->ene_n && k < 128; k++)
+        if ((ene[k].flg & 0x1) && extra_type(ene[k].id) && !rec_flags[k]) cand[nc++] = k;
+    rnd_seed((unsigned)o->seed, (unsigned)room * 7u + 1u);
     for (k = nc - 1; k > 0; k--) { int j = rnd() % (k + 1), t = cand[k]; cand[k] = cand[j]; cand[j] = t; }   /* shuffle */
     for (k = 0; k < nc && made < o->extra; k++) {
         const ETTY_WORK* r = &rom->enep[cand[k]];
-        BH_PWORK* src = &ene[cand[k]];
-        ActorModel am = { "extra enemy", (unsigned short)room_file_now(), (unsigned char)cand[k], (unsigned char)r->id, r->mdlver, 0, 0 };
+        ActorModel am = { "extra enemy", (unsigned short)room, (unsigned char)cand[k], (unsigned char)r->id, r->mdlver, 0, 0 };
         SpawnNote n = { 0 };
         const char* why;
+        int bit = rec_kill[cand[k]] >= 0 && rec_kill[cand[k]] < EXTRA_DEAD ? EXTRA_DEAD + rec_kill[cand[k]] : -1, slot = -1;
+        float dx, dz;
         if (rand_src[cand[k]]) { am = *rand_src[cand[k]]; n.variant = rand_var[cand[k]]; }   /* a randomized record: a copy of its new type (and variant) */
         n.room = am.room; n.rec = am.rec; n.id = am.id; n.mdlver = am.mdlver;
-        n.py = src->py; n.flr = src->flr_no; n.ay = (short)(rnd() & 0xFFFF);
-        if (!find_spot(src->px, src->py, src->pz, src->flr_no, 15.0f, 35.0f, &n.px, &n.pz)) continue;
-        why = spawn_add(&am, &n, NULL);
-        host_log("enemies: extra %s (type %d model %d, from record %d) at %.0f %.0f: %s\n", am.name, am.id, am.mdlver, am.rec, n.px, n.pz, why ? why : "spawned");
-        if (!why) made++;
-        else if (strstr(why, "slots") || strstr(why, "memory")) break;
+        rnd_seed((unsigned)o->seed, (unsigned)room * 7u + 2u + (unsigned)cand[k] * 7919u);
+        n.py = r->py; n.flr = r->flr_no; n.ay = (short)(rnd() & 0xFFFF);   /* (from the record, not where its enemy walked to) */
+        if (!find_spot(r->px, r->py, r->pz, r->flr_no, 15.0f, 35.0f, &n.px, &n.pz)) continue;
+        made++;
+        dx = n.px - plp->px; dz = n.pz - plp->pz;
+        if (bit >= 0 && bhCkFlg(sys->ed_flg, bit)) why = "dead (killed before)";
+        else if (dx * dx + dz * dz < 40.0f * 40.0f) why = "not now: the player stands there (a loaded save, a retry)";
+        else if (!(why = spawn_add(&am, &n, &slot)) && xtra_n < 3) {
+            xtra[xtra_n].slot = (unsigned char)slot; xtra[xtra_n].id = (unsigned char)am.id; xtra[xtra_n++].bit = (short)bit;
+        }
+        host_log("enemies: extra %s (type %d model %d, from record %d, dead flag %d) at %.0f %.0f: %s\n", am.name, am.id, am.mdlver, cand[k], bit,
+                 n.px, n.pz, why ? why : "spawned");
+        if (why && (strstr(why, "slots") || strstr(why, "memory"))) break;
     }
-    if (nc) host_log("enemies: room %04d: %d extra enemies (of %d eligible records, option %d)\n", room_file_now(), made, nc, o->extra);
+    if (nc) host_log("enemies: room %04d: %d extra enemies (of %d eligible records, option %d)\n", room, made, nc, o->extra);
 }

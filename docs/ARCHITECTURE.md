@@ -1332,7 +1332,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_CAST=0\|1[:all\|:custom][:random][:imports]`, `RECVX_CAST_TRACE=1` | the cutscene cast's options over the settings; log the game's state at each room load, each change between cutscene and gameplay, the hand pieces and head parts hidden, and the cast's faces ([ACTORS.md](ACTORS.md) "Cutscene cast") |
 | `RECVX_CAST_PARTS=0`, `RECVX_FEET_TRACE=1` | the cast's head parts (Claire's ponytail) kept on a record drawn as another model; every 15 ticks each display model's lowest ankle or toe and its source's ([ACTORS.md](ACTORS.md) "Retargeting") |
 | `RECVX_TEST_EVENT="f:level:ev,..."` | start the room script's event ev at that task level at game frame f, as its `EvtOn` (a cutscene without walking to its trigger; entries of one frame start together) |
-| `RECVX_ENEMY_KILL=n` | from n game frames into each room, the room's enemies take heavy hits until they die; logs deaths ([ENEMIES.md](ENEMIES.md#tools)) |
+| `RECVX_ENEMY_KILL=n[:r\|:x]` | from n game frames into each room, the room's enemies (`:r` only its records, `:x` only its extra enemies) take heavy hits until they die; logs the living ones and deaths ([ENEMIES.md](ENEMIES.md#tools)) |
 | `RECVX_HEADSHOT=n` | n game frames into each room, every walking zombie takes one head hit that bursts its head; logs its head state ([ENEMIES.md](ENEMIES.md#head-blow-offs)) |
 | `RECVX_ENEMY_TRACE=dist` | one line per step of every enemy within dist units of a player |
 | `RECVX_KNIFE_TRACE=1`, `RECVX_KNIFE_DROP=1` | quick knife: log its state; drawing the knife empties the previous weapon's slot |

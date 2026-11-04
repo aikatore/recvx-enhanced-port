@@ -526,14 +526,21 @@ from the game's `rand()`.
 ### Extra enemies
 
 * "Up to N per room": at the first frame a room runs, the host (or single player) picks up to N
-  of the room's unmarked, visible, living records of the roaming types zombie, Black Widow,
-  Cerberus, Hunter, Bandersnatch, albinoid adult, anatomist, and spawns a copy of each from the
+  of the room's unmarked records of the roaming types zombie, Black Widow, Cerberus, Hunter,
+  Bandersnatch, albinoid adult, anatomist (living or dead), and spawns a copy of each from the
   current room file (`spawn_add`, so it reaches the guest as an added enemy): same type and model
   version (no upload), variant 0, placed 15..35 units from the source where a line test against
   the walls (`hitchkl.c bhCollisionCheckLine2`) is clear, at least 40 units from every entry
-  position and from the player.
-* Deterministic per (seed, room) and the room's living records. Extras have no kill bit: they come
-  back with the room, and "all dead" counts ignore them.
+  position. A spot within 40 units of the player (a loaded save, a retry) skips that extra for the visit.
+* The same on every visit: the picks, spots and angles depend only on (seed, room file, record),
+  each extra with its own draws, never on which records are dead or where the player came in.
+* **Dead flag**: an extra copied from a record that the entry script hides by kill bit b
+  (`EneSetCk`) is remembered dead in `ed_flg` 512 + b (set when it dies; the host or single player
+  sets it, co-op shares it as every `ed_flg` bit, saves keep it) and stays away while that is set,
+  without another taking its place. `EneSetCk` reaches only bits 0..511 (retail uses 0..357, rooms
+  built with `pc/tools` up to 511), so 512..1023 are free. An extra of a record the script does not
+  hide (no `EneSetCk`, e.g. the Battle Game's rooms) comes back with the room, as that record does.
+  "All dead" counts ignore extras.
 * Budgets are the spawner's; a room that runs out stops adding.
 
 ### Rearranged placements
@@ -733,6 +740,15 @@ types). *Another kind*: the script only shows or hides them. *Another look*: an 
 * Two looks of one type share the first one's sound bank.
 * A refusal by `spawn_at` keeps the original record; both co-op sides decide the same unless one
   side's memory is fuller.
+* **BioRand with random doors**: each door it connects sets a fixed room case (`RoomCaseNo` before its
+  `SetDoorCall`: the case file its room graph chose), while the doors it leaves keep their story
+  conditions. So one room can be entered as two case files in the same story state, depending on the
+  door. In the pack of seed string `R840-K9YC-…`: 4/01 is RM_4011 from 5/00 but RM_4010 from 6/05; 1/12
+  stays RM_1120 (four zombies, kill bits 85..88) from 3/08 after the story made it RM_1121 (two
+  Bandersnatches, 90..91) from 1/00. Each case file has its own records and kill bits, as after a story
+  event in the original game, so the other door shows other enemies, and kills in one file do not
+  count in the other; the enemy options key on the case file too. The port loads what the door says
+  (a case BioRand did not choose could miss its items).
 
 ## Tools
 
@@ -745,6 +761,10 @@ types). *Another kind*: the script only shows or hides them. *Another look*: an 
 | `sources` | per (type, model version) the smallest room carrying its model and motions |
 | `selftest` | the script walker on RM_0060 |
 
+`pc/tools/enemy_revisit_check.sh OUT [SEED...]` (headless, about 6 minutes): a new game visits twelve
+rooms twice with the randomizer, placements and three extras on, killing everything (and once only the
+records); every room must get the same records and extras on both visits, and nothing killed may come back.
+
 Test aids:
 
 | Env var | Effect |
@@ -752,7 +772,7 @@ Test aids:
 | `RECVX_SPAWN="gameframe:id[.mdlver][@dist],..."` | spawns the first spawner entry of that type/model version at that game frame (`v<id>`: an enemy variant); traces its state every 30 frames, HP changes and hits on the player |
 | `RECVX_SPAWN_SURVEY="stg:rom,..."` | tries every spawner entry in each room and logs the result; `RECVX_SPAWN_SURVEY_ALL=1` keeps the spawns |
 | `RECVX_ENEMY_EXTRA`, `_PLACE`, `_RANDOM`, `_SEED`, `_VARIETY`, `_EVENTS` | override the enemy options |
-| `RECVX_ENEMY_KILL=n` | from n game frames into each room, every 20 frames each living, shown enemy of the room's records (ids 1..30, in its AI) takes a heavy hit as from the player's weapon; logs each death (`flg & 2`, what `DieCk` turns into the kill bit) and per room how many died (Black Widows take damage through their body parts and do not die from it) |
+| `RECVX_ENEMY_KILL=n[:r\|:x]` | from n game frames into each room, every 20 frames each living, shown enemy of the room's records and its extra enemies (ids 1..30, in its AI) takes a heavy hit as from the player's weapon (`:r` only the records, `:x` only the extras); logs the living ones at frame n, each death (`flg & 2`, what `DieCk` turns into the kill bit) and per room how many died (Black Widows take damage through their body parts and do not die from it) |
 | `RECVX_HEADSHOT=n` | n game frames into each room, every living zombie in its AI (records and added ones) takes one head hit as from the magnum (weapon 6 on joint 11, the game's burst path); its head state (`exp0 + 0x78`), hp and modes are logged every 15 frames for 90 frames |
 | `RECVX_ENEMY_TRACE=dist` | traces enemy steps (co-op targets) |
 | `RECVX_TRACE_SND=1` | logs sound requests and extra banks |
