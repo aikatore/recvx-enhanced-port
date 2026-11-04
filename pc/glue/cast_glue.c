@@ -162,7 +162,8 @@ static int as_model(const BH_PWORK* ep, int k) { return k >= 0 && k < RECS && re
    prop in the same mesh (Claire's hand with the lighter, Rodrigo's with what he hands over) and stays, so the prop does
    not go with it; items the script links to the hand are other objects and stay too. */
 
-static void hands_show(void)
+/* actor_double_tick, every tick before cast_tick: the pieces and head parts hidden last tick shown again */
+void cast_show(void)
 {
     while (hidden_n) hidden[--hidden_n]->evalflags &= ~0x8u;
 }
@@ -195,13 +196,16 @@ static void hands_hide(BH_PWORK* ep, int who)
    event model 47 in 8030) are objects of their own, linked to the head, and kept swinging behind or sitting on the
    model shown in the record's place. Hidden as the hand pieces are (every node's mesh, NJD_EVAL_HIDE) while the
    record is drawn as its model, shown again at the next tick (the record drawn as itself). The other objects linked
-   to a record sit on its hands. */
+   to a record sit on its hands. The same for the double of the character played drawn as the player's look
+   (cast_double_parts). Kept on a player file of the record's own character (chr): it has no head part of its own, the
+   record's is its. From object o: 2, the double 3 (the player's head part there is the look's: coop_glue.c
+   self_cine_hair). */
 extern int cast_parts;                  /* actor_glue.c: 0 (test aid RECVX_CAST_PARTS=0): the parts kept */
-static void parts_hide(BH_PWORK* ep, int who)
+static void parts_hide(BH_PWORK* ep, int who, int chr, int o)
 {
-    int o, i;
-    if (!cast_parts) return;
-    for (o = 2; o < 32; o++) {   /* (0, 1: the player's weapons) */
+    int i, m = actor_shown_model(who);
+    if (!cast_parts || (m >= ACTOR_PART && ((m - ACTOR_PART) & 3) == chr)) return;
+    for (; o < 32; o++) {   /* (0, 1: the player's weapons) */
         O_WRK* op = &sys->obwp[o];
         if (!(op->flg & 0x1) || !(op->flg & 0x80) || op->lkwkp != (unsigned char*)ep || !actor_src_head(who, op->lkono) || !op->mlwP || !op->mlwP->objP) continue;
         for (i = 0; i < (int)op->mlwP->obj_num && hidden_n < HIDDEN_MAX; i++) {
@@ -229,15 +233,18 @@ void cast_tick(void)
             if (rec_slot[k] >= 0) host_log("cast:  record %d (type %d) at %.1f %.1f %.1f%s\n", k, ene[k].id, ene[k].px, ene[k].py, ene[k].pz, (ene[k].stflg & 0x1000000) ? ", hidden" : "");
     }
     was = now;
-    hands_show();
     for (k = 0; k < (int)sys->ewk_n && k < RECS; k++) {
         BH_PWORK* ep = &ene[k];
         if (!as_model(ep, k) || (ep->stflg & 0x41000000) || !ep->mlwP) continue;
         actor_act(ACTOR_CAST + rec_slot[k], ep);
         hands_hide(ep, ACTOR_CAST + rec_slot[k]);
-        parts_hide(ep, ACTOR_CAST + rec_slot[k]);
+        parts_hide(ep, ACTOR_CAST + rec_slot[k], rec_chr[k], 2);
     }
 }
+
+/* actor_double_tick: the head parts of the double ep of character pid posed as the player's look hidden (Claire's
+   ponytail on her record in 9150, 9320, 3210) */
+void cast_double_parts(BH_PWORK* ep, int pid) { parts_hide(ep, ACTOR_DOUBLE, pid, 3); }
 
 /* A part of a creature's body is a record of its own linked to it (flg 0x80, lkwkp, lkono): Nosferatu's heart in 6040
    (type 53, record 5, on his chest node 3, beating, a morphing record) showed on the chest of the model in his place.

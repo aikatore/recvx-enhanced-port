@@ -1884,6 +1884,8 @@ int actor_put_player(void)
 int cast_n;                             /* cast_glue.c: records drawn as other models in this room */
 int cast_draw(BH_PWORK* ep);
 void cast_tick(void);
+void cast_show(void);
+void cast_double_parts(BH_PWORK* ep, int pid);
 int actor_put_enemy(BH_PWORK* ep)
 {
     int i, id = ep->id, pid = sys->ply_id & 3;
@@ -2038,6 +2040,7 @@ void actor_double_tick(void)
     Disguise* d = &dg[ACTOR_DOUBLE];
     int i, pid = sys->ply_id & 3;
     memset(posed_src, 0, sizeof(posed_src));
+    cast_show();   /* (the pieces and head parts hidden last tick) */
     if (cast_n) cast_tick();   /* the cutscene cast, the same way */
     if (d->model < 0 || !d->rig.ok) return;
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
@@ -2047,7 +2050,7 @@ void actor_double_tick(void)
         dbl_tick = dbl_posed ? 2 : 1;
         actor_pose(ACTOR_DOUBLE, ep);
         dbl_tick = 0;
-        if (d->mapped) dbl_posed = ep;
+        if (d->mapped) { dbl_posed = ep; cast_double_parts(ep, pid); }   /* (its head parts: Claire's ponytail) */
     }
 }
 

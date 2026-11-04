@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Claire's ponytail no longer hangs behind another model shown in her place in cutscenes.
+
 ## 0.7.4 (2026-11-04)
 
 ### New
