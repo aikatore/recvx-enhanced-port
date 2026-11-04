@@ -33,6 +33,8 @@
   in the Antarctic mansion study instead of being told they are left for Chris.
 - **BioRand: poison after Nosferatu**: in a BioRand game Nosferatu's poison, which herbs can't cure, goes away
   once he is defeated. With random doors the story part that cures it is never reached.
+- **Co-op crash entering a room**: the game no longer crashes when the partner reaches a room first and sets off
+  its event while your game is still loading it, as when leaving the heliport after Nosferatu.
 - **Third-person keys in menus**: with Free Camera, W, A, S and D move the cursor in every direction in the item
   box, files, map and other menus, not only up, and the mouse wheel scrolls the item box without lagging.
 - **Floating models at the widescreen edges**: a few display pieces, such as the model ship in the Gold Luger

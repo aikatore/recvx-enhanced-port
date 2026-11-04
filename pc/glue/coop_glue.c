@@ -136,6 +136,14 @@ static uint32_t echo_t;
 static uint64_t echo_arr;
 static double ping_f = -1;
 int coop_room_key(void) { return sys->stg_no * 256 + sys->rom_no; }
+/* The room data are those of the room we are in: a room change clears rom (room.c bhInitRoom) a few frames
+   before the new file is read and set up (bhSetRoom; the frames in between run coop_frame), and before that
+   sys->stg_no/rom_no name the next room already while rom is still the last one's; bhFinishRoom keeps the
+   numbers of the room set up in the _b fields; a door (cb_flg 0x1) is under way until the new room shows. */
+static int room_ready(void)
+{
+    return rom && rom->evtp && !(sys->cb_flg & 0x1) && sys->stg_no == sys->stg_nob && sys->rom_no == sys->rom_nob;
+}
 /* the partner's pose is from our room: the same stage and room, and the same room case (a room's cases are
    different room files: other enemies, objects, script); a build that does not send its case: any */
 static int my_case(void)   /* the room loaded (bhFinishRoom keeps it in the _b fields); in a door to another room, the next one's */
@@ -3556,7 +3564,7 @@ static int apply_session_event(const Event* e)
             f[w] |= m; last[w] |= m;
             f[w + 16] &= ~m; last[w + 16] &= ~m;   /* ic_flg: no longer "examined, not taken" (as bhItmCk) */
         }
-        if (e->stg == sys->stg_no && e->rom == sys->rom_no && e->u.pk.etc < rom->etc_n) {
+        if (e->stg == sys->stg_no && e->rom == sys->rom_no && room_ready() && e->u.pk.etc < rom->etc_n) {   /* (loading: its flag builds it) */
             ATR_WORK* a = &rom->etcp[e->u.pk.etc];
             if (sys->itwp && a->prm0 < ITWP_N) sys->itwp[a->prm0].stflg |= 0x1000000;   /* as bhItmCk */
             if (!e->u.pk.etc_on) a->flg &= ~0x1;
@@ -3766,7 +3774,26 @@ static struct { int on, n, held; unsigned int id, at; Event ev; unsigned short o
 static unsigned short trig_ops[TRIG_OPS];
 static unsigned int trig_done;
 
-static unsigned int scd_sig(void) { return (unsigned int)(size_t)rom->evtp->scd1 ^ ((unsigned int)(size_t)rom->evtp->evd << 11) ^ ((unsigned int)sys->rcase << 28); }
+static unsigned int scd_sig(void) { return rom->evtp ? (unsigned int)(size_t)rom->evtp->scd1 ^ ((unsigned int)(size_t)rom->evtp->evd << 11) ^ ((unsigned int)sys->rcase << 28) : 0; }
+/* this room's script is the one analyze() swept */
+static int script_known(void) { return rom->evtp && rom->evtp == reg_evtp && scd_sig() == reg_sig; }
+/* The partner's world event (EV_TRIG, EV_ATR) for the room we are still loading: it waits (stops the stream)
+   until our room is set up (the partner, faster through the door or following us, fired a block of it at entry;
+   applied to a room not set up it read a cleared script: the crash in 7/24 after the heliport). 1: wait. */
+#define ROOM_WAIT_MS 30000              /* a room that does not get ready by then: its flags only, as another room's */
+static int room_wait(int stg, int rom_no)
+{
+    static unsigned int since;
+    if (room_ready() || stg != sys->stg_no || rom_no != sys->rom_no) { since = 0; return 0; }
+    if (!since) {
+        since = net_ms() | 1;
+        host_log("coop: the partner's world event in %d/%d waits until our room is set up\n", stg, rom_no);
+    }
+    if ((int)(net_ms() - since) < ROOM_WAIT_MS) return 1;   /* (signed: since may be a tick ahead) */
+    host_log("coop: our room %d/%d is still not set up: the partner's world event there gives its flags only\n", stg, rom_no);
+    since = 0;
+    return 0;
+}
 
 static void gate_drop(void);
 static void world_reset(void) { trig.on = 0; trig_done = 0; gate_drop(); }
@@ -3871,7 +3898,7 @@ static int wake_partner(unsigned int* keep)
 {
     int i, ang = (rx.ay + 8192) & 0xC000, flr = rx.flr - 3;
     if (!nwake || echo_delay || !have_rx || (rx.flags & (PF_IN_GAME | PF_VISIBLE)) != (PF_IN_GAME | PF_VISIBLE) || rx.busy || !rx.flr ||
-        (rx.pflg & 6) || !partner_here() || (sys->cb_flg & 0x5) || rom->evtp != reg_evtp || scd_sig() != reg_sig) return 0;
+        (rx.pflg & 6) || !partner_here() || (sys->cb_flg & 0x5) || !script_known()) return 0;
     for (i = 0; i < nwake; i++) {
         int ix = wake[i].ix, n = wake[i].etc ? rom->etc_n : rom->flr_n;
         ATR_WORK* a = ix < n ? (wake[i].etc ? &rom->etcp[ix] : &rom->flrp[ix]) : ix < n + (wake[i].etc ? sys->metc_n : sys->mflr_n) ?
@@ -3990,7 +4017,7 @@ static unsigned int latch_bits(int w)
 {
     unsigned int m = 0;
     int i;
-    if (rom->evtp != reg_evtp || scd_sig() != reg_sig) return 0;
+    if (!script_known()) return 0;
     for (i = 0; i < nlatch; i++)
         if (world_off(latch[i].set) + (latch[i].bit >> 5) == w) m |= 0x80000000u >> (latch[i].bit & 31);
     return m;
@@ -4028,7 +4055,7 @@ static unsigned int gate_bits(int w)
 {
     unsigned int m = 0;
     int i;
-    if (rom->evtp != reg_evtp || scd_sig() != reg_sig) return 0;
+    if (!script_known()) return 0;
     for (i = 0; i < nreg; i++)
         if (world_off(reg[i].set) + (reg[i].bit >> 5) == w) m |= 0x80000000u >> (reg[i].bit & 31);
     return m;
@@ -4152,7 +4179,7 @@ static void atr_put(int kind, int ix, const AtrRec* r)
         AtrRec v;
         if (!t || ix >= n) return;
         memcpy(&v, &t[ix], sizeof(v));
-        coop_atr_merge(&v, r, kind, ix, aset, rom->evtp == reg_evtp && scd_sig() == reg_sig ? naset : 0);
+        coop_atr_merge(&v, r, kind, ix, aset, script_known() ? naset : 0);
         if (trace && (v.type != r->type || v.attr != r->attr || memcmp(v.prm, r->prm, 4)))
             fprintf(stderr, "coop: the partner's record kind %d #%d: type %d attr %#x prm %d %d %d %d is none our script writes, ours kept\n",
                     kind, ix, r->type, r->attr, r->prm[0], r->prm[1], r->prm[2], r->prm[3]);
@@ -4357,8 +4384,9 @@ static void world_sync(void)
 static int apply_atr(const Event* e)
 {
     int k;
-    if (!sys || !rom || !in_session_game() || (sys->tk_flg & 0x28) || e->stg != sys->stg_no || e->rom != sys->rom_no ||
-        e->idx != sys->rcase || e->u.at.sig != scd_sig())
+    if (!sys || !rom || !in_session_game() || (sys->tk_flg & 0x28)) return 1;
+    if (room_wait(e->stg, e->rom)) return 0;   /* our room is still loading */
+    if (!room_ready() || e->stg != sys->stg_no || e->rom != sys->rom_no || e->idx != sys->rcase || e->u.at.sig != scd_sig())
         return 1;   /* another room: its flags build it when we get there */
     for (k = 0; k < e->u.at.n; k++) {
         int pend = win_rx.open && atr_pend_n < 64;
@@ -4439,7 +4467,7 @@ void coop_scd1(void)
     int i, k, j, fired[MAX_REG], woke;
     unsigned int wkeep[3];
 
-    if (rom->evtp != reg_evtp || scd_sig() != reg_sig) analyze();   /* a new room script */
+    if (!script_known()) analyze();   /* a new room script */
     woke = wake_partner(wkeep);   /* (enemies a room script wakes when a player steps on a spot) */
     memcpy(pre_flags, flag_block(), sizeof(pre_flags));
     ntrace = 0;
@@ -4519,13 +4547,14 @@ static int apply_trig(const Event* e)
     for (k = 0; k < 24 && first + k < e->u.tr.n; k++) trig_ops[first + k] = e->u.tr.ops[k];
     if (!e->u.tr.last) return 1;
     if (trig.on && trig_done == trig.id && e->id == trig.id) { trig.on = 0; return 1; }   /* replayed */
-    if (!plp || e->stg != sys->stg_no || e->rom != sys->rom_no || e->u.tr.rcase != sys->rcase || !in_session_game() ||
-        e->u.tr.sig != scd_sig() || (sys->tk_flg & 0x28)) {
+    if (plp && rom && in_session_game() && !(sys->tk_flg & 0x28) && room_wait(e->stg, e->rom)) return 0;   /* our room is still loading */
+    if (!plp || !rom || !room_ready() || e->stg != sys->stg_no || e->rom != sys->rom_no || e->u.tr.rcase != sys->rcase || !in_session_game() ||
+        (sys->tk_flg & 0x28) || e->u.tr.sig != scd_sig()) {
         if (trig.on && e->id == trig.id) trig.on = 0;
         host_log("coop: the partner's world event block %04x is not in our room: its flags only\n", e->u.tr.start);
         return 1;
     }
-    if (rom->evtp != reg_evtp || scd_sig() != reg_sig) analyze();
+    if (!script_known()) analyze();
     r = region_at(e->u.tr.start);
     if (!r || r->set != e->u.tr.set || r->bit != e->u.tr.bit || r->val != e->u.tr.val ||
         !coop_trig_ops_ok((const unsigned char*)rom->evtp, r->then1 + 2, r->then0, r->then1, trig_ops, e->u.tr.n)) {

@@ -1036,6 +1036,16 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   our replay of the partner's events still runs, its object placements wait until they have ended: put
   at once, the rest of a relative motion took them past (4/1's bridge, moved in steps, rose 5 m too high).
 * A partner in another room gets the flags only; `scd0` builds the room from them when it enters.
+* **The room we are still loading** (`room_ready`, `room_wait`): a room change clears the room data
+  (`bhInitRoom`) frames before the new file is set up (`bhSetRoom`; the PS2 also waits there up to 255
+  frames while the pad vibrates), and the door has named the next room before that. A partner faster
+  through the door (following us, or with the switch to Chris left out of a BioRand game: both go on
+  from the heliport 6/10 to 7/24) fires that room's entry block meanwhile; its `EV_TRIG` read the cleared
+  script (a crash in `scd_sig`), or, still before the clearing, the last room's (its block taken for
+  another room's: flags only). Now the partner's `EV_TRIG` and `EV_ATR` for the room we are entering
+  wait (the stream with them) until it is set up and shown (`bhFinishRoom`'s room numbers, no door
+  under way), then count as in that room (30 s at most, then flags only); a pickup's record waits for
+  the room's own build from the flags.
 * **A loop of the room is no world event** (`analyze`, `latch`): a block whose own event, started at the
   top of its then-part, sets the gate back at its top level is a latch of the room's own ambient motion,
   not a change of the world. 4/1 case 1 (the airport hangar) starts the motion of objects 5 and 14 by
@@ -1743,6 +1753,13 @@ both sides; each of the joiner's zombie poses is compared with the host's of the
 unless the joiner's hits land, under 3% of the poses have a drawn joint more than a unit off, no zombie is off for 25
 frames in a row, no puppet shows the same host frame for 15 frames in a row, and neither side logs STALL or ORPHAN
 (before the upper half was posed, nearly every pose was off).
+
+`pc/tools/coop_roomchange_check.sh OUT [PORT]` (the same needs, about two minutes): both in 0/8 of a new game, the
+host goes to the heliport 6/10, whose entry block fires at once, and the joiner follows while `RECVX_TEST_READ_HOLD=150`
+holds its room file read (its room data cleared that long). It fails unless the host's world event waits until the
+joiner's room is set up and is then handled in 6/10, and neither side crashes. With `RECVX_BIORAND_MODS` (a mods
+folder with a BioRand pack with random doors in `biorand/`) also the reported case: the host kills Nosferatu in 6/10
+with its read held, and the joiner's entry block of 7/24 waits for the host's room.
 
 `pc/tools/coop_passage_check.sh OUT [PORT] [host|guest]` (the same needs, about two minutes): in the palace's passage
 to the residence (1/10) the watcher (default the host) examines the trigger at the foot of the stairs, whose scene
