@@ -109,6 +109,8 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "cast_models", &g_enemy_opts.cast_all, 0, 2 },     /* characters: 0 cutscene models, 1 all models, 2 custom (cast_custom_off lines) */
     { "cast_assign", &g_enemy_opts.cast_assign, 0, 1 },  /* 0 fixed per character, 1 random per cutscene */
     { "cast_imports", &g_enemy_opts.cast_imports, 0, 1 },
+    { "biorand_appear_models", &g_biorand_appear_pool, 0, 2 },     /* "Randomize Character Model"'s Model Selection (biorand_opts.h; appear_custom_off lines) */
+    { "biorand_appear_imports", &g_biorand_appear_imports, 0, 1 }, /* ... its Include Imported Models (absent: cast_imports', as before) */
     { "subtitles", &g_subtitles, 0, 1 + LANG_COUNT },     /* cutscene subtitles: 0 off, 1 the game language's, 2 + LANG_* (lang.h) */
     { "translated_pictures", &g_lang_pictures, 0, 1 },    /* the language's pictures with writing: 0 the disc's (lang.h) */
     { "translated_voices", &g_lang_voices, 0, 1 },        /* the language's sounds (the title call): 0 the disc's (lang.h) */
@@ -209,27 +211,30 @@ void config_load(void)
         else if (sscanf(line, " biorand_seed = %71s", g_biorand_seed) == 1) continue;   /* the BioRand generator's options (biorand_opts.h), checked when used */
         else if (sscanf(line, " biorand_appear = %d", &g_biorand_appear) == 1) { g_biorand_appear = g_biorand_appear == 2 ? 2 : g_biorand_appear != 0; continue; }   /* "Randomize Played as" (biorand_opts.h) */
         else if (sscanf(line, " dev_cutscene_overlay = %d", &g_devcine_show) == 1) { g_devcine_show = g_devcine_show != 0; continue; }   /* --dev cutscene log (devcine.h) */
-        else if (!strncmp(line, "cast_custom_off =", 17)) continue;   /* (below, once the imports are listed) */
+        else if (!strncmp(line, "cast_custom_off =", 17) || !strncmp(line, "appear_custom_off =", 19)) continue;   /* (below, once the imports are listed) */
         else if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, val) == 2 && bind_ini_line(k, trim(val))) continue;
         else if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, val) == 2 && wpn_ini_line(k, val)) continue;   /* weapon shortcuts (weapons.h) */
         else if (sscanf(line, " %63[a-z_0-9] = %d", k, &v) == 2)
             for (size_t i = 0; i < SDL_arraysize(keys); i++)
                 if (!strcmp(k, keys[i].key) && v >= keys[i].lo && v <= keys[i].hi) *keys[i].val = v;
     import_registry_load();   /* the imported player models: their chr values exist from here */
-    rewind(f);   /* the cutscene cast's "Custom": a line per model not checked, by its key (cast.h; an unknown one is ignored) */
-    while (fgets(line, sizeof(line), f))
-        if (!strncmp(line, "cast_custom_off =", 17)) {
-            char* v = line + 17 + strspn(line + 17, " ");
+    rewind(f);   /* the cutscene cast's and "Randomize Character Model"'s "Custom": a line per model not checked, by its key (cast.h; an unknown one is ignored) */
+    while (fgets(line, sizeof(line), f)) {
+        int appear = !strncmp(line, "appear_custom_off =", 19), at = appear ? 19 : 17;
+        if (appear || !strncmp(line, "cast_custom_off =", 17)) {
+            char* v = line + at + strspn(line + at, " ");
             v[strcspn(v, "\r\n")] = 0;
-            cast_off_key(trim(v));
+            cast_off_key(appear, trim(v));
         }
+    }
     fclose(f);
     /* a file from before Combined (no fixed_cam_version line): Modern, the default then and always
        written, becomes Combined; Classic, never the default since Modern, stays */
     if (!combined_seen && g_modern_on == 1) g_modern_on = MODERN_COMBINED;
     g_coop.chr = appear_canon(g_coop.chr);   /* an event double no longer listed: its listed twin (actors.c) */
     for (int c = 0; c < 2; c++) if (g_appear_own[c] >= 0) g_appear_own[c] = appear_canon(g_appear_own[c]);
-    g_enemy_opts.cast = g_enemy_opts.cast == 1 || g_enemy_opts.cast == 3;   /* the cutscene cast had 1 Characters, 2 Enemies, 3 Both: the characters' on */
+    g_enemy_opts.cast = g_enemy_opts.cast == 1 || g_enemy_opts.cast == 3;
+    if (g_biorand_appear_imports < 0) g_biorand_appear_imports = g_enemy_opts.cast_imports;   /* (a file from before it: the cast's, which it used) */   /* the cutscene cast had 1 Characters, 2 Enemies, 3 Both: the characters' on */
     default_name();
     player_id();
 }
@@ -257,6 +262,7 @@ static void default_name(void)
 }
 
 static void off_line(const char* key, void* f) { fprintf((FILE*)f, "cast_custom_off = %s\n", key); }
+static void appear_off_line(const char* key, void* f) { fprintf((FILE*)f, "appear_custom_off = %s\n", key); }
 
 static int write_ini(FILE* f, void* ud)
 {
@@ -281,7 +287,8 @@ static int write_ini(FILE* f, void* ud)
     if (g_biorand_seed[0]) fprintf(f, "biorand_seed = %s\n", g_biorand_seed);
     if (g_biorand_appear) fprintf(f, "biorand_appear = %d\n", g_biorand_appear);   /* (like biorand_seed: only once set, in the --dev screen) */
     if (!g_devcine_show) fprintf(f, "dev_cutscene_overlay = 0\n");   /* (only once turned off, in the --dev F6 window) */
-    cast_off_write(off_line, f);
+    cast_off_write(0, off_line, f);
+    cast_off_write(1, appear_off_line, f);
     bind_ini_write(f);
     wpn_ini_write(f);
     return 0;

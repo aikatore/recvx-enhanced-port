@@ -632,10 +632,11 @@ Test aid: `RECVX_BIORAND_ISO_TEST=<path>` gives the CLI another image (the game 
   Both** (1) one look for the whole game, whoever is played (as before); **Per Character** (2) one look for Claire,
   another for Chris and a third for Steve's section of Claire's part, all three different (Wesker, played only in
   the Battle Game, takes Chris's). Claire's is the one look Same for Both gives for that seed.
-- The pick: `cast_appear_pick(seed, imports, c)` (cast.c, pure; c 0 Claire, 1 Chris, 2 Steve): a hash of BioRand's seed number indexes
-  `cast_pool(1, imports)`, the cutscene cast's "All models" pool (humanoid catalogue looks and player files, never
-  Claire's or Chris's own looks; the zombies one entry, then `cast_zombie_look(seed, 0, 7)` picks the zombie). Imports
-  count only with the cast's "Include imported models" (`g_enemy_opts.cast_imports`). The result is a "You appear as"
+- The pick: `cast_appear_pick(seed, all, imports, off, c)` (cast.c, pure; c 0 Claire, 1 Chris, 2 Steve): a hash of BioRand's seed number indexes
+  the pool its Model Selection chooses ("S10"; default All Models: the cutscene cast's "All models" pool with Steve's
+  and Wesker's player files, humanoid catalogue looks, never Claire's or Chris's own looks; the zombies one entry, then
+  `cast_zombie_look(seed, 0, 7)` picks the zombie). Imports count only with its own Include Imported Models
+  (`g_biorand_appear_imports`; until S10 the cast's). The result is a "You appear as"
   chr (player file n: 1 + n; catalogue i: `appear_canon(6 + i)`; import k: `COOP_CHR_IMPORT + k`). Chris's and
   Steve's: the same hash with the character added, then the next entry not taken by an earlier character.
 - When: `pc_quick_start` (a new game, coop_glue.c) calls `pc_biorand_appear_new()` after `pc_biorand_stamp()`. It
@@ -1114,7 +1115,7 @@ whoever wants them fixed rather than random; those are used in cutscenes too, as
   `build_rows` moves a cursor that lands on one (the RANDOMIZER page opens on row 1) to the row below, and
   `scroll_to_sel` keeps a row's heading in view with it.
 - **The model rows** are `K_SET` rows, so left/right steps through the models as in ENHANCED SETTINGS; confirm (or a
-  click on the label) opens the model list: `cast_list.c` in its second mode, `cast_list_open_model(setting, heading,
+  click on the label) opened the model list (since S10 the lobby's model page with its preview, "S10"): `cast_list.c` in its second mode, `cast_list_open_model(setting, heading,
   ...)`, the "You appear as" entries (`appear_at`, the lobby model page's order and groups) where the cast's Custom list
   is, the heading (CLAIRE'S MODEL, ...) and "n / N" where SELECT ALL is, the current model gold with an arrow, no check
   boxes; confirm sets the row (`settings_set`, saved as from F1) and closes, BACK / cancel / a right click closes
@@ -1134,6 +1135,52 @@ RANDOMIZER page and its scrolling), `t_pick.sh` (Per Character, Claire's and Chr
 ENHANCED SETTINGS > APPEARANCE shows them), `t_game.sh` (START with a generated pack: gameplay after a teleport, and
 RM_9350's scene with Claire and Chris; with `biorand_appear = 2` the seed's picks replace them), `t_lock.sh` (the greyed
 rows and the refusal), `t_lang.sh` (German, Arabic).
+
+### S10: the character model's own model pool, the model page with its preview (2026-11-04)
+
+The user's requests: give "Randomize Character Model" the model selector the cutscene cast has; and let EXTRA OPTIONS'
+model rows open the co-op lobby's model page with its 3D preview instead of a text list.
+
+- **RANDOMIZER page, CHARACTER MODEL** (rows shown while Randomize Character Model is on, as the cast's while it is
+  on): Randomize Character Model (`K_APPEAR` idx 0), **Model Selection** (idx 1: Cutscene Models / All Models / Custom,
+  ini `biorand_appear_models`, default 1 All Models), **Choose Models** with Custom (`K_CUSTOM` idx 1, "3 of 16"), and
+  **Include Imported Models** while there are imports (idx 2, ini `biorand_appear_imports`). Texts and help: the
+  cast's rows' (already translated).
+- **The pools** (`cast_appear_pick(seed, all, imports, off, c)`, cast.c `appear_pool`): Cutscene Models the story
+  characters' cutscene models but Claire's and Chris's (Steve, Wesker, Alfred, Alexia, Rodrigo: `cast_pool(0)`); All
+  Models as before (`builtins_of(-1)`: the cast's All Models plus Steve's and Wesker's player files); Custom: those of
+  All Models whose bit in `cast_appear_off` is clear; imports after them with Include Imported Models. The rule of
+  before stays: never Claire's or Chris's own looks (so not in its Custom list either), Claire, Chris and Steve
+  different entries while the pool has three (fewer: repeats). The default gives exactly the picks of before (ctest
+  `cast`: a hash over 5000 seeds, with and without imports).
+- **Its own Custom list**: `cast_list.c` opened with `appear` 1 (`cast_list_open(1, ...)`): the same check list (SELECT
+  ALL, DESELECT ALL, groups, scroll bar) over its All Models entries, editing `cast_appear_off`; recvx.ini
+  `appear_custom_off = <key>` lines, the cast's keys (`Steve`, `Tyrant`, `Zombies`, `import:<folder>`), read after the
+  imports are listed, unknown keys ignored. The cast's list (`cast_custom_off`) is separate: neither changes the other.
+- **Include Imported Models: its own** (`biorand_appear_imports`; a recvx.ini without it takes `cast_imports`, which
+  the pick used before): the cast's row is hidden while the cast is off, and the character model does not depend on
+  the cutscene cast.
+- **Custom with nothing checked**: no pick. `pc_biorand_appear_new` writes no look (`cast_appear_pick` returns 0) and
+  logs "custom models, none checked: no pick"; the characters keep the user's looks, as the cast's characters keep
+  theirs (the list says "0/16" in amber, its help says so).
+- **Existing games**: the picks are in the save words (290, 291) from the game's start; the pool only changes new
+  games. Co-op: unchanged (the host's own look; a guest never picks; nothing new is sent).
+- **The model page** (EXTRA OPTIONS' Character Model, Claire's Model, Chris's Model): confirm calls
+  `pc_lobby_models(setting, chris)` (lobby_glue.c), which shows the lobby's own model page (step 6: `pick_open`,
+  `pick_input`, `draw_models`, `draw_previews` with its preview buffers and 3D scene) in mode 30 in place of the BioRand
+  screen, with BIORAND at the top and the help line below. The lobby's state is kept (`mp_keep`) and comes back (the
+  screen may be up over the lobby for a co-op guest); no co-op names, partner or status on it. Heading CHARACTER MODEL /
+  CLAIRE'S MODEL / CHRIS'S MODEL; the current one is the row's (`settings_get`); confirm sets it (`settings_set`, as
+  before), BACK / cancel / a right click leave it; keys, pad, mouse and wheel as in the lobby. It ends on the next
+  frame (`mp_end`), so the press that ended it is not the BioRand screen's; the previews are released then (the lobby
+  loads its own again). No new buffers. `cast_list.c`'s model-list mode is gone.
+
+**Tests (2026-11-04, Linux; job dir `brappearpool/`, not committed):** `t_menu.sh` (the rows, the character model's
+list: DESELECT ALL, three checked; the cast's list unchanged), `t_again.sh` (a restart: "3 of 16" and the same
+checks), `t_game.sh` (START with a generated pack, Custom with three checked: Same for Both Claire as Monster Steve;
+Per Character Claire Monster Steve, Chris Rodrigo, Steve Alfred), `t_pick.sh` (the model page for Claire's and Chris's
+Model, then ENHANCED SETTINGS > APPEARANCE), `t_cancel.sh` (CHARACTER MODEL, cancel: unchanged), `t_mouse.sh` (wheel,
+hover, click).
 
 ## Risks and open questions
 
@@ -1203,6 +1250,8 @@ rows and the refusal), `t_lang.sh` (German, Arabic).
   options on EXTRA OPTIONS (RANDOMIZER sub-page). See "S8".
 - **S9 done** (2026-11-04): EXTRA OPTIONS rearranged (RANDOMIZER as a page link; the cast and Randomize Character
   Model on its page under headings; the player model rows with a model list on EXTRA OPTIONS). See "S9".
+- **S10 done** (2026-11-04): Randomize Character Model's own Model Selection, Custom list and Include Imported
+  Models; EXTRA OPTIONS' model rows open the lobby's model page with its preview. See "S10".
 - **STATUS: All steps done; open: Windows real-machine test list** ("S6", "Windows real-machine test list").
 - The job-dir tools (not committed): S5b's `s5b/` (`co.sh`, `scen.sh`, `mkpack.sh`, `build.sh`); S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
   encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").

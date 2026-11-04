@@ -111,8 +111,8 @@ void pc_biorand_save_accept(void* save)
 
 /* ---------------------------------------------------------------- "Randomize Played as" (docs/BIORAND_INGAME.md S5a)
    A new game with BioRand on and "Randomize Played as" on (g_biorand_appear) is given a "You appear as" look picked
-   from the pack's seed number (cast_appear_pick: the cutscene cast's "All models" pool, imports with its "Include
-   imported models"): one for the whole game (1, "Same for Both"), or (2, "Per Character") one for Claire, another
+   from the pack's seed number (cast_appear_pick: the pool its "Model Selection" chooses, g_biorand_appear_pool, "Custom"
+   its own list cast_appear_off; imports with its "Include Imported Models"; "Custom" with none checked: no pick): one for the whole game (1, "Same for Both"), or (2, "Per Character") one for Claire, another
    for Chris and a third for Steve's section of Claire's part. They are this game's, not the user's: save word
    BR_APPEAR holds 'A' << 24 | Claire's chr (the one look), BR_APPEAR2 'A' << 24 | Steve's chr << 12 | Chris's (chrs
    < 4096) with "Per Character", else 0, so the game's saves keep them and loading one brings them back (the region is
@@ -126,11 +126,12 @@ void pc_biorand_save_accept(void* save)
 
 void pc_biorand_appear_new(void)
 {
-    int chr[3], k, seed = biorand_seed(), imports = g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0;
+    int chr[3], k, seed = biorand_seed(), imports = g_biorand_appear_imports > 0 ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0;
     if (!sys) return;
     sys->itm[BR_APPEAR] = sys->itm[BR_APPEAR2] = 0;
     if (!g_biorand_appear || !biorand_active() || coop_biorand() >= 0 || seed < 0) return;
-    for (k = 0; k < (g_biorand_appear == 2 ? 3 : 1); k++) chr[k] = cast_appear_pick((unsigned)seed, imports, k);   /* (three different ones) */
+    for (k = 0; k < (g_biorand_appear == 2 ? 3 : 1); k++) chr[k] = cast_appear_pick((unsigned)seed, g_biorand_appear_pool, imports, cast_appear_off, k);   /* (different ones) */
+    if (!chr[0]) { host_log("biorand: randomize played as: custom models, none checked: no pick\n"); return; }
     sys->itm[BR_APPEAR] = BR_APPEAR_ON | (unsigned int)chr[0];
     if (g_biorand_appear == 2) {
         sys->itm[BR_APPEAR2] = BR_APPEAR_ON | (unsigned int)chr[2] << 12 | (unsigned int)chr[1];

@@ -38,24 +38,28 @@ int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
 #define CAST_ZOMBIES 10100   /* cast_pool's one entry for all the zombie looks ("All models"); past ACTOR_PART + 9 */
 
 /* "Custom" (docs/ACTORS.md "Cutscene cast"): a bit per "All models" entry, by its position in cast_pool(1, every
-   import): the built-in entries, then import k. Set: not checked (so a new import starts checked). */
+   import): the built-in entries, then import k. Set: not checked (so a new import starts checked). "Randomize
+   Character Model" has a "Custom" list of its own (appear 1 below; cast_appear_off): its "All models" entries, the same way. */
 #define CAST_CUSTOM_MAX (5 + ACTOR_MODELS + 1 + ACTOR_IMPORT_MAX)
 #define CAST_OFF_BYTES ((CAST_CUSTOM_MAX + 7) / 8)
 extern unsigned char cast_off[CAST_OFF_BYTES];   /* ours (recvx.ini cast_custom_off; co-op: the host's go to the guest) */
+extern unsigned char cast_appear_off[CAST_OFF_BYTES];   /* "Randomize Character Model"'s (recvx.ini appear_custom_off; never sent) */
 static inline int cast_off_at(const unsigned char* off, int j) { return off && j >= 0 && j < CAST_CUSTOM_MAX && ((off[j >> 3] >> (j & 7)) & 1); }
 static inline void cast_off_put(unsigned char* off, int j, int v) { if (j >= 0 && j < CAST_CUSTOM_MAX) off[j >> 3] = (unsigned char)((off[j >> 3] & ~(1 << (j & 7))) | (!!v << (j & 7))); }
 /* the "All models" entries in the menus' order (the "You appear as" list's, the zombies' entry where their looks
-   start): each one's position (the bit) and model; the count. imports: as cast_pool's */
-int cast_custom_list(int imports, short* pos, int* model, int max);
+   start): each one's position (the bit) and model; the count. appear: 0 the cast's list, 1 "Randomize Character
+   Model"'s (as cast_appear_pick's pool). imports: as cast_pool's */
+int cast_custom_list(int appear, int imports, short* pos, int* model, int max);
 /* how entry m is shown (its name; the list's group) and its key in recvx.ini (a name; an import: "import:" its folder) */
 const char* cast_entry_name(int m);
 const char* cast_entry_group(int m);
 const char* cast_entry_key(int m, char* buf, int n);
-/* recvx.ini: the entry of key unchecked (imports: those listed now), 0 unknown (ignored); every unchecked one's line */
-int  cast_off_key(const char* key);
-void cast_off_write(void (*line)(const char* key, void* ud), void* ud);
-/* the checked ones of the list (imports: as cast_pool's) and its length */
-int  cast_custom_count(const unsigned char* off, int imports, int* total);
+/* recvx.ini: the entry of key unchecked in list appear (cast_off, cast_appear_off; imports: those listed now), 0 unknown
+   (ignored); every unchecked one's line */
+int  cast_off_key(int appear, const char* key);
+void cast_off_write(int appear, void (*line)(const char* key, void* ud), void* ud);
+/* the checked ones of list appear (imports: as cast_pool's) and its length */
+int  cast_custom_count(int appear, const unsigned char* off, int imports, int* total);
 /* the zombie look (catalogue entry) character c gets when it draws the zombie entry: from (seed, scene, c) */
 int cast_zombie_look(unsigned seed, unsigned scene, int c);
 /* What character c (a creature too) is drawn as: the actor index, -1 none. scene: 0 for "Fixed per character" (the
@@ -67,10 +71,12 @@ int cast_model(unsigned seed, unsigned scene, int c, int all, int imports, const
    have the same; 0 with none */
 unsigned cast_import_id(void);
 /* "Randomize Played as" (BioRand, docs/BIORAND_INGAME.md S5a): the "You appear as" chr of character c (0 Claire,
-   1 Chris, 2 Steve in his section of Claire's part) for BioRand seed number seed, from it alone: an entry of the "All
-   models" pool with Steve's and Wesker's player files too (zombies one entry, then a look of them; imports
-   0..imports-1 too); the three characters' entries differ. Claire's is the one look of the versions before. */
-int cast_appear_pick(unsigned seed, int imports, int c);
+   1 Chris, 2 Steve in his section of Claire's part) for BioRand seed number seed, from it alone: an entry of the pool
+   all ("Model Selection": 0 the cutscene models but Claire's and Chris's, 1 "All models" with Steve's and Wesker's
+   player files too, 2 "Custom": those of 1 whose bit in off is clear; zombies one entry, then a look of them; imports
+   0..imports-1 too); the three characters' entries differ while the pool has three. Claire's is the one look of the
+   versions before. 0: none (an empty "Custom" pool). */
+int cast_appear_pick(unsigned seed, int all, int imports, const unsigned char* off, int c);
 
 #ifdef __cplusplus
 }

@@ -937,7 +937,7 @@ Every other look with a face is its only entry already: the event models and Alf
 twins of the cutscene models; Monster Steve and Alexia's first form are other looks. Wesker's, Alexia's and
 Rodrigo's cutscene models also kept their mouths shut through lines whose bank of mouth shapes is still in their
 face table (all of Alfred's in 1020); they now play their first bank there ("Cutscene doubles", talking faces). "Randomize Played as" (BioRand)
-still picks from the files too: it sets the player's own look, and that one talks through the doubles.
+still picks from the files too (and its own *Custom* list lists them): it sets the player's own look, and that one talks through the doubles.
 
 * `recvx.ini`: an older *Custom* list's lines for the files (`cast_custom_off = Steve`, `Chris`, ...) name no
   entry now and are ignored (dropped at the next save); the cutscene models' own lines (`Steve (Cutscene Model)`)
@@ -965,6 +965,11 @@ CUTSCENE CAST page (CHOOSE MODELS, "12 of 17", opens it as step 8) and the BIORA
 * Co-op: the host's list goes to the guest (`EV_CASTOFF`, protocol 31: the bit list in 64-byte chunks, each
   chunk that changed, all to a new partner, before `EV_EOPTS`), so both pick from the host's; the guest's own
   list stays in its `recvx.ini`. Imported entries count only while both sides have the same imports, as before.
+* BioRand's "Randomize Character Model" has a *Custom* list of its own ([BIORAND_INGAME.md](BIORAND_INGAME.md)
+  "S10"): `cast_appear_off`, `recvx.ini` lines `appear_custom_off = <key>` (the same keys), the same list code
+  (`cast_list_open(1, ...)`, `cast_custom_list(1, ...)`) over its own *All Models* entries (these plus Steve's and
+  Wesker's player files, "Talking twins"; never Claire's or Chris's looks). The two lists never change each other;
+  it is never sent in co-op (the pick is the host's own look).
 
 ### The picks
 

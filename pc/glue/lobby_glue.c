@@ -61,11 +61,11 @@ void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, f
                   const char* b0, const char* b1, int sel, int glyphs);
 int  pc_ui_dialog_hit(float y1, const char* b0, const char* b1, int glyphs, float x, float y);
 /* cast_list.c: the cutscene cast's "Custom" list, at its place (as our model page); 1 back */
-void cast_list_open(float x0, float x1, float y0, float h, float sc, int rows);
+void cast_list_open(int appear, float x0, float x1, float y0, float h, float sc, int rows);   /* appear: "Randomize Character Model"'s list */
 int  cast_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
 void cast_list_draw(void);
 const char* cast_list_help(void);
-const char* cast_list_summary(const unsigned char* off, int imports, char* buf, int n);
+const char* cast_list_summary(int appear, const unsigned char* off, int imports, char* buf, int n);
 extern ADV_WORK AdvWork;
 extern float FontScaleY;
 extern const char PlyFlip[23];
@@ -938,6 +938,12 @@ static struct {
     int msg_t;
 } lb = { .items_sent = -2 };
 
+/* the model page over the BioRand screen (pc_lobby_models): the settings row it sets; it ends next frame (mp_end); the
+   lobby's state while it is up (the screen may have been offered from the lobby) */
+static const Setting* mp_set;
+static int mp_end;
+static __typeof__(lb) mp_keep;
+
 static int session_on(void) { return g_coop.state != COOP_OFF; }
 static int hosting(void) { return session_on() && g_coop.host; }
 static int joining(void) { return session_on() && !g_coop.host; }
@@ -1181,6 +1187,7 @@ static void step_to(int s)
 static int back(void)
 {
     CallSystemSe(0, 0);
+    if (mp_set) { mp_end = 1; return 0; }   /* (BACK on the BioRand screen's model page: unchanged) */
     if (lb.step <= 1) return 1;
     if (lb.step == 6) { lb.step = 2; lb.row = lb.pick_c ? R_CHAR2 : R_CHAR; }
     else if (lb.step == 8) { lb.step = 7; lb.row = R_CASTCUSTOM; }
@@ -1416,7 +1423,7 @@ static void row_text(int r, char* label, char* val, int n)
     case R_CASTPOOL: strcpy(label, "MODELS"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_all)->names[(unsigned)eo->cast_all <= 2 ? eo->cast_all : 0]); break;
     case R_CASTCUSTOM:   /* a page: how many are checked (joining: the host's, of our list) */
         strcpy(label, "CHOOSE MODELS");
-        cast_list_summary(lb.role ? enemy_cast_off() : cast_off, eo->cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, n);
+        cast_list_summary(0, lb.role ? enemy_cast_off() : cast_off, eo->cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, n);
         break;
     case R_CASTASSIGN: strcpy(label, "ASSIGN"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_assign)->names[eo->cast_assign & 1]); break;
     case R_CASTIMP: strcpy(label, "IMPORTED MODELS"); snprintf(val, n, "%s", eo->cast_imports ? "On" : "Off"); break;
@@ -1449,7 +1456,7 @@ static const char* row_help(int r)
     case R_CHAR2: if (lb.step != 6) return lset("Chris's Model")->help;   /* (the model page: as R_CHAR's) */
     /* fall through */
     case R_CHAR:
-        if (lb.step == 6 && lb.pick >= appear_count()) return "Return to the lobby without changing your model.";
+        if (lb.step == 6 && lb.pick >= appear_count()) return mp_set ? "Back without changing the model." : "Return to the lobby without changing your model.";
         if (lb.step != 6 && g_appear_per) return lset("Claire's Model")->help;
         return lb.step == 6 ? "Scroll with up/down, L1/R1, Page Up/Down or the wheel. Confirm: use model; BACK: cancel."
                             : "Choose your appearance. You and your partner both see it.";
@@ -1513,6 +1520,8 @@ enum { BTN_L1 = 0x4, BTN_R1 = 0x8 };   /* Pad[] bits */
 #define PICK_BAR_X 627.0f               /* the scroll bar, right of the names */
 
 static int pick_max_top(void) { int n = appear_count(); return n > PICK_ROWS ? n - PICK_ROWS : 0; }
+/* the current model's position (the BioRand screen's: its row's) */
+static int pick_cur(void) { return mp_set ? settings_get(mp_set) : appear_pos(appear_choice(g_coop.chr, lb.pick_c)); }
 
 /* the first shown position moved by d (clamped), the cursor kept on the page */
 static void pick_scroll(int d)
@@ -1542,7 +1551,7 @@ static void pick_to(int i, int wrap)
 static void custom_open(void)
 {
     lb.step = 8;
-    cast_list_open(ROW_X, 634, ROW_Y0, PICK_H, ROW_SC, 10);
+    cast_list_open(0, ROW_X, 634, ROW_Y0, PICK_H, ROW_SC, 10);
     host_log("lobby: the cutscene cast's custom models\n");
 }
 
@@ -1550,7 +1559,7 @@ static void pick_open(int c)
 {
     lb.step = 6;
     lb.pick_c = g_appear_per ? c : 0;
-    lb.pick = appear_pos(appear_choice(g_coop.chr, lb.pick_c));   /* the current model, in the middle of the page */
+    lb.pick = pick_cur();   /* the current model, in the middle of the page */
     lb.top = lb.pick - PICK_ROWS / 2;
     pick_scroll(0);
     host_log("lobby: model page (%d models)\n", appear_count());
@@ -1561,6 +1570,13 @@ static void pick_open(int c)
 static void pick_take(void)
 {
     if (lb.pick >= appear_count()) { back(); return; }
+    if (mp_set) {   /* the BioRand screen's row: set as ENHANCED SETTINGS does */
+        settings_set(mp_set, lb.pick);
+        host_log("lobby: model page for the BioRand screen: %s = %s\n", mp_set->label, appear_name(appear_at(lb.pick)));
+        mp_end = 1;
+        CallSystemSe(0, 3);
+        return;
+    }
     *(g_appear_per ? &g_appear_own[lb.pick_c] : &g_coop.chr) = appear_at(lb.pick);
     lobby_settings_changed();
     host_log("lobby: %s %s\n", !g_appear_per ? "model" : lb.pick_c ? "Chris's model" : "Claire's model", appear_name(appear_at(lb.pick)));
@@ -1611,7 +1627,7 @@ static void pick_input(unsigned int press, unsigned int rept, unsigned int ok, u
 
 static void draw_models(void)
 {
-    int n = appear_count(), cur = appear_pos(appear_choice(g_coop.chr, lb.pick_c)), i;
+    int n = appear_count(), cur = pick_cur(), i;
     float right = n > PICK_ROWS ? PICK_BAR_X - 6 : 634;   /* the names stop before the scroll bar */
     char pos[24];
     text(ROW_X - 4, HEAD_Y, heading(), 0.5f, 0xFFFFE080);
@@ -1758,9 +1774,9 @@ static void draw_info(void)
 /* our model and, at the title with us, the partner's, with their names */
 static void draw_previews(void)
 {
-    int partner = g_coop.state == COOP_CONNECTED && !g_coop.peer_in_game, k;
+    int partner = !mp_set && g_coop.state == COOP_CONNECTED && !g_coop.peer_in_game, k;   /* (the BioRand screen's page: ours alone) */
     float sx[2] = { partner ? 92.0f : 120.0f, 222.0f };
-    int played = g_coop.start >= 3 && lb.role == 0 && start_valid(g_coop.start) ? saves[save_at(g_coop.start - 3)].ply_id : 0;
+    int played = !mp_set && g_coop.start >= 3 && lb.role == 0 && start_valid(g_coop.start) ? saves[save_at(g_coop.start - 3)].ply_id : 0;   /* (BioRand: a new game) */
     /* the chosen model (on the model page the one under the cursor) loads once it has stayed for a
        few frames (scrolling through the list) */
     int chr;
@@ -1784,12 +1800,13 @@ static void draw_previews(void)
     for (k = 0; k < 2; k++) {
         NJS_POINT2 h;
         const char* nm = k ? (g_coop.peer_name[0] ? g_coop.peer_name : "PARTNER") : g_coop.name;
-        if (pv[k].file < 0) continue;
+        if (pv[k].file < 0 || mp_set) continue;   /* (the co-op names: not on the BioRand screen) */
         h = pv_head(k);
         text_c(h.x, h.y - 22, nm, 0.62f, k ? 0xFFFFE0A0 : 0xFFFFFFFF);
         if (k && g_coop.peer_note[0] && g_coop.peer_lobby) text_c(h.x, 354, g_coop.peer_note, 0.45f, 0xFFC0C0C0);
     }
     scene_end();
+    if (mp_set) return;
     if (g_coop.state == COOP_CONNECTED && g_coop.peer_in_game) {
         char t[64];
         snprintf(t, sizeof(t), tr("%s is playing"), g_coop.peer_name[0] ? g_coop.peer_name : tr("Your partner"));
@@ -1819,9 +1836,11 @@ static void lobby_open(void)
 
 /* keep: the game starts from the lobby (ours, or the host's joined from it); anything else (BACK,
    cancel, right click, a soft reset) closes the session too: hosting stops, the partner hears it */
+static void mp_close(void);
 static void lobby_close(int keep)
 {
     int k;
+    if (mp_set) mp_close();
     if (!lb.open) { font_release(); return; }   /* the title's (title_version) */
     if (!keep && (session_on() || g_coop.request)) {
         g_coop.request = COOP_REQ_STOP;
@@ -1844,6 +1863,50 @@ void pc_lobby_close(void)
     if (up_screen) pc_update_menu_close();
     br_screen = im_screen = up_screen = qt_screen = 0;
     lobby_close(0);
+}
+
+/* The lobby's model page (step 6, its list and preview) for a model row of the BioRand screen's EXTRA OPTIONS (Character
+   Model, Claire's or Chris's Model; c 1: Chris's): drawn in its place until confirm (settings_set) or BACK, then the
+   screen again; the lobby's state is kept and comes back (the screen may be up over the lobby). */
+void pc_lobby_models(const Setting* s, int c)
+{
+    mp_keep = lb;
+    mp_set = s;
+    mp_end = 0;
+    lb.edit = 0;
+    lb.row = c ? R_CHAR2 : R_CHAR;
+    lb.want_chr = -1;
+    pick_open(c);
+}
+
+static void mp_close(void)
+{
+    for (int k = 0; k < 2; k++) pv_release(&pv[k], k);   /* (the lobby's loads its own again) */
+    lb = mp_keep;
+    mp_set = NULL;
+    g_lobby_io.list_on = 0;
+    host_log("lobby: model page for the BioRand screen closed\n");
+}
+
+/* a frame of it: as the lobby's, the BioRand screen's word at the top, the help line below */
+static void mp_frame(void)
+{
+    ADV_WORK* ap = &AdvWork;
+    unsigned int press = Pad[ap->PortId].press, rept = Pad[ap->PortId].Rept;
+    menu_mouse_take(&mt);
+    if (press || rept || mt.left || mt.right || mt.wheel || mt.moved || g_lobby_io.head != g_lobby_io.tail) StopAdvScreenSaver(0);
+    g_lobby_io.list_on = 1;
+    pick_input(press, rept, AdvGetOkButton() | BTN_START, AdvGetCancelButton());
+    AdvEasySetTextureList(0);
+    AdvDwawOnePictureEx(0, 0xFFFFFFFF);
+    rect(0, 0, 640, 480, 0xB0000000, Z_DIM);
+    rect(304, 64, 640, 384, 0x70000000, Z_DIM + 0.0005f);
+    plate_word(W_BR, 320.0f, 16.0f, 0xFFFFFFFF, 192, 1.0f);
+    draw_previews();
+    draw_models();
+    rect(0, 384, 640, 480, 0x60000000, Z_FRONT);
+    text_wrap(24, 390, 584, row_help(lb.row), 0.5f, 0xFFA0D0FF, 2);
+    AdvEasySetTextureList(0);
 }
 
 /* Adv_BioCvTitle mode 30, once per frame */
@@ -1869,6 +1932,8 @@ int pc_lobby(void)
     }
     if (br_screen) {   /* the BioRand screen (biorand_menu.c): 1 back to the menu, or to the lobby it was offered from */
         title_font();
+        if (mp_set && mp_end) mp_close();   /* (the frame after: the press that ended it is not the screen's) */
+        if (mp_set) { mp_frame(); return 0; }   /* its model page (pc_lobby_models) */
         if ((r = pc_biorand_menu())) br_screen = 0;
         return lb.open ? 0 : r;
     }

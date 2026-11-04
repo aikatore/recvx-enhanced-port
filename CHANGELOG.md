@@ -14,8 +14,11 @@
   windows now stay in English; a new setting there shows them in the game's language.
 - **EXIT on the title screen**: the title menu has an EXIT entry at the bottom that closes the game after asking.
 - **BioRand EXTRA OPTIONS**: the cutscene cast and Randomize Character Model moved to the RANDOMIZER page, now
-  grouped under headings. EXTRA OPTIONS can set your character models for Claire and Chris, from a list, without
-  going to the Enhanced Settings; they are used in play and in cutscenes unless the models are randomized.
+  grouped under headings. EXTRA OPTIONS can set your character models for Claire and Chris, on the multiplayer
+  lobby's model page with its 3D preview, without going to the Enhanced Settings; they are used in play and in
+  cutscenes unless the models are randomized.
+- **BioRand character model choice**: Randomize Character Model has its own Model Selection, like the cutscene cast:
+  cutscene models, all models, or only the models you check.
 
 ### Third person
 

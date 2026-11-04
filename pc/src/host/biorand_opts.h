@@ -110,6 +110,10 @@ extern char g_biorand_seed[BIORAND_SEED_CAP];
    once per generated seed): 0 off, 1 one look for the game ("Same for Both"), 2 one each for Claire, Chris and Steve's
    section ("Per Character"). Not part of the seed string. */
 extern int g_biorand_appear;
+/* ini biorand_appear_models: its "Model Selection" (cast.h cast_appear_pick's all: 0 Cutscene Models, 1 All Models,
+   2 Custom, the models checked in its own list: appear_custom_off lines, cast_appear_off); biorand_appear_imports: its
+   "Include Imported Models" (absent: cast_imports') */
+extern int g_biorand_appear_pool, g_biorand_appear_imports;
 /* *o from g_biorand_seed, rules applied; empty or invalid: defaults + rules (invalid: a log line) */
 void biorand_opts_load(BioOpts* o);
 /* g_biorand_seed from *o, and recvx.ini written soon (settings_save_later) */

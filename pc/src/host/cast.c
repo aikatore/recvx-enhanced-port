@@ -103,7 +103,7 @@ static int builtins_of(int* out, int custom)
     }
     return n;
 }
-static int builtins(int* out) { return builtins_of(out, 1); }   /* (the "Custom" list's: its positions) */
+static int builtins(int* out, int appear) { return builtins_of(out, appear ? -1 : 1); }   /* (a "Custom" list's: its positions) */
 #define BUILTIN_MAX (5 + ACTOR_MODELS + 1)   /* (with "Custom"'s: each look once) */
 
 int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
@@ -185,16 +185,28 @@ static int chr_of(int m)
     return appear_canon(COOP_CHR_ACTOR + m);
 }
 
-int cast_appear_pick(unsigned seed, int imports, int c)
+/* "Randomize Character Model"'s pool: all as cast_pool's (0 the cutscene models, 1 "All models" with the player files
+   that have a twin too, 2 those of 1 whose bit in off is clear), imports 0..imports-1 after them */
+static int appear_pool(int all, int imports, int* out, const unsigned char* off)
 {
-    int n = builtins_of(pool, -1), m, i, k, j, got[3];
-    if (c < 0 || c > 2) return 0;
-    for (i = 0; i < imports_n(imports); i++) pool[n++] = ACTOR_MODELS + i;
+    int n = all ? builtins_of(out, -1) : cast_pool(0, 0, out, POOL_MAX, NULL), i, k;
+    for (i = 0; i < imports_n(imports); i++) out[n++] = ACTOR_MODELS + i;
+    if (all == 2) {
+        for (i = k = 0; i < n; i++) if (!cast_off_at(off, i)) out[k++] = out[i];
+        n = k;
+    }
+    return n;
+}
+
+int cast_appear_pick(unsigned seed, int all, int imports, const unsigned char* off, int c)
+{
+    int n = appear_pool(all, imports, pool, off), m, k, j, got[3];
+    if (c < 0 || c > 2 || n < 1) return 0;   /* ("Custom" with nothing checked: no pick) */
     for (k = 0; k <= c; k++) {   /* Claire's, then Chris's, then Steve's: each the next entry not taken (k 0: the pick of one look before) */
         unsigned h = seed * 0x9E3779B1u + 0x632BE5ABu + (unsigned)k * 0x2545F491u;
         h ^= h >> 16; h *= 0x85EBCA6Bu; h ^= h >> 13; h *= 0xC2B2AE35u; h ^= h >> 16;
         got[k] = (int)(h % (unsigned)n);
-        for (j = 0; j < k; j++) if (got[j] == got[k]) { got[k] = (got[k] + 1) % n; j = -1; }   /* (n > 3) */
+        for (j = 0; j < k && k < n; j++) if (got[j] == got[k]) { got[k] = (got[k] + 1) % n; j = -1; }   /* (fewer entries than characters: repeats) */
     }
     m = pool[got[c]];
     if (m == CAST_ZOMBIES) m = cast_zombie_look(seed, 0, CAST_CHARACTERS + c);   /* (as a character of its own) */
@@ -202,11 +214,11 @@ int cast_appear_pick(unsigned seed, int imports, int c)
 }
 
 /* ---------------------------------------------------------------- "Custom" */
-unsigned char cast_off[CAST_OFF_BYTES];
+unsigned char cast_off[CAST_OFF_BYTES], cast_appear_off[CAST_OFF_BYTES];
 
-int cast_custom_list(int imports, short* pos, int* model, int max)
+int cast_custom_list(int appear, int imports, short* pos, int* model, int max)
 {
-    int b[BUILTIN_MAX], nb = builtins(b), n = 0, zombies = 0, i, j, k, m;
+    int b[BUILTIN_MAX], nb = builtins(b, appear), n = 0, zombies = 0, i, j, k, m;
     for (i = 0; i < appear_count() && n < max; i++) {   /* the built-in ones in the list's order */
         int chr = appear_at(i);
         if (chr >= COOP_CHR_IMPORT && chr != COOP_CHR_CINE) break;
@@ -236,26 +248,26 @@ const char* cast_entry_key(int m, char* buf, int n)
     return buf;
 }
 
-int cast_off_key(const char* key)
+int cast_off_key(int appear, const char* key)
 {
-    int b[BUILTIN_MAX], nb = builtins(b), j, imp = !strncmp(key, "import:", 7), n = imp ? listed() : nb;
+    int b[BUILTIN_MAX], nb = builtins(b, appear), j, imp = !strncmp(key, "import:", 7), n = imp ? listed() : nb;
     char k[128];
     for (j = 0; j < n; j++)
-        if (!strcmp(cast_entry_key(imp ? ACTOR_MODELS + j : b[j], k, sizeof(k)), key)) { cast_off_put(cast_off, imp ? nb + j : j, 1); return 1; }
+        if (!strcmp(cast_entry_key(imp ? ACTOR_MODELS + j : b[j], k, sizeof(k)), key)) { cast_off_put(appear ? cast_appear_off : cast_off, imp ? nb + j : j, 1); return 1; }
     return 0;
 }
 
-void cast_off_write(void (*line)(const char* key, void* ud), void* ud)
+void cast_off_write(int appear, void (*line)(const char* key, void* ud), void* ud)
 {
-    int b[BUILTIN_MAX], nb = builtins(b), j;
+    int b[BUILTIN_MAX], nb = builtins(b, appear), j;
     char k[128];
     for (j = 0; j < nb + listed(); j++)
-        if (cast_off_at(cast_off, j)) line(cast_entry_key(j < nb ? b[j] : ACTOR_MODELS + j - nb, k, sizeof(k)), ud);
+        if (cast_off_at(appear ? cast_appear_off : cast_off, j)) line(cast_entry_key(j < nb ? b[j] : ACTOR_MODELS + j - nb, k, sizeof(k)), ud);
 }
 
-int cast_custom_count(const unsigned char* off, int imports, int* total)
+int cast_custom_count(int appear, const unsigned char* off, int imports, int* total)
 {
-    int b[BUILTIN_MAX], n = builtins(b) + imports_n(imports), j, on = 0;
+    int b[BUILTIN_MAX], n = builtins(b, appear) + imports_n(imports), j, on = 0;
     for (j = 0; j < n; j++) on += !cast_off_at(off, j);
     if (total) *total = n;
     return on;

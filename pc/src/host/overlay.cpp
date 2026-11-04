@@ -128,7 +128,7 @@ static bool cast_custom_imgui()
 {
     static short pos[CAST_CUSTOM_MAX];
     static int mdl[CAST_CUSTOM_MAX];
-    int n = cast_custom_list(g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, pos, mdl, CAST_CUSTOM_MAX), on = 0, set = -1;
+    int n = cast_custom_list(0, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, pos, mdl, CAST_CUSTOM_MAX), on = 0, set = -1;
     bool changed = false;
     char head[80];
     for (int k = 0; k < n; k++) on += !cast_off_at(cast_off, pos[k]);

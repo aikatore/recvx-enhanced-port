@@ -7,6 +7,8 @@ set(NOT_IN_TABLE
     coop_start   # lobby START: the host's save to start from, chosen per session
     biorand      # lobby GAME RULES "BIORAND" (--dev): the co-op host's new game plays BioRand (biorand.h; no longer a setting)
     tps_key      # CONTROLS bindings, "Third person on/off" (bindings.c, its first keyboard slot)
+    biorand_appear_models    # BIORAND screen, RANDOMIZER page: Randomize Character Model's Model Selection (biorand_menu.c K_APPEAR)
+    biorand_appear_imports   # ... its Include Imported Models
     borderless_extra   # ini only: the Windows borderless window's overhang past the monitor (settings.c), a driver workaround
 )
 file(READ "${SRC}/src/host/config.c" config)
