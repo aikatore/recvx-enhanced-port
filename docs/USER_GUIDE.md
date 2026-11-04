@@ -367,7 +367,7 @@ Music And Voice, Sound Effects: 0-100%, default 100%.
 |---|---|---|
 | Character Models | Same for Both | Same for Both: one Character Model for whoever you play. Per Character: Claire's Model and Chris's Model instead, so each has a look of their own, also when one shows up in the other's cutscenes (Steve and Wesker then look like themselves) |
 | Character Model | Current Character | play as another character, creature or zombie; your co-op partner sees it too. "Current Character (Cutscene)": the character you play in its cutscene model (follows character switches; also over other costumes) |
-| Claire's Model, Chris's Model | the Character Model | with Per Character: the same list, one for each. A BioRand game's random looks come first until you choose a model in game |
+| Claire's Model, Chris's Model | the Character Model | with Per Character: the same list, one for each. A BioRand game's random looks come first until you choose a model in game. The BIORAND screen's EXTRA OPTIONS has these rows too |
 | Match Model Animations | On | a male model moves like Chris, a female one like Claire |
 | Custom Cutscene Model | On | Off: cutscenes show the real Claire or Chris |
 | Animated Faces (Experimental) | Off | the swapped model moves its mouth |
