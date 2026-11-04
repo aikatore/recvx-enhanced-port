@@ -479,6 +479,11 @@ static void sub_open(int on)
     host_log("biorand menu: randomizer page %s\n", on ? "open" : "closed");
 }
 
+/* APPEARANCE's model rows (a settings row with a list, Character Model / Claire's / Chris's): they only open the
+   lobby's model page with its preview, no stepping */
+static int model_row(const Row* r) { return r->kind == K_SET && g_settings[r->idx].count; }
+static int activate(const Row* r);
+
 /* left/right, or a click on an arrow */
 static void change(const Row* r, int dir)
 {
@@ -486,6 +491,7 @@ static void change(const Row* r, int dir)
     if (r->kind == K_PAGE) { set_page(bm.page + dir); return; }
     if (!has_value(r)) return;
     if (why) { refuse(why); return; }
+    if (model_row(r)) { activate(r); return; }   /* (not locked: activate opens the page) */
     if (r->kind == K_APPEAR) {
         int* v = r->idx == 1 ? &g_biorand_appear_pool : r->idx == 2 ? &g_biorand_appear_imports : &g_biorand_appear;
         *v = r->idx == 2 ? !*v : (*v + dir + 3) % 3;   /* Off, Same for Both, Per Character; Cutscene Models, All Models, Custom */
@@ -692,7 +698,7 @@ static int click(int i, float x)
 {
     const Row* r = &rows[i];
     if (r->kind == K_PAGE) { change(r, x < 320 ? -1 : 1); return 0; }
-    if (!has_value(r) || x < VAL_X - 10) return activate(r);
+    if (!has_value(r) || x < VAL_X - 10 || model_row(r)) return activate(r);
     if (r->kind == K_OPT && is_slider(r->idx)) {
         const BioOpt* d = &biorand_opt[r->idx];
         if (x >= SL_X0 - 2 && x < SL_X1 + 2) {
@@ -918,7 +924,7 @@ static void draw_row(int i)
         const Setting* s = &g_settings[r->idx];
         text_fit(ROW_X, y, s->label, ROW_SC, VAL_X - 16 - ROW_X, col);
         if (bm.edit && sel) edit_draw(y);
-        else value(i, y, settings_value(s, v, sizeof(v)), col, live);
+        else value(i, y, settings_value(s, v, sizeof(v)), col, live && !model_row(r));   /* (a model row: no arrows, it opens its page) */
         return;
     }
     default: pc_ui_text(ROW_X, y, names[r->kind], ROW_SC, col); return;
