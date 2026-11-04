@@ -5,7 +5,7 @@
 ### Fixes
 
 - Claire's ponytail no longer hangs behind another model shown in her place in cutscenes.
-- Extra Enemies you killed no longer come back when you enter the room again, and a room keeps the same extra
+- Killed Extra Enemies no longer come back when a room is entered again, and a room keeps the same extra
   enemies on every visit.
 
 ## 0.7.4 (2026-11-04)
