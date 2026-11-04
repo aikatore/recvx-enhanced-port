@@ -30,6 +30,8 @@
   box, files, map and other menus, not only up, and the mouse wheel scrolls the item box without lagging.
 - **Floating models at the widescreen edges**: a few display pieces, such as the model ship in the Gold Luger
   room, no longer hang in the air at the sides of the screen without the wall they belong to.
+- **B.O.W. gas rounds in widescreen**: the green flash of the grenade launcher's B.O.W. gas rounds now covers the
+  whole screen instead of only the 4:3 middle.
 
 ## 0.7.3 (2026-11-03)
 
