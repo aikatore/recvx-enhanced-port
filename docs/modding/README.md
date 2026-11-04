@@ -161,7 +161,7 @@ on the page row, or with L1/R1 (Q/W on the keyboard).
 | DOORS | Randomize Doors, segments, segment size, cutscene rooms; the estimated play time |
 | ITEMS | Randomize Items, routes, hidden key items, the custom item pool, the random starting inventory, the weapons; the item distribution |
 | ENEMIES | BioRand's enemy options, greyed: BioRand can't randomize enemies in this game yet (planned for later). They stay in the seed string as they are |
-| EXTRA OPTIONS | the port's own options (not in the seed string): **RANDOMIZER**, the game's enemy randomizer, extra enemies and rearranged enemies (the same settings as F1 and the co-op lobby; they apply to BioRand games too); **Randomize Character Model**, which picks your Character Model for each seed; the cutscene cast |
+| EXTRA OPTIONS | the port's own options (not in the seed string): **RANDOMIZER** opens a page with the game's enemy randomizer, extra enemies and rearranged enemies, the cutscene cast, and **Randomize Character Model**, which picks your character models for each seed (the same settings as F1 and the co-op lobby). Below it, **Character Models** with **Character Model** or **Claire's Model** and **Chris's Model**, the same settings as APPEARANCE in ENHANCED SETTINGS: confirm opens the list of models. They are used in play and in cutscenes; while Randomize Character Model is on, a BioRand game uses its random models instead and the rows are greyed. Then Extra Item Boxes and Herbs |
 
 - A greyed row says why in the help strip (for example "Randomize Doors sets this.").
 - Every change is saved at once as the **seed string** (recvx.ini `biorand_seed`). The string

@@ -628,7 +628,7 @@ Test aid: `RECVX_BIORAND_ISO_TEST=<path>` gives the CLI another image (the game 
 
 **"Randomize Played as"** (`g_biorand_appear`):
 
-- The value (the row "Randomize Character Model" on EXTRA OPTIONS: Off / Same for Both / Per Character): **Same for
+- The value (the row "Randomize Character Model", since S9 on EXTRA OPTIONS' RANDOMIZER page: Off / Same for Both / Per Character): **Same for
   Both** (1) one look for the whole game, whoever is played (as before); **Per Character** (2) one look for Claire,
   another for Chris and a third for Steve's section of Claire's part, all three different (Wesker, played only in
   the Battle Game, takes Chris's). Claire's is the one look Same for Both gives for that seed.
@@ -1068,7 +1068,7 @@ on and every ratio None the CLI stops with "No enemy ratios set." (as the GUI wo
 - Below the rows, the distribution bar is gone; the same sentence is shown there (wrapped, yellow).
 
 **RANDOMIZER on EXTRA OPTIONS** (`biorand_menu.c`, `bm.sub`): the page's first row, `K_RANDPG`, "RANDOMIZER" with
-the randomizer's On/Off and an arrow after it (as the lobby's page rows). Confirm or a click opens its sub-page:
+an arrow (until S9 also the randomizer's On/Off). Confirm or a click opens its sub-page:
 the page row says RANDOMIZER (L1/R1 and left/right on it still change page, closing it); the rows are the lobby's
 RANDOMIZER page (step 4) without the co-op-only parts and the cutscene cast (EXTRA OPTIONS has it): Enemy
 Randomizer, Randomizer Variety and Randomize Event Enemies (only while the randomizer is on), Enemy Seed, RANDOM
@@ -1093,6 +1093,47 @@ gives "enemies: room 3050: 5 of 5 records randomized" and other zombies than the
 refused row, EXTRA OPTIONS, the sub-page, randomizer on, the seed typed, RANDOM SEED, Extra Enemies, Rearranged
 Enemies, cancel back), `t_mp.sh` (from that save: the values after a restart; the gamepad and the mouse through
 the same), `t_gen.sh` (GENERATE with the nightly CLI) and `t_start.sh` (START, teleports; `game_3050.png`).
+
+### S9: EXTRA OPTIONS rearranged, the player models on it (2026-11-04)
+
+The user's request: on EXTRA OPTIONS put "Randomize Character Model" and the cutscene cast on the RANDOMIZER page, show
+RANDOMIZER without On/Off (it read as a switch), and let the player models be set there, as in ENHANCED SETTINGS, for
+whoever wants them fixed rather than random; those are used in cutscenes too, as the random ones are.
+
+- **EXTRA OPTIONS**: RANDOMIZER (`K_RANDPG`: the label and an arrow where the values are); heading APPEARANCE: Character
+  Models (Same for Both / Per Character, `g_appear_per`), then Character Model or Claire's Model and Chris's Model (the
+  settings table's rows by label, `add_label`, which now honours `shown` as F1 does); heading ITEMS: Extra Item Boxes
+  and Herbs; BACK.
+- **RANDOMIZER page**: heading ENEMIES: Enemy Randomizer, Randomizer Variety and Randomize Event Enemies (randomizer on),
+  Enemy Seed, RANDOM SEED, Extra Enemies, Rearranged Enemies; heading CUTSCENE CAST: Randomize Cutscene Cast, Model
+  Selection, Choose Models (Custom), Model Assignment, Include Imported Models (with imports); heading CHARACTER MODEL:
+  Randomize Character Model (`K_APPEAR`); BACK. 15 to 18 rows: it scrolls (VISIBLE 10).
+- **Headings** (`K_HEAD`, `heads[]`; texts the menus already had, so translated): drawn as ENHANCED SETTINGS' groups
+  (0.45, gold, lower in their row's slot for a gap above), text only (no box, so nothing for Smooth Menus to pair
+  with a row's). Never selected: `move_sel` steps over them, `row_at` gives -1 for them (no hover, no click),
+  `build_rows` moves a cursor that lands on one (the RANDOMIZER page opens on row 1) to the row below, and
+  `scroll_to_sel` keeps a row's heading in view with it.
+- **The model rows** are `K_SET` rows, so left/right steps through the models as in ENHANCED SETTINGS; confirm (or a
+  click on the label) opens the model list: `cast_list.c` in its second mode, `cast_list_open_model(setting, heading,
+  ...)`, the "You appear as" entries (`appear_at`, the lobby model page's order and groups) where the cast's Custom list
+  is, the heading (CLAIRE'S MODEL, ...) and "n / N" where SELECT ALL is, the current model gold with an arrow, no check
+  boxes; confirm sets the row (`settings_set`, saved as from F1) and closes, BACK / cancel / a right click closes
+  without a change. No 3D preview (the lobby's needs its scene and buffers); the names and groups are the lobby's.
+  Log: `biorand menu: the model list for Claire's Model`, `cast list: Claire's Model = Alfred Ashford`.
+- **Precedence** (unchanged code, `coop_glue.c look_of`): BioRand's random pick of the game (`pc_biorand_appear`) first,
+  else these settings, for play, the doubles and Claire's and Chris's cutscene records. While Randomize Character Model
+  is on, `row_why` greys the three APPEARANCE rows with "Randomize Character Model is on (RANDOMIZER page)." (orange in
+  the help strip; a change buzzes), since a BioRand game started now would not use them. ENHANCED SETTINGS and F1 keep
+  them editable (normal games use them).
+- New texts (10 languages): that reason, RANDOMIZER's help ("Set the enemy randomizer, extra enemies, the cutscene cast
+  and random character models."), " Confirm: choose from a list." after a model row's help, the model list's BACK
+  ("Back without changing the model."); its rows' help is the lobby model page's.
+
+**Tests (2026-11-04, Linux; job dir `brextra/`, not committed):** `t_menu.sh` (EXTRA OPTIONS before/after, the
+RANDOMIZER page and its scrolling), `t_pick.sh` (Per Character, Claire's and Chris's Model from the list, then OPTION >
+ENHANCED SETTINGS > APPEARANCE shows them), `t_game.sh` (START with a generated pack: gameplay after a teleport, and
+RM_9350's scene with Claire and Chris; with `biorand_appear = 2` the seed's picks replace them), `t_lock.sh` (the greyed
+rows and the refusal), `t_lang.sh` (German, Arabic).
 
 ## Risks and open questions
 
@@ -1160,6 +1201,8 @@ the same), `t_gen.sh` (GENERATE with the nightly CLI) and `t_start.sh` (START, t
   menu's new EXTRA. See "S7".
 - **S8 done** (2026-10-30): the ENEMIES rows read-only with a note (BioRand changes no CVX enemy), our randomizer's
   options on EXTRA OPTIONS (RANDOMIZER sub-page). See "S8".
+- **S9 done** (2026-11-04): EXTRA OPTIONS rearranged (RANDOMIZER as a page link; the cast and Randomize Character
+  Model on its page under headings; the player model rows with a model list on EXTRA OPTIONS). See "S9".
 - **STATUS: All steps done; open: Windows real-machine test list** ("S6", "Windows real-machine test list").
 - The job-dir tools (not committed): S5b's `s5b/` (`co.sh`, `scen.sh`, `mkpack.sh`, `build.sh`); S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
   encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").

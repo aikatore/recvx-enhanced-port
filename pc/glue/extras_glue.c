@@ -216,7 +216,7 @@ static void planter_frame(void)
 
 /* ---------------------------------------------------------------- test aid */
 /* RECVX_EXTRAS="frame:op[:arg],...", game frames: goto:k[:d] (stand at extra k of this room, facing it, d units
-   farther), poison,
+   farther), poison (poison:2 Nosferatu's, stflg 0x200000),
    pad:hex (those pad bits pressed for one frame, e.g. b00 the action button / confirm, 8 right), hold:hex:n (for n
    frames, e.g. 21 forward), ok (confirm, only while a message shows), log */
 static void test_aid(void)
@@ -252,7 +252,7 @@ static void test_aid(void)
         plp->flr_no = (char)bhCheckFloorNum(p->pos[1] + 0.5f);   /* (on its floor: an entry upstairs) */
         plp->py = rom->grand[plp->flr_no + 2];
         plp->ay = (p->ang[1] + (sh->use > 0 ? 0 : 0x8000)) & 0xFFFF;
-    } else if (!strcmp(op, "poison")) plp->stflg |= 0x80000;
+    } else if (!strcmp(op, "poison")) plp->stflg |= a == 2 ? 0x200000 : 0x80000;
     else if (!strcmp(op, "pad")) coop_test_press((unsigned)a);
     else if (!strcmp(op, "ok") && (sys->st_flg & 0x200)) coop_test_press(0xB00);   /* only a message's confirm */
     printf("test: extras %s %d at game frame %d (presented %u) in %d/%d case %d: %d here%s, player %.1f %.1f %.1f ay %d, %spoisoned, box screen %d, planter %d (gm %08x cb %08x st %08x sp %08x)\n", op, a,

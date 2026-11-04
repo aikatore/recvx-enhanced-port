@@ -11,6 +11,9 @@
 ### Menus
 
 - **EXIT on the title screen**: the title menu has an EXIT entry at the bottom that closes the game after asking.
+- **BioRand EXTRA OPTIONS**: the cutscene cast and Randomize Character Model moved to the RANDOMIZER page, now
+  grouped under headings. EXTRA OPTIONS can set your character models for Claire and Chris, from a list, without
+  going to the Enhanced Settings; they are used in play and in cutscenes unless the models are randomized.
 
 ### Third person
 
@@ -26,6 +29,8 @@
 
 - **BioRand: key items in the Antarctic study**: in a BioRand game Claire can take key items out of the item box
   in the Antarctic mansion study instead of being told they are left for Chris.
+- **BioRand: poison after Nosferatu**: in a BioRand game Nosferatu's poison, which herbs can't cure, goes away
+  once he is defeated. With random doors the story part that cures it is never reached.
 - **Third-person keys in menus**: with Free Camera, W, A, S and D move the cursor in every direction in the item
   box, files, map and other menus, not only up, and the mouse wheel scrolls the item box without lagging.
 - **Floating models at the widescreen edges**: a few display pieces, such as the model ship in the Gold Luger

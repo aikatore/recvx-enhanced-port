@@ -5,8 +5,10 @@
  *   BS_MENU    the generator's pages SEED, DOORS, ITEMS, ENEMIES, EXTRA OPTIONS: BioRand's options
  *              (biorand_opts.h; each change re-encodes the seed string into recvx.ini biorand_seed),
  *              the doors estimate, the item distribution bar, the seed string's copy / paste;
- *              on EXTRA OPTIONS, Choose Models opens the cutscene cast's "Custom" list there (cast_list.c, bm.list) and
- *              RANDOMIZER its sub-page (bm.sub): our enemy options (g_enemy_opts), as the lobby's RANDOMIZER page.
+ *              EXTRA OPTIONS: RANDOMIZER opens its sub-page (bm.sub): our enemy options (g_enemy_opts), as the lobby's
+ *              RANDOMIZER page, the cutscene cast (Choose Models opens its "Custom" list there: cast_list.c, bm.list)
+ *              and "Randomize Character Model", under headings (K_HEAD); EXTRA OPTIONS itself has APPEARANCE's model
+ *              rows (the settings table's; confirm opens the same list as a model list) and Extra Item Boxes.
  *              ENEMIES' rows are read-only: BioRand's CLI changes no CVX enemy (its enemy list for the game is empty).
  *   BS_ASK     a Yes/No question over it (A_DOWNLOAD with no CLI: No leaves; A_CHECK; A_NEWER; A_GEN; A_DISK: GENERATE's
  *              warning when the mods folder's disk has less than GEN_WARN_MB free)
@@ -33,6 +35,7 @@
 #include "../src/host/bindings.h"
 #include "../src/host/enemies.h"
 #include "../src/host/cast.h"
+#include "../src/host/actors.h"
 #include "../src/host/biorand_opts.h"
 #include "../src/net/biorand_dl.h"
 #include "../src/host/biorand.h"
@@ -58,6 +61,7 @@ void pc_ui_dialog_btns(float y0, float y1, float z, const char* l1, const char* 
 int pc_ui_dialog_btns_hit(float y1, const char* const* b, int n, float x, float y);
 /* cast_list.c: the cutscene cast's "Custom" list (the lobby's too); 1 back */
 void cast_list_open(float x0, float x1, float y0, float h, float sc, int rows);
+void cast_list_open_model(const Setting* s, const char* head, float x0, float x1, float y0, float h, float sc, int rows);   /* ... one model for s */
 int  cast_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
 void cast_list_draw(void);
 const char* cast_list_help(void);
@@ -72,8 +76,10 @@ enum { A_DOWNLOAD, A_CHECK, A_NEWER, A_GEN, A_HOST, A_DIGEST, A_DISK };
 enum { PG_SEED, PG_DOORS, PG_ITEMS, PG_ENEMIES, PG_PORT, PG_N };
 static const char* const page_names[PG_N] = { "SEED", "DOORS", "ITEMS", "ENEMIES", "EXTRA OPTIONS" };
 /* row kinds: K_OPT a biorand_opt[] row, K_SET a settings table row (the cutscene cast, the enemy options) */
-enum { K_PAGE, K_OPT, K_RANDOM, K_COPY, K_PASTE, K_GEN, K_START, K_CHECK, K_APPEAR, K_SET, K_CUSTOM, K_RANDPG, K_RSEED, K_BACK };   /* K_CUSTOM: the cast's
-    "Custom" list; K_RANDPG: the RANDOMIZER sub-page; K_RSEED: its RANDOM SEED */
+enum { K_PAGE, K_OPT, K_RANDOM, K_COPY, K_PASTE, K_GEN, K_START, K_CHECK, K_APPEAR, K_SET, K_CUSTOM, K_RANDPG, K_RSEED, K_HEAD, K_BACK };   /* K_CUSTOM: the
+    cast's "Custom" list; K_RANDPG: the RANDOMIZER sub-page; K_RSEED: its RANDOM SEED; K_HEAD: a heading (heads[idx]), never selected */
+static const char* const heads[] = { "ENEMIES", "CUTSCENE CAST", "CHARACTER MODEL", "APPEARANCE", "ITEMS" };
+enum { H_ENEMIES, H_CAST, H_RANDCHAR, H_APPEAR, H_ITEMS };
 static const char* const enemy_why = "BioRand can't randomize enemies in this game yet; this will be added later. For now, use RANDOMIZER on the EXTRA OPTIONS page.";
 typedef struct { int kind, idx; } Row;
 #define MAX_ROWS 30          /* (ROW_Z has room for 30; ITEMS has 27) */
@@ -319,17 +325,14 @@ static int choose(int yes)
 /* ---------------------------------------------------------------- the pages' rows */
 static void add(int kind, int idx) { if (nrows < MAX_ROWS) rows[nrows++] = (Row){ kind, idx }; }
 /* a settings table row (F1 and ENHANCED SETTINGS edit the same), if the menus list it now */
-static void add_set(const int* var)
-{
-    const Setting* s = settings_of(var);
-    if (s && (!s->shown || s->shown())) add(K_SET, (int)(s - g_settings));
-}
+static void add_row(const Setting* s) { if (s && (!s->shown || s->shown())) add(K_SET, (int)(s - g_settings)); }
+static void add_set(const int* var) { add_row(settings_of(var)); }
 
-/* ... by its label (a g_config row, which the glue does not see) */
+/* ... by its label (a g_config row, which the glue does not see, or one with get/set) */
 static void add_label(const char* label)
 {
     for (int i = 0; i < g_settings_n; i++)
-        if (!strcmp(g_settings[i].label, label)) { add(K_SET, i); return; }
+        if (!strcmp(g_settings[i].label, label)) { add_row(&g_settings[i]); return; }
 }
 
 static void build_rows(void)
@@ -344,27 +347,37 @@ static void build_rows(void)
         add(K_GEN, 0);
         add(K_START, 0);
         add(K_CHECK, 0);
-    } else if (bm.page == PG_PORT && bm.sub) {   /* the lobby's RANDOMIZER page (lobby_glue.c step 4) without the cast */
+    } else if (bm.page == PG_PORT && bm.sub) {   /* the lobby's RANDOMIZER page (lobby_glue.c step 4), BioRand's random model */
+        add(K_HEAD, H_ENEMIES);
         add_set(&g_enemy_opts.rand);
         if (g_enemy_opts.rand) { add_set(&g_enemy_opts.variety); add_set(&g_enemy_opts.events); }   /* only the randomizer has them */
         add_set(&g_enemy_opts.seed);
         add(K_RSEED, 0);
         add_set(&g_enemy_opts.extra);
         add_set(&g_enemy_opts.place);
-    } else if (bm.page == PG_PORT) {
-        add(K_RANDPG, 0);   /* (row 1: sub_open) */
-        add_label("Extra Item Boxes and Herbs");   /* (a GAMEPLAY setting; for the randomizers' games) */
-        add(K_APPEAR, 0);
+        add(K_HEAD, H_CAST);
         add_set(&g_enemy_opts.cast);
         add_set(&g_enemy_opts.cast_all);
         if (g_enemy_opts.cast && g_enemy_opts.cast_all == 2) add(K_CUSTOM, 0);   /* (after Model Selection) */
         add_set(&g_enemy_opts.cast_assign);
         add_set(&g_enemy_opts.cast_imports);
+        add(K_HEAD, H_RANDCHAR);
+        add(K_APPEAR, 0);
+    } else if (bm.page == PG_PORT) {
+        add(K_RANDPG, 0);   /* (row 1: sub_open) */
+        add(K_HEAD, H_APPEAR);   /* ENHANCED SETTINGS APPEARANCE's model rows (the same settings) */
+        add_set(&g_appear_per);
+        add_label("Character Model");
+        add_label("Claire's Model");
+        add_label("Chris's Model");
+        add(K_HEAD, H_ITEMS);
+        add_label("Extra Item Boxes and Herbs");   /* (a GAMEPLAY setting; for the randomizers' games) */
     } else
         for (int i = 0; i < biorand_opt_n; i++)
             if (biorand_opt[i].group == bm.page) add(K_OPT, i);
     add(K_BACK, 0);
     if (bm.row >= nrows) bm.row = nrows - 1;
+    while (rows[bm.row].kind == K_HEAD) bm.row++;   /* (a heading's row: the row below it; BACK is last) */
 }
 
 static int is_slider(int i) { return biorand_opt[i].type == BO_RATIO || (biorand_opt[i].type == BO_RANGE && biorand_opt[i].low); }
@@ -392,7 +405,9 @@ static const char* row_why(const Row* r)
         if (!biorand_pack()) return "Generate a BioRand game first.";
         if (coop_biorand() >= 0) return "Not while joined to a co-op host.";
         return NULL;
-    case K_SET: return settings_locked(&g_settings[r->idx]);
+    case K_SET:   /* APPEARANCE's model rows: BioRand's random model comes first */
+        if (g_settings[r->idx].page == SP_APPEAR && g_biorand_appear) return "Randomize Character Model is on (RANDOMIZER page).";
+        return settings_locked(&g_settings[r->idx]);
     case K_OPT: {
         const char* l = biorand_opt[r->idx].group == BOG_ENEMIES ? enemy_why : biorand_opt_locked(&bm.o, r->idx);
         if (l) return l;
@@ -440,7 +455,7 @@ static void set_page(int p)
 
 static void move_sel(int dir)
 {
-    bm.row = ((bm.row + dir) % nrows + nrows) % nrows;
+    do bm.row = ((bm.row + dir) % nrows + nrows) % nrows; while (rows[bm.row].kind == K_HEAD);
     bm.say_t = 0;
     CallSystemSe(0, 2);
 }
@@ -623,10 +638,19 @@ static int activate(const Row* r)
         if (bm.sub) { sub_open(0); return 0; }
         CallSystemSe(0, 0);
         return 1;
-    case K_SET:
-        if (g_settings[r->idx].val == &g_enemy_opts.seed && !row_why(r)) { edit_begin(&g_settings[r->idx]); return 0; }
+    case K_SET: {
+        const Setting* s = &g_settings[r->idx];
+        if (s->val == &g_enemy_opts.seed && !row_why(r)) { edit_begin(s); return 0; }
+        if (s->count && !row_why(r)) {   /* a model row: the list (the lobby's model page's entries) */
+            bm.list = 1;
+            cast_list_open_model(s, !strcmp(s->label, "Claire's Model") ? "CLAIRE'S MODEL" : !strcmp(s->label, "Chris's Model") ? "CHRIS'S MODEL"
+                                 : "CHARACTER MODEL", ROW_X, 600, ROW_Y0, ROW_H, ROW_SC, 10);
+            host_log("biorand menu: the model list for %s\n", s->label);
+            return 0;
+        }
         change(r, 1);
         return 0;
+    }
     default: change(r, 1); return 0;   /* K_APPEAR */
     }
 }
@@ -636,7 +660,8 @@ static float row_y(int i) { return ROW_Y0 + (i - bm.top) * ROW_H; }
 
 static void scroll_to_sel(void)
 {
-    if (bm.row > 0 && bm.row < bm.top) bm.top = bm.row;
+    int want = bm.row > 1 && rows[bm.row - 1].kind == K_HEAD ? bm.row - 1 : bm.row;   /* (with its heading) */
+    if (bm.row > 0 && want < bm.top) bm.top = want;
     if (bm.row >= bm.top + VISIBLE) bm.top = bm.row - VISIBLE + 1;
     if (bm.top > nrows - VISIBLE) bm.top = nrows - VISIBLE;
     if (bm.top < 1) bm.top = 1;
@@ -647,7 +672,7 @@ static int row_at(float x, float y)
     if (x < 32 || x >= 608) return -1;
     if (y >= PAGE_Y - 4 && y < PAGE_Y + 20) return 0;
     for (int i = bm.top; i < nrows && i < bm.top + VISIBLE; i++)
-        if (y >= row_y(i) - 3 && y < row_y(i) + ROW_H - 3) return i;
+        if (y >= row_y(i) - 3 && y < row_y(i) + ROW_H - 3) return rows[i].kind == K_HEAD ? -1 : i;
     return -1;
 }
 
@@ -830,8 +855,9 @@ static void draw_row(int i)
     float y = i ? row_y(i) : PAGE_Y;
     unsigned int col = !live ? (sel ? 0xFF909090 : 0xFF686868) : sel ? 0xFFFFFFFF : 0xFFB0B0B0;
     static const char* const names[] = { "", "", "RANDOM SEED", "COPY SEED STRING", "PASTE SEED STRING", "GENERATE", "START",
-                                         "CHECK FOR UPDATES", "Randomize Character Model", "", "Choose Models", "RANDOMIZER", "RANDOM SEED", "BACK" };
+                                         "CHECK FOR UPDATES", "Randomize Character Model", "", "Choose Models", "RANDOMIZER", "RANDOM SEED", "", "BACK" };
     char v[96];
+    if (r->kind == K_HEAD) { pc_ui_text(ROW_X - 6, y + 5, heads[r->idx], 0.45f, 0xFFE0C080); return; }   /* (as ENHANCED SETTINGS' groups; text only) */
     if (sel) pc_ui_rect(ROW_X - 8, y - 3, 600, y + ROW_H - 4, bm.edit ? 0x60406080 : 0x50FFFFFF, Z_ROW);
     switch (r->kind) {
     case K_PAGE: {
@@ -864,10 +890,9 @@ static void draw_row(int i)
         text_fit(ROW_X, y, names[r->kind], ROW_SC, VAL_X - 16 - ROW_X, col);
         text_fit(VAL_X + 12, y, cast_list_summary(cast_off, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, v, sizeof(v)), ROW_SC, 196, col);
         return;
-    case K_RANDPG:   /* a page: its summary, an arrow after it (the lobby's page rows) */
+    case K_RANDPG:   /* a page: an arrow where the values are */
         text_fit(ROW_X, y, names[r->kind], ROW_SC, VAL_X - 16 - ROW_X, col);
-        text_fit(VAL_X + 12, y, g_enemy_opts.rand ? "On" : "Off", ROW_SC, 196, col);
-        arrow(i, VAL_X + 12 + pc_ui_text_w(g_enemy_opts.rand ? "On" : "Off", ROW_SC) + 16, y + 9, 1, col);
+        arrow(i, VAL_X + 19, y + 9, 1, col);
         return;
     case K_SET: {
         const Setting* s = &g_settings[r->idx];
@@ -980,12 +1005,12 @@ static void help_text(char* t, int n, unsigned int* col)
         snprintf(t, n, tr("Choose a character model for each generated seed: the same one for Claire and Chris, or one for each character. Saved separately from the seed string."));
         return;
     case K_CUSTOM: snprintf(t, n, "Choose the models the characters can appear as."); return;
-    case K_RANDPG: snprintf(t, n, "%s", tr("Set the enemy randomizer, extra enemies and enemy positions. They also apply to BioRand games.")); return;
+    case K_RANDPG: snprintf(t, n, "%s", tr("Set the enemy randomizer, extra enemies, the cutscene cast and random character models.")); return;
     case K_RSEED: snprintf(t, n, "%s", tr("Picks a new random seed.")); return;
     case K_SET: {
         const Setting* s = &g_settings[r->idx];
         snprintf(t, n, "%s%s%s%s", why ? why : "", why ? " " : "", s->help ? tr(s->help) : "",
-                 s->val == &g_enemy_opts.seed ? tr(" Confirm: enter a seed. Left/right: adjust.") : "");
+                 s->val == &g_enemy_opts.seed ? tr(" Confirm: enter a seed. Left/right: adjust.") : s->count && !why ? tr(" Confirm: choose from a list.") : "");
         if (why) *col = 0xFFFFC060;
         return;
     }

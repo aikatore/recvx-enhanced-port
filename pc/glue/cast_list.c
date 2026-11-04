@@ -1,8 +1,11 @@
 /* The cutscene cast's "Custom" list (docs/ACTORS.md "Cutscene cast"): the "All models" entries in the menus' order
  * (cast.h cast_custom_list; the imported ones too with "Include Imported Models"), each with a check box, SELECT ALL
  * and DESELECT ALL above them, BACK below. Drawn as the lobby's model page (lobby_glue.c pick_*), with its helpers
- * (pc_ui_*), by the lobby's CUTSCENE CAST page and the BIORAND screen's EXTRA OPTIONS page, each at its own place.
- * It edits cast_off (ours: recvx.ini cast_custom_off; a co-op host's go to the guest, coop_glue.c). Game thread. */
+ * (pc_ui_*), by the lobby's CUTSCENE CAST page and the BIORAND screen's RANDOMIZER page, each at its own place.
+ * It edits cast_off (ours: recvx.ini cast_custom_off; a co-op host's go to the guest, coop_glue.c).
+ * The same list picks one model instead (cast_list_open_model, the BIORAND screen's EXTRA OPTIONS): the "You appear
+ * as" entries of a settings row (Character Model, Claire's or Chris's Model; actors.c appear_at), its heading where
+ * SELECT ALL is, the current one gold with an arrow; confirm sets the row (settings_set) and closes. Game thread. */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
 #include "../../decomp/include/ps2/veronica/prog/sdfunc.h"
@@ -19,6 +22,8 @@
 void pc_ui_text(float x, float y, const char* s, float sc, unsigned int argb);
 float pc_ui_text_w(const char* s, float sc);
 void pc_ui_rect(float x0, float y0, float x1, float y1, unsigned int argb, float z);
+void pc_ui_arrow(float x, float y, int dir, unsigned int argb);
+void host_log(const char* fmt, ...);
 
 enum { BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };   /* Pad[] bits */
 #define Z 0.3f
@@ -31,20 +36,34 @@ enum { C_ALL, C_NONE, C_LIST };
 static short pos[CAST_CUSTOM_MAX];
 static int model[CAST_CUSTOM_MAX];
 static struct { int n, cur, top, rows; float x0, x1, y0, h, sc; } cl;
+static const Setting* ms;              /* the model list's row (cast_list_open_model), NULL the cast's list */
+static const char* ms_head;
 
 static int imports(void) { return g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0; }
-static void refresh(void) { cl.n = cast_custom_list(imports(), pos, model, CAST_CUSTOM_MAX); }
+static void refresh(void) { cl.n = ms ? settings_hi(ms) + 1 : cast_custom_list(imports(), pos, model, CAST_CUSTOM_MAX); }
+static const char* entry_name(int k) { return ms ? appear_name(appear_at(k)) : cast_entry_name(model[k]); }
+static const char* entry_group(int k) { return ms ? appear_group(appear_at(k)) : cast_entry_group(model[k]); }
 static float list_y(void) { return cl.y0 + cl.h + GAP; }
 static float back_y(void) { return list_y() + cl.rows * cl.h + GAP; }
 static int max_top(void) { return cl.n > cl.rows ? cl.n - cl.rows : 0; }
 
-void cast_list_open(float x0, float x1, float y0, float h, float sc, int rows)
+static void scroll(int d);
+static void open(const Setting* s, float x0, float x1, float y0, float h, float sc, int rows)
 {
     memset(&cl, 0, sizeof(cl));
+    ms = s;
     cl.x0 = x0; cl.x1 = x1; cl.y0 = y0; cl.h = h; cl.sc = sc; cl.rows = rows;
     refresh();
-    cl.cur = cl.n ? C_LIST : C_ALL;
+    cl.cur = s ? C_LIST + settings_get(s) : cl.n ? C_LIST : C_ALL;
+    cl.top = s ? settings_get(s) - rows / 2 : 0;   /* (the current model in the middle) */
+    scroll(0);
     CallSystemSe(0, 3);
+}
+void cast_list_open(float x0, float x1, float y0, float h, float sc, int rows) { open(NULL, x0, x1, y0, h, sc, rows); }
+void cast_list_open_model(const Setting* s, const char* head, float x0, float x1, float y0, float h, float sc, int rows)
+{
+    ms_head = head;
+    open(s, x0, x1, y0, h, sc, rows);
 }
 
 /* the first shown entry moved by d (clamped), an entry cursor kept on the page */
@@ -62,8 +81,8 @@ static void scroll(int d)
 /* the cursor to c (wrapping, or clamped to the entries); the page follows it */
 static void to(int c, int wrap)
 {
-    int last = C_LIST + cl.n, k;
-    if (wrap) c = (c + last + 1) % (last + 1);
+    int lo = ms ? C_LIST : C_ALL, last = C_LIST + cl.n, k;   /* (the model list: no SELECT ALL row) */
+    if (wrap) c = lo + ((c - lo) % (last - lo + 1) + (last - lo + 1)) % (last - lo + 1);
     else c = c < C_LIST ? C_LIST : c >= last ? last - 1 : c;
     if (c != cl.cur) CallSystemSe(0, 2);
     cl.cur = c;
@@ -85,6 +104,12 @@ static int act(int c)
 {
     if (c == C_ALL || c == C_NONE) { all(c == C_NONE); return 0; }
     if (c >= C_LIST + cl.n) { CallSystemSe(0, 0); return 1; }
+    if (ms) {
+        settings_set(ms, c - C_LIST);
+        host_log("cast list: %s = %s\n", ms->label, appear_name(appear_at(c - C_LIST)));
+        CallSystemSe(0, 3);
+        return 1;
+    }
     cast_off_put(cast_off, pos[c - C_LIST], !cast_off_at(cast_off, pos[c - C_LIST]));
     settings_save_later();
     CallSystemSe(0, 3);
@@ -96,7 +121,7 @@ static int at(float x, float y)
 {
     int i;
     if (x < cl.x0 - 8 || x > cl.x1) return -1;
-    if (y >= cl.y0 - 3 && y < cl.y0 + cl.h - 3) return x < cl.x0 + NONE_X - 12 ? C_ALL : x < cl.x0 + NONE_X + 140 ? C_NONE : -1;
+    if (y >= cl.y0 - 3 && y < cl.y0 + cl.h - 3) return ms ? -1 : x < cl.x0 + NONE_X - 12 ? C_ALL : x < cl.x0 + NONE_X + 140 ? C_NONE : -1;
     if (y >= back_y() - 3 && y < back_y() + cl.h - 3) return C_LIST + cl.n;
     if (y < list_y() - 3) return -1;
     i = (int)((y - list_y() + 3) / cl.h);
@@ -125,7 +150,7 @@ int cast_list_input(const MouseTake* m, unsigned int press, unsigned int rept, u
     if (hit >= 0 && (m->moved || m->left || m->wheel) && hit != cl.cur) { cl.cur = hit; CallSystemSe(0, 2); }
     if (m->left && hit >= 0) return act(hit);
     if (m->right || (press & cancel)) { CallSystemSe(0, 0); return 1; }
-    if (rept & BTN_UP) to(cl.cur == C_LIST ? C_ALL : cl.cur - 1 - (cl.cur == C_NONE), 1);   /* (SELECT ALL and DESELECT ALL: one row) */
+    if (rept & BTN_UP) to(cl.cur == C_LIST && !ms ? C_ALL : cl.cur - 1 - (cl.cur == C_NONE), 1);   /* (SELECT ALL and DESELECT ALL: one row) */
     else if (rept & BTN_DOWN) to(cl.cur < C_LIST ? C_LIST : cl.cur + 1, 1);
     else if ((rept & (BTN_LEFT | BTN_RIGHT)) && cl.cur < C_LIST) { cl.cur ^= 1; CallSystemSe(0, 2); }
     else if ((rept & (BTN_L1 | BTN_LEFT)) && cl.cur >= C_LIST) to(cl.cur - page, 0);
@@ -144,33 +169,37 @@ static void box(float x, float y, int on, unsigned int col)
 
 void cast_list_draw(void)
 {
-    int k, on = cast_custom_count(cast_off, imports(), NULL);
+    int k, on = ms ? 1 : cast_custom_count(cast_off, imports(), NULL), now = ms ? settings_get(ms) : -1;
     float right = cl.n > cl.rows ? cl.x1 - BAR - 6 : cl.x1, y;
     char t[48];
     refresh();
-    for (k = C_ALL; k <= C_NONE; k++) {   /* SELECT ALL, DESELECT ALL */
+    if (ms) {   /* the model list: its heading, the position */
+        pc_ui_text(cl.x0 - 4, cl.y0, ms_head, 0.5f, 0xFFFFE080);
+        snprintf(t, sizeof(t), "%d / %d", (cl.cur < C_LIST + cl.n ? cl.cur - C_LIST : now) + 1, cl.n);
+    } else snprintf(t, sizeof(t), "%d/%d", on, cl.n);
+    for (k = C_ALL; !ms && k <= C_NONE; k++) {   /* SELECT ALL, DESELECT ALL */
         float x = cl.x0 + (k == C_NONE ? NONE_X : 0);
         const char* s = k == C_NONE ? "DESELECT ALL" : "SELECT ALL";
         if (cl.cur == k) pc_ui_rect(x - 8, cl.y0 - 2, x + pc_ui_text_w(s, cl.sc) + 8, cl.y0 + cl.h - 3, 0x50FFFFFF, Z);
         pc_ui_text(x, cl.y0, s, cl.sc, cl.cur == k ? 0xFFFFFFFF : 0xFFB0B0B0);
     }
-    snprintf(t, sizeof(t), "%d/%d", on, cl.n);
     pc_ui_text(cl.x1 - pc_ui_text_w(t, 0.45f), cl.y0 + 2, t, 0.45f, on ? 0xFFA0A0A0 : 0xFFFFC060);
     for (k = cl.top; k < cl.n && k < cl.top + cl.rows; k++) {
-        const char* nm = cast_entry_name(model[k]);
-        const char* grp = cast_entry_group(model[k]);
-        int sel = cl.cur == C_LIST + k, chk = !cast_off_at(cast_off, pos[k]);
-        unsigned int col = sel ? 0xFFFFFFFF : chk ? 0xFFD0D0D0 : 0xFF808080;
+        const char* nm = entry_name(k);
+        const char* grp = entry_group(k);
+        int sel = cl.cur == C_LIST + k, chk = ms ? k == now : !cast_off_at(cast_off, pos[k]);
+        unsigned int col = ms ? (chk ? 0xFFFFE080 : sel ? 0xFFFFFFFF : 0xFFB0B0B0) : sel ? 0xFFFFFFFF : chk ? 0xFFD0D0D0 : 0xFF808080;
         float lim = right, w, sc;
         y = list_y() + (k - cl.top) * cl.h;
-        if (k == cl.top || strcmp(grp, cast_entry_group(model[k - 1]))) {   /* a group's first row (and the page's): its name on the right */
+        if (k == cl.top || strcmp(grp, entry_group(k - 1))) {   /* a group's first row (and the page's): its name on the right */
             float gw = pc_ui_text_w(grp, 0.35f);
             if (k > cl.top) pc_ui_rect(cl.x0 - 8, y - 3, right, y - 2, 0x60FFE080, Z);
             pc_ui_text(right - gw - 2, y + 4, grp, 0.35f, 0xFFC8A860);
             lim = right - gw - 10;
         }
         if (sel) pc_ui_rect(cl.x0 - 8, y - 2, right, y + cl.h - 3, 0x50FFFFFF, Z);
-        box(cl.x0, y, chk, col);
+        if (!ms) box(cl.x0, y, chk, col);
+        else if (chk) pc_ui_arrow(cl.x0 + 10, y + 9, 1, col);   /* the current model: gold, an arrow */
         w = pc_ui_text_w(nm, cl.sc);
         sc = w > lim - cl.x0 - 20 ? cl.sc * (lim - cl.x0 - 20) / w : cl.sc;   /* a long name: narrower */
         pc_ui_text(cl.x0 + 20, y + (cl.sc - sc) * 14, nm, sc, col);
@@ -189,6 +218,7 @@ void cast_list_draw(void)
 
 const char* cast_list_help(void)
 {
+    if (ms) return cl.cur >= C_LIST + cl.n ? "Back without changing the model." : "Scroll with up/down, L1/R1, Page Up/Down or the wheel. Confirm: use model; BACK: cancel.";
     if (cl.cur == C_ALL) return "Check every model in the list.";
     if (cl.cur == C_NONE) return "Uncheck every model. With none checked, the characters keep their own looks.";
     if (cl.cur >= C_LIST + cl.n) return "Back. Your choices are saved.";
