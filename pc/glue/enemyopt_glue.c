@@ -531,8 +531,9 @@ static void kill_test(void)
         hit[k] = 1;
         ep->flg |= 0x4;
         ep->dpx = ep->px; ep->dpy = ep->py + 10.0f; ep->dpz = ep->pz;
-        ep->wpnr_no = plp->wpnr_no >= 2 ? plp->wpnr_no : 2;   /* (no weapon or the knife: the handgun's; an anatomist's death by
-                                                                    a weapon without a death action keeps its move's mode2, en26.c) */
+        ep->wpnr_no = plp->wpnr_no >= 2 ? plp->wpnr_no : 2;   /* (no weapon or the lighter: the knife's, weapon 2; 0 and 1 never
+                                                                    hit in the game, their rows in the enemies' damage tables are
+                                                                    empty: a Bandersnatch hit by one does not die, en09.c) */
         ep->djnt_no = ep->mlwP && ep->mlwP->obj_num > 1 ? 1 : 0;
         ep->dam[ep->djnt_no] += 500;
         ep->comb_flg |= 0x10;
