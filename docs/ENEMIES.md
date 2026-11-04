@@ -761,7 +761,7 @@ types). *Another kind*: the script only shows or hides them. *Another look*: an 
 | `sources` | per (type, model version) the smallest room carrying its model and motions |
 | `selftest` | the script walker on RM_0060 |
 
-`pc/tools/enemy_revisit_check.sh OUT [SEED...]` (headless, about 6 minutes): a new game visits twelve
+`pc/tools/enemy_revisit_check.sh OUT [SEED...]` (headless, about 7 minutes): a new game visits twelve
 rooms twice with the randomizer, placements and three extras on, killing everything (and once only the
 records); every room must get the same records and extras on both visits, and nothing killed may come back.
 

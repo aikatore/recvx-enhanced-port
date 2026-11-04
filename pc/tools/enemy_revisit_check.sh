@@ -4,7 +4,7 @@
 # extra enemies on, killing every enemy of each room (RECVX_ENEMY_KILL; ":r" kills only the records, so the extras of the
 # first visit live on). Passes when, for every seed, each room got the same randomizer result and the same extras (type,
 # source record, spot) on both visits, and nothing that died on the first visit is there on the second (extras of
-# records without a kill bit come back, as those records do). About 6 minutes, all runs in parallel.
+# records without a kill bit come back, as those records do). About 7 minutes, all runs in parallel.
 #   pc/tools/enemy_revisit_check.sh OUT [SEED...]      (default seeds 1234 77 900001)
 # Environment: RECVX_ISO (disc image), RECVX_BIN (binary, default build/pc/recvx), ROOMS (stg:rom:pos:case list).
 out=$1; shift; seeds=${*:-1234 77 900001}
