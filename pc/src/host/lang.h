@@ -37,7 +37,7 @@ void lang_scan(void);                 /* which languages are installed (at start
 int  lang_installed(int l);           /* its folder is complete (English: always) */
 int  lang_old_import(int l);          /* an older import (lang.txt version 1: the item messages cut; 2: no text crawl, movies): import again */
 int  lang_has_subtitles(int l);       /* its rooms have cutscene subtitles */
-int  lang_has_voices(int l);          /* its folder has a sound of its own (the title call: Translated Voices) */
+int  lang_has_voices(int l);          /* its folder has a sound of its own (the title call: Translated Title Call) */
 int  lang_sub(void);                  /* the subtitles' language (installed, with subtitles), -1 none */
 const char* lang_dir(int l);          /* its folder, NULL for English */
 int  lang_font(void);                 /* the language of the font our texts are drawn in (pc_glyph_next) */
@@ -90,7 +90,7 @@ void pc_lang_file_opened(const char* name, int src); /* a file the game opens (b
 struct PcPart;
 int pc_lang_disc_parts(const char* name, FILE* f, uint32_t size, uint32_t lsn, uint32_t dsize, struct PcPart* out, int max);
 extern int g_lang_pictures;                         /* Translated Pictures (ini translated_pictures): 0 the disc's pictures */
-extern int g_lang_voices;                           /* Translated Voices (ini translated_voices): 0 the disc's sounds */
+extern int g_lang_voices;                           /* Translated Title Call (ini translated_voices): 0 the disc's sounds */
 float pc_font_width(unsigned short code);           /* the language font's width, < 0: the game's own */
 float pc_font_space(void);                          /* the advance of a space (0xFF01) at scale 1: 14, Japanese 28 */
 int  pc_font_glyph(int code, void** texlist, float* dx);   /* bhDispFont: the cell to draw (-1 none); *texlist another font's; *dx left shift */

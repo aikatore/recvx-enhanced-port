@@ -245,6 +245,7 @@ int   pc_slope_ground(struct BH_PWORK* pw, void* pos, float ah);   /* hitchk.c: 
 void  host_fatal(const char* fmt, ...);
 int   pc_prs_decode(const unsigned char* s, uint32_t n, unsigned char* d, uint32_t cap);   /* pc_parse.h: bounded Expand */
 int   pc_room_from_disc(const char* name, unsigned char* memp, unsigned char* endp, int err);   /* actor_glue.c */
+int   pc_test_read_hold(void);   /* cheat_glue.c: test aid RECVX_TEST_READ_HOLD, 1 = the room file is still being read */
 void  host_log(const char* fmt, ...);
 void  pc_et_lp_clear(void);   /* room.c: sys->et_lp rows of model versions >= 16 */
 /* F2 enemy spawner (pc/glue/spawn_glue.c): its textures go with the room's / with everything */

@@ -26,6 +26,17 @@ CheatState g_cheat = { .give_count = 1 };
    the path of the game's own unlimited weapons (no count check, no decrement) */
 int pc_inf_ammo(void) { return g_cheat.inf_ammo; }
 
+/* test aid RECVX_TEST_READ_HOLD=n: each room file takes n more frames to read (system.c), as from the disc or
+   while the PS2 waits for a pad's vibration to end (VibWait): rom stays cleared (bhInitRoom) that long */
+int pc_test_read_hold(void)
+{
+    static int n = -1, k;
+    if (n < 0) n = getenv("RECVX_TEST_READ_HOLD") ? atoi(getenv("RECVX_TEST_READ_HOLD")) : 0;
+    if (++k <= n) return 1;
+    k = 0;
+    return 0;
+}
+
 /* noclip: player.c bhControlPlayer skips the enemy push (flg 0x8) and the wall check (0x10,
    which also does slopes) for the returned flags. Walking never changes the height otherwise
    (no gravity; height comes from the room's floor levels), so the player stays at its height.

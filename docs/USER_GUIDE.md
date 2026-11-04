@@ -345,7 +345,7 @@ Shown once you have imported another language (title menu, IMPORT, or F9; see LA
 | Language | English | the game's text, from the next screen; change it on the title screen |
 | Subtitles | Off | cutscene subtitles in any installed language that has them |
 | Translated Pictures | Off | pictures with writing (menus, maps, labels) in the language. Off: the English ones, which an HD pack can replace |
-| Translated Voices | On | the language's title screen call, where its disc has one |
+| Translated Title Call | On | the language's title screen call, where its disc has one |
 | Translated Overlay Windows | Off | the F1, F2, F3 and F9 windows in the language. Off: they stay English; the game's own menus are translated either way |
 
 ### Controls
