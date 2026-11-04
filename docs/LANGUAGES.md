@@ -27,7 +27,7 @@ is imported.
 | 5. Our own texts: `tr()`, the table (French, German, Spanish, Japanese, Russian, Turkish, Brazilian Portuguese, Arabic, Korean, Italian), the game fonts' letters (glyphs.c, ctest `lang`), the overlay's fonts; Arabic: joined forms and right-to-left order (`lang_shape`) | done (about 1400 texts) |
 | 6. Verification | done: runs per language (below), layout check identical, Linux and Windows builds, ctest |
 | 7. Movies and the opening's text crawl (see "Movies") | done: the Russian and Brazilian Portuguese text crawl, the Japanese movies' logo; no disc has a movie with translated text |
-| 8. Voices (see "Voices"), Translated Voices | done: the title call of the Japanese, Korean and Italian discs; no disc has dubbed dialogue |
+| 8. Voices (see "Voices"), Translated Title Call | done: the title call of the Japanese, Korean and Italian discs; no disc has dubbed dialogue |
 
 Resume notes: research scripts (Python, capstone in a venv), the translation pipeline and the runs are in the job
 folders `/home/dev/.claude/jobs/c1d3e63f/lang/` (European), `lang2/` (Russian, Japanese: `x/ru`, `x/jp` hold the
@@ -543,7 +543,7 @@ are. The European English is not installed: its text is the US text, and it has 
   language's. The rooms and movies of the language's folder (`RM_0000.RDX`: the opening's text crawl; `MOVIE/`: the
   Japanese logo) are pictures too (`picture_whole`): with it off, the disc's. It applies to the files loaded next (the
   next screen, the next room, the next movie).
-- **Translated Voices** (LANGUAGE, under Translated Pictures, shown when an imported language has a sound
+- **Translated Title Call** (LANGUAGE, under Translated Pictures, shown when an imported language has a sound
   of its own: `lang_has_voices`, its folder has `ADV.AFS/3`; ini `translated_voices`, default 1 since 2026-11-03): On plays the
   language's title call (`pc_lang_file_dir`: `ADV.AFS/3` follows this setting, not Translated Pictures); Off the disc's.
   `ADXT_StartAfs` streams it from the file (the log's `adxt: start 3/3 ... from <folder>/ADV.AFS/3`), as a mods
@@ -613,7 +613,7 @@ are. The European English is not installed: its text is the US text, and it has 
   `/4` (the title's texture 1, OPTION's texture 0; past the mods and language folders; reread when the screen changes)
   and makes it the current texture list for the letters.
 - **Language** (the LANGUAGE page, F1 and ENHANCED SETTINGS; the page, after GAMEPLAY, is shown only with an imported
-  language, `settings_page_shown`, and holds Language, Subtitles, Translated Pictures, Translated Voices and Translated
+  language, `settings_page_shown`, and holds Language, Subtitles, Translated Pictures, Translated Title Call and Translated
   Overlay Windows): English and the installed languages in their own
   names; locked "No other language is installed." or, in a game, "Change it on the title screen." It applies from
   the next screen: leaving OPTION reloads the title in the new language, a game start reads the system messages and

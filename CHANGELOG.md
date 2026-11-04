@@ -4,7 +4,7 @@
 
 ### New
 
-- **Translated Voices**: with Japanese, Korean or Italian imported, the title screen's call is played in that
+- **Translated Title Call**: with Japanese, Korean or Italian imported, the title screen's call is played in that
   language. A new setting can turn it off.
 - **Dithering**: a new display setting smooths the visible color steps in dark fog, light gradients and glows.
 

@@ -276,7 +276,7 @@ static int picture_whole(const char* name)
     return !strncmp(name, "MOVIE/", 6) || (n > 4 && !strcasecmp_(name + n - 4, ".RDX"));
 }
 /* a language's sound (docs/LANGUAGES.md "Voices"): the title call, ADV.AFS/3 (adv.c TitleCall), the one sound a
-   language's disc changes (Japanese and Korean: the Japanese release's, Italian: the patch's); Translated Voices plays it */
+   language's disc changes (Japanese and Korean: the Japanese release's, Italian: the patch's); Translated Title Call plays it */
 int g_lang_voices = 1;   /* (on by default: only the title call differs on any disc) */
 static int voice_file(const char* name) { return !strcmp(name, "ADV.AFS/3"); }
 /* the language of a file the game is about to read: its folder (NULL: the disc's) */
