@@ -51,7 +51,7 @@ void pc_biorand_stamp(void)
     if (sys) words(&sys->itm[BR_W]);
 }
 
-/* sub1.c ItemBoxChange: BioRand places the Security Card/File and Crystal anywhere, so Claire may box them */
+/* sub1.c ItemBoxChange: BioRand places key items anywhere, so Claire may box the Security Card/File and Crystal, and take key items out of the box in the Antarctic mansion study (9/26) */
 int pc_biorand_box_any(void) { return biorand_active(); }
 
 /* ps2_LoadScreen.c and the lobby: the save just read (card bytes from sys->version) decides this game's BioRand state

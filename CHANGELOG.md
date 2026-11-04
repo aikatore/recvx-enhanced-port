@@ -24,6 +24,8 @@
 
 ### Fixes
 
+- **BioRand: key items in the Antarctic study**: in a BioRand game Claire can take key items out of the item box
+  in the Antarctic mansion study instead of being told they are left for Chris.
 - **Third-person keys in menus**: with Free Camera, W, A, S and D move the cursor in every direction in the item
   box, files, map and other menus, not only up, and the mouse wheel scrolls the item box without lagging.
 - **Floating models at the widescreen edges**: a few display pieces, such as the model ship in the Gold Luger
