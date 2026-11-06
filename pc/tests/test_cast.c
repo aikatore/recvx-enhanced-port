@@ -297,6 +297,38 @@ int main(void)
               voice_model_chr(ACTOR_PART + 4) == 0 && voice_model_chr(17) == -1 && voice_model_chr(14) == -1 && voice_model_chr(ACTOR_MODELS) == -1 &&
               voice_model_chr(CAST_ZOMBIES) == -1);   /* Steve, Wesker's event model, Rodrigo, files, the Tyrant, the hazmat man, an import */
     }
+    {   /* an enemy model's sounds in place of a line (voices.c voice_creature, voice_creature_seq) */
+        unsigned char pr[64], pick[16], pick2[16];
+        int room = 0, n, k, m, at[16], at2[16], len[3] = { 400, 1200, 700 }, seen = 0;
+        for (m = 0; m < ACTOR_MODELS && strcmp(actor_models[m].name, "Zombie: Prisoner"); m++);   /* (RM_5520, model 0: moans 48..51) */
+        CHECK(m < ACTOR_MODELS && voice_creature(m, 0, &room, pr, 64) == 4 && room == 5520 && pr[0] == 48 && pr[3] == 51);
+        CHECK(voice_creature(m, 1, &room, pr, 64) == 44 && room == 5520 && pr[0] == 20 && pr[43] == 63);
+        CHECK(voice_creature(m, 2, &room, pr, 64) == 44 && room == 30 && !voice_creature(m, 3, &room, pr, 64));
+        for (m = 0; m < ACTOR_MODELS && strcmp(actor_models[m].name, "Zombie: Soldier"); m++);   /* (model 2: 20..23) */
+        CHECK(m < ACTOR_MODELS && voice_creature(m, 0, &room, pr, 64) == 4 && room == 1070 && pr[0] == 20);
+        for (m = 0; m < ACTOR_MODELS && actor_models[m].id != 52; m++);   /* a scripted zombie: any moans of its room */
+        CHECK(m < ACTOR_MODELS && voice_creature(m, 0, &room, pr, 64) == 44 && room == actor_models[m].room);
+        for (m = 0; m < ACTOR_MODELS && strcmp(actor_models[m].name, "Zombie: Bandaged 2"); m++);   /* (its room's bank is the spiders') */
+        CHECK(m < ACTOR_MODELS && voice_creature(m, 0, &room, pr, 64) == 44 && room == 30);
+        for (m = 0; m < ACTOR_MODELS && actor_models[m].id != 4; m++);
+        CHECK(m < ACTOR_MODELS && voice_creature(m, 0, &room, pr, 64) == 8 && room == 3020 && pr[0] == 2 && !voice_creature(m, 1, &room, pr, 64));
+        for (m = 0, k = 0; m < ACTOR_MODELS; m++)   /* every creature and zombie has sounds, the fish, the hazmat man and the story cast none */
+            if (voice_creature(m, 0, &room, pr, 64) > 0) k++;
+            else CHECK(actor_models[m].id == 8 || actor_models[m].id == 99 || cast_character(actor_models[m].id, actor_models[m].mdlver) >= 0);
+        CHECK(k == 46 && !voice_creature(ACTOR_PART + 1, 0, &room, pr, 64) && !voice_creature(ACTOR_MODELS, 0, &room, pr, 64) && !voice_creature(m - 1, 0, &room, pr, 8));
+        for (s = 0; s < 64; s++) {   /* deterministic, from 0 ms on, filling the line, never the same twice in a row */
+            n = voice_creature_seq((unsigned)s, 1020, 1, 40 + s % 3, len, 3, 5000, pick, at, 16);
+            CHECK(n > 1 && n == voice_creature_seq((unsigned)s, 1020, 1, 40 + s % 3, len, 3, 5000, pick2, at2, 16) && !memcmp(pick, pick2, (size_t)n) &&
+                  !memcmp(at, at2, sizeof(int) * (size_t)n) && at[0] == 0);
+            CHECK(at[n - 1] < 5000 - 250 && at[n - 1] + len[pick[n - 1]] + 300 >= 5000 - 250);
+            for (k = 1; k < n; k++) CHECK(at[k] >= at[k - 1] + len[pick[k - 1]] + 60 && (pick[k] != pick[k - 1] || len[pick[k]] == 400));
+            for (k = 0; k < n; k++) seen |= 1 << pick[k];
+            CHECK(voice_creature_seq((unsigned)s, 1020, 1, 40, len, 3, 400, pick, at, 16) == 1 && pick[0] == 0);   /* (a short line: the one that fits) */
+            CHECK(voice_creature_seq((unsigned)s, 1020, 1, 40, len, 3, 900, pick, at, 16) >= 1 && pick[0] != 1);
+        }
+        CHECK(seen == 7 && voice_creature_seq(1, 1020, 1, 40, len, 3, 0, pick, at, 16) == 1 && voice_creature_seq(1, 1020, 1, 40, len + 1, 2, 300, pick, at, 16) == 1 &&
+              pick[0] == 1 && voice_creature_seq(1, 1020, 1, 40, len, 1, 60000, pick, at, 16) == 16 && !voice_creature_seq(1, 1020, 1, 40, len, 0, 5000, pick, at, 16));
+    }
     printf("cast: ok\n");
     return 0;
 }
