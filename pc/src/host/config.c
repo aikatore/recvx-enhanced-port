@@ -110,6 +110,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "cast_models", &g_enemy_opts.cast_all, 0, 2 },     /* characters: 0 cutscene models, 1 all models, 2 custom (cast_custom_off lines) */
     { "cast_assign", &g_enemy_opts.cast_assign, 0, 1 },  /* 0 fixed per character, 1 random per cutscene */
     { "cast_imports", &g_enemy_opts.cast_imports, 0, 1 },
+    { "voice_random", &g_enemy_opts.voices, 0, 1 },              /* "Randomize Voice Lines" (cast.h) */
     { "biorand_appear_models", &g_biorand_appear_pool, 0, 2 },     /* "Randomize Character Model"'s Model Selection (biorand_opts.h; appear_custom_off lines) */
     { "biorand_appear_imports", &g_biorand_appear_imports, 0, 1 }, /* ... its Include Imported Models (absent: cast_imports', as before) */
     { "subtitles", &g_subtitles, 0, 1 + LANG_COUNT },     /* cutscene subtitles: 0 off, 1 the game language's, 2 + LANG_* (lang.h) */

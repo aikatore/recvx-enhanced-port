@@ -2,6 +2,7 @@
    character's own look, different characters different models, "Random per cutscene" picking again per room. */
 #include "../src/host/cast.h"
 #include "../src/host/actors.h"
+int coop_insn_len_raw(const unsigned char* p);   /* net/coop_proto.c */
 #include <stdio.h>
 #include <string.h>
 #define CHECK(x) do { if (!(x)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); return 1; } } while (0)
@@ -260,6 +261,41 @@ int main(void)
             for (s = 0; s < 5000; s++)
                 for (c = 0; c < 3; c++) h = (h ^ (unsigned)cast_appear_pick((unsigned)s, 1, imp, NULL, c)) * 16777619u;
         CHECK(h == 0x7046d2f6u);
+    }
+    {   /* "Randomize Voice Lines" (voices.c): a room's lines by the LipSet after each VoiceOn, their lips; picks */
+        static unsigned char d[0x400];
+        static const unsigned char ev[] = { 25, 1, 5, 0, 1, 0, 0, 0, 61, 0, 1, 1, 63, 0, 1, 0,   /* VoiceOn 5 (record 0), LipSet record 1 entry 1, LipStart */
+                                            25, 1, 6, 0, 1, 0, 1, 0, 61, 0, 0, 0,                /* VoiceOn 6 (record 1), LipSet record 0 entry 0 */
+                                            25, 1, 7, 0, 1, 0, 1, 0, 25, 0, 8, 0, 1, 0, 0, 0,    /* VoiceOn 7 without one, VoiceOn 8 (kind 0) */
+                                            61, 0, 0, 2, 255, 0 };                               /* a LipSet of a missing entry; EvtEnd */
+        static const unsigned char lips[] = { 5, 0, 0, 0, 1, 10, 2, 20, 0xFF, 3, 0, 0, 0, 3, 30, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+        const VoiceLine *l, *a;
+        int rec = -1, k;
+        unsigned w[] = { 0x10, 0x100, 0x18, 0x200, 0x1C, 0x300, 0x108, 0x180, 0x188, 2, 0x210, 0x280, 0x300, 0x0C, 0x304, 0x0E, 0x308, 0x10 };
+        for (k = 0; k < (int)(sizeof w / sizeof w[0]); k += 2) memcpy(d + w[k], &w[k + 1], 4);
+        d[0x180 + 4] = 93; d[0x180 + 0x24 + 4] = 91;   /* record 0 Steve, 1 Claire */
+        memcpy(d + 0x280, lips, sizeof lips);
+        memcpy(d + 0x310, ev, sizeof ev);
+        CHECK(voice_count(0) == -1 && !voice_pick(1, 1020, 1, 5, 0));   /* (not read yet) */
+        CHECK(voice_lipset(ev + 8, 64, coop_insn_len_raw, &rec) == 1 && rec == 1 && voice_lipset(ev + 36, 64, coop_insn_len_raw, &rec) == -1);
+        voice_scan_room(1020, d, sizeof d, coop_insn_len_raw);
+        voice_scan_room(1020, d, sizeof d, coop_insn_len_raw);   /* (the same lines again: once) */
+        voice_scan_room(9000, d, sizeof d, coop_insn_len_raw);   /* (the other disc's archive: other lines) */
+        voice_scan_done();
+        CHECK(voice_count(0) == 2 && voice_count(2) == 2 && voice_count(1) == 0 && voice_count(3) == 0);
+        l = voice_line(0, 0);
+        CHECK(l && l->vid == 5 && l->disc == 1 && l->room == 1020 && l->lip_n == 3 && l->lip[0] == 3 && l->lip[2] == 0xFF);
+        l = voice_line(2, 1);
+        CHECK(l && l->vid == 6 && l->disc == 2 && l->room == 9000 && l->lip_n == 5 && l->lip[3] == 20 && !voice_line(2, 2));
+        for (s = 0, k = 0; s < 64; s++) {   /* deterministic, of the character asked for, both lines in use */
+            a = voice_pick((unsigned)s, 1020, 1, 40, 2);
+            CHECK(a && a->chr == 2 && a == voice_pick((unsigned)s, 1020, 1, 40, 2));
+            k |= 1 << (a->disc - 1);
+        }
+        CHECK(k == 3 && !voice_pick(1, 1020, 1, 40, 1) && !voice_pick(1, 1020, 1, 40, 7));
+        CHECK(voice_model_chr(3) == 2 && voice_model_chr(7) == 3 && voice_model_chr(13) == 6 && voice_model_chr(ACTOR_PART + 3) == 3 &&
+              voice_model_chr(ACTOR_PART + 4) == 0 && voice_model_chr(17) == -1 && voice_model_chr(14) == -1 && voice_model_chr(ACTOR_MODELS) == -1 &&
+              voice_model_chr(CAST_ZOMBIES) == -1);   /* Steve, Wesker's event model, Rodrigo, files, the Tyrant, the hazmat man, an import */
     }
     printf("cast: ok\n");
     return 0;

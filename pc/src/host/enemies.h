@@ -10,7 +10,7 @@ extern "C" {
                                    eligible records of a retail room is 7 (RM_5680) */
 #define ENEMY_TYPES_MAX 8       /* "Types per Room": 1..8, 0 no limit */
 #define ENEMY_RATE_MAX 10       /* a kind's rate under "Custom": 0 (Off) .. 10 */
-#define ENEMY_RATE_N 36         /* EnemyOpts.rate: the base kinds (enemy_rate_*), then the enemy variants by variant_at index
+#define ENEMY_RATE_N 32         /* EnemyOpts.rate: the base kinds (enemy_rate_*), then the enemy variants by variant_at index
                                    (EnemyOpts fills Event's union, coop_proto.h: 80 bytes) */
 typedef struct EnemyOpts {
     int extra;                  /* 0 off, 1..ENEMY_EXTRA_MAX: up to that many extra enemies per room (types the room has) */
@@ -25,6 +25,7 @@ typedef struct EnemyOpts {
                                    the models checked in its list (cast.h cast_off; co-op: the host's, EV_CASTOFF) */
     int cast_assign;            /* 0 fixed per character (the seed), 1 random per cutscene (seed and room file) */
     int cast_imports;           /* 1: imported models too (co-op: only while both sides have the same, cast_import_id) */
+    int voices;                 /* 1: "Randomize Voice Lines": a role shown as another story character's model says that one's lines (cast.h) */
     int types;                  /* randomizer: at most this many different kinds in a room (0: no limit) */
     unsigned char rate[ENEMY_RATE_N];   /* "Custom": each kind's weight, 0..ENEMY_RATE_MAX (recvx.ini enemy_rates); picking Wild or
                                            Mild presets them (enemy_rate_preset) */

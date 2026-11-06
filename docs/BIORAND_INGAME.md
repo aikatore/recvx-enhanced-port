@@ -1182,7 +1182,22 @@ Per Character Claire Monster Steve, Chris Rodrigo, Steve Alfred), `t_pick.sh` (t
 Model, then ENHANCED SETTINGS > APPEARANCE), `t_cancel.sh` (CHARACTER MODEL, cancel: unchanged), `t_mouse.sh` (wheel,
 hover, click).
 
-### S11: Custom enemy rates, Types per Room, more extra enemies (2026-11-06)
+### S11: Randomize Voice Lines (2026-11-06)
+
+The user's request: as in the classic BioRands, a character whose cutscene model is swapped (the cutscene cast, the
+player's random or chosen look) says random lines of the character shown, with that line's mouth movements where it can.
+
+- **RANDOMIZER page**: "Randomize Voice Lines" (`g_enemy_opts.voices`, the settings table's row, `add_set`) under heading
+  CHARACTER MODEL, after Randomize Character Model's rows: it serves the cast and the character models alike. Also in
+  ENHANCED SETTINGS / F1 (GAMEPLAY, CUTSCENE CAST) and the lobby's CUTSCENE CAST page (RANDOMIZE VOICES, the host's).
+- How it works, the numbers and the limits: [ACTORS.md](ACTORS.md) "Voice lines". BioRand's own pick of the look
+  (`pc_biorand_appear`) is a look like any other: the double shown as it says its character's lines.
+
+**Tests (2026-11-06, Linux; job dir `voicerand/`, not committed):** `run.sh` with `RECVX_TEST_SCENE` (0000, 0030, 1020
+with the cast off and a player look, 9350 as Chris, 7220 per cutscene), `batch2.sh` (the same scenes off and on: the
+same scene lengths, every inserted line's lips set), `coop.sh` (host and guest in 9350 and 9370: the same lines).
+
+### S12: Custom enemy rates, Types per Room, more extra enemies (2026-11-06)
 
 The user's request: per-type rates for our enemy randomizer as BioRand's enemy sliders (Mutated Steve included), Wild and
 Mild kept as presets, a Custom choice, a limit of enemy types per room with No Limit, a higher Extra Enemies maximum, all in
@@ -1200,7 +1215,7 @@ the co-op lobby too.
   ratio sentence (already translated). The lobby opens the same list as its step 9 (from step 4's **ENEMY RATES**); a
   joining player sees the host's rates, read-only. F1 shows them as sliders under Enemy Selection.
 - Picking Wild or Mild presets the rates (`settings.c variety_set`), so Custom starts from the last preset; the rates are
-  saved as recvx.ini `enemy_rates` and go to a co-op guest with the other enemy options (`EV_EOPTS`, protocol 38).
+  saved as recvx.ini `enemy_rates` and go to a co-op guest with the other enemy options (`EV_EOPTS`, protocol 39).
 - Behaviour: docs/ENEMIES.md "Randomizer" (Custom, Types per Room) and "Extra enemies" (why 8).
 
 **Tests (2026-11-06, Linux; job dir `enemyrates/`, not committed):** `ui/t_br.sh` (the BIORAND page: keyboard into the
@@ -1279,8 +1294,9 @@ click on Mutated Steve's track, a right click back, Types per Room), `pc/tools/e
   Model on its page under headings; the player model rows with a model list on EXTRA OPTIONS). See "S9".
 - **S10 done** (2026-11-04): Randomize Character Model's own Model Selection, Custom list and Include Imported
   Models; EXTRA OPTIONS' model rows open the lobby's model page with its preview. See "S10".
-- **S11 done** (2026-11-06): Custom enemy rates (Enemy Selection Custom, the Enemy Rates list), Types per Room, Extra
-  Enemies up to 8; in the lobby too. See "S11".
+- **S11 done** (2026-11-06): Randomize Voice Lines on the RANDOMIZER page (and the lobby, ENHANCED SETTINGS). See "S11".
+- **S12 done** (2026-11-06): Custom enemy rates (Enemy Selection Custom, the Enemy Rates list), Types per Room, Extra
+  Enemies up to 8; in the lobby too. See "S12".
 - **STATUS: All steps done; open: Windows real-machine test list** ("S6", "Windows real-machine test list").
 - The job-dir tools (not committed): S5b's `s5b/` (`co.sh`, `scen.sh`, `mkpack.sh`, `build.sh`); S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
   encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").

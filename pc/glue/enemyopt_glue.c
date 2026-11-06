@@ -61,6 +61,7 @@ __attribute__((constructor)) static void opts_env(void)
     if (e && strstr(e, "custom")) g_enemy_opts.cast_all = 2;   /* (the models: recvx.ini cast_custom_off) */
     if (e && strstr(e, "random")) g_enemy_opts.cast_assign = 1;
     if (e && strstr(e, "imports")) g_enemy_opts.cast_imports = 1;
+    if ((e = getenv("RECVX_VOICES"))) g_enemy_opts.voices = atoi(e) != 0;   /* "Randomize Voice Lines" */
 }
 
 const EnemyOpts* enemy_opts(void)
@@ -79,9 +80,10 @@ void enemy_opts_from_host(const EnemyOpts* o)
     if (!o) { kept_n = 0; memset(host_off, 0, sizeof(host_off)); }   /* (enemy_rand_kept, EV_CASTOFF: the host's go with its session) */
     if (o) {
         host_opts = *o;
-        host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s, types per room %d%s, rates %s), seed %d, cutscene cast %d (%s, %s%s)\n",
+        host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s, types per room %d%s, rates %s), seed %d, cutscene cast %d (%s, %s%s), voice lines %d\n",
                  o->extra, o->place, o->rand, variety_name(o->variety), o->types, o->events ? ", event enemies" : "", rates_line(o->rate), o->seed, o->cast,
-                 o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models", o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "");
+                 o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models", o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "",
+                 o->voices);
     }
 }
 
@@ -278,7 +280,7 @@ _Static_assert(KINDS < ENEMY_RATE_N, "EnemyOpts.rate");
 static int kind_of(int id) { for (int i = 0; i < KINDS; i++) if (kinds[i].id == id) return i; return -1; }
 
 /* "Custom"'s rates (enemies.h): EnemyOpts.rate[i] for kinds[i], then rate[KINDS + j] for variant_at(j), listed when the
-   variant has a randomizer weight. ponytail: variants past ENEMY_RATE_N - KINDS (26) have no rate and "Custom" never places
+   variant has a randomizer weight. ponytail: variants past ENEMY_RATE_N - KINDS (22) have no rate and "Custom" never places
    them; more needs a co-op event of their own (EnemyOpts fills Event's union). */
 static int vrate(int j) { return j < ENEMY_RATE_N - KINDS ? KINDS + j : -1; }
 static int listed(int j) { const EnemyVariant* v = variant_at(j); return v && (v->wild || v->mild) && vrate(j) >= 0; }

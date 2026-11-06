@@ -4,6 +4,9 @@
 
 ### New
 
+- **Randomize Voice Lines**: in cutscenes, a character shown as another story character speaks random lines of
+  that character, with the matching mouth movements. Lines can repeat and may not fit the scene. Off by default;
+  on the BioRand RANDOMIZER page, in the multiplayer lobby and in the Enhanced Settings.
 - **Custom enemy rates**: Randomizer Variety is now Enemy Selection, with a third choice, Custom. It sets how often
   each enemy type is chosen, Mutated Steve included, from off to very often, like BioRand's enemy sliders. Picking
   Wild or Mild first fills in their rates as a start. Also on the multiplayer lobby's randomizer page.
@@ -18,6 +21,7 @@
 - Claire's ponytail no longer hangs behind another model shown in her place in cutscenes.
 - Killed Extra Enemies no longer come back when a room is entered again, and a room keeps the same extra
   enemies on every visit.
+- In third person, holding a movement key through a door keeps walking in the new room again.
 
 ## 0.7.4 (2026-11-04)
 

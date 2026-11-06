@@ -210,8 +210,8 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   (`spawn_replay`); a door clears them on both sides. Randomizer records the host had to keep go
   along as notes marked `SPAWN_NOTE_KEPT`.
 * **The host's enemy options** go to the guest as `EV_EOPTS` (session start, before the game
-  state, on change) and replace the guest's: with protocol 38 also Types per Room and Custom's
-  36 rates, which fill the event's 80 bytes (`EnemyOpts`; the lobby shows the guest the host's
+  state, on change) and replace the guest's: with protocol 39 also Types per Room and Custom's
+  32 rates, which fill the event's 80 bytes (`EnemyOpts`; the lobby shows the guest the host's
   rates read-only). Placements and the randomizer depend only on the room
   file and the seed, so both sides make the same records in the same slots. The guest never spawns
   (F2 refuses there).
@@ -621,7 +621,7 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
   nothing else with a rate fits): an Off zombie still appears where the room's own zombie stays.
   Fliers become fliers as in Wild (both at Off: they stay). Picking Wild or Mild presets the
   rates to that variety's weights (variants capped at 10), so Custom starts from the last one
-  picked. Variants past the 26th have no rate and are not placed by Custom (the rates fill the
+  picked. Variants past the 22nd have no rate and are not placed by Custom (the rates fill the
   co-op event, see "Co-op").
 * **Types per Room** (`enemy_types`, 1..8, default No Limit): at most that many kinds in a room.
   The records that keep their type count first; then, in record order, once the room has that

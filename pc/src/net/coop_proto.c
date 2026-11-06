@@ -262,7 +262,7 @@ int coop_check_event(const Event* e, int from_host)
             if (e->u.eo.rate[k] > ENEMY_RATE_MAX) return COOP_BAD_FIELD;
         return e->u.eo.extra >= 0 && e->u.eo.extra <= ENEMY_EXTRA_MAX && (unsigned)e->u.eo.place <= 1 && (unsigned)e->u.eo.rand <= 1 && e->u.eo.seed >= 0 &&
                (unsigned)e->u.eo.variety <= 2 && (unsigned)e->u.eo.events <= 1 && (unsigned)e->u.eo.cast <= 1 && (unsigned)e->u.eo.cast_all <= 2 &&
-               (unsigned)e->u.eo.cast_assign <= 1 && (unsigned)e->u.eo.cast_imports <= 1 && (unsigned)e->u.eo.types <= ENEMY_TYPES_MAX ? COOP_OK : COOP_BAD_FIELD;
+               (unsigned)e->u.eo.cast_assign <= 1 && (unsigned)e->u.eo.cast_imports <= 1 && (unsigned)e->u.eo.voices <= 1 && (unsigned)e->u.eo.types <= ENEMY_TYPES_MAX ? COOP_OK : COOP_BAD_FIELD;
     case EV_FX:   /* (a burst: Event.idx is not read) */
         if (e->u.fx.id == FX_BURST) {   /* counts and times bounded (the effect loops over them), floats finite */
             const uint32_t* w = e->u.fxr.w;

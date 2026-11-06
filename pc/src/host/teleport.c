@@ -14,6 +14,7 @@
 #include "../audio/audio.h"
 #include "cheat.h"
 #include "biorand.h"
+#include "cast.h"
 #include "../../include/pc_parse.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -25,6 +26,7 @@ unsigned int RoomNameSwitch(unsigned int name); /* bup_00.c: stage * 100 + room 
 extern int g_dev_tools;
 void devcat_scan_room(int room, const unsigned char* d, int n);   /* --dev scene list (devcine_glue.c): each file as read */
 void devcat_scan_done(void);
+int coop_insn_len_raw(const unsigned char* p);   /* net/coop_proto.c */
 
 enum { TP_SRC = 4, MAX_FILES = 1024 };
 typedef struct Row {
@@ -288,6 +290,7 @@ static int SDLCALL scan(void* ud)
         if (n < 0 || (m = pc_prs_expand(in, n, &out, &cap)) < 0x80) { bad++; host_log("teleport: cannot read %s%s\n", f[i].mod ? "mods/" : "", f[i].name); continue; }
         parse(out, m, at[file_key(f[i].name)]);
         if (g_dev_tools) devcat_scan_room(atoi(f[i].name + 3), out, (int)m);
+        voice_scan_room(atoi(f[i].name + 3), out, (int)m, coop_insn_len_raw);   /* "Randomize Voice Lines"' catalogue (cast.h) */
     }
     for (i = 0; i < nrows; i++) {
         const Row* r = &rows[i];
@@ -306,6 +309,9 @@ static int SDLCALL scan(void* ud)
     fclose(iso);
     free(f); free(out); free(in);
     if (g_dev_tools) devcat_scan_done();
+    voice_scan_done();
+    host_log("voices: lines with mouth movements: Claire %d, Chris %d, Steve %d, Wesker %d, Alfred %d, Alexia %d, Rodrigo %d\n", voice_count(0),
+             voice_count(1), voice_count(2), voice_count(3), voice_count(4), voice_count(5), voice_count(6));
     __atomic_store_n(&state, 2, __ATOMIC_RELEASE);
     return 0;
 }
