@@ -210,7 +210,9 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   (`spawn_replay`); a door clears them on both sides. Randomizer records the host had to keep go
   along as notes marked `SPAWN_NOTE_KEPT`.
 * **The host's enemy options** go to the guest as `EV_EOPTS` (session start, before the game
-  state, on change) and replace the guest's. Placements and the randomizer depend only on the room
+  state, on change) and replace the guest's: with protocol 39 also Types per Room and Custom's
+  32 rates, which fill the event's 80 bytes (`EnemyOpts`; the lobby shows the guest the host's
+  rates read-only). Placements and the randomizer depend only on the room
   file and the seed, so both sides make the same records in the same slots. The guest never spawns
   (F2 refuses there).
 * **Targets** (host, `coop_proto.c coop_pick_target`): each enemy goes for one player at a time:
@@ -511,11 +513,13 @@ count for both. Code: `pc/glue/enemyopt_glue.c`, one decomp hook at the end of
 
 | Setting (page) | ini key | Values | Test aid |
 |---|---|---|---|
-| "Extra Enemies" (GAMEPLAY) | `enemy_extra` | 0 = Off, 1..3 = "Up to N" | `RECVX_ENEMY_EXTRA` |
+| "Extra Enemies" (GAMEPLAY) | `enemy_extra` | 0 = Off, 1..8 = "Up to N" | `RECVX_ENEMY_EXTRA` |
 | "Rearranged Enemies" (GAMEPLAY) | `enemy_place` | 0/1 | `RECVX_ENEMY_PLACE` |
 | "Enemy Randomizer" (GAMEPLAY) | `enemy_random` | 0/1 | `RECVX_ENEMY_RANDOM` |
 | "Enemy Seed" (GAMEPLAY) | `enemy_seed` | seed for placements and randomizer | `RECVX_ENEMY_SEED` |
-| "Randomizer Variety" (GAMEPLAY) | `enemy_variety` | 0 = Mild, **1 = Wild** | `RECVX_ENEMY_VARIETY` |
+| "Enemy Selection" (GAMEPLAY) | `enemy_variety` | 0 = Mild, **1 = Wild**, 2 = Custom | `RECVX_ENEMY_VARIETY` |
+| Custom's rates (BIORAND screen and lobby RANDOMIZER pages, F1) | `enemy_rates` line: `id:rate` per kind by type id, `vID:rate` per variant | 0 (Off)..10 | `RECVX_ENEMY_RATES` (same text) |
+| "Types per Room" (GAMEPLAY) | `enemy_types` | **0 = No Limit**, 1..8 | `RECVX_ENEMY_TYPES` |
 | "Randomize Event Enemies" (GAMEPLAY) | `enemy_random_events` | 0/**1** | `RECVX_ENEMY_EVENTS` |
 | "Randomize Cutscene Cast" and its page (GAMEPLAY, CUTSCENE CAST) | `cast_random`, `cast_models`, `cast_assign`, `cast_imports`, `cast_custom_off` lines | the story characters drawn as other models in cutscenes, visual only (no enemy is touched): [ACTORS.md](ACTORS.md) "Cutscene cast" | `RECVX_CAST` |
 
@@ -545,6 +549,14 @@ from the game's `rand()`.
   hide (no `EneSetCk`, e.g. the Battle Game's rooms) comes back with the room, as that record does.
   "All dead" counts ignore extras.
 * Budgets are the spawner's; a room that runs out stops adding.
+* **Up to 8**: one extra per record at most, because each needs its own dead flag (512 + the
+  record's kill bit: the whole free range), so a room never gets more extras than it has unmarked
+  records of those types. The most any retail room has is 7 (RM_5680; 5530, 5580, 5630 and 5640
+  have 6), so 8 gives every one of them its copy. Each spawn still checks the spawner's budgets
+  (enemy slots with 6 left free of 255, room memory, the 32 MB spawn pool, texture entries) and
+  the room stops adding at the first refusal; the extras of a type the room already has upload
+  no textures. Nothing else grows: the room's list of extras and dead flags is 8 entries, the
+  co-op list of added enemies 64, the guest's pending ones 64.
 
 ### Rearranged placements
 
@@ -603,6 +615,24 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
   drawn in this room first, then a look not yet used in this room. *Mild* draws two kinds per
   room (no Tyrant, Giant Black Widow or fliers) and alternates between them; if neither fits a
   record, any Mild kind that does.
+* **Custom** (Enemy Selection's third choice, as BioRand's enemy ratio sliders): each kind's
+  weight is its rate, Off or 1..10 (`EnemyOpts.rate`, recvx.ini `enemy_rates`), one per kind
+  above and per variant with a randomizer weight (Mutated Steve too). The kinds' rules stay; a
+  record draws from the kinds that fit it by rate alone (no "unused kinds first"), so a kind at
+  10 among kinds at 1 takes most records, and a kind at Off is never placed. Records that cannot
+  change keep their type (event-driven records, single-look types, boss rooms, a record where
+  nothing else with a rate fits): an Off zombie still appears where the room's own zombie stays.
+  Fliers become fliers as in Wild (both at Off: they stay). Picking Wild or Mild presets the
+  rates to that variety's weights (variants capped at 10), so Custom starts from the last one
+  picked. Variants past the 22nd have no rate and are not placed by Custom (the rates fill the
+  co-op event, see "Co-op").
+* **Types per Room** (`enemy_types`, 1..8, default No Limit): at most that many kinds in a room.
+  The records that keep their type count first; then, in record order, once the room has that
+  many kinds a record draws only among them (if one of them fits it), else as before. A room
+  can only go over the limit when a record fits none of its kinds (a bat record among ground
+  kinds: fliers stay fliers), logged as `over it` on the room's line. Extra enemies copy records,
+  so they never add a kind. It depends only on the options, the room file and the draws (the
+  same on every visit and on both co-op sides).
 * **Variants**: a record that keeps its type (another look) keeps its variant (an event's pose, a
   lying zombie); another kind gets variant 0 (free-roaming).
 * **Slots**: all records are counted with what their Inits spawn; a change may only add up to 122
@@ -767,6 +797,12 @@ types). *Another kind*: the script only shows or hides them. *Another look*: an 
 `pc/tools/enemy_revisit_check.sh OUT [SEED...]` (headless, about 7 minutes): a new game visits twelve
 rooms twice with the randomizer, placements and three extras on, killing everything (and once only the
 records); every room must get the same records and extras on both visits, and nothing killed may come back.
+`EXTRA=8` raises the extras; the other `RECVX_ENEMY_*` (Custom, its rates, Types per Room) pass through.
+
+`pc/tools/enemy_rates_check.sh OUT [SEED...]` (headless, about 3 minutes): a new game tours 22 rooms per
+seed with eight extras, once with Custom rates (zombies Off, Cerberus 10, the rest 1: no record may become a
+zombie, Cerberus must take most ground records), once Wild with Types per Room 1 and once Custom with
+Types per Room 2 (no room over its limit unless logged, every extra of a type the room's records have).
 
 Test aids:
 
@@ -774,7 +810,7 @@ Test aids:
 |---|---|
 | `RECVX_SPAWN="gameframe:id[.mdlver][@dist],..."` | spawns the first spawner entry of that type/model version at that game frame (`v<id>`: an enemy variant); traces its state every 30 frames, HP changes and hits on the player |
 | `RECVX_SPAWN_SURVEY="stg:rom,..."` | tries every spawner entry in each room and logs the result; `RECVX_SPAWN_SURVEY_ALL=1` keeps the spawns |
-| `RECVX_ENEMY_EXTRA`, `_PLACE`, `_RANDOM`, `_SEED`, `_VARIETY`, `_EVENTS` | override the enemy options |
+| `RECVX_ENEMY_EXTRA`, `_PLACE`, `_RANDOM`, `_SEED`, `_VARIETY`, `_EVENTS`, `_TYPES`, `_RATES` | override the enemy options (`_RATES` as the `enemy_rates` line) |
 | `RECVX_ENEMY_KILL=n[:r\|:x]` | from n game frames into each room, every 20 frames each living, shown enemy of the room's records and its extra enemies (ids 1..30, in its AI) takes a heavy hit as from the player's weapon (the knife's without one: weapons 0 and 1, none and the lighter, never hit in the game; `:r` only the records, `:x` only the extras); logs the living ones at frame n, each death (`flg & 2`, what `DieCk` turns into the kill bit) and per room how many died (Black Widows take damage through their body parts and do not die from it) |
 | `RECVX_HEADSHOT=n` | n game frames into each room, every living zombie in its AI (records and added ones) takes one head hit as from the magnum (weapon 6 on joint 11, the game's burst path); its head state (`exp0 + 0x78`), hp and modes are logged every 15 frames for 90 frames |
 | `RECVX_ENEMY_TRACE=dist` | traces enemy steps (co-op targets) |

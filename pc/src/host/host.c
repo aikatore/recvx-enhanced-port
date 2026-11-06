@@ -12,6 +12,7 @@
 #include "bindings.h"
 #include "settings.h"
 #include "biorand.h"
+#include "enemies.h"
 #include "../import/import.h"
 #include "lang.h"
 extern char g_lang_us_iso[1024];   /* import/lang.c */
@@ -355,7 +356,7 @@ int main(int argc, char** argv)
 #endif
     config_load();
     parse_args(argc, argv);   /* command line overrides the saved settings */
-    { extern void variants_load(void); variants_load(); }   /* mods/enemies.ini: custom enemies (variants.h) */
+    { extern void variants_load(void); variants_load(); enemy_rates_load(); }   /* mods/enemies.ini: custom enemies (variants.h), then "Custom"'s rates of them (enemies.h) */
     biorand_scan();   /* mods/biorand: BioRand's pack (biorand.h) */
     if (SDL_getenv("RECVX_IMPORT")) {   /* headless import (docs/IMPORT_OUTBREAK.md): RECVX_IMPORT=outbreak2, then exit */
         int src = -1, what = SDL_getenv("RECVX_IMPORT_WHAT") ? atoi(SDL_getenv("RECVX_IMPORT_WHAT")) : IMPORT_PLAYERS;

@@ -99,11 +99,12 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "input_source", &g_input_source, 0, 2 },            /* INPUT_*: Auto, Keyboard/mouse only, Gamepad only */
     { "input_pad", &g_input_pad, 0, 4 },                  /* 0 any gamepad, n player n's (bindings.c) */
     { "fixed_cam_controls", &g_modern_on, 0, 2 },        /* fixed cameras: 0 classic (tank), 1 modern (camera-relative), 2 combined */
-    { "enemy_extra", &g_enemy_opts.extra, 0, 3 },        /* enemy options (docs/ENEMIES.md "Enemy options") */
+    { "enemy_extra", &g_enemy_opts.extra, 0, ENEMY_EXTRA_MAX },   /* enemy options (docs/ENEMIES.md "Enemy options") */
     { "enemy_place", &g_enemy_opts.place, 0, 1 },
     { "enemy_random", &g_enemy_opts.rand, 0, 1 },
     { "enemy_seed", &g_enemy_opts.seed, 0, 0x7FFFFFFF },
-    { "enemy_variety", &g_enemy_opts.variety, 0, 1 },    /* 0 Mild, 1 Wild */
+    { "enemy_variety", &g_enemy_opts.variety, 0, 2 },    /* 0 Mild, 1 Wild, 2 Custom (enemy_rates line) */
+    { "enemy_types", &g_enemy_opts.types, 0, ENEMY_TYPES_MAX },   /* Types per Room, 0 no limit */
     { "enemy_random_events", &g_enemy_opts.events, 0, 1 },
     { "cast_random", &g_enemy_opts.cast, 0, 3 },         /* cutscene cast (docs/ACTORS.md "Cutscene cast"): 0/1 (an older 2, Enemies, is off; 3, Both, on: config_load) */
     { "cast_models", &g_enemy_opts.cast_all, 0, 2 },     /* characters: 0 cutscene models, 1 all models, 2 custom (cast_custom_off lines) */
@@ -211,6 +212,7 @@ void config_load(void)
         else if (sscanf(line, " biorand_cli_digest = %71s", g_biorand_cli_digest) == 1) continue;   /* the installed BioRand CLI (biorand_dl.h) */
         else if (sscanf(line, " update_skip = %31s", g_update_skip) == 1) continue;   /* SKIP THIS VERSION (update.h) */
         else if (sscanf(line, " biorand_seed = %71s", g_biorand_seed) == 1) continue;   /* the BioRand generator's options (biorand_opts.h), checked when used */
+        else if (!strncmp(line, "enemy_rates =", 13)) { line[strcspn(line, "\r\n")] = 0; enemy_rates_ini(line + 13 + strspn(line + 13, " ")); continue; }   /* "Custom"'s rates (enemies.h), applied once the variants are known */
         else if (sscanf(line, " biorand_appear = %d", &g_biorand_appear) == 1) { g_biorand_appear = g_biorand_appear == 2 ? 2 : g_biorand_appear != 0; continue; }   /* "Randomize Played as" (biorand_opts.h) */
         else if (sscanf(line, " dev_cutscene_overlay = %d", &g_devcine_show) == 1) { g_devcine_show = g_devcine_show != 0; continue; }   /* --dev cutscene log (devcine.h) */
         else if (!strncmp(line, "cast_custom_off =", 17) || !strncmp(line, "appear_custom_off =", 19)) continue;   /* (below, once the imports are listed) */
@@ -287,6 +289,7 @@ static int write_ini(FILE* f, void* ud)
     if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);
     if (g_update_skip[0]) fprintf(f, "update_skip = %s\n", g_update_skip);
     if (g_biorand_seed[0]) fprintf(f, "biorand_seed = %s\n", g_biorand_seed);
+    fprintf(f, "enemy_rates = %s\n", enemy_rates_text());   /* "Custom"'s rates (enemies.h) */
     if (g_biorand_appear) fprintf(f, "biorand_appear = %d\n", g_biorand_appear);   /* (like biorand_seed: only once set, in the --dev screen) */
     if (!g_devcine_show) fprintf(f, "dev_cutscene_overlay = 0\n");   /* (only once turned off, in the --dev F6 window) */
     cast_off_write(0, off_line, f);

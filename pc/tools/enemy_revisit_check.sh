@@ -6,7 +6,8 @@
 # source record, spot) on both visits, and nothing that died on the first visit is there on the second (extras of
 # records without a kill bit come back, as those records do). About 7 minutes, all runs in parallel.
 #   pc/tools/enemy_revisit_check.sh OUT [SEED...]      (default seeds 1234 77 900001)
-# Environment: RECVX_ISO (disc image), RECVX_BIN (binary, default build/pc/recvx), ROOMS (stg:rom:pos:case list).
+# Environment: RECVX_ISO (disc image), RECVX_BIN (binary, default build/pc/recvx), ROOMS (stg:rom:pos:case list), EXTRA (extra
+# enemies, default 3); the other RECVX_ENEMY_* (e.g. _VARIETY=2, _RATES, _TYPES) pass through.
 out=$1; shift; seeds=${*:-1234 77 900001}
 root=$(cd "$(dirname "$0")/../.." && pwd)
 iso=${RECVX_ISO:-$root/ISO/SLUS-20184 ROM.iso}
@@ -23,7 +24,7 @@ for seed in $seeds; do
         k=40; [ $kill = r ] && k=40:r
         SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy RECVX_SKIP_MOVIES=1 RECVX_SKIP_CINE=30 RECVX_UPDATE_CHECK=0 RECVX_MODS="$out/mods" \
         RECVX_INPUT="$newgame" RECVX_TELEPORT="$tp" RECVX_EXIT_FRAME=$((f * 3 / 2 + 600)) RECVX_INF_HEALTH=1 \
-        RECVX_ENEMY_RANDOM=1 RECVX_ENEMY_PLACE=1 RECVX_ENEMY_EXTRA=3 RECVX_ENEMY_SEED=$seed RECVX_ENEMY_KILL=$k \
+        RECVX_ENEMY_RANDOM=1 RECVX_ENEMY_PLACE=1 RECVX_ENEMY_EXTRA=${EXTRA:-3} RECVX_ENEMY_SEED=$seed RECVX_ENEMY_KILL=$k \
         timeout -s KILL 1200 "$bin" "$iso" --skip-intro --size 320x240 --save-dir "$d/save" --log="$d/log.txt" > "$d/stdout.txt" 2>&1 &
     done
 done
@@ -51,8 +52,8 @@ for seed in seeds:
                 if m: cur['living'] = m.group(1).split()
                 m = re.match(r'test: room \d+ record (\d+) \(type \d+\) died', line)
                 if m: cur['died'].add('r' + m.group(1))
-                m = re.match(r'test: room \d+ extra in slot (\d+) \(type \d+\) died', line)
-                if m: cur['died'].add('x' + m.group(1))
+                m = re.match(r'test: room \d+ extra in slot (\d+) \(type (\d+)\) died', line)
+                if m: cur['died'].add('x%s:%s' % m.group(1, 2))
         first, rooms, back, differ = {}, 0, [], []
         for v in visits:
             if v['living'] is None:
@@ -65,9 +66,13 @@ for seed in seeds:
             if (a['now'], a['extras']) != (v['now'], v['extras']):
                 differ.append(v['room'])
             for e in v['living']:   # "k:id" (record k) or "extra@slot:id"
-                key = ('x' if e.startswith('extra@') else 'r') + e.split('@')[-1].split(':')[0]
-                if key in a['died'] and not (key[0] == 'x' and a['flagless']):   # (extras of records without a kill bit come back)
+                if not e.startswith('extra@') and 'r' + e.split(':')[0] in a['died']:
                     back.append(v['room'] + ' ' + e)
+            # extras by type (a slot an extra that stayed dead left can hold another one): no more of a type than lived on
+            if not a['flagless']:   # (extras of records without a kill bit come back)
+                types = lambda l: collections.Counter(e.split(':')[1] for e in l if e.startswith('extra@'))
+                lived, died, now = types(a['living']), collections.Counter(d.split(':')[1] for d in a['died'] if d[0] == 'x'), types(v['living'])
+                back += ['%s extra of type %s' % (v['room'], t) for t in now if now[t] > lived[t] - died[t]]
         ok = rooms >= 8 and not differ and not back
         fail |= not ok
         print('%s seed %s, kill %s: %d rooms visited twice; differ: %s; died and back: %s' %

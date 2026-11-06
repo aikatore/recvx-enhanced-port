@@ -157,6 +157,25 @@ static bool cast_custom_imgui()
     return changed;
 }
 
+/* the enemy randomizer's "Custom" rates under Enemy Selection (enemies.h; the lobby and the BIORAND screen list the same) */
+static bool enemy_rates_imgui()
+{
+    bool changed = false;
+    char head[96];
+    SDL_snprintf(head, sizeof head, "%s###enemyrates", tr("Enemy Rates"));
+    if (!ImGui::TreeNodeEx(head, ImGuiTreeNodeFlags_DefaultOpen)) return false;
+    for (int k = 0; k < enemy_rate_count(); k++) {
+        int i = enemy_rate_at(k), v = g_enemy_opts.rate[i];
+        char label[96];
+        SDL_snprintf(label, sizeof label, "%s##er%d", tr(enemy_rate_name(i)), k);
+        if (ImGui::SliderInt(label, &v, 0, ENEMY_RATE_MAX, v ? "%d" : tr("Off"))) { g_enemy_opts.rate[i] = (unsigned char)v; changed = true; }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("How often this enemy is chosen, against the others. Note: Some rooms can only contain certain enemies."));
+    }
+    ImGui::TreePop();
+    if (changed) settings_save_later();
+    return changed;
+}
+
 static bool settings_imgui(int page, bool all = true)
 {
     bool changed = false;
@@ -194,6 +213,13 @@ static bool settings_imgui(int page, bool all = true)
                 if (hover && s->help) ImGui::SetTooltip("%s", tr(s->help));
                 ImGui::EndDisabled();
                 changed |= cast_custom_imgui();
+                continue;
+            }
+            if (s->val == &g_enemy_opts.variety && v == 2) {   /* "Custom": the rates below */
+                bool hover = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+                if (hover && s->help) ImGui::SetTooltip("%s", tr(s->help));
+                ImGui::EndDisabled();
+                changed |= enemy_rates_imgui();
                 continue;
             }
         } else {   /* a number; a value name (tenths) is shown as the slider's text */
