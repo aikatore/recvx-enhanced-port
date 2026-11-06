@@ -42,7 +42,8 @@ extern "C" {
                                            36: EneSnap.root (SNAP_ROOT_STILL: the motion moves the enemy, its root stays put);
                                            37: Pose.legs, legs_frm (third person "Move While Aiming": the legs walking under the aim);
                                            38: EV_EOPTS voices ("Randomize Voice Lines");
-                                           39: (reserved: BioRand enemy rates);
+                                           39: EV_EOPTS types and rate[] (the randomizer's "Custom" rates and "Types per Room"), extra up to
+                                               ENEMY_EXTRA_MAX, variety 2 (Custom);
                                            40: EV_FX of FX_REACT (third person "Locational Hit Reactions": where a shot hit a zombie) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */

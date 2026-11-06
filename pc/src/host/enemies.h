@@ -6,12 +6,19 @@
 extern "C" {
 #endif
 
+#define ENEMY_EXTRA_MAX 8       /* "Extra Enemies": one per eligible record at most (its dead flag, ed_flg 512 + kill bit); the most
+                                   eligible records of a retail room is 7 (RM_5680) */
+#define ENEMY_TYPES_MAX 8       /* "Types per Room": 1..8, 0 no limit */
+#define ENEMY_RATE_MAX 10       /* a kind's rate under "Custom": 0 (Off) .. 10 */
+#define ENEMY_RATE_N 32         /* EnemyOpts.rate: the base kinds (enemy_rate_*), then the enemy variants by variant_at index
+                                   (EnemyOpts fills Event's union, coop_proto.h: 80 bytes) */
 typedef struct EnemyOpts {
-    int extra;                  /* 0 off, 1..3: up to that many extra enemies per room (types the room has) */
+    int extra;                  /* 0 off, 1..ENEMY_EXTRA_MAX: up to that many extra enemies per room (types the room has) */
     int place;                  /* 1: rearranged placements */
     int rand;                   /* 1: enemy randomizer */
     int seed;                   /* placements and randomizer (0..2^31-1) */
-    int variety;                /* randomizer: 0 Mild (two common kinds per room), 1 Wild (every kind that fits; default) */
+    int variety;                /* randomizer: 0 Mild (two common kinds per room), 1 Wild (every kind that fits; default),
+                                   2 Custom (each kind by its rate[], as BioRand's ratio sliders) */
     int events;                 /* randomizer: 1 also event enemies (default) */
     int cast;                   /* cutscene cast randomizer (cast.h): 1 the story characters drawn as other models in cutscenes */
     int cast_all;               /* its characters: 0 from the cutscene models (faces move), 1 from all models, 2 "Custom":
@@ -19,8 +26,21 @@ typedef struct EnemyOpts {
     int cast_assign;            /* 0 fixed per character (the seed), 1 random per cutscene (seed and room file) */
     int cast_imports;           /* 1: imported models too (co-op: only while both sides have the same, cast_import_id) */
     int voices;                 /* 1: "Randomize Voice Lines": a role shown as another story character's model says that one's lines (cast.h) */
+    int types;                  /* randomizer: at most this many different kinds in a room (0: no limit) */
+    unsigned char rate[ENEMY_RATE_N];   /* "Custom": each kind's weight, 0..ENEMY_RATE_MAX (recvx.ini enemy_rates); picking Wild or
+                                           Mild presets them (enemy_rate_preset) */
 } EnemyOpts;
 extern EnemyOpts g_enemy_opts;  /* our settings (F1, recvx.ini) */
+
+/* "Custom"'s list (enemyopt_glue.c): every kind the randomizer can place, the base kinds then the enemy variants with a
+   randomizer weight; i is the kind's index into EnemyOpts.rate */
+int  enemy_rate_count(void);
+int  enemy_rate_at(int k);                      /* the list's k-th kind: its rate index */
+const char* enemy_rate_name(int i);             /* English (the menus translate it) */
+void enemy_rate_preset(unsigned char* rate, int variety);   /* Wild's (1) or Mild's (0) weights */
+void enemy_rates_ini(const char* text);         /* config.c: the recvx.ini line, applied by enemy_rates_load */
+void enemy_rates_load(void);                    /* at start, once the variants are known (host.c) */
+const char* enemy_rates_text(void);             /* the recvx.ini line ("1:5 4:4 ... v1:1": type ids, v + variant ids) */
 
 /* an enemy that exists on the host but not in the room file: where its data is and where it stands */
 typedef struct SpawnNote {

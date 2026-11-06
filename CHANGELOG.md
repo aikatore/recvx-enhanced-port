@@ -10,6 +10,14 @@
 - **Locational Hit Reactions**: in the over-the-shoulder camera, a zombie shot in the head, an arm or a leg now
   flinches there: the head snaps back, the arm jerks away, the leg buckles. Damage, stun and timing stay the same.
   A co-op partner sees it too. On by default, with a setting to turn it off.
+- **Custom enemy rates**: Randomizer Variety is now Enemy Selection, with a third choice, Custom. It sets how often
+  each enemy type is chosen, Mutated Steve included, from off to very often, like BioRand's enemy sliders. Picking
+  Wild or Mild first fills in their rates as a start. Also on the multiplayer lobby's randomizer page.
+- **Types per Room**: a new randomizer setting limits how many different enemy types share a room.
+
+### Changes
+
+- **More Extra Enemies**: Extra Enemies goes higher, up to one more for every roaming enemy of a room.
 
 ### Fixes
 

@@ -66,6 +66,12 @@ int  cast_list_input(const MouseTake* m, unsigned int press, unsigned int rept, 
 void cast_list_draw(void);
 const char* cast_list_help(void);
 const char* cast_list_summary(int appear, const unsigned char* off, int imports, char* buf, int n);
+/* rate_list.c: the enemy randomizer's "Custom" rates, at the same place (step 9); 1 back */
+void rate_list_open(int ro, float x0, float x1, float y0, float h, float sc, int rows);
+int  rate_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
+void rate_list_draw(void);
+const char* rate_list_help(void);
+const char* rate_list_summary(const unsigned char* rate, char* buf, int n);
 extern ADV_WORK AdvWork;
 extern float FontScaleY;
 extern const char PlyFlip[23];
@@ -907,24 +913,27 @@ static void title_version(void)
 /* In steps (docs/COOP.md "Lobby"): 1 how to connect (Direct / Via server) and Host or Join,
    2 only that choice's rows plus the player and game rows, 3 the game rules (host: edits them,
    guest: the host's, read-only), with their pages 4 enemies and 5 extra events, step 4's page 7 the
-   cutscene cast (its page 8 the "Custom" models, cast_list.c), and step 2's page 6 the model list. BACK goes one step back (from a page: to its entry); from step 1 it leaves the lobby.
+   cutscene cast (its page 8 the "Custom" models, cast_list.c) and page 9 the enemy randomizer's "Custom" rates (rate_list.c), and step 2's
+   page 6 the model list. BACK goes one step back (from a page: to its entry); from step 1 it leaves the lobby.
    The rows in display order; a gap where the group changes. */
 enum { R_MODE, R_HOSTSTEP, R_JOINSTEP,
        R_SERVER, R_PORT, R_ADDR, R_PW, R_RELAY,
        R_NAME, R_CHARMODE, R_CHAR, R_CHAR2,
        R_START, R_ITEMS, R_FOLLOW, R_RULES,
        R_BIORAND, R_LOOT, R_IMP, R_TFREEZE, R_SKIPS, R_RIBBON, R_GOVER, R_ENEMYPG, R_EVENTPG,
-       R_RAND, R_VARIETY, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTASSIGN, R_CASTIMP, R_VOICES, R_QUICK, R_DETECTOR, R_EXTRAOBJ,
+       R_RAND, R_VARIETY, R_RATES, R_TYPES, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTASSIGN, R_CASTIMP,
+       R_VOICES, R_QUICK, R_DETECTOR, R_EXTRAOBJ,
        R_HOST, R_GO, R_COPY, R_RCOPY, R_KICK, R_STOP, R_JOIN,
        R_BACK, R_N };
-static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6 };
+static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+                                              5, 5, 5, 5, 5, 5, 5, 6 };
 _Static_assert(sizeof(row_group) == R_N, "row_group");
 enum { F_NONE, F_NAME, F_ADDR, F_PORT, F_SEED, F_SERVER, F_PW };
 
 static struct {
     int open, row, role;                /* role 0 host, 1 join */
     int step;                           /* 1 connection and role, 2 its options, 3 game rules, 4 / 5 its pages, 6 the models, 7 the cutscene cast (from 4),
-                                           8 its "Custom" models (from 7) */
+                                           8 its "Custom" models (from 7), 9 the enemy rates (from 4) */
     int pick, top;                      /* the model page: the cursor's and the first shown list position (appear_at) */
     int pick_c;                         /* ... whose model it chooses: 0 "Character Model" (Same for Both) or Claire's, 1 Chris's (R_CHAR2) */
     int mode;                           /* 0 direct (P2P), 1 via a co-op server (g_coop.conn Automatic or Via server) */
@@ -955,9 +964,11 @@ static int row_visible(int r)
 {
     int host = lb.role == 0, srv = lb.mode;
     if (r == R_BACK) return 1;
-    if (lb.step == 6 || lb.step == 8) return 0;   /* the model page and "Custom" draw their lists themselves (draw_models, cast_list.c) */
+    if (lb.step == 6 || lb.step == 8 || lb.step == 9) return 0;   /* the model page, "Custom" and the rates draw their lists themselves (draw_models,
+                                                                     cast_list.c, rate_list.c) */
     if (lb.step == 1) return r == R_MODE || r == R_HOSTSTEP || r == R_JOINSTEP;
-    if (r == R_VARIETY || r == R_EVENTS) return lb.step == 4 && shown_eo()->rand;   /* only the randomizer has them */
+    if (r == R_VARIETY || r == R_EVENTS || r == R_TYPES) return lb.step == 4 && shown_eo()->rand;   /* only the randomizer has them */
+    if (r == R_RATES) return lb.step == 4 && shown_eo()->rand && shown_eo()->variety == 2;   /* ... and Custom its rates */
     if (r == R_BIORAND) return lb.step == 3 && (host ? biorand_pack() : coop_biorand() == 1);   /* the host has a pack; a guest sees it while it is on */
     if (lb.step == 3) return r == R_GOVER || r == R_ENEMYPG || r == R_EVENTPG || ((r == R_LOOT || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON) && host) ||
                              (r == R_IMP && host && !g_coop.loot);   /* only shared loot has it */
@@ -990,7 +1001,7 @@ static int row_locked(int r)
     case R_MODE: case R_PORT: case R_LOOT: case R_IMP: case R_ADDR: case R_RELAY: case R_SERVER: case R_PW: return session_on();
     case R_HOSTSTEP: return joining();
     case R_JOINSTEP: return hosting();
-    case R_GOVER: case R_QUICK: case R_DETECTOR: case R_EXTRAOBJ: case R_EXTRA: case R_PLACE: case R_RAND: case R_VARIETY: case R_EVENTS: case R_SEED: case R_BIORAND:
+    case R_GOVER: case R_QUICK: case R_DETECTOR: case R_EXTRAOBJ: case R_EXTRA: case R_PLACE: case R_RAND: case R_VARIETY: case R_TYPES: case R_EVENTS: case R_SEED: case R_BIORAND:
     case R_CAST: case R_CASTPOOL: case R_CASTCUSTOM: case R_CASTASSIGN: case R_CASTIMP: case R_VOICES: return lb.role != 0;   /* the host's choice */
     case R_RCOPY: return !g_coop.room[0];
     default: return 0;
@@ -1139,6 +1150,7 @@ static void change(int r, int dir)
     case R_PLACE: settings_step(eset(&g_enemy_opts.place), dir); break;
     case R_RAND: settings_step(eset(&g_enemy_opts.rand), dir); break;
     case R_VARIETY: settings_step(eset(&g_enemy_opts.variety), dir); break;
+    case R_TYPES: settings_step(eset(&g_enemy_opts.types), dir); break;
     case R_EVENTS: settings_step(eset(&g_enemy_opts.events), dir); break;
     case R_CAST: settings_step(eset(&g_enemy_opts.cast), dir); break;
     case R_CASTPOOL: settings_step(eset(&g_enemy_opts.cast_all), dir); break;
@@ -1154,7 +1166,8 @@ static void change(int r, int dir)
 static int has_value(int r)
 {
     return r == R_MODE || r == R_RELAY || r == R_BIORAND || r == R_LOOT || r == R_IMP || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON || r == R_GOVER || r == R_QUICK || r == R_DETECTOR || r == R_EXTRAOBJ || r == R_START || r == R_ITEMS || r == R_FOLLOW || r == R_CHARMODE ||
-           r == R_EXTRA || r == R_PLACE || r == R_RAND || r == R_VARIETY || r == R_EVENTS || r == R_CAST || r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP || r == R_VOICES;
+           r == R_EXTRA || r == R_PLACE || r == R_RAND || r == R_VARIETY || r == R_TYPES || r == R_EVENTS || r == R_CAST || r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP ||
+           r == R_VOICES;
 }
 
 /* the joining player's items for coop_glue.c (own inventory on join) */
@@ -1192,6 +1205,7 @@ static int back(void)
     if (lb.step <= 1) return 1;
     if (lb.step == 6) { lb.step = 2; lb.row = lb.pick_c ? R_CHAR2 : R_CHAR; }
     else if (lb.step == 8) { lb.step = 7; lb.row = R_CASTCUSTOM; }
+    else if (lb.step == 9) { lb.step = 4; lb.row = R_RATES; }
     else if (lb.step == 7) { lb.step = 4; lb.row = R_CASTPG; }
     else if (lb.step > 3) { lb.row = lb.step == 4 ? R_ENEMYPG : R_EVENTPG; lb.step = 3; }
     else { lb.step--; lb.row = lb.step == 2 ? R_RULES : lb.role ? R_JOINSTEP : R_HOSTSTEP; }
@@ -1212,6 +1226,7 @@ static int need_server(void)
 
 static void pick_open(int c);   /* the model page (below) */
 static void custom_open(void);
+static void rates_open(void);
 
 /* 0 stay, 1 back to the menu, 2 new game, 3 the chosen save */
 static int activate(int r)
@@ -1223,6 +1238,7 @@ static int activate(int r)
     case R_ENEMYPG: step_to(4); return 0;
     case R_CASTPG: step_to(7); return 0;
     case R_CASTCUSTOM: custom_open(); return 0;
+    case R_RATES: rates_open(); return 0;
     case R_EVENTPG: step_to(5); return 0;
     case R_CHAR: pick_open(0); return 0;
     case R_CHAR2: pick_open(1); return 0;
@@ -1360,6 +1376,7 @@ static const char* heading(void)
     if (lb.step == 6) return !g_appear_per ? "CHARACTER MODEL" : lb.pick_c ? "CHRIS'S MODEL" : "CLAIRE'S MODEL";
     if (lb.step == 7) return lb.role ? "HOST RULES - CUTSCENE CAST" : "GAME RULES - CUTSCENE CAST";
     if (lb.step == 8) return "GAME RULES - CUSTOM MODELS";
+    if (lb.step == 9) return lb.role ? "HOST RULES - ENEMY RATES" : "GAME RULES - ENEMY RATES";
     if (lb.step > 3) return lb.step == 4 ? (lb.role ? "HOST RULES - RANDOMIZER" : "GAME RULES - RANDOMIZER")
                                          : (lb.role ? "HOST RULES - EXTRA EVENTS" : "GAME RULES - EXTRA EVENTS");
     snprintf(h, sizeof(h), "%s - %s", tr(lb.role ? "JOIN A GAME" : "HOST A GAME"), tr(lb.mode ? "VIA SERVER" : "DIRECT"));
@@ -1414,10 +1431,12 @@ static void row_text(int r, char* label, char* val, int n)
     }
     case R_ITEMS: strcpy(label, "ITEMS"); items_label(val, n, g_coop.items); break;
     case R_FOLLOW: strcpy(label, "FOLLOW"); snprintf(val, n, "%s", g_coop.follow ? "On" : "Off"); break;
-    case R_EXTRA: strcpy(label, "EXTRA ENEMIES"); snprintf(val, n, "%s", eset(&g_enemy_opts.extra)->names[eo->extra & 3]); break;
+    case R_EXTRA: strcpy(label, "EXTRA ENEMIES"); snprintf(val, n, "%s", eset(&g_enemy_opts.extra)->names[(unsigned)eo->extra <= ENEMY_EXTRA_MAX ? eo->extra : 0]); break;
     case R_PLACE: strcpy(label, "LAYOUT"); snprintf(val, n, "%s", eo->place ? "On" : "Off"); break;
     case R_RAND: strcpy(label, "RANDOMIZER"); snprintf(val, n, "%s", eo->rand ? "On" : "Off"); break;
-    case R_VARIETY: strcpy(label, "VARIETY"); snprintf(val, n, "%s", eset(&g_enemy_opts.variety)->names[eo->variety & 1]); break;
+    case R_VARIETY: strcpy(label, "VARIETY"); snprintf(val, n, "%s", eset(&g_enemy_opts.variety)->names[(unsigned)eo->variety <= 2 ? eo->variety : 1]); break;
+    case R_RATES: strcpy(label, "ENEMY RATES"); rate_list_summary(eo->rate, val, n); break;   /* a page: how many types can appear */
+    case R_TYPES: strcpy(label, "TYPES PER ROOM"); snprintf(val, n, "%s", eset(&g_enemy_opts.types)->names[(unsigned)eo->types <= ENEMY_TYPES_MAX ? eo->types : 0]); break;
     case R_EVENTS: strcpy(label, "EVENT ENEMIES"); snprintf(val, n, "%s", eo->events ? "On" : "Off"); break;
     case R_CASTPG: strcpy(label, "CUTSCENE CAST"); snprintf(val, n, "%s", eo->cast ? "On" : "Off"); break;   /* a page */
     case R_CAST: strcpy(label, "RANDOMIZE CAST"); snprintf(val, n, "%s", eo->cast ? "On" : "Off"); break;
@@ -1486,6 +1505,8 @@ static const char* row_help(int r)
     case R_PLACE: return eset(&g_enemy_opts.place)->help;
     case R_RAND: return eset(&g_enemy_opts.rand)->help;
     case R_VARIETY: return eset(&g_enemy_opts.variety)->help;
+    case R_RATES: return host ? "Set how often each enemy type is chosen." : "The host's rates. Only the host can change them.";
+    case R_TYPES: return eset(&g_enemy_opts.types)->help;
     case R_EVENTS: return eset(&g_enemy_opts.events)->help;
     case R_CASTPG: return host ? "Choose how story characters' appearances are randomized in cutscenes."
                                : "View the host's randomized cutscene models. Only the host can change them.";
@@ -1556,6 +1577,14 @@ static void custom_open(void)
     lb.step = 8;
     cast_list_open(0, ROW_X, 634, ROW_Y0, PICK_H, ROW_SC, 10);
     host_log("lobby: the cutscene cast's custom models\n");
+}
+
+/* the enemy randomizer's "Custom" rates (step 9), there too; joining: the host's, read-only */
+static void rates_open(void)
+{
+    lb.step = 9;
+    rate_list_open(lb.role != 0, ROW_X, 634, ROW_Y0, PICK_H, ROW_SC, 11);
+    host_log("lobby: the enemy rates\n");
 }
 
 static void pick_open(int c)
@@ -1681,6 +1710,7 @@ static int lobby_input(void)
     }
     if (lb.step == 6) { pick_input(press, rept, ok, cancel); return 0; }
     if (lb.step == 8) { if (cast_list_input(&mt, press, rept, ok, cancel)) { lb.step = 7; lb.row = R_CASTCUSTOM; } return 0; }
+    if (lb.step == 9) { if (rate_list_input(&mt, press, rept, ok, cancel)) { lb.step = 4; lb.row = R_RATES; } return 0; }
     g_lobby_io.tail = g_lobby_io.head;
     if (!row_selectable(lb.row)) {   /* the row went (hosting started or stopped): its successor */
         lb.row = lb.row == R_HOST || lb.row == R_KICK ? R_GO : lb.row == R_GO || lb.row == R_STOP || lb.row == R_COPY || lb.row == R_RCOPY ? R_HOST : lb.row;
@@ -1732,7 +1762,7 @@ static void draw_rows(void)
             if (!locked) { arrow(VAL_X, y + 9, -1, col); arrow(VAL_X + 14 + w + 12, y + 9, 1, col); }
             text(VAL_X + 12, y + (ROW_SC - sc) * 14, val, sc, col);
         } else if (val[0] || lb.edit) {
-            int page = r == R_ENEMYPG || r == R_EVENTPG || r == R_CASTPG || r == R_CHAR || r == R_CHAR2 || r == R_CASTCUSTOM;   /* opens a page: an arrow after it */
+            int page = r == R_ENEMYPG || r == R_EVENTPG || r == R_CASTPG || r == R_CHAR || r == R_CHAR2 || r == R_CASTCUSTOM || r == R_RATES;   /* opens a page: an arrow after it */
             float lim = page ? 196.0f : 220.0f, w = text_w(val, ROW_SC), sc = w > lim ? ROW_SC * lim / w : ROW_SC;   /* a long address: narrower */
             text(VAL_X, y + (ROW_SC - sc) * 14, val, sc, col);
             if (page) arrow(VAL_X + (sc < ROW_SC ? lim : w) + 16, y + 9, 1, col);
@@ -1755,7 +1785,7 @@ static void draw_info(void)
     unsigned int col = 0xFFC8C8C8;
     rect(0, 384, 640, 480, 0x60000000, Z_FRONT);
     if (lb.msg_t > 0) { lb.msg_t--; text(24, y, lb.msg, 0.55f, 0xFFFFE080); y += 17; }
-    else y += 15 * text_wrap(24, y, 584, lb.step == 8 ? cast_list_help() : row_help(lb.row), 0.5f, 0xFFA0D0FF, 2);
+    else y += 15 * text_wrap(24, y, 584, lb.step == 8 ? cast_list_help() : lb.step == 9 ? rate_list_help() : row_help(lb.row), 0.5f, 0xFFA0D0FF, 2);
     /* without a session a status is why (busy port, the host left): highlighted */
     y += 16 * text_wrap(24, y, 592, g_coop.status[0] ? coop_shown(g_coop.status) : "Not connected", 0.52f, !session_on() && g_coop.status[0] ? 0xFFFFC060 : col, 2);
     if (!hosting()) return;
@@ -1944,7 +1974,7 @@ int pc_lobby(void)
     if (session_on()) lb.role = !g_coop.host;   /* F3 may host or join meanwhile */
     font_ok = font_ready();
     r = lobby_input();
-    g_lobby_io.list_on = lb.step == 6 || lb.step == 8;
+    g_lobby_io.list_on = lb.step == 6 || lb.step == 8 || lb.step == 9;
     /* what we chose, for the partner's screen; the joining items as they change */
     if (lb.role == 0) { start_label(note, sizeof(note), g_coop.start); snprintf(g_coop.note, sizeof(g_coop.note), "Starts: %.*s", (int)sizeof(g_coop.note) - 9, note); }
     else if (g_coop.items == COOP_ITEMS_HOST) snprintf(g_coop.note, sizeof(g_coop.note), "Items saved by host");
@@ -1960,6 +1990,7 @@ int pc_lobby(void)
     draw_previews();
     if (lb.step == 6) draw_models();
     else if (lb.step == 8) { text(ROW_X - 4, HEAD_Y, heading(), 0.5f, 0xFFFFE080); cast_list_draw(); }
+    else if (lb.step == 9) { text(ROW_X - 4, HEAD_Y, heading(), 0.5f, 0xFFFFE080); rate_list_draw(); }
     else draw_rows();
     draw_info();
     AdvEasySetTextureList(0);   /* the title's texture list again (the font and the models set theirs) */
