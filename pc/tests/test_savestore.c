@@ -71,6 +71,20 @@ static void names(void)
     card_save(d, 1, 3, 7, 1);
     savestore_label(l, sizeof(l), d);
     CHECK(!strcmp(l, "Chris_3-07"));   /* not a save room: stage-room */
+    {   /* a placed typewriter's location text (sys->itm[292..]): the label; junk there is none */
+        char t[SAVE_TEXT_BYTES];
+        unsigned int sum = 0;
+        CHECK(!savestore_text(t, d) && !t[0]);
+        memcpy(d + SAVE_TEXT_OFS, "LOC=Gate \xC3\xA4\0", 12);
+        for (int i = 0; i < SAVE_DATA_BYTES - 4; i++) sum += d[i];
+        memcpy(d + SAVE_DATA_BYTES - 4, &sum, 4);
+        CHECK(savestore_text(t, d) && !strcmp(t, "Gate \xC3\xA4"));
+        savestore_label(l, sizeof(l), d);
+        CHECK(!strcmp(l, "Chris_Gate \xC3\xA4"));
+        memcpy(d + SAVE_TEXT_OFS + 4, "a\x01", 3);
+        CHECK(!savestore_text(t, d));   /* a control byte */
+        card_save(d, 1, 3, 7, 1);
+    }
 }
 
 int main(void)

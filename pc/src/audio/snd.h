@@ -11,6 +11,7 @@ typedef struct {
     SndBlob sq[8];        /* MIDI sequences (SQ) by port */
     SndBlob xhd[31], xbd[31];   /* PC: extra enemy banks 1..31 (header, body), snd_xbank_load */
     SndBlob arms2_hd, arms2_bd;   /* co-op: the partner's weapon bank (snd_partner_arms) */
+    SndBlob sys_hd, sys_bd;       /* PC: a save room's MIDI program bank 2 (snd_sysbank_load) */
 } SndBanks;
 extern SndBanks g_snd_banks;
 
@@ -32,6 +33,9 @@ void snd_synth_xbanks_stop(void);       /* (lock held) stop what plays from the 
    case), or a player voice bank CORE_00n bank 4 (key 0xFFF0 + n, docs/ACTORS.md "Voices"); 1..31 or 0 (none) */
 int  snd_xbank_load(int key);
 void snd_xbank_release(void);
+/* the system sounds (MIDI bank 2: item box lid, typewriter keys and bell) whose programs a room's own bank 2 lacks
+   (only save rooms have them) play from RM_1080's bank 2, loaded once by this (game thread; kept for the session) */
+void snd_sysbank_load(void);
 int  snd_xbank_prog_ms(int xb, int tq);   /* how long program tq of extra bank xb plays, ms; 0: none there, or a looping one */
 /* co-op (coop_glue.c): the partner's weapon bank - the shot bank of an ARMS_nnn.SPQ - beside our own
    arms bank (SE bank 1): its programs play as arms programs SND_PARTNER_TQ + n. NULL / 0: none */
