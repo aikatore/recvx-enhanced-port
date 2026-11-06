@@ -263,6 +263,9 @@ the body with its head.
 against the zombie's body bursts the head only when that hit is on the head (joint 11); earlier head
 damage, the magnum's near hit on joints 1 and 8..10 and the shotgun aimed up no longer do.
 
+**Third person, "Locational Hit Reactions"** ([THIRDPERSON.md](THIRDPERSON.md#locational-hit-reactions)): a
+zombie hit on its head, an arm or a leg also flinches that part while it is drawn; its state is untouched.
+
 ## Requirements for randomizers and difficulty options
 
 1. **Record count and order** stay (scripts, `wrk_no`, model/motion/texture tables, co-op slots).

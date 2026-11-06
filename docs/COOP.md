@@ -5,7 +5,7 @@ over the internet or a LAN (UDP). Co-op is an optional addon: with it off the ga
 as without it (every hook is `#ifdef TARGET_PC` and `if (coop_on)`).
 
 Part 1 is for players: how to host, join and play. Part 2 is the reference: architecture,
-protocol 37, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
+protocol 38, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
 [USER_GUIDE.md](USER_GUIDE.md) (settings, controls), [ACTORS.md](ACTORS.md) (models and voices),
 [ENEMIES.md](ENEMIES.md) (enemy options), [ARCHITECTURE.md](ARCHITECTURE.md),
 [BUILDING.md](BUILDING.md).
@@ -1214,7 +1214,10 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   call. Mirrored projectiles show only; the owner's game does the damage. Enemy attack effects hurt
   the receiver's player where they land. Budget: at most 8 per frame and none while 48 events wait
   for acknowledgement (cosmetic, dropped rather than queued). The Bandersnatch's stretched arm goes
-  as `FX_ARM`.
+  as `FX_ARM`. A shot of ours that hits a zombie's head, arm or leg in third person goes as `FX_REACT`
+  (protocol 38: the slot, the region 1..5 and the shot's unit direction), and the receiver's zombie
+  flinches the same way if its own "Locational Hit Reactions" is on and it plays in third person
+  ([THIRDPERSON.md](THIRDPERSON.md#locational-hit-reactions)); outside the per-frame budget of received effects, like `FX_ARM`.
 * **Which effects** (protocol 28, `coop_proto.c` `fx_rules`): only those a sender's window can start
   (a survey of every creation site in the decomp): 2 5 10 11 13 15 16 23 24 108 130 (blood, splashes,
   bolts, blasts, explosions, ripples, grenades), 250..298 (mince, fire, sand, acid, blood, the moth's
@@ -1370,10 +1373,10 @@ send time minus the echoed datagram's arrival. Sample = arrival - our clock - th
 smoothed (EWMA 0.1). The name tag's point goes with the recorded frame (`stream_point`) and is
 interpolated with the in-between frames; it snaps on camera cuts and in vanilla mode.
 
-## Protocol 37
+## Protocol 38
 
-`COOP_VERSION` is **37**; both players need builds with the same version (a mismatch is reported,
-e.g. "The host uses co-op compatibility version 36; yours is 37. Use matching game builds."). The co-op server does not
+`COOP_VERSION` is **38**; both players need builds with the same version (a mismatch is reported,
+e.g. "The host uses co-op compatibility version 37; yours is 38. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
 tag, `EV_OWN`; 17 trade requests; 18 voices; 19 the game rules `OPT_IMPORTANT`, `OPT_NO_RIBBON`,
@@ -1388,7 +1391,7 @@ and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid
 `Pose.opts`, so a further rule needs a field of its own); 24 enemy slots 0..254 (`COOP_ENE_SLOTS`, the PC's
 255 slots) in every slot field, and `EV_FX` marks its `FX_*` references in `refs` (the bytes 253..255 are slots now); 25 `Pose.use`, the trigger the sender is using (one player at a puzzle at a time, see "Puzzles"; the pose grew to 112 bytes); 26 `EneSnap.id`, the enemy type in the slot: a snapshot applies only to a slot holding the same type (`hokan_count` is 16 bits now; the snapshot stays 100 bytes); 27 `PoseExt.br`, `br_seed`, `br_id` (BioRand: the host's choice and each side's pack; `Pose.opts` has no free bit, so a field of its own; the extension grew to 104 bytes); 28 direct sessions are encrypted after a handshake bound to the whole join code (`PKT_HELLO`, `PKT_HELLO_ACK`, see "Security"), so `Pose.auth`, the 32-bit join-code proof, is gone (`rsv`, zero), the goodbye's `COOP_REJ_STATE`, and a generic `EV_FX` only for the effects co-op sends, each field checked (see "Effects and voices"); 29 the cutscene cast: `EV_EOPTS` carries `cast`, `cast_all`, `cast_assign`, `cast_imports` (the event stays 88 bytes) and `PoseExt.imp_id`, the sender's imported models (the extension grew to 108 bytes); 30 `EV_BRSEED`, the host's BioRand seed string and CLI checksum (a guest can generate the host's pack, see "BioRand"; the pose and extension are unchanged); 31 `EV_CASTOFF`, the host's cutscene cast "Custom" list, and `EV_EOPTS` `cast_all` 2 (Custom); 32 the cutscene cast's pools without the player files that have a talking twin (Claire's, Chris's, Steve's, Wesker's: their cutscene models stand for them, [ACTORS.md](ACTORS.md) "Talking twins"), so the same seed picks other models and the `EV_CASTOFF` bits name other entries (the event is unchanged); 33 `Pose.opts2`, more game rules
 in the first of the pose's spare bytes (`OPT2_EXTRA_OBJECTS` 1, see "Extra item boxes and herbs"; unknown bits refused; the pose stays 112
-bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. 37 `Pose.legs` and `legs_frm` in the two spare bytes (third person "Move While Aiming": the legs walking under the aim, see "Pose"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. 37 `Pose.legs` and `legs_frm` in the two spare bytes (third person "Move While Aiming": the legs walking under the aim, see "Pose"). 38 `EV_FX` of `FX_REACT` (third person "Locational Hit Reactions": the region where the sender's shot hit a zombie and the shot's direction, see "Effects and voices"; the event is unchanged in size). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1487,7 +1490,7 @@ enemy's (`mode[0]` 0) to one whose own Init ran.
 | `EV_SPAWN` | 14 | host | An added enemy (`SpawnNote`), or a randomizer record the host kept |
 | `EV_EOPTS` | 15 | host | Enemy options: extra 0..3, placements, randomizer, seed, variety 0..1, event enemies 0..1, cutscene cast 0..1, its models 0..1, assignment 0..1, imported models 0..1 |
 | `EV_ATR` | 16 | either | 1..2 room records (wall, trigger, floor, object) after a world event |
-| `EV_FX` | 17 | either | An effect started here (`FX_BURST` 308, `FX_PARTICLE` 302, `FX_ARM`, or a generic entry). What it follows (`idx`), its model's owner and `exp0` are each an enemy slot or, with their bit in `refs` (`FXR_IDX` 1, `FXR_OWNER` 2, `FXR_EXP0` 4), `FX_RECEIVER` 0, `FX_SENDER` 1 or `FX_NONE` 2 |
+| `EV_FX` | 17 | either | An effect started here (`FX_BURST` 308, `FX_PARTICLE` 302, `FX_ARM`, `FX_REACT`, or a generic entry). What it follows (`idx`), its model's owner and `exp0` are each an enemy slot or, with their bit in `refs` (`FXR_IDX` 1, `FXR_OWNER` 2, `FXR_EXP0` 4), `FX_RECEIVER` 0, `FX_SENDER` 1 or `FX_NONE` 2 |
 | `EV_GRANT` | 18 | either | An event gave the sender an item: item, count, floor, position |
 | `EV_TSCREEN` | 19 | either | Trade screen op (below) |
 | `EV_GONE` | 20 | joiner | Dead enemies (up to 26: slot, type, model version) |

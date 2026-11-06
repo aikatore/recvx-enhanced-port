@@ -187,6 +187,7 @@ unit (the character is about 17 units tall).
 | Crosshair | `tps_crosshair` | 1 |
 | Aim Assist (0 = free aim) | `tps_auto_aim` | 0 |
 | Precise Shots ([Precise Shots](#precise-hits)) | `tps_precise_hits` | 1 |
+| Locational Hit Reactions ([Locational hit reactions](#locational-hit-reactions)) | `tps_hit_react` | 1 |
 | Move While Aiming ([Moving while aiming](#moving-while-aiming)) | `tps_aim_walk` | 0 |
 | Mouse Camera Style (0 = Behind Character, 1 = Free Camera) | `tps_free_camera` | 0 |
 | Gamepad Controls (0 = Classic, 1 = Modern) | `tps_pad_controls` | 1 |
@@ -203,7 +204,7 @@ unit (the character is about 17 units tall).
 |---|---|
 | `RECVX_TPS_MOUSE="frame:dx:dy,..."` | moves the mouse dx/dy counts per game frame from that presented frame on |
 | `RECVX_VPAD="frame:input+input,..."` | a virtual gamepad ([ARCHITECTURE.md](ARCHITECTURE.md)): sticks as `leftx=0.5+lefty=-1` (up is negative), triggers `+lefttrigger`; a trigger after another input needs its own `+` (`+lefttrigger++righttrigger`) |
-| `RECVX_TPS_TRACE=1` | logs the walk under the aim per frame ("tps: aimwalk": modes, the input, the legs' walk motion, frame, turn and weight, the position), the gamepad per frame ("tps: pad": the sticks past their dead zones, the walk direction, facing, camera, quick turn, the enemy nearest the crosshair) and its aim assist ("tps: assist"), the free aim per frame, each shot's direction and wall hit against the crosshair target ("SHOT"), the drawn weapon's barrel with "Character Model", the camera ("tps: cam A\|B": yaw, pitch, the player's position, the model's root, the point followed and the eye), the aim height given to the game, the scope per frame ("tps: scope": `ay`, `wax`, the field of view, the turn of the mouse and right stick in game units, the enemy nearest the centre in degrees, the enemies' health), each shot of a dual weapon ("tps: DUAL R\|L": the arms' yaws aimed and shown, the enemy under the crosshair and the other arm's, the aim height, each enemy's health, degrees off the facing and distance), each gun hit ("tps: HIT": weapon, enemy, joint, damage, precise or the game's test, the enemy's state), each precise test that met a body ("tps: PRECISE": joint, volume, along which ray), a zombie's head burst ("tps: HEAD BURST"); `=2` also keeps the camera on the enemy the game locked on to (dual weapons: the nearest of their lock-on), also in the scope, and logs per shot how far the crosshair passed from that enemy's body ("tps: SHOT at enemy") |
+| `RECVX_TPS_TRACE=1` | logs the walk under the aim per frame ("tps: aimwalk": modes, the input, the legs' walk motion, frame, turn and weight, the position), the gamepad per frame ("tps: pad": the sticks past their dead zones, the walk direction, facing, camera, quick turn, the enemy nearest the crosshair) and its aim assist ("tps: assist"), the free aim per frame, each shot's direction and wall hit against the crosshair target ("SHOT"), the drawn weapon's barrel with "Character Model", the camera ("tps: cam A\|B": yaw, pitch, the player's position, the model's root, the point followed and the eye), the aim height given to the game, the scope per frame ("tps: scope": `ay`, `wax`, the field of view, the turn of the mouse and right stick in game units, the enemy nearest the centre in degrees, the enemies' health), each shot of a dual weapon ("tps: DUAL R\|L": the arms' yaws aimed and shown, the enemy under the crosshair and the other arm's, the aim height, each enemy's health, degrees off the facing and distance), each gun hit ("tps: HIT": weapon, enemy, joint, damage, precise or the game's test, the enemy's state), each precise test that met a body ("tps: PRECISE": joint, volume, along which ray), a zombie's head burst ("tps: HEAD BURST"), each gun hit's region on a zombie ("tps: REGION") and each flinch started, ours or the partner's ("tps: REACT"); `=2` also keeps the camera on the enemy the game locked on to (dual weapons: the nearest of their lock-on), also in the scope, and logs per shot how far the crosshair passed from that enemy's body ("tps: SHOT at enemy") |
 | `RECVX_TPS_AIM_AT=f`, `=cN`, `...:side:up` | with `RECVX_TPS_TRACE=2`, where on that enemy: `f` along its hit capsule (0 = `c1`, for a zombie the head, 1 = `c2`, its legs; default 0.5), `cN` the middle of volume N of its joint table ([Precise Shots](#precise-hits); a zombie: `c0` hips to chest, `c4` the head); `:side:up` adds that many units beside it (right of the view, negative left) and above |
 | `RECVX_TPS_ORBIT=degrees` | turns only the view about the player (side views; aim unchanged, camera ignores walls) |
 | `RECVX_ATMOS_TRACE=1` | logs each game frame's cut, the game's fog, lights and filter, the player's view depth from the view drawn and from the cut camera, and the fog shown with our camera (range in view depth) and what "smooth" shows |
@@ -663,6 +664,39 @@ where it shows.
 `COOP_HIT_PRECISE` (protocol 21) says its hit was precise, so the side running the zombie bursts its
 head by the same rule (checked: the guest's magnum on the head bursts it on both sides, on the hips
 it does not, with the guest's option off it does as before).
+
+## Locational hit reactions
+
+Setting "Locational Hit Reactions" (THIRD PERSON page, ini `tps_hit_react`, on by default). The game has
+one hit reaction for a zombie wherever a shot lands: walking, a jolt of its spine over 8 ticks
+(`en01.c bhEne01_SetMtn`, `rot_tbl`); heavier weapons its damage motions. With this on, in third person
+(and its scope), a gun hit on a zombie's head, arm or leg also flinches that part:
+
+* **Region**: the joint the shot damaged (`bhCheckGunAtari` -> `pc_precise_dam` -> `react_hit`): with
+  [Precise Shots](#precise-hits) the volume the crosshair's ray entered; without it the volume under the
+  crosshair if its ray meets the zombie's body, else the game's joint (the bone nearest where its wide test
+  touched the body). Zombie skeleton (18 nodes, all looks): 10 neck and 11 head; 12..14 right arm, 15..17 left
+  arm (shoulder, elbow, hand); 2..4 right leg, 5..7 left leg (hip, knee, ankle); the rest (0, 1, 8, 9: root,
+  hips, spine, chest) torso.
+* **The flinch** (`react_turns`): the head turns back along the shot about the neck and the head joint (0.3
+  and 0.4 radians at the peak); the arm swings back along the shot and out to its side about the shoulder,
+  the forearm further about the elbow (0.8, 0.6); the leg's knee buckles: the thigh forward and the shin back
+  in the zombie's facing (0.35, -0.9). Up in 2 ticks, eased out by tick 10 (smoothstep), about the game's
+  own jolt. A new hit restarts it (one region at a time per zombie). The torso keeps the game's reaction
+  alone; no flinch on a zombie lying or crawling (its head not above its chest) nor on the head once it
+  burst.
+* **Drawing only** (`eneset.c bhDrawEnemy` -> `pc_hit_react`): after the zombie's node matrices are posed,
+  the part's nodes (its subtree in the model's tree) are turned in world space for its draw and put back
+  after it, as the head blow-off hides the head ([ENEMIES.md](ENEMIES.md#head-blow-offs)). Its linked
+  parts on those nodes (caps on the head) turn with it. The motion, the node angles, the hit volumes, damage,
+  stun, damage modes, AI and timings are the game's: runs with the setting off and on are identical in every
+  enemy step (hp, modes, motion and frame), hit and aim trace line (handgun on the head, arms and legs,
+  Precise Shots off, shotgun, magnum, sub machine gun; to the zombie's death or head burst).
+* **Co-op** (protocol 38): our hit goes to the partner as `EV_FX` `FX_REACT` (slot, region, shot direction;
+  [COOP.md](COOP.md)); its zombie flinches the same way if its own setting is on and it plays in third
+  person, whichever side runs the zombie. Checked both ways (host and guest shooting the head and an arm:
+  every hit flinched on both sides).
+* Zombies only (type 1, every look). Off, and with the fixed cameras: nothing changes.
 
 ## Limits
 

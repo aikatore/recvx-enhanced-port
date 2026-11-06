@@ -269,6 +269,9 @@ int coop_check_event(const Event* e, int from_host)
         }
         if (e->u.fx.id == FX_ARM)
             return e->idx < COOP_ENE_SLOTS ? (fins(e->u.fxa.len, 4) && fabsf(e->u.fxa.len[3]) < 1000 ? COOP_OK : COOP_BAD_FLOAT) : COOP_BAD_FIELD;
+        if (e->u.fx.id == FX_REACT)
+            return e->idx < COOP_ENE_SLOTS && e->u.fxk.rg >= 1 && e->u.fxk.rg < FX_REACT_REGIONS && !e->u.fxk.pad ?
+                   (fins(e->u.fxk.d, 3) && fabsf(e->u.fxk.d[0]) <= 1.01f && fabsf(e->u.fxk.d[1]) <= 1.01f && fabsf(e->u.fxk.d[2]) <= 1.01f ? COOP_OK : COOP_BAD_FLOAT) : COOP_BAD_FIELD;
         if (e->u.fx.id == FX_PARTICLE)
             return e->u.fxp.typ < FX_PTCL_TYPES && e->u.fxp.mk2 <= 1 && e->u.fxp.lnk < 64 && e->u.fxp.refs <= FXR_IDX &&
                    fx_ref(coop_fx_get(e->idx, e->u.fxp.refs, FXR_IDX)) ? (fins(e->u.fxp.off, 3) && fins(e->u.fxp.dir, 3) ? COOP_OK : COOP_BAD_FLOAT) : COOP_BAD_FIELD;

@@ -394,6 +394,18 @@ static void test_events(void)
         CHECK(coop_check_event(&e, 1) == COOP_OK);
         e.u.fxa.len[1] = NAN; CHECK(coop_check_event(&e, 1) != COOP_OK);
     }
+    {   /* a zombie's flinch where a shot hit it (FX_REACT) */
+        Event e = ev(EV_FX);
+        memset(&e.u, 0, sizeof(e.u));
+        e.idx = 3; e.u.fxk.id = FX_REACT; e.u.fxk.rg = 1; e.u.fxk.d[0] = 1;
+        CHECK(coop_check_event(&e, 0) == COOP_OK && coop_check_event(&e, 1) == COOP_OK);
+        e.u.fxk.rg = 0; CHECK(coop_check_event(&e, 0) != COOP_OK);
+        e.u.fxk.rg = FX_REACT_REGIONS; CHECK(coop_check_event(&e, 0) != COOP_OK); e.u.fxk.rg = 5;
+        CHECK(coop_check_event(&e, 0) == COOP_OK);
+        e.idx = 255; CHECK(coop_check_event(&e, 0) != COOP_OK); e.idx = 3;
+        e.u.fxk.d[2] = 2; CHECK(coop_check_event(&e, 0) != COOP_OK); e.u.fxk.d[2] = 0;
+        e.u.fxk.d[1] = NAN; CHECK(coop_check_event(&e, 0) != COOP_OK);
+    }
     {   /* a particle call */
         Event e = ev(EV_FX);
         memset(&e.u, 0, sizeof(e.u));

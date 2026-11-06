@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### New
+
+- **Locational Hit Reactions**: in the over-the-shoulder camera, a zombie shot in the head, an arm or a leg now
+  flinches there: the head snaps back, the arm jerks away, the leg buckles. Damage, stun and timing stay the same.
+  A co-op partner sees it too. On by default, with a setting to turn it off.
+
 ### Fixes
 
 - Claire's ponytail no longer hangs behind another model shown in her place in cutscenes.

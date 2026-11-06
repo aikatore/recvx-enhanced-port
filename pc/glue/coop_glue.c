@@ -1984,6 +1984,20 @@ static void fx_arm(BH_PWORK* ep)
     if (!coop_check_event(&e, is_host)) fx_queue(&e);
 }
 
+/* third person, "Locational Hit Reactions" (tps_glue.c): our shot hit enemy slot `slot` there (region rg along d);
+   the partner's zombie flinches the same way (FX_REACT, shown by its own setting) */
+void tps_react_start(int i, int rg, const float* d);
+void coop_react_out(int slot, int rg, const float* d)
+{
+    Event e;
+    if (!coop_on || !have_peer || echo_delay || !sys || !in_session_game() || !same_room()) return;
+    memset(&e, 0, sizeof(e));
+    e.type = EV_FX; e.idx = slot; e.stg = sys->stg_no; e.rom = sys->rom_no;
+    e.u.fxk.id = FX_REACT; e.u.fxk.rg = rg;
+    memcpy(e.u.fxk.d, d, sizeof(e.u.fxk.d));
+    if (!coop_check_event(&e, is_host)) fx_queue(&e);
+}
+
 /* game.c, before bhControlPlayer (coop_control_remote closes it) */
 void coop_fx_player(void) { fx_begin(1); }
 
@@ -1997,7 +2011,7 @@ static int apply_fx(const Event* e)
     int k, n, ix = coop_fx_get(e->idx, e->u.fx.refs, FXR_IDX), owner = coop_fx_get(e->u.fx.owner, e->u.fx.refs, FXR_OWNER),
         exp0 = coop_fx_get(e->u.fx.exp0, e->u.fx.refs, FXR_EXP0);   /* (the generic entry's; a particle call has its own refs) */
     if (!sys || !rom || e->stg != sys->stg_no || e->rom != sys->rom_no || !in_session_game() || (sys->cb_flg & 0x1) || !fx_heap()) return 1;   /* another room: gone */
-    if (e->u.fx.id != FX_ARM) {   /* bounded: the partner's effects never take most of eff[] (ours: shots, blasts) - they are cosmetic */
+    if (e->u.fx.id != FX_ARM && e->u.fx.id != FX_REACT) {   /* bounded: the partner's effects never take most of eff[] (ours: shots, blasts) - they are cosmetic */
         static unsigned int in_frame, in_n;
         if (in_frame != frame_no) { in_frame = frame_no; in_n = 0; }
         if (in_n >= FX_IN_FRAME) return 1;
@@ -2008,6 +2022,11 @@ static int apply_fx(const Event* e)
     if (e->u.fx.id == FX_BURST) {
         OR_WORK* o = bhSetRapEff(FX_BURST, (void*)e->u.fxr.w, FX_RAW_WORDS);
         if (o) fx_mirror[(O_WRK*)o - eff] = 1;
+        return 1;
+    }
+    if (e->u.fx.id == FX_REACT) {
+        BH_PWORK* w = fx_ref_in(e->idx);
+        if (w && w->id == 1) tps_react_start(e->idx, e->u.fxk.rg, e->u.fxk.d);
         return 1;
     }
     if (e->u.fx.id == FX_ARM) {
