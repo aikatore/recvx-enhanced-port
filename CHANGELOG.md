@@ -7,6 +7,7 @@
 - Claire's ponytail no longer hangs behind another model shown in her place in cutscenes.
 - Killed Extra Enemies no longer come back when a room is entered again, and a room keeps the same extra
   enemies on every visit.
+- In third person, holding a movement key through a door keeps walking in the new room again.
 
 ## 0.7.4 (2026-11-04)
 

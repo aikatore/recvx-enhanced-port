@@ -992,10 +992,12 @@ unsigned int tps_pad(unsigned int pad)
        camera B (camera A's walk below gave them all "forward", the cursor only went up) */
     menu = !(sys->sp_flg & 0x40) || pc_trade_screen();
     {   /* a movement key held as a sub-screen (inventory, item box, files, map, save screen) or the trade screen opens
-           or closes counts for neither until let go: no cursor step as it opens, no step forward as it closes */
+           or closes counts for neither until let go: no cursor step as it opens, no step forward as it closes. The
+           sub-screens' own bits (system.c bhCheckSubTask: status 0x8, map 0x40000, computer, typewriter, option), not
+           ts_flg 0x80 (no 3D scene), which a door, a room load or a movie also set (W held through a door stopped in the new room) */
         static int was;
         static unsigned stale;
-        int sub = (sys->ts_flg & 0x80) || pc_trade_screen();
+        int sub = (sys->st_flg & 0x1C040008) || pc_trade_screen();
         if (sub != was) stale = k & (TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT);
         was = sub;
         stale &= k;
