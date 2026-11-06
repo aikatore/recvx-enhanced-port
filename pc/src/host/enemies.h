@@ -18,6 +18,7 @@ typedef struct EnemyOpts {
                                    the models checked in its list (cast.h cast_off; co-op: the host's, EV_CASTOFF) */
     int cast_assign;            /* 0 fixed per character (the seed), 1 random per cutscene (seed and room file) */
     int cast_imports;           /* 1: imported models too (co-op: only while both sides have the same, cast_import_id) */
+    int voices;                 /* 1: "Randomize Voice Lines": a role shown as another story character's model says that one's lines (cast.h) */
 } EnemyOpts;
 extern EnemyOpts g_enemy_opts;  /* our settings (F1, recvx.ini) */
 

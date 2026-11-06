@@ -368,6 +368,25 @@ void ADXT_StartAfs(void* h, int ptid, int fid)
     host_log("adxt: start %d/%d (%u Hz, %u ch, %u samples, loop %d) voice %d%s%s\n", ptid, fid, t->rate, t->channels, t->total, t->loop, t->voice, mod ? " from " : "", mod ? path : "");
 }
 
+/* how long file fid of partition ptid plays (its ADX header, as ADXT_StartAfs finds it), ms; 0 unknown (the voice
+   lines: pc/glue/cast_glue.c) */
+int adx_length_ms(int ptid, int fid)
+{
+    uint32_t lsn, size;
+    uint8_t hdr[SECTOR] = { 0 };
+    char name[64], path[512];
+    FILE* hf = NULL;
+    int ok;
+    if (ptid >= 0 && ptid < MAX_PT && pt[ptid].name[0]) {
+        snprintf(name, sizeof(name), "%s/%d", pt[ptid].name, fid);
+        hf = mod_open_path(name, &size, path, sizeof path, NULL);
+    }
+    if (hf) { rewind(hf); ok = fread(hdr, 1, SECTOR, hf) >= 0x34; fclose(hf); }
+    else ok = adx_afs_locate(ptid, fid, &lsn, &size) && cdvd_read_sectors(lsn, 1, hdr);
+    if (!ok || hdr[0] != 0x80 || !be32(hdr + 8)) return 0;
+    return (int)((uint64_t)be32(hdr + 12) * 1000 / be32(hdr + 8));
+}
+
 static uint64_t played_samples(AdxTalk* t)
 {
     uint64_t now = t->paused ? t->pause_ns : SDL_GetTicksNS();

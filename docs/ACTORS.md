@@ -22,7 +22,8 @@ unless noted; types are in `decomp/include/ps2/veronica/prog/types.h`. Related:
 * Any enemy or NPC model can be shown as the player ("Character Model"): a display actor drawn in
   place of the player, retargeted from the player's skeleton.
 * The cutscene cast randomizer draws the story characters as other models in cutscenes the same
-  way, retargeted from their own skeletons ("Cutscene cast").
+  way, retargeted from their own skeletons ("Cutscene cast"). With "Randomize Voice Lines" a character shown as
+  another story character says that one's lines, with their mouth movements ("Voice lines").
 
 ## Memory and load pipeline
 
@@ -717,7 +718,7 @@ weapon of a hand the model lacks floated at the invisible source's hand.
     linked to the player): linked to the double it would come from `sys->memp`, which broke a
     pending disc read (weapon change). Its swing restarts at the cutscene's start.
   * Voices: `pc_player_voice` keeps the played character's voice while a double acts. Cutscene
-    dialogue is streamed and never swapped.
+    dialogue is streamed and stays the script's, unless "Randomize Voice Lines" is on ("Voice lines").
   * Co-op: each game decides for its own screen (the doubles are local; the partner is not drawn
     during a cutscene of ours, `local_visible`), so each player chooses what they see; a replayed
     cutscene follows the replaying player's setting.
@@ -788,7 +789,7 @@ partner's), taken from the same 31 extra-bank numbers as the spawner's enemy ban
 Setting "Randomize Cutscene Cast" (GAMEPLAY, group CUTSCENE CAST; the lobby's GAME RULES, RANDOMIZER,
 CUTSCENE CAST page; ini `cast_random`, default 0): in cutscenes the story characters are drawn as other
 "Character Model" models. Purely visual: every record keeps its type, motions, script and collision. The
-voices are the scripts' and stay the original character's (cutscene dialogue is streamed); the faces
+voices are the scripts' and stay the original character's (cutscene dialogue is streamed; "Voice lines" below changes them); the faces
 follow the lip data where the model has a face mask. Code: `pc/src/host/cast.c` (who is cast and the
 picks; no game state, ctest `cast`), `pc/glue/cast_glue.c` (in the game), the display actors of
 `actor_glue.c`.
@@ -1066,6 +1067,102 @@ the same in Claire's part and in Chris's.
   and every 10 ticks each cast face's lips, muscles and jaw against its record's;
   `RECVX_TEST_EVENT="f:level:ev,..."` starts a room script's event (a cutscene) without walking to its
   trigger.
+
+## Voice lines
+
+Setting "Randomize Voice Lines" (GAMEPLAY, group CUTSCENE CAST; the BIORAND screen's RANDOMIZER page under the
+character model rows; the lobby's CUTSCENE CAST page, RANDOMIZE VOICES; ini `voice_random`, default 0;
+`EnemyOpts.voices`): in cutscenes a character shown as another story character's model says random lines of that
+character, and its mouth moves as for that line. Steve shown as Wesker says Wesker's lines. It works with whatever
+shows the other model: the cutscene cast's picks, Claire's and Chris's records shown as the player's look for them
+(`coop_look_model`), and the played character's double shown as "Character Model" (also BioRand's "Randomize
+Character Model" and *Per Character*), so it also works with the cast off. Code: `pc/src/host/voices.c` (the
+catalogue and the picks; no game state, ctest `cast`), `pc/glue/cast_glue.c` `pc_voice_*` (in the game), hooks in
+`event.c` (`bhVoiceOn`, `bhLipSet`) and `sdfunc.c` (`CheckPlayEndAdx`, `StopVoice`).
+
+### Lines and speakers
+
+* A cutscene line is op 25 `VoiceOn` (kind, voice number u16, mode, fade, record): file *voice* of `VOICE1.AFS`
+  (stages 0..5) or `VOICE2.AFS` (6..9), streamed on ADX slot 1 (`PlayVoiceEx2`, partition `PatId[1]`, the disc of
+  the room). Kind 0 positions the sound at the player, 1 at enemy record *record*, 2 at an object; every line on the
+  US disc has mode 1 (not positioned), so the record is only a hint. The mouth is op 61 `LipSet` (bank, record,
+  entry): entry *n* of the room's lip list (`sys->lspp`: `hed02` after the motion entries; size, then pairs phoneme
+  0..5 and time, 0xFF last), on that record's face; op 63 `LipStart` starts it (`face.c bhControlMask`).
+* The **speaker** is the record of the `LipSet` that follows the `VoiceOn` before another `VoiceOn`, `End` or
+  `EvtEnd` (`voice_lipset`, at most 16 instructions; on the disc it is the next or the second next instruction).
+  A line without one: the `VoiceOn`'s record when kind is 1; else nobody (the line stays).
+* Counted over all 205 room files of the US disc (with `pc/tools/rdx.py`'s room reader): 673 `VoiceOn` (562
+  distinct files), no `VoiceWait`. 451 have a `LipSet`: the speaker is the face that moves. 195 more name a record
+  (kind 1) and no mouth; where both exist the record and the `LipSet` agree in 345 of 428 lines (81 %), so about
+  one in five of these is said by someone else. 27 kind-0 and 3 kind-2 lines without a `LipSet` name nobody and
+  stay. The speaker's character is `cast_character` of the record's type (the seven; the hazmat man, the
+  creatures and the zombies have none).
+
+### The catalogue
+
+The lines another role may say: every line with a `LipSet` on a story character's record, with that lip entry's
+bytes copied from its room (`voice_scan_room`). Read once with the room files of the teleport list (`teleport.c`,
+its thread, about 2 s; started by the first room load with the option on, `cast_room` -> `tp_count`): the disc's rooms
+and the mods folder's and BioRand's, as the game loads them. Sorted by character, disc and file; a file in several
+rooms once (its first room's lips); a file two characters' `LipSet`s claim is nobody's (2 files). The log:
+`voices: lines with mouth movements: Claire 114, Chris 45, Steve 124, Wesker 46, Alfred 13, Alexia 10, Rodrigo 20`
+(372 lines, 19 KB of lips). Nothing of the disc is in the repository.
+
+A model's character (`voice_model_chr`): the catalogue entries by type (`cast_character`: the cutscene models, the
+event models, Alfred's other uniforms), the player files 10..13 (14, Claire's second costume: Claire). Every other
+model has no lines: the creatures (Monster Steve, Nosferatu, the Tyrant, ...), the zombies, the hazmat man and
+every **imported model** (an Outbreak character has no lines on this disc): the line stays.
+
+### In a cutscene
+
+* `bhVoiceOn` asks `pc_voice_on`: with the option on (`enemy_opts()->voices`: the host's in co-op), the catalogue read,
+  a speaker of a story character shown as another one's model (`shown_model`: the cast's slot, `cast_glue.c as_model`,
+  else the double's `actor_double_shown`), whose character has lines: `voice_pick(seed, room file, disc, file,
+  character)`, a hash of the enemy seed, the room file and the line into that character's lines. The same line in the
+  same room with the same seed is always the same: replays repeat, and both co-op games pick alike. The line is played
+  from its own disc's archive (partitions 28 `VOICE1.AFS`, 29 `VOICE2.AFS`, loaded at the first such line; a mods
+  folder's `VOICE1.AFS/<n>` counts as for the game's), so Chris's lines can be said in Claire's part.
+  The original line's speaker shown as itself, as its own character's other model, or anything without lines: the
+  game's own line.
+* The mouth: the `LipSet` after it (the speaker's) runs as the game's, then `pc_voice_lip` points the record's lip data
+  (`exp0[268]`) at the inserted line's entry; `LipStart` plays it, and the model shown takes the record's lips as
+  always (`face_step`: the bank past or still in the model's face table is its first). The bank stays the script's
+  (each face table has its own banks; the phonemes are 0..5 in every entry).
+* **Timing**: the script waits for a line with `AdxCk` (op 27, 66 in the scripts, all slot 1); `CheckPlayEndAdx(1)`
+  answers from `pc_voice_playing`: "playing" for exactly the original line's length (its ADX header, `adx_length_ms`),
+  whatever the inserted line's, then "ended". So the scene keeps its timing: a longer line goes on over what follows
+  until the next line stops it (`PlayVoiceEx2` stops slot 1) or ends by itself; a shorter one leaves a silence. No
+  script uses `AdxTimeCk`. `StopVoice` (`VoiceOff`, the next line, a skip) ends it. Measured in 0030, 1020 and 9350 (with
+  the cast, a player look and both): every scene lasted as long to 0.1 s as with the option off (97.3, 122.2 and
+  125.9 s), with inserted lines from 0.5 to 17.6 s in place of 0.4 to 16 s ones.
+* The **mouth** follows the inserted line wherever the original line moves a mouth (two thirds of all lines: every
+  catalogue line has lips): measured 19 of 30 lines in 0030 (the rest have no `LipSet`), 25 of 32 in 9350, 4 of 4 in
+  1020; the faces' jaw then runs with the inserted line's phonemes (`RECVX_CAST_TRACE`: `voices: record 2 moves its
+  mouth with the inserted line's lips`). A line without a `LipSet` keeps a still mouth, as before. The mouth moves
+  only on a model with a face (the cutscene models; a player file on the double with "Animated Faces" on, its talking
+  twin; an imported model's jaw, `imp_face`).
+* **Subtitles** stay the script's: the original line's text (`MessageSet` is its own op, timed by the script; the US and
+  European English rooms have no subtitles at all). The text tells the story while the voice is the joke; the inserted
+  line's subtitle would be another room's message, in some languages a message the room does not have.
+* **Translated voices**: the language imports change only the title call (`ADV.AFS/3`, "Translated Title Call",
+  `g_lang_voices`); no import has `VOICE?.AFS` files, so the cutscene voices, inserted or not, are the disc's in every
+  language.
+* **Co-op**: the option goes with the host's enemy options (`EV_EOPTS` `voices`, protocol 38). The cast's picks are
+  the host's on both screens, so both games say the same lines for them (checked: host and guest, the guest's own
+  option off, picked the same 12 lines in 9350 and 9370). Claire and Chris show each player's own look (and the
+  played one's double each player's "Character Model"), so their lines follow each screen's look.
+* The log names every inserted line: `voices: room 9350 record 2: Wesker's line 2/448 (8278 ms), shown as Steve
+  (Cutscene Model) -> Steve's line 1/112 (877 ms) from RM_1050, with its lips`.
+* Off: `pc_voice_on` returns at once and plays as `PlayVoice` did; nothing is read.
+
+### Limits
+
+* About one in five lines without a `LipSet` (195) is given to the record that is only its sound position; such a
+  line may be replaced although its real speaker is not swapped, or kept although it is.
+* The inserted lines are the lines with mouth movements; lines without them (off-screen calls, many short
+  exclamations) are never inserted.
+* A longer line can go on briefly after the scene ends.
+* Test aid: `RECVX_VOICES=0|1` sets the option.
 
 ## Limits
 

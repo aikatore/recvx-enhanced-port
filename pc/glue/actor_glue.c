@@ -2025,6 +2025,16 @@ static int double_acting(const BH_PWORK* ep, int pid)
     return j < 3;
 }
 
+/* the model ep is drawn as while it is a cutscene double of the character played, -1 itself (the voice lines,
+   cast_glue.c pc_voice_on: the double may be hidden while it talks) */
+int actor_double_shown(const BH_PWORK* ep)
+{
+    int j, pid = sys->ply_id & 3;
+    if (dg[ACTOR_DOUBLE].model < 0 || !dg[ACTOR_DOUBLE].rig.ok || !(ep->flg & 0x1) || !ep->id) return -1;
+    for (j = 0; j < 3 && doubles[pid][j] != ep->id; j++);
+    return j < 3 ? dg[ACTOR_DOUBLE].model : -1;
+}
+
 /* a cutscene: a double of the character played is shown (whether as our model or as itself) */
 int actor_double_acting(void)
 {

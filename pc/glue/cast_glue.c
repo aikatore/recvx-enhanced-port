@@ -29,6 +29,7 @@ extern int coop_on;
 extern int cast_n;                      /* actor_glue.c: hooks run while > 0 */
 unsigned coop_partner_import_id(void);  /* coop_glue.c: the partner's cast_import_id, 0 none */
 int coop_look_model(int c);             /* coop_glue.c: the player's look for Claire or Chris as a model, -1 themselves */
+int tp_count(void);                     /* teleport.c: reads the room files once (and the voice lines: voice_scan_room) */
 
 #define CSLOTS (ACTOR_SLOTS - ACTOR_CAST)
 #define RECS 128
@@ -91,6 +92,8 @@ void cast_room(const EnemyOpts* o)
         for (k = 0; k < (int)((const unsigned char*)sys->ply_stflg - b); k++) h = (h ^ b[k]) * 16777619u;   /* story, item, kill, key, map flags and items */
         host_log("cast: room %04d loaded: state %08x, player %.2f %.2f %.2f hp %d\n", room, h, plp ? plp->px : 0.0f, plp ? plp->py : 0.0f, plp ? plp->pz : 0.0f, plp ? plp->hp : 0);
     }
+    pc_voice_stop();
+    if (o && o->voices) tp_count();   /* "Randomize Voice Lines": the lines are read with the room files, once, on a thread of their own */
     if (!o || !rom || (!o->cast && !g_appear_per)) { cast_release(); return; }   /* ("Per Character": Claire's and Chris's looks without the cast) */
     imports = import_count(o);
     scene = o->cast_assign ? (unsigned)room + 1 : 0;
@@ -267,6 +270,82 @@ int cast_draw(BH_PWORK* ep)
     if (creature_part(ep)) return 1;   /* (drawn: as nothing) */
     return as_model(ep, k) && actor_put_as(ACTOR_CAST + rec_slot[k], ep);
 }
+
+/* ---------------------------------------------------------------- "Randomize Voice Lines" (cast.h voices.c; docs/ACTORS.md "Voice lines")
+   A line's speaker (the record the next LipSet moves the mouth of, else the VoiceOn's record) shown as another story
+   character's model (a cast pick, the player's look for Claire or Chris, the double's "Character Model") says a line of
+   that character instead (voice_pick: from the seed, the room file and the line), played from that line's disc's archive
+   (partitions VOICE_PT + 0/1), and the LipSet after it plays that line's lip entry. The script waits for it as long as for
+   its own line (pc_voice_playing): a longer one goes on over what follows (until the next line stops it), a shorter one
+   leaves a silence; the scene keeps its timing. Subtitles stay the script's (the original line's text). */
+int coop_insn_len_raw(const unsigned char* p);   /* net/coop_proto.c */
+int adx_length_ms(int ptid, int fid);            /* audio/adx.c */
+int ADXF_LoadPartitionNw(int ptid, char* fname, void* dir, void* ptinfo);
+int ADXF_GetPtStat(int ptid);
+int actor_double_shown(const BH_PWORK* ep);      /* actor_glue.c */
+uint64_t SDL_GetTicks(void);
+extern int PatId[4];
+#define VOICE_PT 28
+static struct { int on, rec, ms; const unsigned char* lip; uint64_t t0; } vl;   /* on: 1 an inserted line plays, 2 the original's time is over */
+
+/* the model record k is drawn as now, -1 itself */
+static int shown_model(int k)
+{
+    if (cast_n && as_model(&ene[k], k)) return slot_model[rec_slot[k]];
+    return actor_double_shown(&ene[k]);
+}
+
+int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid)
+{
+    static int logged, part[2];
+    const EnemyOpts* o = enemy_opts();
+    int disc = (sys->ss_flg & 0x1) + 1, sp = -1, own, chr, m, lrec, ms, lip;
+    const VoiceLine* l;
+    vl.on = 0;
+    if (!o || !o->voices || !rom) return vid;
+    if (voice_count(0) < 0) {   /* (the room files are being read: cast_room started it) */
+        tp_count();
+        if (!logged++) host_log("voices: the lines are not read yet: line %d/%d stays\n", disc, vid);
+        return vid;
+    }
+    if ((lip = voice_lipset(next, 512, coop_insn_len_raw, &lrec)) >= 0) sp = lrec;
+    else if (kind == 1) sp = rec;
+    if (sp < 0 || sp >= rom->ene_n || sp >= RECS) return vid;
+    own = cast_character(ene[sp].id, ene[sp].mdlver);
+    m = shown_model(sp);
+    chr = voice_model_chr(m);
+    if (own < 0 || chr < 0 || chr == own || !(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr))) return vid;
+    if (!part[l->disc - 1]) {   /* the line's archive as a partition of its own (the game's 1 is the room's disc's) */
+        ADXF_LoadPartitionNw(VOICE_PT + l->disc - 1, l->disc == 1 ? (char*)"\\VOICE1.AFS" : (char*)"\\VOICE2.AFS", NULL, NULL);
+        part[l->disc - 1] = ADXF_GetPtStat(VOICE_PT + l->disc - 1) == 3 ? 1 : -1;   /* (ADXF_STAT_READEND) */
+    }
+    if (part[l->disc - 1] < 0) return vid;
+    ms = adx_length_ms(PatId[1], vid);
+    host_log("voices: room %04d record %d: %s's line %d/%d (%d ms), shown as %s -> %s's line %d/%d (%d ms) from RM_%04d, %s\n", room_file_now(), sp,
+             cast_name(own), disc, vid, ms, m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?", cast_name(chr), l->disc, l->vid,
+             adx_length_ms(VOICE_PT + l->disc - 1, l->vid), l->room, lip >= 0 ? "with its lips" : "no lips (none in the script: the speaker is the VoiceOn's record)");
+    vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = l->lip; vl.t0 = SDL_GetTicks();
+    *ptid = VOICE_PT + l->disc - 1;
+    return l->vid;
+}
+
+void pc_voice_lip(BH_PWORK* pp, int rec)
+{
+    if (vl.on != 1 || !vl.lip || rec != vl.rec || !pp->exp0 || !pp->exp2) return;
+    ((int*)pp->exp0)[268] = (int)(uintptr_t)vl.lip;   /* (bhSetLip's: the entry LipStart plays) */
+    if (getenv("RECVX_CAST_TRACE")) host_log("voices: record %d moves its mouth with the inserted line's lips (bank %d)\n", rec, ((int*)pp->exp0)[4]);
+    vl.lip = NULL;
+}
+
+int pc_voice_playing(int flag)
+{
+    if (!vl.on || !vl.ms) return flag;
+    if (vl.on == 1 && SDL_GetTicks() - vl.t0 < (uint64_t)vl.ms) return 1;
+    vl.on = 2;
+    return 0;
+}
+
+void pc_voice_stop(void) { vl.on = 0; }
 
 /* --dev cutscene log (devcine_glue.c): this room visit's swaps, "r3 Alfred(94)->Tyrant, r5 Rodrigo(98)->Wesker,
    r0 Chris(92)->Hunter (your look)" (Claire's and Chris's: the player's look for them);
