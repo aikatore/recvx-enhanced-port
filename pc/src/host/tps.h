@@ -20,6 +20,8 @@ typedef struct TpsConfig {
     int precise;              /* "Precise hits": free-aim shots hit only the enemies' bodies (tps_glue.c pc_precise_hits) */
     int aim_walk;             /* "Move While Aiming": walk slowly while aiming or reloading, the legs walking under the aim (tps_glue.c) */
     int hit_react;            /* "Locational Hit Reactions": a zombie hit on the head, an arm or a leg flinches there (tps_glue.c, drawn only) */
+    int headshots;            /* "Headshots & Piercing": more head damage from the rifles, killing head hits burst a zombie's head,
+                                 the sniper rifle pierces (tps_glue.c; co-op: the host's, pc_headshots) */
     int atmos;                /* light and fog: 1 = smooth (fades between the cuts' settings), 0 = per cut */
     int free_cam;             /* mouse/keyboard camera: 0 = B (behind the character, the mouse turns it),
                                  1 = A (free: the mouse orbits the camera, WASD walk relative to it) */

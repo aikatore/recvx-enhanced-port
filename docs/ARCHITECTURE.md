@@ -972,10 +972,14 @@ What the options do in detail, beyond [USER_GUIDE.md](USER_GUIDE.md#settings):
 - **Stack Rifle Ammo**: rifle and assault rifle bullets; forced on while BioRand is on (its item
   amounts count on it).
 - **Precise Shots** (third person): a head hit does half again the damage (zombies, Cerberus,
-  Bandersnatch, Tyrant, Alexia's first form, Steve), and a zombie's head bursts (magnum, shotgun,
-  sniper rifle) only from a hit on the head. The shotgun keeps a narrow spread; grenades, the bow
+  Bandersnatch, Tyrant, Alexia's first form, Steve), a zombie's head bursts (magnum, shotgun,
+  sniper rifle) only from a hit on the head, and the blood comes from the point hit. The shotgun keeps a narrow spread; grenades, the bow
   gun, the rocket and linear launchers and the knife hit as in the game. Not with "Aim Assist"
   on the mouse or with the fixed cameras ([THIRDPERSON.md](THIRDPERSON.md#precise-hits)).
+- **Headshots & Piercing** (third person; co-op: the host's): sniper rifle head hits do 300 %, assault
+  rifle 200 % (not on the bosses); a killing head hit bursts a zombie's head with the magnum, Gold Lugers,
+  shotgun, sniper and assault rifle in any state the game's walking-only rule misses; the sniper rifle's
+  shot pierces enemies up to the wall ([THIRDPERSON.md](THIRDPERSON.md#headshots-and-piercing)).
 - **Save list** (native files): the heading reads "Load Game" or "Save Game" instead of "MEMORY
   CARD slot 1"; the list scrolls through all saves. The first native start also copies the system
   data and co-op partner files from the card; the log says how many saves. A changed save system

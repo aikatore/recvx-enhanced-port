@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 40                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 41                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -44,7 +44,8 @@ extern "C" {
                                            38: EV_EOPTS voices ("Randomize Voice Lines");
                                            39: EV_EOPTS types and rate[] (the randomizer's "Custom" rates and "Types per Room"), extra up to
                                                ENEMY_EXTRA_MAX, variety 2 (Custom);
-                                           40: EV_FX of FX_REACT (third person "Locational Hit Reactions": where a shot hit a zombie) */
+                                           40: EV_FX of FX_REACT (third person "Locational Hit Reactions": where a shot hit a zombie);
+                                           41: OPT2_HEADSHOTS (third person "Headshots & Piercing", the host's) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
 #define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */
@@ -69,7 +70,8 @@ enum { OPT_INDIVIDUAL = 1, OPT_TRADE_FREEZE = 2,   /* Pose.opts: the host's sess
        OPT_QUICK_START = 128,           /* a new-game inventory starts with the manual read and the knife from the first room */
        OPT_ALL = 255 };
 enum { OPT2_EXTRA_OBJECTS = 1,          /* Pose.opts2 (protocol 33): extra item boxes and blue herb planters (pc/glue/extras_glue.c) */
-       OPT2_ALL = 1 };
+       OPT2_HEADSHOTS = 2,              /* (protocol 41) third person "Headshots & Piercing": rifle head damage, head bursts, piercing (tps_glue.c) */
+       OPT2_ALL = 3 };
 enum { BUSY_NONE, BUSY_EVENT, BUSY_MENU, BUSY_BOX, BUSY_TRADE };
 enum { MSET_OWN = -1, MSET_ROOM = -2, MSET_NONE = -3 };
 #define MNW_ROOM 0x7FFE

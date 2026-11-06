@@ -376,7 +376,9 @@ Weapon Shortcuts (on, [Weapon shortcuts](#weapon-shortcuts)), then the bindings.
 | Mouse Camera Style | Behind Character | Behind Character: the mouse turns you. Free Camera: the mouse orbits the camera, W/A/S/D walk relative to it |
 | Lighting and Fog | Smooth | fades when the room's camera cut changes. Original: changes with each camera cut, as the original |
 | Aim Assist | Off | Off: free aim. On: the game's lock-on (gamepad: aim assist) |
-| Precise Shots | On | free-aim shots hit only where the crosshair meets the body; head hits do more damage |
+| Precise Shots | On | free-aim shots hit only where the crosshair meets the body; head hits do more damage, and the blood comes from where the shot hit (the head, an arm, a leg) |
+| Locational Hit Reactions | On | a zombie shot in the head, an arm or a leg flinches there; damage and timing stay the same |
+| Headshots & Piercing | On | sniper and assault rifle headshots do more damage; a killing headshot from the magnum, shotgun, Gold Lugers, sniper or assault rifle bursts a zombie's head; sniper rifle shots go through enemies (not walls). In co-op, the host's choice counts |
 | Move While Aiming | Off | walk slowly with the weapon raised, firing, slashing or reloading: W/A/S/D or the left stick move you (forward, back, sideways), the arms keep aiming; not with Aim Assist's lock-on (mouse, Classic gamepad) |
 | Gamepad Controls | Modern | see [Third person with a gamepad](#third-person-with-a-gamepad) |
 

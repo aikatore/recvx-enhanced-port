@@ -135,6 +135,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "tps_precise_hits", &g_tps.precise, 0, 1 },
     { "tps_aim_walk", &g_tps.aim_walk, 0, 1 },
     { "tps_hit_react", &g_tps.hit_react, 0, 1 },
+    { "tps_headshots", &g_tps.headshots, 0, 1 },
     { "tps_atmos", &g_tps.atmos, 0, 1 },
     { "tps_free_camera", &g_tps.free_cam, 0, 1 },
     { "tps_key", &g_tps.key, 1, 511 },

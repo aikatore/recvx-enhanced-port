@@ -188,6 +188,7 @@ unit (the character is about 17 units tall).
 | Aim Assist (0 = free aim) | `tps_auto_aim` | 0 |
 | Precise Shots ([Precise Shots](#precise-hits)) | `tps_precise_hits` | 1 |
 | Locational Hit Reactions ([Locational hit reactions](#locational-hit-reactions)) | `tps_hit_react` | 1 |
+| Headshots & Piercing ([Headshots and piercing](#headshots-and-piercing); co-op: the host's) | `tps_headshots` | 1 |
 | Move While Aiming ([Moving while aiming](#moving-while-aiming)) | `tps_aim_walk` | 0 |
 | Mouse Camera Style (0 = Behind Character, 1 = Free Camera) | `tps_free_camera` | 0 |
 | Gamepad Controls (0 = Classic, 1 = Modern) | `tps_pad_controls` | 1 |
@@ -654,6 +655,22 @@ precise, with this weapon) only that hit on the head counts: not head damage fro
 magnum's near hit on the hips or chest or the shotgun aimed up within 10 units. Measured: the magnum
 at the hips 14 units away burst the head with the game's test and does not with this; on the head
 it bursts at 14 and at 27 units, the shotgun too. The grenade launcher and bow gun keep the game's rule.
+With [Headshots & Piercing](#headshots-and-piercing) the rifles do more on the head, and a killing head
+hit bursts a zombie's head in more cases.
+
+**Blood at the hit.** A precise hit's blood comes from where the shot entered, on the joint it hit
+(`zonzon.c bhEne_SetBlood` and `en01.c bhEne01_SetBlood` -> `pc_blood_at_hit`): the point in that joint's
+frame, as the game already places the sniper rifle's and the bow gun's. The game puts it at a spot of the
+enemy's blood table for the joint hit, which for a zombie's head and neck is on its chest (`en01prt_blood_tbl`
+joints 10 and 11 link to node 9), and the spray of a killing hit or a shotgun hit on the chest or, for a
+leg, the hips (`bhEne_SetBlood4` on node 9 or 1). Now the splash, the drops and the spray start at the
+head, the arm or the leg hit, and the shotgun's or a kill's chunks from the hit point. Every enemy with a
+blood table (zombies, Cerberus, the Bandersnatch, the anatomist, Steve and the others using
+`bhEne_SetBlood`). Always on with Precise Shots: it shows where the hit was judged. The table's random
+draws are still made and the hit's joint (`djnt_no`) is left as the game leaves it, so damage, AI and timings
+stay the game's. A point more than 10 units from the joint (the magnum's piercing stores the nearest enemy's
+point for the others) keeps the game's place. Without Precise Shots, with the fixed cameras and for blasts,
+arrows and the knife, the game's places.
 
 **Bosses.** Nosferatu (Battle Game 5/80): the sniper rifle on its core (volume 0) still does five
 times the damage (`en15.c`, `cpcl_no` 0) and kills it as with the game's test. The final Alexia
@@ -688,7 +705,12 @@ one hit reaction for a zombie wherever a shot lands: walking, a jolt of its spin
 * **Drawing only** (`eneset.c bhDrawEnemy` -> `pc_hit_react`): after the zombie's node matrices are posed,
   the part's nodes (its subtree in the model's tree) are turned in world space for its draw and put back
   after it, as the head blow-off hides the head ([ENEMIES.md](ENEMIES.md#head-blow-offs)). Its linked
-  parts on those nodes (caps on the head) turn with it. The motion, the node angles, the hit volumes, damage,
+  parts on those nodes (caps on the head) turn with it, and so do the effects linked to them (the blood
+  at the hit, [Precise hits](#precise-hits)): the nodes are turned the same way while the effects step and
+  are drawn (`effect.c bhControlEffect`, `bhDrawEffect` -> `pc_hit_react_fx`, up to 8 zombies at once) and put
+  back after. Each node's matrix is saved and put back whole (`node_mtx`; before, the copy took 64 bytes
+  per node of the 80-byte node works, so the last nodes, the left arm's, kept the flinch until the zombie's
+  next pose). The motion, the node angles, the hit volumes, damage,
   stun, damage modes, AI and timings are the game's: runs with the setting off and on are identical in every
   enemy step (hp, modes, motion and frame), hit and aim trace line (handgun on the head, arms and legs,
   Precise Shots off, shotgun, magnum, sub machine gun; to the zombie's death or head burst).
@@ -697,6 +719,49 @@ one hit reaction for a zombie wherever a shot lands: walking, a jolt of its spin
   person, whichever side runs the zombie. Checked both ways (host and guest shooting the head and an arm:
   every hit flinched on both sides).
 * Zombies only (type 1, every look). Off, and with the fixed cameras: nothing changes.
+
+## Headshots and piercing
+
+Setting "Headshots & Piercing" (THIRD PERSON page, ini `tps_headshots`, on by default; in co-op the host's
+choice, `OPT2_HEADSHOTS`). It changes the balance, in third person and its scope only (`tps_glue.c`):
+
+* **Head damage** (with [Precise Shots](#precise-hits), `pc_precise_dam` -> `head_damage`): a precise head
+  hit with the sniper rifle does 300 % of its damage (80 -> 240 on a zombie, which has 60, 90 or 120), with
+  the assault rifle 200 % (8 -> 16); every other gun keeps Precise Shots' 150 %. Not on the bosses with a
+  head joint (Alexia's first form, Steve, the Tyrant), which keep 150 %.
+* **Head bursts** (`en01.c bhEne01_DmgCheck` -> `pc_burst_head` -> `pc_head_burst`): a precise head hit that
+  kills a zombie bursts its head, through the game's own burst (hp -1, `exp0 + 0x78` = -1, effect 356 at the
+  neck by `bhEne01_ExpHeadEffect2`, sound 4869; [ENEMIES.md](ENEMIES.md#head-blow-offs)), with the magnum,
+  the Gold Lugers, the shotgun, the sniper rifle and the assault rifle. The game bursts a head only for its
+  `0x10` weapons (magnum, Gold Lugers, shotgun, sniper rifle, grenade rounds, explosive arrows) and only on a
+  zombie walking (`bhEne01_DmgCheckType00`, mode 1); with this a killing head hit also bursts it while the
+  zombie staggers or falls from an earlier hit. The assault rifle is the one new weapon: a rifle round, but
+  four to eight head hits a zombie, so only the killing one bursts. The handguns, the sub machine guns
+  and the bow gun never burst a head (the game's choice, and their rounds are the lightest: 4 to 18 a hit).
+  Hits on a zombie already dying burst nothing; the game's exclusions stay (model versions 31 and 42, a
+  crawling or kneeling zombie, `exp0 + 0x40 & 0x80440000`). Other enemies: only the anatomist has a head
+  burst in the game (`en26.c bhEne26_CheckExpHead`, the same weapons); it keeps the game's rule.
+* **Piercing** (`weapon.c bhCheckGunAtari` -> `pc_pierce`): the sniper rifle's shot goes through enemies as
+  the magnum's and the shotgun's do (`WpnTab` flag `0x80000000`): every enemy along it up to the first wall
+  is hit, each with its own hit point, joint and distance, and the full damage. Walls stop it as the game's
+  test does (the shot's length ends at the wall, `bhCheckL2Wall`, and a wall between the gun and an enemy's
+  hit point, `bhCheckC2WallN`); only enemies are tested, never the player or the co-op partner. Not the
+  assault rifle: full-automatic fire through a crowd would clear rooms the game meant to be fought.
+* **Co-op**: the host's choice counts for both (`pc_headshots`, `Pose.opts2` bit 2, protocol 41). The shooter
+  applies the head damage and the piercing and sends each enemy's damage as before (`EV_ENE_HIT`); the side
+  running the zombie bursts its head by the same rule (`COOP_HIT_PRECISE`) and its burst reaches the partner
+  as effect 356, as the game's bursts do. The blood is made by the side running the enemy from the hit point
+  and joint in `EV_ENE_HIT`, and its effects reach the partner as the game's do, at the same joint.
+* Off: the game's head damage (Precise Shots' 150 %), bursts and piercing: shooting runs to the zombie's death
+  (handgun, magnum, shotgun, sniper rifle, assault rifle, sub machine gun, Gold Lugers; head, arms, legs, torso)
+  are identical to the build without it in every enemy step, hit and aim trace line, the blood at the hit
+  included; the fixed cameras frame for frame (`layout_check.sh`).
+* **Checked** (lift hall 3/0, `RECVX_TPS_TRACE=2`): the assault rifle at a 120-hp zombie's head, 16 a hit,
+  burst it on the eighth (it was staggering: the game's rule would not); the sniper rifle 240 on the head;
+  one sniper shot along three zombies hit all three (off: the first); with the third zombie behind the wall it was not
+  hit and one in front of it was; co-op both ways: the guest's and the host's assault rifle burst the head on
+  both sides, and with the host's setting off the guest's hits did 12 and burst nothing although its own
+  setting was on.
 
 ## Limits
 

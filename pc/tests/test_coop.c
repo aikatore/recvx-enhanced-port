@@ -544,6 +544,7 @@ static void test_dgrams(void)
     BADP(q.opts = OPT_SKIP_DETECTOR, COOP_OK);    /* protocol 22: the metal detector rule */
     BADP(q.opts = OPT_QUICK_START, COOP_OK);      /* protocol 23: the quick start rule (every option bit is in use) */
     BADP(q.opts2 = OPT2_EXTRA_OBJECTS, COOP_OK);  /* protocol 33: more rules, extra item boxes and herbs */
+    BADP(q.opts2 = OPT2_HEADSHOTS, COOP_OK);      /* protocol 41: third person "Headshots & Piercing" */
     BADP(q.opts2 = OPT2_ALL + 1, COOP_BAD_FIELD); /* only the rules this protocol has */
     {   /* the PoseExt's enumerations (protocol 16) */
         PoseExt x;

@@ -11,7 +11,11 @@
   scene. Off by default; on the BioRand RANDOMIZER page, in the multiplayer lobby and in the Enhanced Settings.
 - **Locational Hit Reactions**: in the over-the-shoulder camera, a zombie shot in the head, an arm or a leg now
   flinches there: the head snaps back, the arm jerks away, the leg buckles. Damage, stun and timing stay the same.
-  A co-op partner sees it too. On by default, with a setting to turn it off.
+  A co-op partner sees it too. On by default, with a setting to turn it off. Blood now also comes from where the
+  shot hit, the head, an arm or a leg, instead of the chest.
+- **Headshots & Piercing**: in the over-the-shoulder camera, sniper and assault rifle headshots hit harder, a
+  killing headshot from the magnum, shotgun, Gold Lugers or a rifle bursts a zombie's head even when it staggers,
+  and sniper rifle shots go through enemies until they hit a wall. On by default; in co-op the host decides.
 - **Custom enemy rates**: Randomizer Variety is now Enemy Selection, with a third choice, Custom. It sets how often
   each enemy type is chosen, Mutated Steve included, from off to very often, like BioRand's enemy sliders. Picking
   Wild or Mild first fills in their rates as a start. Also on the multiplayer lobby's randomizer page.
