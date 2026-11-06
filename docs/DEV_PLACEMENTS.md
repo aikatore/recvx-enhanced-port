@@ -20,6 +20,10 @@ hook `game.c bhAllDrawModel` (after the room's objects and items). Test: ctest `
    Player**. The new entry is selected; the list shows the entries of this room.
 4. Move it with the gizmo or the fields, **Snap to Floor**, turn it. **Duplicate**, **Delete**,
    **To Player** work on the selected entry; click a list row to select or deselect it.
+   A typewriter has a **Save Text** field: the location the save list shows for saves made at it, in place of the
+   room's name (as an extra, [below](#typewriter-save-text)); empty keeps the room's name. At most 16 letters, no `"`;
+   any UTF-8, shown in the game's font: a letter the font of the game's text language lacks (with English, accents)
+   shows as the plain letter or `?` (`lang.h pc_glyph_next`).
 5. **Export** writes the file at once and copies its text to the clipboard: hand that text over.
    The file is also written by itself half a second after each change and read at the next start,
    so nothing is lost between sessions.
@@ -117,6 +121,7 @@ their extent around the origin (x, y, z at angle 0).
 | `ax_deg`, `ay_deg`, `az_deg` | the same in degrees, -180..180 (for reading; ignored when read back) |
 | `floor` | floor number at the position (`bhCheckFloorNum(y)`): the `flr_no` of records there |
 | `file` | the room file of that case, `RM_SRRC.RDX` (for reading) |
+| `text` | typewriter: its save text in double quotes (`text="Prison: Gate"`, spaces kept), left out when empty |
 
 Example:
 
@@ -189,15 +194,15 @@ work:
   `hitchk.c bhCheckExmAtari` then animates the lid (`objitm.c bhObjItmBox`) and opens the item
   box screen; `prm0 = 0xFF` opens the screen without a lid. The front is +z of the model turned by
   `ay`; the footprint is the extent in the header (12 x 9.4 units).
-* **Typewriter**: a type 3 trigger with the typewriter's message (the ink ribbon question) in
-  front of it; the save screen opens as `RECVX_TEST_TYPEWRITER` does (`cb_flg |= 0x200000`).
+* **Typewriter**: done as an extra ([below](#extra-item-boxes-and-herbs)): RM_1080's trigger 6 around it, its
+  ink ribbon question and "Yes" opening the save screen (`cb_flg |= 0x200000`).
 * Walls: none are added here; a solid box needs a type 0 wall record (box `w` x `d`, height 9).
 
 ## Test aids
 
 | Variable | Effect |
 |---|---|
-| `RECVX_PLACE="f:op[:args],..."` | game frames counted in rooms (with `--dev`): `add:type[:dist]` (in front of the player, facing it, selected), `sel:i`, `move:dx:dy:dz`, `rot:ax:ay:az` (degrees), `snap`, `del`, `rings:0/1`, `log` (the room's entries and, with the F2 window open, the gizmo's screen place) |
+| `RECVX_PLACE="f:op[:args],..."` | game frames counted in rooms (with `--dev`): `add:type[:dist]` (in front of the player, facing it, selected), `sel:i`, `move:dx:dy:dz`, `rot:ax:ay:az` (degrees), `snap`, `del`, `text:words` (the selected typewriter's save text, no commas), `rings:0/1`, `log` (the room's entries with their texts and, with the F2 window open, the gizmo's screen place) |
 | `RECVX_PLACE_DRAG="f:handle:dx:dy,..."` | from presented frame f, the mouse grabs the selected entry's handle (`x y z free rx ry rz`) and moves by dx, dy window pixels over 20 presented frames (F2 open: `RECVX_SHOW_OVERLAY=2`) |
 
 Limits: the list holds 256 entries; at most 8 roots and 24 nodes per model and 16
@@ -209,7 +214,8 @@ tests (the offscreen driver gives letter keys no key code); arrows and Page Up/D
 The GAMEPLAY setting **Extra Item Boxes and Herbs** (F1 / ENHANCED SETTINGS, BioRand's EXTRA OPTIONS, the co-op
 lobby's EXTRA EVENTS page; ini `extra_objects`, default off; in co-op the host's: `Pose.opts2`
 `OPT2_EXTRA_OBJECTS`, protocol 33, [COOP.md](COOP.md) "Extra item boxes and herbs") puts the placements of
-`pc/src/host/extras.c` into their rooms, working as the game's own objects. Code: `pc/src/host/extras.c`
+`pc/src/host/extras.c` into their rooms, working as the game's own objects: item boxes, blue herb planters and
+typewriters (no typewriter is placed yet). Code: `pc/src/host/extras.c`
 (the table, the shapes, the geometry; pure, ctest `placer`), `pc/glue/extras_glue.c` (the game's side), hooks
 `enemyopt_glue.c enemy_room_finished` (the room is set up), `event.c bhControlEvent` before scd1
 (`pc_extras_scd1`), the placer's `placer_frame` (loading) and `placer_draw` (drawing).
@@ -225,9 +231,10 @@ lobby's EXTRA EVENTS page; ini `extra_objects`, default off; in co-op the host's
   address triggers by their room numbers, below these). With the rule off nothing is added; turned off in a room
   the records are switched off (`flg` 0), turned on they are made then (or switched on again).
 * **Walls**: type 0 boxes (`extras.c` `extra_shapes`: the item box 12 x 9, height 9, as RM_1080's wall 22; the
-  planter 5.4 x 2.3, height 2, as RM_7090's wall 12), the model's rectangle turned by its `ay` (its box around
-  it, so up to 10 degrees off the axes), on its floor (`bhCheckFloorNum`, `rom->grand`). Turned further (the planter
-  in 1/2 at 45 degrees), a row of three cylinders (type 2) along it instead.
+  planter 5.4 x 2.3, height 2, as RM_7090's wall 12; a typewriter on the floor its model, 4.2 x 4.8, height 2.7, and
+  none on a desk or crate, more than 0.5 above its floor level, whose own wall is there), the model's rectangle turned
+  by its `ay` (its box around it, so up to 10 degrees off the axes), on its floor (`bhCheckFloorNum`, `rom->grand`).
+  Turned further (the planter in 1/2 at 45 degrees), a row of three cylinders (type 2) along it instead.
 * **Triggers**: usable only facing the object from its open side (the direction bits 0x400 .. 0x2000 of
   `bhCheckExmAtari`; near 45 degrees both directions next to it), so not through a wall from the room behind.
   * **Item box**: type 4, `attr` 0x2, the box in front of it (RM_1080's trigger 3: 11 x 5 from 1.5 in front of
@@ -248,15 +255,53 @@ lobby's EXTRA EVENTS page; ini `extra_objects`, default off; in co-op the host's
     The texts are RM_7090's messages 14, 15, 16: the imported language's (`lang_glue.c pc_lang_room_text`, its
     `ROOMS.MES`) or the disc's (US), shown through the game's message box from our own table (`say`: as
     `bhSetMessage`), so no room's message list changes.
+  * **Typewriter**: type 3, `attr` 0, RM_1080's trigger 6 as it lies around that room's typewriter (x -6.2 .. 0.8,
+    z -2.6 .. 4.4 from its middle: the typewriter's keys face -x of the model), usable facing +x of the model only
+    (RM_1080's `attr` 0x9c00 direction bits). Its use is what RM_1080 does there: the trigger's message
+    (`hitchk.c` `attr` 0x8000: `bhSetMessage`, the pad saved, `cb_flg` 0x20, `st_flg` 0x2000 | 0x4) chosen by the
+    script's `PlItemCheck 31`: with an ink ribbon in the bag (`ItemSearch`) or Free Typewriter Saves, "You can save
+    your progress with this. Use an ink ribbon?" Yes / No (RM_1080 message 0), and Yes (`sys->mes_sel` 0 once `cb_flg`
+    0x1000 and `st_flg` 0x4000 are set) opens the save screen (`cb_flg` 0x200000); without one "An old typewriter. I
+    could save my progress if I had an ink ribbon." (message 3). The save uses a ribbon as at every typewriter
+    (`mcWriteStartSaveFile`). Texts as the planter's.
 * **Models**: the placer's loader and drawing (`placer_ready`, `placer_put`), loaded when first needed after a
   frame (`placer_frame`, also without `--dev`) into the placer's buffer (box and planter: about 45 KB of its
   160 KB), drawn after the room's objects and items. With `--dev` a placer entry at the same spot as an extra
   of its type is not drawn twice.
 * **Nothing is saved**: the objects have no flags; a room set up again (a load, a retry, a door) gets them again.
+* **Sounds**: the item box lid's (`objitm.c bhObjItmBox`: `CallSystemSe` 0x80000240) and the save screen's typewriter
+  keys and bell (0x80000242 .. 0x80000244) are system sounds of MIDI bank 2, whose sequences every room has but whose
+  programs (64, 66, 67, ...) each room's sound pack (`RM_SRRC.SPQ`, its MIDI program bank 2) holds only when the room
+  uses them: save rooms. Elsewhere the lid and the keys were silent (`RECVX_TRACE_SND`: "key-on prog 64 ... dropped (no
+  such program)"). The first room with an extra box or typewriter loads RM_1080's MIDI program bank 2 from the disc
+  once (`snd_iop.c snd_sysbank_load`, 470 KB, kept), and a bank 2 key-on whose program the room's bank lacks plays it
+  from there (`snd_synth.c key_on`: "key-on prog 64 from the save room's bank 2"); a program the room has plays as
+  before. F2's Save Now loads it too (its keys outside save rooms). The planter makes no sound of its own (RM_7090's
+  event 60 has none), so it has no such gap.
 * **Co-op**: both games make the same records in the same order at the room's set-up, so the trigger numbers
-  match (the planter's "<name> is using this" lock goes by them, `coop_examine`). The box is the game's box
-  screen, so shared or individual loot apply as at every box (`box_frame`, `EV_BOX`); the planter's cure is the
-  local player's.
+  match (the planter's and typewriter's "<name> is using this" lock goes by them, `coop_examine`). The box is the
+  game's box screen, so shared or individual loot apply as at every box (`box_frame`, `EV_BOX`); the planter's cure is
+  the local player's, a typewriter's save and its text the saving player's own. Both games load the sounds' bank.
+
+### Typewriter save text
+
+A placed typewriter's `text` (the placer's Save Text) is the location its saves show in the save and load lists, in
+place of the room's name (`ps2_McSaveFile.c` message 215 + `RoomNameSwitch`, which names only the 18 save rooms and
+shows NO_DATA for any other):
+
+* **In the save**: "Yes" at the typewriter writes `LOC=` and the text (UTF-8, its NUL) into `sys->itm[292..301]`
+  (`savestore.h SAVE_TEXT_ITM`, save-region words no game code uses; [coop_glue.c](../pc/glue/coop_glue.c)'s map of
+  `sys->itm`), so the save written next carries it, in either save system and through the card import. The words are
+  cleared every game frame no save screen is open (`pc_extras_scd1`), so a loaded save's text goes no further and every
+  other save (other typewriters, Save Now) has none. No text: all zero, the room's name as before.
+* **In the lists**: `savestore.c savestore_text` reads it back (only after `LOC=`, printable, ended); native rows take
+  it from the file (`SaveEntry.text`), card rows and a row just written from `mcGetPortSelectDirInfo`
+  (`pc_save_row_note`). `mcDispFileName` draws it at the room name's place (`pc_save_text_draw`: the game's font, made
+  narrower when wider than 256, as wide W's would run past the window), and the row typed in after a save
+  (`mcDisplaySelectFileInfoMesCount`, `mcSetStringSaveFile`) takes its length instead of the room's `Type_Space`
+  entry, with the keys' sounds. A save in a room without a save-menu name and without a text (Save Now) types its
+  NO_DATA the same way (retail read `Type_Space[-1]` there and typed nothing).
+* **The file name**: the label is the text (`001_Chris_Prison-Gate.sav`).
 
 ### The placements
 
@@ -283,8 +328,9 @@ triggers around each spot are the same there, so those placements have both case
 
 ### Adding placements
 
-1. Place the objects with the `--dev` placer (above) and **Export**; only `item_box` and `blue_herb_bed` work
-   as extras (`extras.c extra_shapes`; another model needs a shape and a behaviour there).
+1. Place the objects with the `--dev` placer (above) and **Export**; only `item_box`, `blue_herb_bed` and
+   `typewriter` work as extras (`extras.c extra_shapes`; another model needs a shape and a behaviour there). Put a
+   typewriter on a desk or crate (Snap to Floor) with its keys toward the walkable side, and give it its Save Text.
 2. Paste each exported line into `lines[]` of `pc/src/host/extras.c` (the `ax_deg`, `ay_deg`, `az_deg` and
    `file` keys may go). Add ` cases=0,1` when the room has other cases (`RM_SRR1.RDX` ...) in which the spot is
    free and walkable; without it only the case the line was placed in gets it.
@@ -300,9 +346,12 @@ game keeps for its movable objects' extra records (a room that has them full get
 ### Test aid
 
 `RECVX_EXTRAS="f:op[:arg],..."`, game frames: `goto:k[:d]` (stand in front of the k-th placement of this room
-and case, facing it, `d` units farther; also with the rule off), `poison` (`poison:2`: Nosferatu's, `stflg` 0x200000), `pad:hex` (game pad bits for one
+and case, facing it, `d` units farther, after the frame with the collision points as `RECVX_WARP`; also with the rule
+off; not while a room event holds the player), `poison` (`poison:2`: Nosferatu's, `stflg` 0x200000), `pad:hex` (game pad bits for one
 frame: `b00` the action button / confirm), `hold:hex:n` (for n frames: `21` forward, `1000` cancel), `ok` (confirm,
 only while a message shows), `log` (the room's extras, the player, poison, the box screen, the planter's state).
+`RECVX_EXTRAS_LINE='type=typewriter stage=0 room=3 case=1 ... text="Prison: Gate"'`: one more placement, a line as
+`extras.c`'s (to try one before adding it).
 
 `pc/tools/retry_check.sh OUT` (the disc image in `RECVX_ISO`; about a minute): Chris killed in the prison's main gate
 (0/3 case 1, an extra box and planter) and the game over's retry; passes when the room is set up again from the same

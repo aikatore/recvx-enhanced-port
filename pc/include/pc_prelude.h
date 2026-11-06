@@ -306,6 +306,11 @@ int   pc_save_card(struct MEMORYCARDSTATE* mc);  /* native, instead of ExecuteMe
 void  pc_save_list(struct SELECTFILEWINDOW* win, struct MEMORYCARDSTATE* mc, int saving);   /* the window's rows: the saves (+ a new one) */
 void  pc_save_move(struct SELECTFILEWINDOW* win, short* cursor, int dir);   /* the cursor up/down through any number of rows */
 int   pc_save_header(void);                      /* mcDisplayFileSelectWindow: native, "Load Game" / "Save Game" drawn as its header; 0 memory card */
+struct SELECTFILEINFO;
+struct SAVEFILE;
+void  pc_save_row_note(struct SELECTFILEWINDOW* win, int row, const struct SAVEFILE* f);   /* mcGetPortSelectDirInfo: the row's save, for its location text */
+int   pc_save_text_len(const struct SELECTFILEINFO* p);   /* letters of the row's location text (a placed typewriter's; a room without a save-menu name: message 215), -1 the room's name */
+int   pc_save_text_draw(const struct SELECTFILEINFO* p, float y, unsigned int col, int count);   /* 1: the row's own location text drawn (count letters, 0 all) */
 void  pc_save_mouse(int saving, unsigned int state, int cg, short* cur_x, short* cur_y, short* sel,
                     struct SELECTFILEWINDOW* win, struct MEMORYCARDSTATE* mc);   /* both save systems: the mouse as the screen's cursor and pad bits */
 int   pc_sysload_native(struct SYSLOAD_SCREEN* p);   /* the system file: 0 memory card, else the screen's result (1 none, 2 read) */

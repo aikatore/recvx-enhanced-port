@@ -27,6 +27,76 @@
 #include <string.h>
 
 static int native;          /* the open save/load screen's save system, taken when it (re)starts */
+
+/* A placed typewriter's location text (docs/DEV_PLACEMENTS.md "Extra item boxes and herbs"): a save made there has it
+   in its data (savestore.h SAVE_TEXT_ITM); the rows show it in place of the room's name, typed in as a name is after a
+   save. Kept by row of the row array it was noted for: the native rows, or the card window's (mcGetPortSelectDirInfo). */
+static const SELECTFILEINFO* txt_rows;
+static char (*txt)[SAVE_TEXT_BYTES];
+static int txt_n;
+
+static void txt_reset(const SELECTFILEINFO* r, int n)
+{
+    txt_rows = r;
+    txt_n = 0;
+    free(txt);
+    if ((txt = calloc(n > 0 ? n : 1, sizeof(*txt)))) txt_n = n;
+}
+
+void pc_save_row_note(SELECTFILEWINDOW* win, int row, const SAVEFILE* f)
+{
+    if (win->pRecordTop != txt_rows || win->lRecordMax > txt_n) txt_reset(win->pRecordTop, win->lRecordMax);
+    if (row >= 0 && row < txt_n) savestore_text(txt[row], (const unsigned char*)f);
+}
+
+static const char* row_text(const SELECTFILEINFO* p)
+{
+    uintptr_t i = ((uintptr_t)p - (uintptr_t)txt_rows) / sizeof(*p);
+    return txt && i < (uintptr_t)txt_n && txt[i][0] ? txt[i] : NULL;
+}
+
+/* UTF-8 -> the game font's codes (lang.h pc_glyph_next: a letter the font lacks as the plain letter or '?'), 0xFFFF end */
+static int glyphs(const char* s, unsigned short* mes, int max)
+{
+    int i = 0, c;
+    while (i < max - 1 && (c = pc_glyph_next(&s)) >= 0) mes[i++] = c ? c : 0xFF01;
+    mes[i] = 0xFFFF;
+    return i;
+}
+
+int pc_save_text_len(const SELECTFILEINFO* p)
+{
+    unsigned short mes[SAVE_TEXT_BYTES];
+    const unsigned short* d;
+    const char* s = row_text(p);
+    int n = 0;
+    if (s) return glyphs(s, mes, SAVE_TEXT_BYTES);
+    if (p->saveroom) return -1;
+    /* a room the save menu has no name for (the F2 Save Now, a placed typewriter without a text): its message 215
+       (NO_DATA) as the name, counted as bhDispMessageEx counts (retail read Type_Space[-1]) */
+    for (d = (const unsigned short*)((const char*)sys->mes_sp + sys->mes_sp[216]); *d != 0xFFFF; d++) {
+        if (*d == 0xFF02 || *d == 0xFF03) d++;
+        else if (*d == 0xFF01 || *d < 0xFE00) n++;
+    }
+    return n;
+}
+
+int pc_save_text_draw(const SELECTFILEINFO* p, float y, unsigned int col, int count)
+{
+    unsigned short mes[SAVE_TEXT_BYTES];
+    const char* s = row_text(p);
+    void* keep = sys->mes_tp;
+    float sx = FontScaleX, w;
+    if (!s) return 0;
+    glyphs(s, mes, SAVE_TEXT_BYTES);
+    if ((w = bhMesLen(mes)) > 256.0f) FontScaleX = sx * 256.0f / w;   /* narrower to end inside the window (wide letters) */
+    sys->mes_tp = mes;
+    bhDispMessageEx(352.0f, y, -1.0f, 2, 0, col, count);   /* where the room's name is (mcDispFileName) */
+    sys->mes_tp = keep;
+    FontScaleX = sx;
+    return 1;
+}
+
 static int listing_save;    /* it is the save screen (pc_save_list) */
 static SaveEntry* saves;    /* the files of its rows; a row past them is a new save */
 static int saves_n, rows_n;
@@ -59,6 +129,8 @@ void pc_save_list(SELECTFILEWINDOW* win, MEMORYCARDSTATE* mc, int saving)
         rows[i].saveroom = RoomNameSwitch(e->rom_no + e->stg_no * 100);   /* as mcGetPortSelectDirInfo */
         if (e->written >= saves[cur].written) cur = i;
     }
+    txt_reset(rows, n);
+    for (i = 0; i < saves_n && txt; i++) memcpy(txt[i], saves[i].text, SAVE_TEXT_BYTES);
     if (n > saves_n) rows[saves_n].FileNumber = savestore_next(dir);
     if (saving) cur = n - 1;
     win->pRecordTop = rows;

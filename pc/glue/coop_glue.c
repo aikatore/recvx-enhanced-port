@@ -2453,8 +2453,10 @@ static void apply_snapshots(void)
      288, 289  BioRand: its marker and seed, the pack's id (biorand_glue.c BR_W: any value)
      290, 291  BioRand "Randomize Played as": its marker and Claire's look; its marker, Chris's and Steve's looks
                (biorand_glue.c BR_APPEAR, BR_APPEAR2: any value)
+     292..301  a placed typewriter's location text, "LOC=" + UTF-8 (savestore.h SAVE_TEXT_ITM; extras_glue.c sets it for
+               the save screen and clears it otherwise: any value)
      320..359  GRANT0: pending event items (word 0 of each entry an item word, its floor in bits 24..31)
-     292..319, 360..382  unused (any value: no code reads them)
+     302..319, 360..382  unused (any value: no code reads them)
      383       the files read (fileview.c: a bit per file, 24 files, so bits 16..23 too)
    Only the item words are items: the game indexes item tables with their bits 16..23. */
 static int own_copies(void);

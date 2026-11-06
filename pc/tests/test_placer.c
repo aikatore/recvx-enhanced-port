@@ -33,6 +33,22 @@ int main(int argc, char** argv)
     CHECK(!placer_parse_line("type=item_box stage=1 x=0 z=0", &q));   /* (no room) */
     CHECK(placer_parse_line("  type=red_herb stage=2 room=3 x=1.5 z=-2 later=1 ay=100", &q) && q.type == placer_type_find("red_herb") &&
           q.stg == 2 && q.rom == 3 && q.pos[0] == 1.5f && q.pos[2] == -2.0f && q.ang[1] == 100 && q.used);
+    {   /* a typewriter's location text: quoted (spaces), anywhere in the line, written back the same; cleaned and cut */
+        Placement t = { 1, placer_type_find("typewriter"), 1, 8, 0, 0, { -10.75f, 7.5f, 20.5f }, { 0, 0, 0 }, 0, "Prison: Gate" };
+        CHECK(placer_parse_line("type=typewriter text=\"Old  office\" stage=1 room=8 x=1 z=2 cases=0,1", &q) && !strcmp(q.text, "Old  office") && q.rom == 8);
+        CHECK(placer_parse_line("type=typewriter stage=1 room=8 x=1 z=2 text=\"a\tb\xC3\xA4\"", &q) && !strcmp(q.text, "ab\xC3\xA4"));
+        CHECK(placer_parse_line("type=typewriter stage=1 room=8 x=1 z=2 text=\"12345678901234567890\"", &q) && !strcmp(q.text, "1234567890123456"));
+        CHECK(placer_parse_line("type=typewriter stage=1 room=8 x=1 z=2 text=\"\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4"
+                                "\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\"", &q) && strlen(q.text) == 32);   /* 16 letters */
+        CHECK(placer_parse_line("type=typewriter stage=1 room=8 x=1 z=2 text=\"\xE6\x97\xA5\xE6\x97\xA5\xE6\x97\xA5\xE6\x97\xA5\xE6\x97\xA5\xE6\x97\xA5\xE6\x97\xA5\xE6\x97\xA5"
+                                "\xE6\x97\xA5\xE6\x97\xA5\xE6\x97\xA5\xE6\x97\xA5\"", &q) &&
+              strlen(q.text) == 33);   /* the byte limit, 35: 11 letters, the 12th cut in half left out */
+        memset(g_placer.p, 0, sizeof g_placer.p);
+        g_placer.p[0] = t;
+        CHECK(placer_format(buf, sizeof buf) > 0 && strstr(buf, "file=RM_1080.RDX text=\"Prison: Gate\"\n"));
+        CHECK(placer_save(path) == 0 && placer_load(path) == 1 && !memcmp(&g_placer.p[0], &t, sizeof t));
+        memset(g_placer.p, 0, sizeof g_placer.p);
+    }
     {   /* "Extra Item Boxes and Herbs" (extras.c): every placement readable, its cases; the turned rectangles; the trigger's
            directions */
         const ExtraShape* sh;
@@ -48,10 +64,11 @@ int main(int argc, char** argv)
         extras_rect(&q, r, w);
         CHECK(fabsf(w[0] - 12) < 1e-3f && fabsf(w[1] - 13) < 1e-3f && fabsf(w[2] - 19) < 1e-3f && fabsf(w[3] - 20) < 1e-3f);
         CHECK(!extras_slanted(0) && !extras_slanted(65400) && !extras_slanted(16249) && extras_slanted(8124));
-        CHECK(extras_facing(0, 1) == (0x400 | 0x800 | 0x2000));    /* a box facing +z: used facing -z */
-        CHECK(extras_facing(0, -1) == (0x800 | 0x1000 | 0x2000));  /* a planter used from -z: facing +z */
-        CHECK(extras_facing(16384, 1) == (0x400 | 0x1000 | 0x2000)); /* a box facing +x: used facing -x */
-        CHECK(extras_facing(8192, -1) == (0x800 | 0x1000));         /* 45 degrees: facing +z or +x */
+        CHECK(extras_facing(0, 0) == (0x400 | 0x800 | 0x2000));    /* a box facing +z: used facing -z */
+        CHECK(extras_facing(0, 0x8000) == (0x800 | 0x1000 | 0x2000));  /* a planter used from -z: facing +z */
+        CHECK(extras_facing(16384, 0) == (0x400 | 0x1000 | 0x2000)); /* a box facing +x: used facing -x */
+        CHECK(extras_facing(8192, 0x8000) == (0x800 | 0x1000));     /* 45 degrees: facing +z or +x */
+        CHECK(extras_facing(0, 0xC000) == 0x1C00);                  /* a typewriter as RM_1080's: its attr 0x9c00's bits */
     }
     remove(path);
     printf("placer: ok\n");

@@ -10,6 +10,7 @@ extern "C" {
 #endif
 
 enum { PL_MAX = 256, PL_RING = 48, PL_TYPES = 16 };
+enum { PL_TEXT = 36, PL_TEXT_LEN = 16 };   /* a typewriter's location text: bytes (UTF-8 and its NUL), letters at most */
 enum { PL_SNAP = 1 };                   /* placer_state.request bits (game thread) */
 
 typedef struct Placement {
@@ -20,6 +21,7 @@ typedef struct Placement {
     float pos[3];                       /* game units, y up */
     int ang[3];                         /* ax, ay, az: 65536 = 360 degrees, njRotateXYZ order */
     int flr;                            /* floor number at pos (bhCheckFloorNum), kept by the game thread */
+    char text[PL_TEXT];                 /* typewriter: the save list's location for saves made there (UTF-8), "" the room's */
 } Placement;
 
 typedef struct PlacerState {
@@ -80,17 +82,18 @@ typedef struct ExtraShape {
     float wall[4];                      /* x0 x1 z0 z1 in the model's frame (angle 0): the wall over it */
     float wall_h;
     float trig[4];                      /* the trigger box, same frame */
-    int trig_type;                      /* 4: item box (attr 0x2, prm0 its lid's object slot), 3: examine (the planter) */
+    int trig_type;                      /* 4: item box (attr 0x2, prm0 its lid's object slot), 3: examine (planter, typewriter) */
     unsigned trig_attr;
-    int use;                            /* the side the player uses it from: +1 +z, -1 -z */
+    int use_ay;                         /* the player's ay using it, the model's ay 0 (0: from +z, 0x8000 from -z, 0xC000 from -x) */
 } ExtraShape;
 extern const ExtraShape extra_shapes[];
 extern const int extra_shape_n;
 int extras_n(void);
 int extras_get(int i, Placement* p, unsigned* cases, const ExtraShape** shape);   /* 1: entry i, *cases the room cases (bits) */
+int extras_get_line(const char* line, Placement* p, unsigned* cases, const ExtraShape** shape);   /* the same of a line */
 void extras_rect(const Placement* p, const float* r, float* out);   /* model-frame rectangle -> world box (x0 x1 z0 z1) */
 int extras_slanted(int ay);             /* more than 10 degrees off the axes */
-unsigned extras_facing(int ay, int use);   /* the trigger's attr direction bits: usable facing it from its use side */
+unsigned extras_facing(int ay, int use_ay);   /* the trigger's attr direction bits: usable facing it from its use side */
 void extras_room(void);                 /* game thread: the room was set up (enemyopt_glue.c enemy_room_finished) */
 void extras_load(void);                 /* placer_frame: their models and texts, loaded when first needed */
 int extras_draw(void);                  /* placer_draw: the extras of this room (count drawn) */
@@ -102,6 +105,7 @@ int placer_load(const char* path);      /* entries read, -1 no file */
 int placer_save(const char* path);      /* 0 ok */
 int placer_format(char* buf, int cap);  /* the whole list in the file format; length */
 int placer_parse_line(const char* line, Placement* out);   /* 1: an entry */
+void placer_text_clean(char* t);        /* a location text as kept: no control characters or '"', at most PL_TEXT_LEN letters */
 
 #ifdef __cplusplus
 }

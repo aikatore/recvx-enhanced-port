@@ -47,11 +47,26 @@ static const struct { int code; const char* name; } rooms[] = {
     { 304, "T Facility: DR" }, { 702, "T Facility: DR" }, { 207, "Residence: SR" },
 };
 
+int savestore_text(char* out, const unsigned char* d)
+{
+    const unsigned char* t = d + SAVE_TEXT_OFS + 4;
+    int i;
+    out[0] = 0;
+    if (memcmp(d + SAVE_TEXT_OFS, "LOC=", 4)) return 0;
+    for (i = 0; i < SAVE_TEXT_BYTES - 4 && t[i]; i++)
+        if (t[i] < 0x20 || t[i] == 0x7F) return 0;
+    if (i == SAVE_TEXT_BYTES - 4) return 0;   /* (no end) */
+    memcpy(out, t, i + 1);
+    return i > 0;
+}
+
 void savestore_label(char* out, int n, const unsigned char* d)
 {
     static const char* chr[] = { "Claire", "Chris", "Steve", "Wesker" };
     int code = d[9] * 100 + d[10];
     size_t i;
+    char text[SAVE_TEXT_BYTES];
+    if (savestore_text(text, d)) { snprintf(out, n, "%s_%s", chr[d[8] & 3], text); return; }
     for (i = 0; i < sizeof(rooms) / sizeof(rooms[0]); i++)
         if (rooms[i].code == code) { snprintf(out, n, "%s_%s", chr[d[8] & 3], rooms[i].name); return; }
     snprintf(out, n, "%s_%d-%02d", chr[d[8] & 3], d[9], d[10]);
@@ -158,6 +173,7 @@ static SDL_EnumerationResult SDLCALL scan_entry(void* ud, const char* dir, const
         SDL_strlcpy(e->file, name, sizeof(e->file));
         e->written = h.written; e->play_time = h.play_time; e->save_ct = h.save_ct; e->gm_mode = h.gm_mode;
         e->ply_id = h.ply_id; e->stg_no = h.stg_no; e->rom_no = h.rom_no;
+        savestore_text(e->text, b + SAVE_HEADER_BYTES);
     }
     return SDL_ENUM_CONTINUE;
 }
