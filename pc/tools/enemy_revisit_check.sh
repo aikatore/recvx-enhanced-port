@@ -52,8 +52,8 @@ for seed in seeds:
                 if m: cur['living'] = m.group(1).split()
                 m = re.match(r'test: room \d+ record (\d+) \(type \d+\) died', line)
                 if m: cur['died'].add('r' + m.group(1))
-                m = re.match(r'test: room \d+ extra in slot (\d+) \(type \d+\) died', line)
-                if m: cur['died'].add('x' + m.group(1))
+                m = re.match(r'test: room \d+ extra in slot (\d+) \(type (\d+)\) died', line)
+                if m: cur['died'].add('x%s:%s' % m.group(1, 2))
         first, rooms, back, differ = {}, 0, [], []
         for v in visits:
             if v['living'] is None:
@@ -66,9 +66,13 @@ for seed in seeds:
             if (a['now'], a['extras']) != (v['now'], v['extras']):
                 differ.append(v['room'])
             for e in v['living']:   # "k:id" (record k) or "extra@slot:id"
-                key = ('x' if e.startswith('extra@') else 'r') + e.split('@')[-1].split(':')[0]
-                if key in a['died'] and not (key[0] == 'x' and a['flagless']):   # (extras of records without a kill bit come back)
+                if not e.startswith('extra@') and 'r' + e.split(':')[0] in a['died']:
                     back.append(v['room'] + ' ' + e)
+            # extras by type (a slot an extra that stayed dead left can hold another one): no more of a type than lived on
+            if not a['flagless']:   # (extras of records without a kill bit come back)
+                types = lambda l: collections.Counter(e.split(':')[1] for e in l if e.startswith('extra@'))
+                lived, died, now = types(a['living']), collections.Counter(d.split(':')[1] for d in a['died'] if d[0] == 'x'), types(v['living'])
+                back += ['%s extra of type %s' % (v['room'], t) for t in now if now[t] > lived[t] - died[t]]
         ok = rooms >= 8 and not differ and not back
         fail |= not ok
         print('%s seed %s, kill %s: %d rooms visited twice; differ: %s; died and back: %s' %
