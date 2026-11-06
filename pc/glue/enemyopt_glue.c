@@ -60,6 +60,7 @@ __attribute__((constructor)) static void opts_env(void)
     if (e && strstr(e, "custom")) g_enemy_opts.cast_all = 2;   /* (the models: recvx.ini cast_custom_off) */
     if (e && strstr(e, "random")) g_enemy_opts.cast_assign = 1;
     if (e && strstr(e, "imports")) g_enemy_opts.cast_imports = 1;
+    if ((e = getenv("RECVX_VOICES"))) g_enemy_opts.voices = atoi(e) != 0;   /* "Randomize Voice Lines" */
 }
 
 const EnemyOpts* enemy_opts(void)
@@ -76,9 +77,9 @@ void enemy_opts_from_host(const EnemyOpts* o)
     if (!o) { kept_n = 0; memset(host_off, 0, sizeof(host_off)); }   /* (enemy_rand_kept, EV_CASTOFF: the host's go with its session) */
     if (o) {
         host_opts = *o;
-        host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s%s), seed %d, cutscene cast %d (%s, %s%s)\n", o->extra, o->place, o->rand,
+        host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s%s), seed %d, cutscene cast %d (%s, %s%s), voice lines %d\n", o->extra, o->place, o->rand,
                  o->variety ? "wild" : "mild", o->events ? ", event enemies" : "", o->seed, o->cast, o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models",
-                 o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "");
+                 o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "", o->voices);
     }
 }
 

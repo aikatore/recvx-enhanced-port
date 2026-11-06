@@ -78,6 +78,27 @@ unsigned cast_import_id(void);
    versions before. 0: none (an empty "Custom" pool). */
 int cast_appear_pick(unsigned seed, int all, int imports, const unsigned char* off, int c);
 
+/* "Randomize Voice Lines" (voices.c; docs/ACTORS.md "Voice lines"): a role shown as another story character's model
+   says random lines of that character, with their mouth movements. The catalogue: every cutscene line a LipSet gives
+   to a story character, per character, from the room files (voice_scan_room on the teleport list's thread, then
+   voice_scan_done; read-only after that). insn: the script instructions' lengths (net/coop_proto.c coop_insn_len_raw). */
+typedef struct VoiceLine {
+    unsigned short room, vid;   /* the room file it is said in; its file in the disc's voice archive */
+    unsigned char disc, chr;    /* 1 VOICE1.AFS (stages 0..5), 2 VOICE2.AFS; the character (cast_character) */
+    unsigned short lip_n;       /* its lip entry: pairs phoneme 0..5, time; 0xFF last (face.c bhSetLip) */
+    const unsigned char* lip;
+} VoiceLine;
+/* the LipSet after a VoiceOn (p: the script after it; before another VoiceOn, End or EvtEnd, within 16 instructions):
+   its lip entry, *rec its record; -1 none */
+int voice_lipset(const unsigned char* p, int n, int (*insn)(const unsigned char*), int* rec);
+int voice_model_chr(int m);   /* the story character (cast_character) model m ("You appear as" actor index) is, -1: none (no lines) */
+void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const unsigned char*));   /* an expanded room file */
+void voice_scan_done(void);
+int voice_count(int chr);     /* lines of character chr, -1: the catalogue is not read yet */
+const VoiceLine* voice_line(int chr, int i);
+/* the line of character chr said in place of file vid of disc's archive in room file room for seed (NULL: chr has none) */
+const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr);
+
 #ifdef __cplusplus
 }
 #endif

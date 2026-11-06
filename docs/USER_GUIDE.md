@@ -305,6 +305,7 @@ until the right square on the white strip is.
 | Randomize Cutscene Cast | Off | see [Cutscene cast](#cutscene-cast): the story characters as other models in cutscenes |
 | Model Selection | Cutscene Models | where the characters' new looks come from |
 | Model Assignment | Per Character | Per Character: the same model in every cutscene. Per Cutscene: each cutscene room picks again |
+| Randomize Voice Lines | Off | a character shown as another story character says that character's lines (below) |
 
 Enemy options apply from the next room (ENEMIES.md, "Enemy options"). In co-op the host's enemy
 options and ink ribbons count for both.
@@ -313,7 +314,7 @@ options and ink ribbons count for both.
 
 GAMEPLAY, under CUTSCENE CAST (and in the co-op lobby: GAME RULES, RANDOMIZER, CUTSCENE CAST). In
 cutscenes the story characters are shown as other models; nothing else changes: the scenes, the
-voices and what happens stay as they are.
+voices (unless Randomize Voice Lines is on) and what happens stay as they are.
 
 * **Randomize Cutscene Cast**: On swaps the story characters (Alfred, Alexia, Steve, Rodrigo, Wesker)
   in cutscenes; a character who stays in the room afterwards keeps the new look. Claire and Chris are never
@@ -335,6 +336,11 @@ voices and what happens stay as they are.
 * Your own character is not part of it: how you look in cutscenes follows APPEARANCE ("Character
   Model", "Custom Cutscene Model"). Alexia asleep in her capsule keeps her own look.
 * In co-op the host's settings and seed count, so both players see the same cast.
+* **Randomize Voice Lines** (also on its own, with only your character model changed): a character shown as another
+  story character (Steve shown as Wesker) says random lines of that character instead of its own, and its mouth moves
+  with the new line where the original line moves it. Lines can repeat and be longer or shorter than the scene
+  expects; the subtitles still show the original text. Creatures, zombies and imported models have no lines: whoever is
+  shown as one keeps the original line. The seed decides the lines, so a scene sounds the same each time.
 
 ### Language
 

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### New
+
+- **Randomize Voice Lines**: in cutscenes, a character shown as another story character speaks random lines of
+  that character, with the matching mouth movements. Lines can repeat and may not fit the scene. Off by default;
+  on the BioRand RANDOMIZER page, in the multiplayer lobby and in the Enhanced Settings.
+
 ### Fixes
 
 - Claire's ponytail no longer hangs behind another model shown in her place in cutscenes.
