@@ -281,7 +281,18 @@ int main(void)
         voice_scan_room(1020, d, sizeof d, coop_insn_len_raw);
         voice_scan_room(1020, d, sizeof d, coop_insn_len_raw);   /* (the same lines again: once) */
         voice_scan_room(9000, d, sizeof d, coop_insn_len_raw);   /* (the other disc's archive: other lines) */
+        d[0x310 + 34] = 2;   /* 1040: VoiceOn 7 names record 2, which no line with a LipSet names */
+        voice_scan_room(1040, d, sizeof d, coop_insn_len_raw);
+        d[0x310 + 6] = 1; d[0x310 + 22] = 0;   /* 1050, 1030: the same script naming each line's speaker */
+        voice_scan_room(1050, d, sizeof d, coop_insn_len_raw);
+        d[0x310 + 34] = 1;
+        voice_scan_room(1030, d, sizeof d, coop_insn_len_raw);
+        CHECK(!voice_sure(1030, 7, 1));   /* (not read yet) */
         voice_scan_done();
+        /* "Talking Mouths": VoiceOn 7 without a LipSet is surely its record's where the script's lines with one that name that
+           record are said by it (1030, not 1020), or no line names it and every one names its speaker (1050, not 1040) */
+        CHECK(voice_sure(1030, 7, 1) && !voice_sure(1020, 7, 1) && voice_sure(1050, 7, 2) && !voice_sure(1040, 7, 2) && !voice_sure(1030, 7, 0) &&
+              !voice_sure(1030, 8, 0) && !voice_sure(1030, 5, 1) && voice_sure_count() == 2);
         CHECK(voice_count(0) == 2 && voice_count(2) == 2 && voice_count(1) == 0 && voice_count(3) == 0);
         l = voice_line(0, 0);
         CHECK(l && l->vid == 5 && l->disc == 1 && l->room == 1020 && l->lip_n == 3 && l->lip[0] == 3 && l->lip[2] == 0xFF);

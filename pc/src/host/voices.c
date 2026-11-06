@@ -33,6 +33,14 @@ int voice_model_chr(int m)
 /* the catalogue: built on the scan thread, published whole (voice_scan_done), read-only after that */
 static VoiceLine *scan, *lines;
 static int scan_n, scan_cap, lines_n, ready, first[CAST_CHARACTERS + 1];
+int g_voice_mouths = 1;
+/* the lines without a LipSet whose VoiceOn record is surely the speaker: in the same script, at least 9 in 10 of the lines
+   with a LipSet that name that record are said by it; none naming it: every line with one names its speaker. Tried on the
+   US disc's lines with both (the LipSet's record the speaker), each judged by the others: 294 of the 428 pass and 284 of
+   those are right (97 %, against 81 % for all); 134 of the 192 lines without a LipSet pass */
+typedef struct { unsigned short room, vid; unsigned char rec; } Sure;
+static Sure* sure;
+static int sure_n, sure_cap;
 
 static void add(int room, int disc, int vid, int chr, const unsigned char* lip, int lip_n)
 {
@@ -83,14 +91,21 @@ void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const 
     }
     for (int i = 0; i < k; i++) {   /* each script to its End outside any if-block (an event's also at op 255), as teleport.c sweep */
         long o = base + offs[i], ends[64], next = 0;
-        int ne = 0;
+        int ne = 0, nq = 0, bad = 0;
+        Sure q[64];   /* this script's lines without a LipSet that name a record (kind 1) */
+        unsigned short named[256] = { 0 }, right[256] = { 0 };   /* its lines with one naming each record, those said by it */
         for (int j = 0; j < k; j++) if (offs[j] > offs[i] && (!next || offs[j] < (unsigned long)next)) next = offs[j];
         while (o >= 0 && o + 8 <= n && (!next || o < base + next)) {
             int op = d[o], len = insn(d + o), rec, lip;
             const unsigned char* b;
             while (ne && ends[ne - 1] <= o) ne--;
             if (len <= 0) break;
-            if (op == OP_VOICEON && (lip = voice_lipset(d + o + len, (int)(n - o - len), insn, &rec)) >= 0 && rec < nr && ep) {
+            lip = op == OP_VOICEON ? voice_lipset(d + o + len, (int)(n - o - len), insn, &rec) : -1;
+            if (op == OP_VOICEON && d[o + 1] == 1) {   /* (kind 1: the line names a record) */
+                if (lip >= 0) { named[d[o + 6]]++; right[d[o + 6]] += rec == d[o + 6]; bad |= rec != d[o + 6]; }
+                else if (nq < 64) q[nq++] = (Sure){ (unsigned short)room, (unsigned short)(d[o + 2] | d[o + 3] << 8), d[o + 6] };
+            }
+            if (lip >= 0 && rec < nr && ep) {
                 long r = ep + rec * 0x24;   /* ETTY_WORK: id at 4, mdlver at 9 */
                 int chr = r + 0x24 <= n ? cast_character(d[r + 4] | d[r + 5] << 8, d[r + 9]) : -1, bn;
                 if (chr >= 0 && (bn = lip_entry(d, n, lip, &b)) > 0) add(room, disc, d[o + 2] | d[o + 3] << 8, chr, b, bn);
@@ -101,8 +116,27 @@ void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const 
             o += len;
             if (!ne && (op == OP_END || (i >= 2 && op == OP_EVTEND))) break;
         }
+        for (int j = 0; j < nq; j++) {
+            int r = q[j].rec;
+            if (named[r] ? right[r] * 10 < named[r] * 9 : bad) continue;
+            if (sure_n == sure_cap) {
+                Sure* g = realloc(sure, sizeof(Sure) * (size_t)(sure_cap + 64));
+                if (!g) break;
+                sure = g; sure_cap += 64;
+            }
+            sure[sure_n++] = q[j];
+        }
     }
 }
+
+/* ponytail: a linear search; a few hundred entries, looked up once per line */
+int voice_sure(int room, int vid, int rec)
+{
+    if (!__atomic_load_n(&ready, __ATOMIC_ACQUIRE)) return 0;
+    for (int i = 0; i < sure_n; i++) if (sure[i].room == room && sure[i].vid == vid && sure[i].rec == rec) return 1;
+    return 0;
+}
+int voice_sure_count(void) { return __atomic_load_n(&ready, __ATOMIC_ACQUIRE) ? sure_n : -1; }
 
 static int by_line(const void* a, const void* b)
 {

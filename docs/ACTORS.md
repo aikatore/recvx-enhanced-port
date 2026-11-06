@@ -1080,7 +1080,7 @@ the same in Claire's part and in Chris's.
 Setting "Randomize Voice Lines" (GAMEPLAY, group CUTSCENE CAST; the BIORAND screen's RANDOMIZER page under the
 character model rows; the lobby's CUTSCENE CAST page, RANDOMIZE VOICES; ini `voice_random`, default 0;
 `EnemyOpts.voices`): in cutscenes a character shown as another story character's model says random lines of that
-character, and its mouth moves as for that line. Steve shown as Wesker says Wesker's lines; shown as a zombie or a
+character, and its mouth moves as for that line (also where the original line moves none: "Talking Mouths" below). Steve shown as Wesker says Wesker's lines; shown as a zombie or a
 creature, he makes that enemy's own sounds instead ("Enemy models" below). It works with whatever
 shows the other model: the cutscene cast's picks, Claire's and Chris's records shown as the player's look for them
 (`coop_look_model`), and the played character's double shown as "Character Model" (also BioRand's "Randomize
@@ -1147,9 +1147,9 @@ the line.
 * The **mouth** follows the inserted line wherever the original line moves a mouth (two thirds of all lines: every
   catalogue line has lips): measured 19 of 30 lines in 0030 (the rest have no `LipSet`), 25 of 32 in 9350, 4 of 4 in
   1020; the faces' jaw then runs with the inserted line's phonemes (`RECVX_CAST_TRACE`: `voices: record 2 moves its
-  mouth with the inserted line's lips`). A line without a `LipSet` keeps a still mouth, as before. The mouth moves
-  only on a model with a face (the cutscene models; a player file on the double with "Animated Faces" on, its talking
-  twin; an imported model's jaw, `imp_face`).
+  mouth with the inserted line's lips`). A line without a `LipSet` keeps a still mouth unless "Talking Mouths" gives it
+  one (below). The mouth moves only on a model with a face (the cutscene models; a player file on the double with
+  "Animated Faces" on, its talking twin; an imported model's jaw, `imp_face`).
 * **Subtitles** stay the script's: the original line's text (`MessageSet` is its own op, timed by the script; the US and
   European English rooms have no subtitles at all). The text tells the story while the voice is the joke; the inserted
   line's subtitle would be another room's message, in some languages a message the room does not have.
@@ -1220,15 +1220,62 @@ own sounds in place of every line of it, from the speakers above (the cast, the 
 * The log: `voices: room 1020 record 0: Claire's line 1/118 (11968 ms), shown as Zombie: Prisoner -> its sounds from
   RM_5520 bank 3: 49 (2116 ms) + 50 (1683 ms) + ...`; with `RECVX_CAST_TRACE` each sound as it starts.
 
+### Talking Mouths
+
+Setting "Talking Mouths" (right under "Randomize Voice Lines" in GAMEPLAY / F1, the BIORAND RANDOMIZER page and the
+lobby's CUTSCENE CAST page, TALKING MOUTHS; shown while the voice lines are on; ini `voice_mouths`, default 1;
+`g_voice_mouths`, `cast.h`): an inserted line in place of a line without a `LipSet` moves the speaker's mouth too.
+
+* **What moves it**: the inserted line's own lip entry. Every catalogue line has one (only lines with a `LipSet` are
+  in it; none of the 450 lip entries the disc's lines use is a still mouth: each has phonemes other than 0), and it came with that line from its own
+  scene, so it fits the sound. No mouth is made from the sound's loudness: an inserted line never lacks lips. (The
+  game's own lines without lips, with the voice lines off, are left alone; they have no lip entry, so they would need
+  one made from the sound, as `imp_face` does for the player's voice.)
+* **When**: `cast_glue.c mouth_add`, from `pc_voice_on` for an inserted line without a `LipSet`, if all hold:
+  * the speaker is **sure** (`voice_sure`, from the catalogue's scan, `voice_scan_room`): the line's `VoiceOn` names
+    a record (kind 1; the 30 lines that name nobody never count), and in the same script at least 9 in 10 of the lines
+    with a `LipSet` that name that record are said by it (the `LipSet` moves that record's mouth); a record no such
+    line names counts only if every line of the script with a `LipSet` names its speaker. The scripters used the
+    record as the speaker in some scripts and as the listener now and then in others; a script that names its
+    speakers for one record does so for its other lines too. Tried on the US disc's 428 lines that have both, each
+    judged by the other lines of its script: 294 pass, 284 of them right (97 %, against 81 % for all). 134 of the 192
+    lines without a `LipSet` pass (log: `voices: lines with mouth movements: ...; 134 without one said surely by their
+    record`). In 0030 Steve's seven lines pass, Claire's four do not (one of the three lines naming her is Steve's);
+  * the record is drawn as a model now (`shown_slot`: its cast slot or the double; not hidden, `stflg` 0x41000000)
+    whose model moves a mouth (`actor_glue.c actor_talks`: a face mask with a bank that moves, or an imported model's
+    jaw; the double only with "Animated Faces");
+  * its mouth is not moving already (`exp0[0]` bit 0x4: the scene's own lips stay).
+* **How**: as `LipSet` and `LipStart` would: the record's lip data (`exp0[268]`) set to the entry, its `LIP_WORK`
+  restarted, bit 0x4 set; its bank stays the record's last. The models shown take the record's lips as for any line
+  (`face_step`, `imp_face`). It ends with the entry, the next line, `VoiceOff`, a skip (`pc_voice_stop`: `StopVoice`)
+  or a `LipSet` of the script for that record (`pc_voice_lip`: the script's lips start afresh) (`mouth_stop`, only
+  while its lips are the record's, in the same room).
+* **Timing**: nothing of the script or the sound changes; only the face.
+* **Co-op**: each screen's own (a face only; not in `EV_EOPTS`, no protocol change): the lines are the same on both
+  screens, the mouths follow each player's setting. The lobby row is not locked for a guest.
+* The log: `... from RM_0000, no lips in the script (the speaker is the VoiceOn's record): Talking Mouths: its lips
+  added`, else `a still mouth, ` and why (`Talking Mouths is off`, `the speaker is not sure`, `its model is not
+  drawn`, `its model has no mouth`, `its mouth moves already`).
+* Measured (`RECVX_TEST_SCENE`, seed 1, the cast on): in 0030, 0040, 1002, 6060, 5001 and 9350 41 inserted lines
+  had no `LipSet`; 24 were given a mouth (0030 7, 0040 6, 6060 6, 9350 3, 1002 1, 5001 1), all with the inserted line's
+  lips; the other 17 kept a still mouth: 4 speakers not sure (Claire in 0030), 10 shown as the double without
+  "Animated Faces", 3 not drawn. The face trace (`RECVX_CAST_TRACE`: `model lips 1`, the jaw moving) and the frames
+  show the mouth moving (0040 frames 2361..2370: Steve shown as Rodrigo talks with it on, keeps his mouth shut with it
+  off). Every scene lasted as long to 0.1 s with it on, off and the voice lines off (97.3, 81.2, 106.3, 44.4, 89.7,
+  125.9 s); with it off the lines and the face trace were the same as before.
+
 ### Limits
 
 * About one in five lines without a `LipSet` (195) is given to the record that is only its sound position; such a
-  line may be replaced although its real speaker is not swapped, or kept although it is.
+  line may be replaced although its real speaker is not swapped, or kept although it is. With Talking Mouths about
+  one in thirty of the lines it gives a mouth may move the listener's mouth.
 * The inserted lines are the lines with mouth movements; lines without them (off-screen calls, many short
   exclamations) are never inserted.
 * A longer line can go on briefly after the scene ends.
 * Enemy sounds: which program is a cry was read from the code (the voice channel, the hurt and death calls) and the
   samples' lengths, not by ear; the Hunter has two, the Tyrant none of its own (its blows stand in).
+* Talking Mouths moves no mouth for the game's own lines (the voice lines off, or a line kept), and none where the
+  speaker is not sure (58 of the 192 lines without a `LipSet`) or shown with a still face.
 * Test aid: `RECVX_VOICES=0|1` sets the option.
 
 ## Limits

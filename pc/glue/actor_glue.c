@@ -2024,6 +2024,12 @@ static void face_step(Disguise* d, const BH_PWORK* ep)
     }
 }
 
+int actor_talks(int who)
+{
+    const Disguise* d = &dg[who];
+    return d->model >= 0 && d->rig.ok && ((d->face > 5 && !bank_still(d, 0)) || (d->skin && d->fbone[4] >= 0));
+}
+
 /* ep is a shown cutscene double of the character played */
 static int double_acting(const BH_PWORK* ep, int pid)
 {

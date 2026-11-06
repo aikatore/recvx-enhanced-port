@@ -98,6 +98,7 @@ int  actor_set(int who, int idx);       /* 1 = shown (a failed entry is not retr
 int  actor_shown(int who);
 int  actor_shown_model(int who);       /* the model idx slot who shows, -1 none */
 int  actor_rigged(int who);             /* its model is posed from a source's skeleton (a humanoid node map was found) */
+int  actor_talks(int who);              /* its model moves a mouth with its source's lips (a face mask with mouth shapes, an imported model's jaw) */
 struct BH_PWORK;
 void actor_pose(int who, struct BH_PWORK* src);   /* after src's bhSetMotion and bhCalcModel */
 void actor_draw(int who);               /* bhPutModel: the caller sets camera matrix, lights, textures state */

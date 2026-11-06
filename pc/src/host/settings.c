@@ -12,6 +12,7 @@
 #include "bindings.h"
 #include "modern.h"
 #include "enemies.h"
+#include "cast.h"
 #include "lobby.h"
 #include "savestore.h"
 #include "biorand.h"
@@ -367,6 +368,7 @@ static const char* const cast_pools[] = { "Cutscene Models", "All Models", "Cust
 static const char* const cast_assigns[] = { "Per Character", "Per Cutscene" };
 static const char* const model_modes[] = { "Same for Both", "Per Character" };
 static int cast_on(void) { return g_enemy_opts.cast != 0; }
+static int voices_on(void) { return g_enemy_opts.voices != 0; }
 static int cast_imports_shown(void) { return cast_on() && __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0; }
 
 #define V(x) ((int*)&(x))
@@ -459,6 +461,8 @@ const Setting g_settings[] = {
       .help = "Include imported characters. In co-op, both players need the same models." },
     { SP_GAMEPLAY, "Randomize Voice Lines", V(g_enemy_opts.voices), 0, 1, 1,   /* (cast.h; also for "Character Model" with the cast off) */
       .help = "Characters shown as another story character say random lines of that character, with matching mouth movements. In co-op, the host decides." },
+    { SP_GAMEPLAY, "Talking Mouths", V(g_voice_mouths), 0, 1, 1, .shown = voices_on,   /* (cast.h; each screen's own: only the faces) */
+      .help = "With Randomize Voice Lines on, new lines also move the speaker's mouth where the original line did not, when it is clear who speaks." },
 
     { SP_LANG, "Language", NULL, 0, 0, 1, .get = lang_get, .set = lang_set, .name = lang_name, .count = lang_n, .locked = lang_locked, .shown = lang_any,
       .help = "The game's text. Applies from the next screen." },
