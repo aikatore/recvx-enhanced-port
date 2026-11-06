@@ -692,7 +692,7 @@ one hit reaction for a zombie wherever a shot lands: walking, a jolt of its spin
   stun, damage modes, AI and timings are the game's: runs with the setting off and on are identical in every
   enemy step (hp, modes, motion and frame), hit and aim trace line (handgun on the head, arms and legs,
   Precise Shots off, shotgun, magnum, sub machine gun; to the zombie's death or head burst).
-* **Co-op** (protocol 38): our hit goes to the partner as `EV_FX` `FX_REACT` (slot, region, shot direction;
+* **Co-op** (protocol 40): our hit goes to the partner as `EV_FX` `FX_REACT` (slot, region, shot direction;
   [COOP.md](COOP.md)); its zombie flinches the same way if its own setting is on and it plays in third
   person, whichever side runs the zombie. Checked both ways (host and guest shooting the head and an arm:
   every hit flinched on both sides).

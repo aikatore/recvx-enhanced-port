@@ -448,6 +448,8 @@ const Setting g_settings[] = {
       .help = "Keep one model for each character, or choose again for each cutscene room. The seed fixes the choices." },
     { SP_GAMEPLAY, "Include Imported Models", V(g_enemy_opts.cast_imports), 0, 1, 1, .shown = cast_imports_shown,
       .help = "Include imported characters. In co-op, both players need the same models." },
+    { SP_GAMEPLAY, "Randomize Voice Lines", V(g_enemy_opts.voices), 0, 1, 1,   /* (cast.h; also for "Character Model" with the cast off) */
+      .help = "Characters shown as another story character say random lines of that character, with matching mouth movements. In co-op, the host decides." },
 
     { SP_LANG, "Language", NULL, 0, 0, 1, .get = lang_get, .set = lang_set, .name = lang_name, .count = lang_n, .locked = lang_locked, .shown = lang_any,
       .help = "The game's text. Applies from the next screen." },

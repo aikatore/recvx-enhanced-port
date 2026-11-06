@@ -4,6 +4,9 @@
 
 ### New
 
+- **Randomize Voice Lines**: in cutscenes, a character shown as another story character speaks random lines of
+  that character, with the matching mouth movements. Lines can repeat and may not fit the scene. Off by default;
+  on the BioRand RANDOMIZER page, in the multiplayer lobby and in the Enhanced Settings.
 - **Locational Hit Reactions**: in the over-the-shoulder camera, a zombie shot in the head, an arm or a leg now
   flinches there: the head snaps back, the arm jerks away, the leg buckles. Damage, stun and timing stay the same.
   A co-op partner sees it too. On by default, with a setting to turn it off.
@@ -13,6 +16,7 @@
 - Claire's ponytail no longer hangs behind another model shown in her place in cutscenes.
 - Killed Extra Enemies no longer come back when a room is entered again, and a room keeps the same extra
   enemies on every visit.
+- In third person, holding a movement key through a door keeps walking in the new room again.
 
 ## 0.7.4 (2026-11-04)
 

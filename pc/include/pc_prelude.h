@@ -184,6 +184,11 @@ int   pc_cheat_save(void);                    /* the open save screen is the F2 
 int   pc_detector_skipped(void);              /* co-op rule "Metal detector: Skipped" (pc/glue/detector_glue.c): event.c bhPlItemCheck in 0/9 finds no metal */
 void  pc_dev_event_start(int level, unsigned int id);   /* --dev cutscene log (pc/glue/devcine_glue.c): event.c Event_init, task level runs event id */
 void  pc_dev_event_op(int movie);             /* ... event.c bhCamSet, bhCineSet (0), bhMovieStart (1): the running task's event shows a scene */
+/* "Randomize Voice Lines" (pc/glue/cast_glue.c, docs/ACTORS.md "Voice lines") */
+int   pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid);   /* event.c bhVoiceOn: the file to play (*ptid its partition); next: the script after it */
+void  pc_voice_lip(struct BH_PWORK* pp, int rec);   /* event.c bhLipSet, after bhSetLip: the inserted line's lips */
+int   pc_voice_playing(int flag);             /* sdfunc.c CheckPlayEndAdx(1): AdxPlayFlag[1] as the script sees it (the line's own length) */
+void  pc_voice_stop(void);                    /* sdfunc.c StopVoice */
 void  pc_extras_scd1(void);                   /* "Extra Item Boxes and Herbs" (pc/glue/extras_glue.c): event.c bhControlEvent before scd1 */
 void  pc_detector_scd1(void);                 /* ... event.c bhControlEvent before scd1: the empty security boxes rest */
 void  pc_quick_start(void);                   /* co-op rule "Quick start" (pc/glue/coop_glue.c): system.c bhSysCallMonitor after a new game's AllItemInit */

@@ -287,8 +287,9 @@ add_test(NAME parsers COMMAND test_parsers)
 # enemy variants (pc/src/host/variants.c): the built-in table, the mods/enemies.ini reader
 add_executable(test_variants tests/test_variants.c src/host/variants.c src/host/actors.c src/host/fileio.c)
 add_test(NAME variants COMMAND test_variants)
-# the cutscene cast randomizer's picks (pc/src/host/cast.c): deterministic, never the model itself, distinct per room
-add_executable(test_cast tests/test_cast.c src/host/cast.c src/host/actors.c)
+# the cutscene cast randomizer's picks (pc/src/host/cast.c): deterministic, never the model itself, distinct per room; the voice lines (voices.c)
+add_executable(test_cast tests/test_cast.c src/host/cast.c src/host/actors.c src/host/voices.c src/net/coop_proto.c src/net/rdv_proto.c)
+target_link_libraries(test_cast PRIVATE monocypher m)
 add_test(NAME cast COMMAND test_cast)
 # the --dev object placer's file (pc/src/host/placer.c): written and read back
 add_executable(test_placer tests/test_placer.c src/host/placer.c src/host/extras.c src/host/fileio.c)

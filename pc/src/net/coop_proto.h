@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 38                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 40                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -41,7 +41,9 @@ extern "C" {
                                            35: the cutscene cast also draws the creatures only cutscenes show (Nosferatu in 6040, ...);
                                            36: EneSnap.root (SNAP_ROOT_STILL: the motion moves the enemy, its root stays put);
                                            37: Pose.legs, legs_frm (third person "Move While Aiming": the legs walking under the aim);
-                                           38: EV_FX of FX_REACT (third person "Locational Hit Reactions": where a shot hit a zombie) */
+                                           38: EV_EOPTS voices ("Randomize Voice Lines");
+                                           39: (reserved: BioRand enemy rates);
+                                           40: EV_FX of FX_REACT (third person "Locational Hit Reactions": where a shot hit a zombie) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
 #define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */
@@ -187,7 +189,7 @@ static inline int coop_fx_get(uint8_t b, uint8_t refs, int bit) { return refs & 
 #define FX_PARTICLE 302                 /* blood and debris particles: EV_FX carries the bhSetEffParticle call */
 #define FX_PTCL_TYPES 19                /* its table (effsub3.c PtclTbl) */
 #define FX_ARM 1000                     /* not an effect: a Bandersnatch's arm length (its AI sets node offsets) */
-#define FX_REACT 1001                   /* not an effect: a zombie's flinch where the sender's shot hit it (protocol 38) */
+#define FX_REACT 1001                   /* not an effect: a zombie's flinch where the sender's shot hit it (protocol 40) */
 #define FX_REACT_REGIONS 6              /* FX_REACT region: 1..5 (tps_glue.c RG_*: head, right/left arm, right/left leg) */
 #define FX_RAW_WORDS 18
 /* EV_FX's generic entries (protocol 28): only the effects a sender's window can start (an enemy's step,
