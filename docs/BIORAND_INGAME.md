@@ -1204,11 +1204,11 @@ Mild kept as presets, a Custom choice, a limit of enemy types per room with No L
 the co-op lobby too.
 
 - **RANDOMIZER page** (heading ENEMIES): Enemy Randomizer; with it on, **Enemy Selection** (the settings row formerly
-  "Randomizer Variety": Mild, Wild, **Custom**), with Custom **Enemy Rates** (`K_RATES`, the label and "9 of 11", the kinds
+  "Randomizer Variety": Mild, Wild, **Custom**), with Custom **Enemy Rates** (`K_RATES`, the label and "9 of 12", the kinds
   with a rate), **Types per Room** (No Limit, 1..8) and Randomize Event Enemies; then Enemy Seed, RANDOM SEED, Extra
   Enemies (now up to 8), Rearranged Enemies. 23 rows at most.
 - **Enemy Rates** opens `pc/glue/rate_list.c` (`bm.list` 2, where the cast's list opens): every kind the randomizer
-  places (`enemyopt_glue.c enemy_rate_*`: the ten base kinds, then the variants with a randomizer weight), each with a
+  places (`enemyopt_glue.c enemy_rate_*`: the eleven base kinds (the Hunter and the Sweeper separate since 2026-11-06), then the variants with a randomizer weight), each with a
   slider Off..10 drawn as BioRand's (the filled part, the rest; arrows), the value and its share of the draws, BACK below.
   Up/down, L1/R1, Page Up/Down, Home/End move; left/right or a click on an arrow steps; a click on the track sets that
   value; confirm steps up and wraps to Off; the wheel moves a row; cancel, a right click or BACK return. Help: BioRand's
