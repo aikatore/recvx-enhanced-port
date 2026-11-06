@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### New
+
+- **Custom enemy rates**: Randomizer Variety is now Enemy Selection, with a third choice, Custom. It sets how often
+  each enemy type is chosen, Mutated Steve included, from off to very often, like BioRand's enemy sliders. Picking
+  Wild or Mild first fills in their rates as a start. Also on the multiplayer lobby's randomizer page.
+- **Types per Room**: a new randomizer setting limits how many different enemy types share a room.
+
+### Changes
+
+- **More Extra Enemies**: Extra Enemies goes higher, up to one more for every roaming enemy of a room.
+
 ### Fixes
 
 - Claire's ponytail no longer hangs behind another model shown in her place in cutscenes.

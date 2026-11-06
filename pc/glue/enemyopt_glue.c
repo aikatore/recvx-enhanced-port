@@ -55,6 +55,7 @@ __attribute__((constructor)) static void opts_env(void)
     if ((e = getenv("RECVX_ENEMY_SEED"))) g_enemy_opts.seed = atoi(e);
     if ((e = getenv("RECVX_ENEMY_VARIETY"))) g_enemy_opts.variety = atoi(e);
     if ((e = getenv("RECVX_ENEMY_EVENTS"))) g_enemy_opts.events = atoi(e);
+    if ((e = getenv("RECVX_ENEMY_TYPES"))) g_enemy_opts.types = atoi(e);   /* (RECVX_ENEMY_RATES: enemy_rates_load) */
     if ((e = getenv("RECVX_CAST"))) g_enemy_opts.cast = atoi(e) != 0;   /* the cutscene cast: 0/1, then ":all" / ":random" / ":imports" */
     if (e && strstr(e, "all")) g_enemy_opts.cast_all = 1;
     if (e && strstr(e, "custom")) g_enemy_opts.cast_all = 2;   /* (the models: recvx.ini cast_custom_off) */
@@ -70,15 +71,17 @@ const EnemyOpts* enemy_opts(void)
 }
 
 static int kept_n;
+static const char* variety_name(int v) { return v == 2 ? "custom" : v ? "wild" : "mild"; }
+static const char* rates_line(const unsigned char* rate);
 void enemy_opts_from_host(const EnemyOpts* o)
 {
     have_host_opts = o != NULL;
     if (!o) { kept_n = 0; memset(host_off, 0, sizeof(host_off)); }   /* (enemy_rand_kept, EV_CASTOFF: the host's go with its session) */
     if (o) {
         host_opts = *o;
-        host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s%s), seed %d, cutscene cast %d (%s, %s%s)\n", o->extra, o->place, o->rand,
-                 o->variety ? "wild" : "mild", o->events ? ", event enemies" : "", o->seed, o->cast, o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models",
-                 o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "");
+        host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s, types per room %d%s, rates %s), seed %d, cutscene cast %d (%s, %s%s)\n",
+                 o->extra, o->place, o->rand, variety_name(o->variety), o->types, o->events ? ", event enemies" : "", rates_line(o->rate), o->seed, o->cast,
+                 o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models", o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "");
     }
 }
 
@@ -252,35 +255,104 @@ static int boss_arena(int id)
 #define slot_cost(id) ((id) < 31 ? spawn_slots_needed(id) : 1)
 
 /* What a record can become: a kind (weighted), then one of its looks (the spawn list's entries of that type,
-   unused ones in this room first). Weights per variety (0 Mild, 1 Wild); 0: not in that variety. */
+   unused ones in this room first). Weights per variety (0 Mild, 1 Wild; 2 Custom: EnemyOpts.rate); 0: not in that variety. */
 enum { K_BIG = 1,       /* needs open space around the record (not in corridors or small rooms) */
        K_FLIER = 2,     /* only for flier records (bats, Spotters), which hover where they are placed */
        K_RMFLG = 4,     /* its code writes rm_flg bits 0..2 (Tyrant clears them every frame): not where the script uses them */
        K_NOCOUNT = 8,   /* not where the doors count the kills: it may leave the room, fly out of reach or take too long */
        K_HEAVY = 16 };  /* an enemy variant marked heavy (boss-like): one per room */
-static const struct { unsigned char id, w[2], flags; } kinds[] = {
-    { 1, { 5, 5 }, 0 },                         /* zombie, 24 looks */
-    { 4, { 4, 4 }, 0 },                         /* Cerberus */
-    { 9, { 4, 4 }, 0 },                         /* Bandersnatch */
-    { 5, { 3, 4 }, K_NOCOUNT },                 /* Hunter, Sweeper: may leap out of a room */
-    { 3, { 2, 3 }, K_BIG | K_NOCOUNT },         /* Black Widow (with its brood 25 slots; climbs walls) */
-    { 26, { 2, 2 }, 0 },                        /* anatomist */
-    { 19, { 0, 2 }, K_BIG | K_RMFLG | K_NOCOUNT },   /* Tyrant, both looks */
-    { 23, { 0, 1 }, K_BIG | K_RMFLG | K_NOCOUNT },   /* Giant Black Widow */
-    { 7, { 0, 3 }, K_FLIER | K_RMFLG | K_NOCOUNT },  /* bat */
-    { 11, { 0, 2 }, K_FLIER | K_RMFLG | K_NOCOUNT }, /* Spotter */
+static const struct { unsigned char id, w[2], flags; const char* name; } kinds[] = {   /* (name: "Custom"'s list) */
+    { 1, { 5, 5 }, 0, "Zombie" },                       /* 24 looks */
+    { 4, { 4, 4 }, 0, "Cerberus" },
+    { 9, { 4, 4 }, 0, "Bandersnatch" },
+    { 5, { 3, 4 }, K_NOCOUNT, "Hunter" },               /* Hunter, Sweeper: may leap out of a room */
+    { 3, { 2, 3 }, K_BIG | K_NOCOUNT, "Black Widow" },  /* (with its brood 25 slots; climbs walls) */
+    { 26, { 2, 2 }, 0, "Anatomist Zombie" },
+    { 19, { 0, 2 }, K_BIG | K_RMFLG | K_NOCOUNT, "Tyrant" },   /* both looks */
+    { 23, { 0, 1 }, K_BIG | K_RMFLG | K_NOCOUNT, "Giant Black Widow" },
+    { 7, { 0, 3 }, K_FLIER | K_RMFLG | K_NOCOUNT, "Bat" },
+    { 11, { 0, 2 }, K_FLIER | K_RMFLG | K_NOCOUNT, "Spotter" },
 };
 #define KINDS (int)(sizeof(kinds) / sizeof(kinds[0]))
+_Static_assert(KINDS < ENEMY_RATE_N, "EnemyOpts.rate");
+static int kind_of(int id) { for (int i = 0; i < KINDS; i++) if (kinds[i].id == id) return i; return -1; }
+
+/* "Custom"'s rates (enemies.h): EnemyOpts.rate[i] for kinds[i], then rate[KINDS + j] for variant_at(j), listed when the
+   variant has a randomizer weight. ponytail: variants past ENEMY_RATE_N - KINDS (26) have no rate and "Custom" never places
+   them; more needs a co-op event of their own (EnemyOpts fills Event's union). */
+static int vrate(int j) { return j < ENEMY_RATE_N - KINDS ? KINDS + j : -1; }
+static int listed(int j) { const EnemyVariant* v = variant_at(j); return v && (v->wild || v->mild) && vrate(j) >= 0; }
+int enemy_rate_count(void)
+{
+    int n = KINDS;
+    for (int j = 0; j < variant_count(); j++) n += listed(j);
+    return n;
+}
+int enemy_rate_at(int k)
+{
+    if (k < KINDS) return k;
+    k -= KINDS;
+    for (int j = 0; j < variant_count(); j++) if (listed(j) && !k--) return KINDS + j;
+    return -1;
+}
+const char* enemy_rate_name(int i) { return i < KINDS ? kinds[i].name : variant_at(i - KINDS) ? variant_at(i - KINDS)->name : ""; }
+void enemy_rate_preset(unsigned char* rate, int variety)
+{
+    int w = variety != 0;
+    memset(rate, 0, ENEMY_RATE_N);
+    for (int i = 0; i < KINDS; i++) rate[i] = kinds[i].w[w];
+    for (int j = 0; j < variant_count() && vrate(j) >= 0; j++) {
+        const EnemyVariant* v = variant_at(j);
+        int r = w ? v->wild : v->heavy ? 0 : v->mild;   /* (as make_kinds) */
+        rate[vrate(j)] = (unsigned char)(r > ENEMY_RATE_MAX ? ENEMY_RATE_MAX : r);
+    }
+}
+
+/* recvx.ini enemy_rates: "id:rate" per base kind (its type id), "vID:rate" per variant; a kind the line lacks (new, or a
+   mods file changed) keeps the preset of the file's Enemy Selection. Read before the variants are loaded, applied after. */
+static char rates_ini[512];
+static int rates_ready;
+void enemy_rates_ini(const char* text) { snprintf(rates_ini, sizeof(rates_ini), "%s", text); }
+static void rates_apply(const char* t)
+{
+    int id, r, n, i, v;
+    while (t && *t) {
+        v = *t == 'v';
+        if (sscanf(t + v, "%d:%d%n", &id, &r, &n) != 2) break;
+        t += v + n;
+        t += strspn(t, " ");
+        if (r < 0 || r > ENEMY_RATE_MAX) continue;
+        for (i = 0; !v && i < KINDS; i++) if (kinds[i].id == id) g_enemy_opts.rate[i] = (unsigned char)r;
+        for (i = 0; v && i < variant_count() && vrate(i) >= 0; i++) if (variant_at(i)->id == id) g_enemy_opts.rate[vrate(i)] = (unsigned char)r;
+    }
+}
+void enemy_rates_load(void)
+{
+    enemy_rate_preset(g_enemy_opts.rate, g_enemy_opts.variety);   /* (Custom without a line: Wild's) */
+    rates_apply(rates_ini);
+    rates_apply(getenv("RECVX_ENEMY_RATES"));   /* test aid, as the ini line */
+    rates_ready = 1;
+}
+static const char* rates_line(const unsigned char* rate)
+{
+    static char t[sizeof(rates_ini)];
+    int n = 0;
+    for (int i = 0; i < KINDS; i++) n += snprintf(t + n, sizeof(t) - n, "%s%d:%d", n ? " " : "", kinds[i].id, rate[i]);
+    for (int j = 0; j < variant_count() && vrate(j) >= 0 && n < (int)sizeof(t) - 16; j++)
+        if (listed(j)) n += snprintf(t + n, sizeof(t) - n, " v%d:%d", variant_at(j)->id, rate[vrate(j)]);
+    return t;
+}
+const char* enemy_rates_text(void) { return rates_ready ? rates_line(g_enemy_opts.rate) : rates_ini; }   /* (saved before the load: the file's) */
 /* the kinds a room's records can become: those above, then the enemy variants with a randomizer weight
    (docs/ENEMIES.md "Enemy variants"): a variant takes its base kind's rules (another type's: not where doors
    count kills, nor where the script uses rm_flg bits), plus big, heavy and the stages it may appear in. The
    same on both co-op sides as long as both have the same variants (built in; mods/enemies.ini). */
-typedef struct { unsigned char id, w[2], flags, cost; const EnemyVariant* v; } Kind;
+typedef struct { unsigned char id, w[2], flags, cost; signed char ri; const EnemyVariant* v; } Kind;   /* ri: its rate (-1: none) */
 static int make_kinds(Kind* kd)
 {
     int n = 0, i, j;
     for (i = 0; i < KINDS; i++) { kd[n].id = kinds[i].id; kd[n].w[0] = kinds[i].w[0]; kd[n].w[1] = kinds[i].w[1]; kd[n].flags = kinds[i].flags;
-                                  kd[n].cost = (unsigned char)slot_cost(kinds[i].id); kd[n++].v = NULL; }
+                                  kd[n].cost = (unsigned char)slot_cost(kinds[i].id); kd[n].ri = (signed char)i; kd[n++].v = NULL; }
     for (i = 0; i < variant_count(); i++) {
         const EnemyVariant* v = variant_at(i);
         int f = K_NOCOUNT | K_RMFLG;
@@ -292,6 +364,7 @@ static int make_kinds(Kind* kd)
         kd[n].w[1] = v->wild;
         kd[n].flags = (unsigned char)(f | (v->big || v->heavy ? K_BIG : 0) | (v->heavy ? K_NOCOUNT | K_HEAVY : 0));
         kd[n].cost = (unsigned char)(v->slots > slot_cost(v->type) ? v->slots : slot_cost(v->type));
+        kd[n].ri = (signed char)vrate(i);
         kd[n++].v = v;
     }
     return n;
@@ -334,13 +407,18 @@ static const ActorModel* pick_look(int kd, int id, int ver, const unsigned char*
    script only shows or hides) to another kind; those an event drives (and those whose HP the script reads) to another
    look of their own type, so the event's motions, AI states and HP tests still fit. Bosses and their arenas, NPCs,
    water and wall types, props stay. Every record keeps its slot and kill bit; any refusal keeps the original.
-   The choices depend only on the options, the room file and its collision (the same on both co-op sides). */
+   The choices depend only on the options, the room file and its collision (the same on both co-op sides).
+   "Custom" draws each kind by its rate alone (Wild and Mild also take every unused kind first). "Types per Room" (o->types):
+   once the room has that many kinds (those of the records that stay first, then each record's in turn), a record becomes
+   one of them if one fits there, else another that fits (a bat can only become a flier). */
+static void in_set(unsigned char* set, int* n, int kd) { if (kd >= 0 && !set[kd]) { set[kd] = 1; ++*n; } }
+
 static void randomize(const EnemyOpts* o)
 {
-    int k, j, cost = 0, made = 0, nc = 0, guest = coop_is_guest(), room = room_file_now(), wild = o->variety != 0;
+    int k, j, cost = 0, made = 0, nc = 0, guest = coop_is_guest(), room = room_file_now(), wild = o->variety != 0, custom = o->variety == 2;
     Kind kt[KINDS + VARIANT_MAX];
-    int nk = make_kinds(kt), kused[KINDS + VARIANT_MAX] = { 0 }, room_kinds[2] = { -1, -1 }, heavy = 0;
-    unsigned char held[128] = { 0 }, used[256] = { 0 }, cls[128] = { 0 };   /* cls: 1 another kind, 2 another look */
+    int nk = make_kinds(kt), kused[KINDS + VARIANT_MAX] = { 0 }, room_kinds[2] = { -1, -1 }, heavy = 0, nset = 0;
+    unsigned char held[128] = { 0 }, used[256] = { 0 }, cls[128] = { 0 }, set[KINDS + VARIANT_MAX] = { 0 };   /* cls: 1 another kind, 2 another look */
     char line[600];
     int ln = 0;
     for (k = j = 0; k < kept_n; k++)   /* guest: records the host kept (this room's notes are used up by this load) */
@@ -359,6 +437,8 @@ static void randomize(const EnemyOpts* o)
         nc += cls[k] != 0;
     }
     if (!nc) return;
+    for (k = 0; k < rom->ene_n && k < 128; k++)   /* Types per Room: the kinds of the records that keep theirs */
+        if ((ene[k].flg & 0x1) && cls[k] != 1) in_set(set, &nset, kind_of(ene[k].id));
     if (!wild) {   /* Mild: up to two kinds for the room's free records */
         rnd_seed((unsigned)o->seed, (unsigned)room * 977u + 0x3000u);
         for (j = 0; j < 2; j++) {
@@ -385,10 +465,10 @@ static void randomize(const EnemyOpts* o)
             for (kd = 0; kd < KINDS && kinds[kd].id != save.id; kd++);
             if (kd < KINDS) m = pick_look(kd, save.id, save.mdlver, used);
         } else {
-            int w[KINDS + VARIANT_MAX], t = 0, fresh = 0, r, big = -1, mine = 0;
+            int w[KINDS + VARIANT_MAX], t = 0, fresh = 0, r, big = -1, mine = 0, mset = 0;
             for (i = 0; i < nk; i++) {
                 int f = kt[i].flags;
-                w[i] = kt[i].w[wild];
+                w[i] = !custom ? kt[i].w[wild] : kt[i].ri >= 0 ? o->rate[kt[i].ri] : 0;
                 if (!(f & K_FLIER) != !flier_record(save.id)) w[i] = 0;
                 if ((f & K_NOCOUNT) && all_dead_check) w[i] = 0;
                 if ((f & K_RMFLG) && rm_flg_used) w[i] = 0;
@@ -402,7 +482,11 @@ static void randomize(const EnemyOpts* o)
             }
             for (i = 0; i < nk; i++) {
                 if (mine && i != room_kinds[0] && i != room_kinds[1]) w[i] = 0;   /* Mild: the room's two kinds, if one fits */
-                fresh |= w[i] && !kused[i];
+                mset |= w[i] && set[i];
+            }
+            for (i = 0; i < nk; i++) {
+                if (o->types && nset >= o->types && mset && !set[i]) w[i] = 0;   /* Types per Room: the room's kinds, if one fits */
+                fresh |= w[i] && !kused[i] && !custom;
             }
             for (i = 0; i < nk; i++) {   /* each kind once while unused ones are left */
                 if (fresh && kused[i]) w[i] = 0;
@@ -416,6 +500,7 @@ static void randomize(const EnemyOpts* o)
         }
         if (!m) {   /* its own kind drawn, without another look (Cerberus, bat), or nothing else fits */
             if (kd >= 0 && kd < nk) kused[kd] = 1;
+            in_set(set, &nset, kind_of(save.id));
             host_log("enemies: record %d stays type %d model %d (%s)\n", k, save.id, save.mdlver, cls[k] == 2 ? "event enemy, no other look of its type"
                      : kd >= 0 && kd < nk && kt[kd].id == save.id ? "its own kind drawn" : "nothing else fits");
             continue;
@@ -425,6 +510,7 @@ static void randomize(const EnemyOpts* o)
         kused[kd] = 1;
         kcost = kd >= 0 && kd < nk ? kt[kd].cost : slot_cost(m->id);
         if (held[k]) {   /* as the host's: the original */
+            in_set(set, &nset, kind_of(save.id));
             host_log("enemies: record %d stays %d (as the host's)\n", k, save.id);
             continue;
         }
@@ -440,10 +526,12 @@ static void randomize(const EnemyOpts* o)
             ene[k] = save;
             bhCheckEneWorkNum();
             host_log("enemies: record %d stays %d (%s)%s\n", k, save.id, why, guest ? "; the host's may differ" : "");
-            if (!guest) coop_rand_kept(k, &kn);   /* the guest keeps it too */
-            else cost += kcost - slot_cost(save.id), heavy += v && v->heavy;   /* the host's budget (it made the change), so the next draws stay its */
+            if (!guest) coop_rand_kept(k, &kn), in_set(set, &nset, kind_of(save.id));   /* the guest keeps it too */
+            else cost += kcost - slot_cost(save.id), heavy += v && v->heavy, in_set(set, &nset, kd);   /* the host's budget and kinds (it made the
+                                                                                                         change), so the next draws stay its */
             continue;
         }
+        in_set(set, &nset, kd);
         for (i = 0; i < save.mdl_n; i++)   /* the original's textures are released with the room's (the record now holds the new type) */
             if ((save.mdl[i].flg & 0x200) && save.mdl[i].texP) spawn_keep_texlist(save.mdl[i].texP);
         rand_src[k] = m;   /* (the room file still says the old type: extra enemies copy from here) */
@@ -457,8 +545,8 @@ static void randomize(const EnemyOpts* o)
     }
     for (k = 0; k < rom->ene_n && k < 128 && ln < (int)sizeof(line) - 16; k++)
         if ((ene[k].flg & 0x1) && ene[k].id < 31) ln += snprintf(line + ln, sizeof(line) - ln, " %d:%d.%d", k, ene[k].id, ene[k].mdlver);
-    host_log("enemies: room %04d: %d of %d records randomized (seed %d, %s%s), now%s\n", room, made, nc, o->seed, wild ? "wild" : "mild",
-             o->events ? ", event enemies" : "", line);
+    host_log("enemies: room %04d: %d of %d records randomized (seed %d, %s%s, %d kinds, limit %d%s), now%s\n", room, made, nc, o->seed, variety_name(o->variety),
+             o->events ? ", event enemies" : "", nset, o->types, o->types && nset > o->types ? ": over it, records that could only be another kind" : "", line);
 }
 
 /* ---------------------------------------------------------------- the room load (room.c bhFinishRoom) */
@@ -483,7 +571,7 @@ void enemy_room_finished(void)
 /* types that roam freely and die like any enemy */
 static int extra_type(int id) { return id == 1 || id == 3 || id == 4 || id == 5 || id == 9 || id == 22 || id == 26; }
 
-static struct { unsigned char slot, id; short bit; } xtra[3];   /* the room's extra enemies and their dead flags (-1: none) */
+static struct { unsigned char slot, id; short bit; } xtra[ENEMY_EXTRA_MAX];   /* the room's extra enemies and their dead flags (-1: none) */
 static int xtra_n, xtra_gen = -1;
 
 /* Test aid RECVX_ENEMY_KILL=n[:r|:x]: from n game frames into each room, every 20 frames each living enemy of the room's
@@ -493,7 +581,7 @@ static int xtra_n, xtra_gen = -1;
 static void kill_test(void)
 {
     static int n = -2, only, gen = -1, t, hit[PC_ENE_SLOTS], died[PC_ENE_SLOTS], room;
-    int k, i, h = 0, d = 0, slots[128 + 3], ns = 0, nrec;
+    int k, i, h = 0, d = 0, slots[128 + ENEMY_EXTRA_MAX], ns = 0, nrec;
     char line[700];
     if (n == -2) {
         const char* e = getenv("RECVX_ENEMY_KILL");
@@ -619,7 +707,7 @@ void enemy_extras_frame(void)
         dx = n.px - plp->px; dz = n.pz - plp->pz;
         if (bit >= 0 && bhCkFlg(sys->ed_flg, bit)) why = "dead (killed before)";
         else if (dx * dx + dz * dz < 40.0f * 40.0f) why = "not now: the player stands there (a loaded save, a retry)";
-        else if (!(why = spawn_add(&am, &n, &slot)) && xtra_n < 3) {
+        else if (!(why = spawn_add(&am, &n, &slot)) && xtra_n < ENEMY_EXTRA_MAX) {
             xtra[xtra_n].slot = (unsigned char)slot; xtra[xtra_n].id = (unsigned char)am.id; xtra[xtra_n++].bit = (short)bit;
         }
         host_log("enemies: extra %s (type %d model %d, from record %d, dead flag %d) at %.0f %.0f: %s\n", am.name, am.id, am.mdlver, cand[k], bit,

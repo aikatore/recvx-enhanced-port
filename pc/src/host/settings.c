@@ -354,8 +354,15 @@ static const char* const fixed_cam_names[] = { "Classic", "Modern", "Combined" }
 static const char* const tps_pad_names[] = { "Classic", "Modern" };
 static const char* const noclips[] = { "Off", "Walls", "Walls and Flight" };
 static const char* const sources[] = { "Auto", "Keyboard and Mouse", "Gamepad Only" };
-static const char* const extras[] = { "Off", "Up to 1", "Up to 2", "Up to 3" };
-static const char* const varieties[] = { "Mild", "Wild" };
+static const char* const extras[ENEMY_EXTRA_MAX + 1] = { "Off", "Up to 1", "Up to 2", "Up to 3", "Up to 4", "Up to 5", "Up to 6", "Up to 7", "Up to 8" };
+static const char* const varieties[] = { "Mild", "Wild", "Custom" };
+static const char* const types_names[ENEMY_TYPES_MAX + 1] = { "No Limit", "1", "2", "3", "4", "5", "6", "7", "8" };
+/* Enemy Selection: Wild or Mild also presets "Custom"'s rates, so Custom starts from the last one picked */
+static void variety_set(int v)
+{
+    if (v < 2) enemy_rate_preset(g_enemy_opts.rate, v);
+    g_enemy_opts.variety = v;
+}
 static const char* const cast_pools[] = { "Cutscene Models", "All Models", "Custom" };
 static const char* const cast_assigns[] = { "Per Character", "Per Cutscene" };
 static const char* const model_modes[] = { "Same for Both", "Per Character" };
@@ -432,11 +439,13 @@ const Setting g_settings[] = {
       .help = "Save at typewriters without using ink ribbons. In co-op, the host decides." },
     { SP_GAMEPLAY, "Extra Item Boxes and Herbs", V(g_config.extra_objects), 0, 1, 1, .group = "ITEMS",
       .help = "Add item boxes and blue herb planters to some rooms. Useful with the randomizers. In co-op, the host decides." },
-    { SP_GAMEPLAY, "Extra Enemies", V(g_enemy_opts.extra), 0, 3, 1, extras, .help = "Add more of a room's existing enemies from the next room. In co-op, the host decides.", .group = "ENEMIES" },
+    { SP_GAMEPLAY, "Extra Enemies", V(g_enemy_opts.extra), 0, ENEMY_EXTRA_MAX, 1, extras, .help = "Add more of a room's existing enemies from the next room. In co-op, the host decides.", .group = "ENEMIES" },
     { SP_GAMEPLAY, "Rearranged Enemies", V(g_enemy_opts.place), 0, 1, 1, .help = "Move roaming enemies to new starting positions; story and boss enemies stay. Applies next room." },
     { SP_GAMEPLAY, "Enemy Randomizer", V(g_enemy_opts.rand), 0, 1, 1, .help = "Replace enemies with other types that fit the room; bosses stay. Applies next room." },
-    { SP_GAMEPLAY, "Randomizer Variety", V(g_enemy_opts.variety), 0, 1, 1, varieties,
-      .help = "Mild uses two common types per room; Wild adds variety, including Tyrants and bats. Applies next room." },
+    { SP_GAMEPLAY, "Enemy Selection", V(g_enemy_opts.variety), 0, 2, 1, varieties, .set = variety_set,
+      .help = "Mild uses two common types per room; Wild adds variety, including Tyrants and bats. Custom uses your rate for each type. Applies next room." },
+    { SP_GAMEPLAY, "Types per Room", V(g_enemy_opts.types), 0, ENEMY_TYPES_MAX, 1, types_names,
+      .help = "Limit how many different enemy types the randomizer puts in one room. Applies next room." },
     { SP_GAMEPLAY, "Randomize Event Enemies", V(g_enemy_opts.events), 0, 1, 1,
       .help = "Change event enemies too; those needed for scenes only change appearance. Applies next room." },
     { SP_GAMEPLAY, "Enemy Seed", V(g_enemy_opts.seed), 0, 99999, 1, .fmt = "%d", .help = "Use the same seed for repeatable enemy and cast choices. In co-op, both players use the host's seed." },

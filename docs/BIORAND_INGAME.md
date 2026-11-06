@@ -1182,6 +1182,33 @@ Per Character Claire Monster Steve, Chris Rodrigo, Steve Alfred), `t_pick.sh` (t
 Model, then ENHANCED SETTINGS > APPEARANCE), `t_cancel.sh` (CHARACTER MODEL, cancel: unchanged), `t_mouse.sh` (wheel,
 hover, click).
 
+### S11: Custom enemy rates, Types per Room, more extra enemies (2026-11-06)
+
+The user's request: per-type rates for our enemy randomizer as BioRand's enemy sliders (Mutated Steve included), Wild and
+Mild kept as presets, a Custom choice, a limit of enemy types per room with No Limit, a higher Extra Enemies maximum, all in
+the co-op lobby too.
+
+- **RANDOMIZER page** (heading ENEMIES): Enemy Randomizer; with it on, **Enemy Selection** (the settings row formerly
+  "Randomizer Variety": Mild, Wild, **Custom**), with Custom **Enemy Rates** (`K_RATES`, the label and "9 of 11", the kinds
+  with a rate), **Types per Room** (No Limit, 1..8) and Randomize Event Enemies; then Enemy Seed, RANDOM SEED, Extra
+  Enemies (now up to 8), Rearranged Enemies. 23 rows at most.
+- **Enemy Rates** opens `pc/glue/rate_list.c` (`bm.list` 2, where the cast's list opens): every kind the randomizer
+  places (`enemyopt_glue.c enemy_rate_*`: the ten base kinds, then the variants with a randomizer weight), each with a
+  slider Off..10 drawn as BioRand's (the filled part, the rest; arrows), the value and its share of the draws, BACK below.
+  Up/down, L1/R1, Page Up/Down, Home/End move; left/right or a click on an arrow steps; a click on the track sets that
+  value; confirm steps up and wraps to Off; the wheel moves a row; cancel, a right click or BACK return. Help: BioRand's
+  ratio sentence (already translated). The lobby opens the same list as its step 9 (from step 4's **ENEMY RATES**); a
+  joining player sees the host's rates, read-only. F1 shows them as sliders under Enemy Selection.
+- Picking Wild or Mild presets the rates (`settings.c variety_set`), so Custom starts from the last preset; the rates are
+  saved as recvx.ini `enemy_rates` and go to a co-op guest with the other enemy options (`EV_EOPTS`, protocol 38).
+- Behaviour: docs/ENEMIES.md "Randomizer" (Custom, Types per Room) and "Extra enemies" (why 8).
+
+**Tests (2026-11-06, Linux; job dir `enemyrates/`, not committed):** `ui/t_br.sh` (the BIORAND page: keyboard into the
+list, two rates changed, gamepad down and right twice, a mouse click on a track, the wheel, BACK, Types per Room, Wild
+then Custom: the ini has Wild's rates), `ui/t_lobby.sh` (the lobby: the gamepad into ENEMY RATES, a rate stepped, a mouse
+click on Mutated Steve's track, a right click back, Types per Room), `pc/tools/enemy_rates_check.sh`,
+`pc/tools/enemy_revisit_check.sh` (also with `EXTRA=8` and Custom), and a co-op run (host and guest the same records).
+
 ## Risks and open questions
 
 1. **Memory: the CLI peaked at 6.0 GB RSS** for one CVX pack. With the game running, 8 GB
@@ -1252,6 +1279,8 @@ hover, click).
   Model on its page under headings; the player model rows with a model list on EXTRA OPTIONS). See "S9".
 - **S10 done** (2026-11-04): Randomize Character Model's own Model Selection, Custom list and Include Imported
   Models; EXTRA OPTIONS' model rows open the lobby's model page with its preview. See "S10".
+- **S11 done** (2026-11-06): Custom enemy rates (Enemy Selection Custom, the Enemy Rates list), Types per Room, Extra
+  Enemies up to 8; in the lobby too. See "S11".
 - **STATUS: All steps done; open: Windows real-machine test list** ("S6", "Windows real-machine test list").
 - The job-dir tools (not committed): S5b's `s5b/` (`co.sh`, `scen.sh`, `mkpack.sh`, `build.sh`); S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
   encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").

@@ -210,6 +210,7 @@ static void test_events(void)
     BAD(EV_CASTOFF, 1, e->u.co.pad = 1);
     { Event e = ev(EV_CASTOFF); e.u.co.at = 0; e.u.co.n = COOP_CASTOFF_CHUNK; CHECK(coop_check_event(&e, 1) == COOP_OK); }
     { Event e = ev(EV_EOPTS); e.u.eo.cast_all = 2; CHECK(coop_check_event(&e, 1) == COOP_OK); }
+    { Event e = ev(EV_EOPTS); e.u.eo.variety = 2; e.u.eo.types = ENEMY_TYPES_MAX; e.u.eo.extra = ENEMY_EXTRA_MAX; memset(e.u.eo.rate, ENEMY_RATE_MAX, ENEMY_RATE_N); CHECK(coop_check_event(&e, 1) == COOP_OK); }   /* (protocol 38) */
     /* EV_GONE: 1..COOP_GONE_MAX enemy slots below COOP_ENE_SLOTS, a room case */
     BAD(EV_GONE, 0, e->u.gn.n = 0);
     BAD(EV_GONE, 0, e->u.gn.n = COOP_GONE_MAX + 1);
@@ -257,10 +258,13 @@ static void test_events(void)
     BAD(EV_BOX, 1, e->u.bx.w[0] = 5 << 16 | 0xFFFF);
     BAD(EV_SPAWN, 1, e->idx = 255);
     BAD(EV_SPAWN, 1, e->u.sp.pz = NAN);
-    BAD(EV_EOPTS, 1, e->u.eo.extra = 4);
+    BAD(EV_EOPTS, 1, e->u.eo.extra = ENEMY_EXTRA_MAX + 1);
     BAD(EV_EOPTS, 1, e->u.eo.seed = -1);
     BAD(EV_EOPTS, 1, e->u.eo.rand = 2);
-    BAD(EV_EOPTS, 1, e->u.eo.variety = 2);
+    BAD(EV_EOPTS, 1, e->u.eo.variety = 3);
+    BAD(EV_EOPTS, 1, e->u.eo.types = ENEMY_TYPES_MAX + 1);
+    BAD(EV_EOPTS, 1, e->u.eo.types = -1);
+    BAD(EV_EOPTS, 1, e->u.eo.rate[ENEMY_RATE_N - 1] = ENEMY_RATE_MAX + 1);
     BAD(EV_EOPTS, 1, e->u.eo.events = -1);
     BAD(EV_EOPTS, 1, e->u.eo.cast = 2);
     BAD(EV_EOPTS, 1, e->u.eo.cast_all = 3);
