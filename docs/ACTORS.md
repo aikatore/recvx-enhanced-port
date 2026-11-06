@@ -813,8 +813,8 @@ other enemy options, `EV_EOPTS`, [COOP.md](COOP.md) "Added enemies and options")
 
 ### Who is cast
 
-At the end of every room load (`enemyopt_glue.c enemy_room_finished` -> `cast_room`) each room record of a
-story character (`cast_character`) gets a model: Claire 91; Chris 92, 42; Steve 93, 43; Wesker 97, 49,
+At the end of every room load (`enemyopt_glue.c enemy_room_finished` -> `cast_room`, after the enemy randomizer and
+the placements: the cast sees the records as they are drawn) each room record of a story character (`cast_character`) gets a model: Claire 91; Chris 92, 42; Steve 93, 43; Wesker 97, 49,
 47; Alfred 94, 96 (both model versions), 44; Alexia 95; Rodrigo 98. Not: the man in the hazmat suit 99 (his helmet's mouth does not move, so neither cast nor a pick, in either pool);
 the bosses (Alfred's boss type 16, Alexia's forms 12..14), props and set pieces, enemies (zombies and
 creatures stay as they are; a first version swapped the cutscenes' zombies too, removed: the fights changed), anything
@@ -957,6 +957,14 @@ character stays in the room as a gameplay figure (Rodrigo at his desk after the 
 the cinema mode `cb_flg & 0x4`; or the player hidden by an event) only marks the cutscene for the test
 aid: with `RECVX_CAST_TRACE=1` the log names each change (`cast: a cutscene ...`, `cast: gameplay ...`)
 with where the cast records are.
+
+A record that is no longer what was given its model (`still`: its type or model version changed since `cast_room`)
+is drawn as itself, and the log says so once per record and room (`cast: room 9340 record 1: given a model as type 1
+model 35, now type 1 model 7: drawn as itself`; the devcine log leaves it out of its swaps). That was the scene zombies
+with *Randomize Event Enemies*: `cast_room` ran before the randomizer, which gives an event's zombie another zombie
+look by spawning a new record, so the pick was logged and never drawn. Check with a run of the scene and the
+settings, the log free of that line: `RECVX_TEST_SCENE=3200:RM_9340:8:0:1` with `enemy_random = 1`,
+`enemy_random_events = 1`, `cast_random = 1`.
 
 ### The pools
 

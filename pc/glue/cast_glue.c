@@ -43,6 +43,7 @@ _Static_assert(CSLOTS == 6, "slot_model");
 static NJS_CNK_OBJECT* hidden[HIDDEN_MAX];   /* hand pieces and head parts hidden this tick (hands_hide, parts_hide) */
 static int hidden_n;
 static unsigned char hid_logged[4];   /* (test aid: objects logged hidden in this room) */
+static unsigned char lost_logged[RECS / 8];   /* records logged no longer what was given a model (cast_tick) */
 
 /* records whose scene needs their own look */
 static const struct { unsigned short room; unsigned char rec; const char* why; } kept[] = {
@@ -80,6 +81,7 @@ void cast_release(void)
     cast_n = 0;
     hidden_n = 0;   /* (the room's objects go with the room: nothing to show again) */
     memset(hid_logged, 0, sizeof(hid_logged));
+    memset(lost_logged, 0, sizeof(lost_logged));
 }
 
 /* enemyopt_glue.c, the end of the room load */
@@ -242,6 +244,12 @@ void cast_tick(void)
     was = now;
     for (k = 0; k < (int)sys->ewk_n && k < RECS; k++) {
         BH_PWORK* ep = &ene[k];
+        if (shown(rec_slot[k]) && (ep->flg & 0x1) && !still(ep, k) && !(lost_logged[k >> 3] & (1 << (k & 7)))) {   /* picked, not drawn: a
+            record changed after cast_room (the enemy randomizer's other look once ran after it); once per record and room */
+            lost_logged[k >> 3] |= (unsigned char)(1 << (k & 7));
+            host_log("cast: room %04d record %d: given a model as type %d model %d, now type %d model %d: drawn as itself\n", room_file_now(), k,
+                     rec_id[k], rec_ver[k], ep->id, ep->mdlver);
+        }
         if (!as_model(ep, k) || (ep->stflg & 0x41000000) || !ep->mlwP) continue;
         actor_act(ACTOR_CAST + rec_slot[k], ep);
         hands_hide(ep, ACTOR_CAST + rec_slot[k]);
@@ -481,7 +489,7 @@ int cast_describe(char* buf, int n)
     int k, len = 0, r;
     buf[0] = 0;
     for (k = 0; k < RECS && len < n - 1; k++) {
-        if (!shown(rec_slot[k])) continue;   /* (also before the first room load: rec_slot still zeros) */
+        if (!shown(rec_slot[k]) || !still(&ene[k], k)) continue;   /* (also before the first room load: rec_slot still zeros; a record changed since is itself) */
         r = snprintf(buf + len, (size_t)(n - len), "%sr%d %s(%d)->%s%s", len ? ", " : "", k, cast_name(rec_chr[k]), rec_id[k],
                      cast_entry_name(slot_model[rec_slot[k]]),
                      played(k) ? (rec_chr[k] < 2 ? " (played: the double)" : " (played: as itself)") : rec_chr[k] < 2 ? " (your look)" : "");

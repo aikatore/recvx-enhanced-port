@@ -574,13 +574,15 @@ void enemy_room_finished(void)
     extras_room();    /* "Extra Item Boxes and Herbs": their walls and triggers (extras_glue.c) */
     if (!rom || !sys) return;
     o = enemy_opts();
-    cast_room(o);   /* the cutscene cast's models (cast_glue.c; it touches no record) */
-    if (!o->place && !o->rand && !o->extra) return;
-    scan_script();
-    memset(rand_src, 0, sizeof(rand_src));
-    memset(rand_var, 0, sizeof(rand_var));
-    if (o->rand) randomize(o);
-    if (o->place) place(o);
+    if (o->place || o->rand || o->extra) {
+        scan_script();
+        memset(rand_src, 0, sizeof(rand_src));
+        memset(rand_var, 0, sizeof(rand_var));
+        if (o->rand) randomize(o);
+        if (o->place) place(o);
+    }
+    cast_room(o);   /* the cutscene cast's models (cast_glue.c; it touches no record), after the randomizer: a record it gives another
+                       look (an event's zombie: "Randomize Event Enemies") is no longer what the cast saw, and was drawn as itself */
 }
 
 /* ---------------------------------------------------------------- (a) extra enemies */
