@@ -428,6 +428,16 @@ static int room_case_exists(int stg, int rom, int c)
     snprintf(name, sizeof(name), "rm_%1d%02d%1d.rdx", stg, rom, c);   /* as system.c's room load names it */
     return c >= 0 && c <= 9 && GetFileSize(name) != 0;
 }
+/* test aids: the player and its collision points moved together to x, z facing ay (no wall check across the jump) */
+void cheat_put_player(float x, float z, int ay)
+{
+    EXP_WORK* e = (EXP_WORK*)plp->exp0;
+    float dx = x - plp->px, dz = z - plp->pz;
+    plp->px += dx; plp->pxb += dx; plp->pz += dz; plp->pzb += dz; plp->ay = ay;
+    plp->flg &= ~0xC0000;   /* not placed by the legs of the last pose (bhFixPosition) */
+    if (e) { e->fpx += dx; e->bpx += dx; e->bpxb += dx; e->spx += dx; e->plx += dx; e->fpz += dz; e->bpz += dz; e->bpzb += dz; e->spz += dz; e->plz += dz; }
+}
+
 void cheat_room_warp(int stg, int rom, int pos, int rcase)
 {
     int c;
@@ -523,13 +533,7 @@ static void scripted(unsigned int* inv)
     if (wp && sscanf(wp, "%d:%d:%d:%f:%f:%d%n", &a, &b, &f, &x, &z, &c, &n) == 6 && sys->stg_no == a && sys->rom_no == b &&
         in_room >= f && !(sys->gm_flg & 0x9) && !(sys->cb_flg & 0x1)) {
         printf("test: warp to (%.1f %.1f) in %d/%d\n", x, z, a, b);
-        {   /* the player and its collision points move together: no wall check across the jump */
-            EXP_WORK* e = (EXP_WORK*)plp->exp0;
-            float dx = x - plp->px, dz = z - plp->pz;
-            plp->px += dx; plp->pxb += dx; plp->pz += dz; plp->pzb += dz; plp->ay = c;
-            plp->flg &= ~0xC0000;   /* not placed by the legs of the last pose (bhFixPosition) */
-            if (e) { e->fpx += dx; e->bpx += dx; e->bpxb += dx; e->spx += dx; e->plx += dx; e->fpz += dz; e->bpz += dz; e->bpzb += dz; e->spz += dz; e->plz += dz; }
-        }
+        cheat_put_player(x, z, c);
         wp = wp[n] == ',' ? wp + n + 1 : NULL;
     }
     {
@@ -781,6 +785,7 @@ static void item_trace(const unsigned int* inv)
    a flag set elsewhere would wait and open the screen later. Not in the Battle Game, which has neither. Co-op:
    either player may save, as at a typewriter; the shared box (shared loot) not while the partner has it open. */
 extern unsigned char PauseBtn;   /* system.c */
+void snd_sysbank_load(void);     /* audio/snd_iop.c: the typewriter keys outside save rooms */
 static int cheat_saving;         /* the open save screen is ours: ps2_McSaveFile.c mcWriteStartSaveFile uses no ink ribbon */
 int pc_cheat_save(void) { return cheat_saving; }
 static const char* anywhere_refused(int save)
@@ -848,7 +853,7 @@ void cheat_frame(void)
         int save = (req & CHEAT_SAVE) != 0;
         const char* why = anywhere_refused(save);
         if (why) g_cheat.result = why;
-        else if (save) { sys->cb_flg |= 0x200000; cheat_saving = 1; g_cheat.result = "Opening the save screen."; }
+        else if (save) { sys->cb_flg |= 0x200000; cheat_saving = 1; g_cheat.result = "Opening the save screen."; snd_sysbank_load(); }
         else { sys->cb_flg |= 0x40000; g_cheat.result = "Opening the item box."; }
         host_log("cheat: %s in %d/%d at (%.1f %.1f %.1f): %s (play %d st %08x cb %08x gm %08x ts %08x flg %x mode0 %d)\n", save ? "save anywhere" : "item box anywhere",
                  sys->stg_no, sys->rom_no, plp->px, plp->py, plp->pz, g_cheat.result, pc_in_play(plp, 0), sys->st_flg, sys->cb_flg, sys->gm_flg, sys->ts_flg, plp->flg, plp->mode0);

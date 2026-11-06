@@ -284,6 +284,14 @@ static void export_now(void)
     dirty = 0;
 }
 
+/* a typewriter's text: no '"' (the file quotes it), at most PL_TEXT_LEN letters */
+static int text_filter(ImGuiInputTextCallbackData* d)
+{
+    int n = 0;
+    for (const char* s = (const char*)d->UserData; *s; s++) n += ((unsigned char)*s & 0xC0) != 0x80;
+    return d->EventChar == '"' || d->EventChar < 0x20 || n >= PL_TEXT_LEN;
+}
+
 /* its own window, shown with the F2 window */
 static void placer_window(void)
 {
@@ -330,6 +338,16 @@ static void placer_window(void)
             for (int k = 0; k < 3; k++) p->ang[k] = to_ang(deg[k]);
             changed();
         }
+        if (p->type == placer_type_find("typewriter")) {   /* the save list's location for saves made there */
+            if (ImGui::InputTextWithHint("Save Text", "the room's name", p->text, sizeof p->text, ImGuiInputTextFlags_CallbackCharFilter, text_filter, p->text)) {
+                placer_text_clean(p->text);
+                changed();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("The location the save list shows for saves made at this typewriter\n"
+                                  "(at most %d letters; empty: the room's name). Letters the game's font\n"
+                                  "lacks show as the plain letter or '?'.", PL_TEXT_LEN);
+        }
         ImGui::TextDisabled("ax %d  ay %d  az %d   floor %d   placed as %s, case %d", p->ang[0], p->ang[1], p->ang[2], p->flr,
                             p->ply == 1 ? "Chris" : p->ply == 2 ? "Steve" : p->ply == 3 ? "Wesker" : "Claire", p->rcase);
         if (ImGui::Button("Snap to Floor")) __atomic_or_fetch(&g_placer.request, PL_SNAP, __ATOMIC_ACQ_REL);
@@ -341,7 +359,7 @@ static void placer_window(void)
             Placement q = *p;
             q.pos[0] += 3.0f;
             int k = add(q.type, q.pos, q.ang[1]);
-            if (k >= 0) { g_placer.p[k].ang[0] = q.ang[0]; g_placer.p[k].ang[2] = q.ang[2]; g_placer.p[k].pos[1] = q.pos[1]; }
+            if (k >= 0) { g_placer.p[k].ang[0] = q.ang[0]; g_placer.p[k].ang[2] = q.ang[2]; g_placer.p[k].pos[1] = q.pos[1]; memcpy(g_placer.p[k].text, q.text, PL_TEXT); }
         }
         ImGui::SameLine();
         if (ImGui::Button("Delete")) { p->used = 0; g_placer.sel = -1; changed(); }

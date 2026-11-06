@@ -171,6 +171,11 @@ static int next_sample(Voice* v, int16_t* out)
 static void key_on(const SndBlob* hd, const SndBlob* bd, MidiCh* m, int note, int vel)
 {
     uint32_t prog = hd_entry(hd, HD_PROG, m->prog);
+    if (!prog && hd == &g_snd_banks.midi_hd[2] && (prog = hd_entry(&g_snd_banks.sys_hd, HD_PROG, m->prog))) {   /* snd_sysbank_load */
+        hd = &g_snd_banks.sys_hd;
+        bd = &g_snd_banks.sys_bd;
+        if (trace_snd()) printf("tsnd: key-on prog %d from the save room's bank 2\n", m->prog);
+    }
     if (!prog || !bd->size) {
         if (trace_snd()) printf("tsnd: key-on prog %d note %d dropped (%s)\n", m->prog, note, prog ? "no samples loaded" : "no such program");
         return;

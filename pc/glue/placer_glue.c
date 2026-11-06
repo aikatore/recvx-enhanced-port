@@ -622,7 +622,8 @@ void placer_draw(void)
 
 /* ---------------------------------------------------------------- test aid */
 /* RECVX_PLACE="frame:op[:args],...", game frames counted from the first in a room:
-   add:type[:dist] (in front of the player, selected), sel:i, move:dx:dy:dz, rot:ax:ay:az (degrees), snap, del,
+   add:type[:dist] (in front of the player, selected), sel:i, move:dx:dy:dz, rot:ax:ay:az (degrees), snap, del, text:words (a
+   typewriter's location text, no commas),
    rings:0/1 (the pitch and roll rings), log (the entries in this room; the gizmo's place while the F2 window shows it: RECVX_SHOW_OVERLAY=2) */
 static void test_aid(void)
 {
@@ -665,6 +666,7 @@ static void test_aid(void)
         else if (!strcmp(op, "rot")) for (n = 0; n < 3; n++) p->ang[n] = (p->ang[n] + (int)lroundf(a[n] * 65536.0f / 360.0f)) & 0xFFFF;
         else if (!strcmp(op, "snap")) g_placer.request |= PL_SNAP;
         else if (!strcmp(op, "del")) { p->used = 0; g_placer.sel = -1; }
+        else if (!strcmp(op, "text")) { snprintf(p->text, sizeof(p->text), "%s", arg); placer_text_clean(p->text); }
     }
     if (strcmp(op, "log")) g_placer.edited = 1;
     if (!strcmp(op, "log") && g_placer.gz_ok)
@@ -674,8 +676,8 @@ static void test_aid(void)
     if (!strcmp(op, "log"))
         for (n = 0; n < PL_MAX; n++)
             if (here(&g_placer.p[n]))
-                printf("test: placer %d %s at %.2f %.2f %.2f ang %d %d %d floor %d%s\n", n, placer_type_key(g_placer.p[n].type),
+                printf("test: placer %d %s at %.2f %.2f %.2f ang %d %d %d floor %d%s text \"%s\"\n", n, placer_type_key(g_placer.p[n].type),
                        g_placer.p[n].pos[0], g_placer.p[n].pos[1], g_placer.p[n].pos[2], g_placer.p[n].ang[0], g_placer.p[n].ang[1],
-                       g_placer.p[n].ang[2], g_placer.p[n].flr, g_placer.type_state[g_placer.p[n].type] == 1 ? "" : " (not loaded)");
+                       g_placer.p[n].ang[2], g_placer.p[n].flr, g_placer.type_state[g_placer.p[n].type] == 1 ? "" : " (not loaded)", g_placer.p[n].text);
     printf("test: placer %s %s at game frame %d\n", op, arg, clock);
 }

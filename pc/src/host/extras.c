@@ -25,10 +25,13 @@ static const char* const lines[] = {
 /* in the model's own frame (angle 0): the wall over it, the trigger box, where the player is when facing it */
 const ExtraShape extra_shapes[] = {
     /* RM_1080's box: wall 22 (12 x 9, height 9), trigger 3 (type 4, attr 0x2: the box with its lid) in front, +z */
-    { "item_box", { -6.0f, 6.0f, -4.5f, 4.5f }, 9.0f, { -5.5f, 5.5f, 1.5f, 6.5f }, 4, 0x2, 1 },
+    { "item_box", { -6.0f, 6.0f, -4.5f, 4.5f }, 9.0f, { -5.5f, 5.5f, 1.5f, 6.5f }, 4, 0x2, 0 },
     /* RM_7090's planter: wall 12 (height 2), trigger 10 (type 3, attr 0) from just in front of the middle to behind it; the
        placements have their back (+z) to a wall and the player on -z */
-    { "blue_herb_bed", { -2.7f, 2.7f, -1.0f, 1.3f }, 2.0f, { -3.6f, 3.6f, -1.0f, 4.0f }, 3, 0, -1 },
+    { "blue_herb_bed", { -2.7f, 2.7f, -1.0f, 1.3f }, 2.0f, { -3.6f, 3.6f, -1.0f, 4.0f }, 3, 0, 0x8000 },
+    /* RM_1080's typewriter (its keys face -x): trigger 6 (type 3; attr 0x9c00, usable facing +x) where it is around the
+       typewriter's middle (-10.77, 20.60); its wall the model's (on a desk none: the desk's is there, extras_glue.c) */
+    { "typewriter", { -2.1f, 2.1f, -2.4f, 2.4f }, 2.7f, { -6.2f, 0.8f, -2.6f, 4.4f }, 3, 0, 0xC000 },
 };
 const int extra_shape_n = (int)(sizeof(extra_shapes) / sizeof(extra_shapes[0]));
 
@@ -36,14 +39,19 @@ int extras_n(void) { return (int)(sizeof(lines) / sizeof(lines[0])); }
 
 int extras_get(int i, Placement* p, unsigned* cases, const ExtraShape** shape)
 {
+    return i >= 0 && i < extras_n() && extras_get_line(lines[i], p, cases, shape);
+}
+
+int extras_get_line(const char* line, Placement* p, unsigned* cases, const ExtraShape** shape)
+{
     const char* c;
     int k;
-    if (i < 0 || i >= extras_n() || !placer_parse_line(lines[i], p)) return 0;
+    if (!placer_parse_line(line, p)) return 0;
     for (k = 0; k < extra_shape_n && placer_type_find(extra_shapes[k].key) != p->type; k++) {}
     if (k == extra_shape_n) return 0;
     *shape = &extra_shapes[k];
     *cases = 1u << (p->rcase & 15);
-    if ((c = strstr(lines[i], " cases=")))
+    if ((c = strstr(line, " cases=")))
         for (c += 7; *c >= '0' && *c <= '9'; c += c[1] == ',' ? 2 : 1) *cases |= 1u << (*c - '0');
     return 1;
 }
@@ -71,12 +79,12 @@ int extras_slanted(int ay)
 }
 
 /* the trigger's direction bits (hitchk.c bhCheckExmAtari: 0x400 / 0x800 / 0x1000 / 0x2000 = not usable facing +z / -x
-   / -z / +x): usable only facing the object from its use side (`use` +1: from +z, -1: from -z); a turn near 45 degrees
-   leaves both directions it lies between */
-unsigned extras_facing(int ay, int use)
+   / -z / +x): usable only facing the object from its use side (`use_ay`: the player's turn using it at the model's ay 0);
+   a turn near 45 degrees leaves both directions it lies between */
+unsigned extras_facing(int ay, int use_ay)
 {
     static const unsigned bit[4] = { 0x1000, 0x800, 0x400, 0x2000 };   /* by (player ay + 8192) & 0xC000: -z, -x, +z, +x */
-    int face = (ay + (use > 0 ? 0 : 0x8000)) & 0xFFFF, q;   /* the player's ay facing it (forward: -sin, -cos) */
+    int face = (ay + use_ay) & 0xFFFF, q;   /* the player's ay facing it (forward: -sin, -cos) */
     unsigned attr = 0;
     for (q = 0; q < 4; q++) {
         int d = (face - q * 16384) & 0xFFFF;

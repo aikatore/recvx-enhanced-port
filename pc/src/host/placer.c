@@ -61,10 +61,33 @@ static float deg(int a) { return (float)((a & 0xFFFF) > 32767 ? (a & 0xFFFF) - 6
 
 static int format_entry(char* b, int n, const Placement* p)
 {
+    char t[PL_TEXT];
+    memcpy(t, p->text, PL_TEXT);
+    placer_text_clean(t);
     return snprintf(b, n, "type=%s stage=%d room=%d case=%d player=%d x=%.2f y=%.2f z=%.2f ax=%d ay=%d az=%d "
-                    "ax_deg=%.1f ay_deg=%.1f az_deg=%.1f floor=%d file=RM_%d%02d%d.RDX\n",
+                    "ax_deg=%.1f ay_deg=%.1f az_deg=%.1f floor=%d file=RM_%d%02d%d.RDX%s%s%s\n",
                     placer_type_key(p->type), p->stg, p->rom, p->rcase, p->ply, p->pos[0], p->pos[1], p->pos[2],
-                    p->ang[0], p->ang[1], p->ang[2], deg(p->ang[0]), deg(p->ang[1]), deg(p->ang[2]), p->flr, p->stg, p->rom, p->rcase);
+                    p->ang[0], p->ang[1], p->ang[2], deg(p->ang[0]), deg(p->ang[1]), deg(p->ang[2]), p->flr, p->stg, p->rom, p->rcase,
+                    *t ? " text=\"" : "", t, *t ? "\"" : "");
+}
+
+void placer_text_clean(char* t)
+{
+    int i, k = 0, n = 0;
+    for (i = 0; t[i] && i < PL_TEXT - 1; i++) {
+        unsigned char c = (unsigned char)t[i];
+        if (c < 0x20 || c == 0x7F || c == '"') continue;
+        if ((c & 0xC0) != 0x80 && n++ == PL_TEXT_LEN) break;   /* a letter's first byte */
+        t[k++] = (char)c;
+    }
+    if (k) {   /* the last letter whole or not at all (the byte limit) */
+        int j = k - 1;
+        unsigned char c;
+        while (j > 0 && ((unsigned char)t[j] & 0xC0) == 0x80) j--;
+        c = (unsigned char)t[j];
+        if (k - j < (c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : c >= 0xC0 ? 2 : 1)) k = j;
+    }
+    t[k] = 0;
 }
 
 int placer_format(char* buf, int cap)
@@ -98,7 +121,24 @@ int placer_parse_line(const char* line, Placement* out)
     out->type = -1;
     while (*s == ' ' || *s == '\t') s++;
     if (*s == ';' || *s == '#' || !*s) return 0;
-    while (sscanf(s, " %15[^= \t\r\n]=%47s%n", key, val, &n) == 2) {
+    for (;;) {
+        n = 0;
+        if (sscanf(s, " %15[^= \t\r\n]=%n", key, &n) != 1 || !n) break;
+        s += n;
+        if (*s == '"') {   /* text="..." (spaces in it) */
+            const char* e = strchr(s + 1, '"');
+            int k = e ? (int)(e - s - 1) : 0;
+            if (!e) break;
+            if (!strcmp(key, "text")) {
+                if (k >= PL_TEXT) k = PL_TEXT - 1;
+                memcpy(out->text, s + 1, k);
+                out->text[k] = 0;
+                placer_text_clean(out->text);
+            }
+            s = e + 1;
+            continue;
+        }
+        if (sscanf(s, "%47s%n", val, &n) != 1) break;
         s += n;
         if (!strcmp(key, "type")) out->type = placer_type_find(val);
         else if (!strcmp(key, "stage")) out->stg = atoi(val), have |= 1;

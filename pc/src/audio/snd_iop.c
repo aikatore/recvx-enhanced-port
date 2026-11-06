@@ -278,6 +278,33 @@ int snd_xbank_load(int key)
     return xb_n;
 }
 
+/* MIDI bank 2 holds the system sounds (CallSystemSe with bit 31: item box lid 0x240, typewriter keys and bell 0x242..0x244),
+   but each room's sound pack fills it with the programs that room uses: the lid's and the keys' only in save rooms. The
+   extras' item boxes and typewriters and the F2 Save Now stand in any room, so the programs a room's bank 2 lacks are
+   taken from RM_1080's (synth key_on). */
+void snd_sysbank_load(void)
+{
+    static int done;
+    uint8_t* spq;
+    uint32_t size, o, d = 0, hd_ofs, hd_size, bd_ofs, bd_size;
+    if (done++) return;
+    if (!(spq = spq_read(1080, &size))) { host_log("snd: RM_1080.SPQ not found: no system sounds outside save rooms\n"); return; }
+    for (o = 0; o + 16 <= size && le32(spq + o); o += 16)   /* {Offset, Size, Type, BankNo}; Type 1 = MIDI program bank */
+        if (le32(spq + o + 8) == 1 && le32(spq + o + 12) == 2 && le32(spq + o) <= size - 16) d = le32(spq + o);
+    if (d) {
+        hd_ofs = d + le32(spq + d); hd_size = le32(spq + d + 4); bd_ofs = d + le32(spq + d + 8); bd_size = le32(spq + d + 12);
+        if (hd_ofs <= size && hd_size <= size - hd_ofs && bd_ofs <= size && bd_size <= size - bd_ofs) {
+            snd_synth_lock();
+            store(&g_snd_banks.sys_hd, spq + hd_ofs, 0, hd_size);
+            store(&g_snd_banks.sys_bd, spq + bd_ofs, 0, bd_size);
+            snd_synth_unlock();
+            host_log("snd: system sounds bank = RM_1080.SPQ MIDI bank 2 (header %u, samples %u bytes)\n", hd_size, bd_size);
+        } else d = 0;
+    }
+    if (!d) host_log("snd: RM_1080.SPQ has no MIDI bank 2\n");
+    free(spq);
+}
+
 void snd_xbank_release(void)
 {
     if (!xb_n) return;
