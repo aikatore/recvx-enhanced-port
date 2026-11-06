@@ -37,6 +37,7 @@
 - Chris's Spotter cutscene in the Antarctic base no longer gets stuck when he is shown as another model.
 - With Dithering on, the picture asks less of the graphics card and no longer stutters briefly the first time a
   room shows new kinds of surfaces.
+- With randomized event enemies, monsters changed by the cutscene cast now really show their new look in cutscenes.
 - The extra item boxes now make their opening sound in every room, like the game's own.
 
 ## 0.7.4 (2026-11-04)
