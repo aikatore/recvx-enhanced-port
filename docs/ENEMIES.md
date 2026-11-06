@@ -265,6 +265,10 @@ the body with its head.
 against the zombie's body bursts the head only when that hit is on the head (joint 11); earlier head
 damage, the magnum's near hit on joints 1 and 8..10 and the shotgun aimed up no longer do.
 
+**Third person, "Headshots & Piercing"** ([THIRDPERSON.md](THIRDPERSON.md#headshots-and-piercing)): a
+precise head hit that kills a zombie also bursts its head with the magnum, Gold Lugers, shotgun, sniper rifle
+and assault rifle, while it staggers or falls too (`bhEne01_DmgCheck` -> `pc_burst_head`, the same burst).
+
 **Third person, "Locational Hit Reactions"** ([THIRDPERSON.md](THIRDPERSON.md#locational-hit-reactions)): a
 zombie hit on its head, an arm or a leg also flinches that part while it is drawn; its state is untouched.
 

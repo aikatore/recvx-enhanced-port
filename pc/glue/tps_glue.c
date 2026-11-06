@@ -22,7 +22,7 @@
 #include "pc_rules.h"
 
 TpsConfig g_tps = { .fov = 75, .aim_fov = 65, .dist = 140, .aim_dist = 100, .height = 165, .shoulder = 35,
-                    .sens_x = 100, .sens_y = 100, .aim_sens = 70, .crosshair = 1, .precise = 1, .hit_react = 1, .atmos = 1, .key = 62 /* F5 */,
+                    .sens_x = 100, .sens_y = 100, .aim_sens = 70, .crosshair = 1, .precise = 1, .hit_react = 1, .headshots = 1, .atmos = 1, .key = 62 /* F5 */,
                     .pad_modern = 1, .pad_sens_x = 100, .pad_sens_y = 100, .pad_aim_sens = 50, .pad_dead_move = 20, .pad_dead_look = 15 };
 int tps_on;            /* hooks active (changes only at the frame hand-off) */
 int tps_cam_active;    /* our camera is the view of the current frame */
@@ -1192,13 +1192,41 @@ int pc_precise_hit(BH_PWORK* pp, int wpn, const float* c1, const float* c2, floa
 
 static void react_hit(BH_PWORK* pp, int jnt, int precise);
 
+/* ---------------------------------------------------------------- "Headshots & Piercing" (docs/THIRDPERSON.md)
+   With our camera or its scope, and in co-op the host's choice (coop_glue.c pc_headshots):
+   * head damage of a precise head hit: the sniper rifle 300 %, the assault rifle 200 % (others HEAD_DAMAGE); not on the
+     bosses with a head joint (Alexia 1, Steve, the Tyrant), which keep HEAD_DAMAGE;
+   * a precise head hit that kills a zombie bursts its head (en01.c bhEne01_DmgCheck -> pc_head_burst), the game's burst,
+     with the magnum, the Gold Lugers, the shotgun, the sniper rifle (the game's own burst weapons: there only a
+     walking zombie) and the assault rifle; not the handguns, the sub machine guns, the bow gun (the game never);
+   * the sniper rifle's shot goes through the enemies as the magnum's (bhCheckGunAtari -> pc_pierce). */
+int pc_headshots(void);   /* coop_glue.c: the setting, or the host's */
+static int headshots(void) { return tps_on && pc_headshots() && (tps_cam_active || in_scope()); }
+
+static int head_damage(int id, int wpn)
+{
+    if (!headshots() || id == 12 || id == 17 || id == 19) return HEAD_DAMAGE;
+    return wpn == 13 ? 300 : wpn == 12 ? 200 : HEAD_DAMAGE;
+}
+
+int pc_pierce(int wpn) { return wpn == 13 && headshots(); }
+
+int pc_head_burst(BH_PWORK* pp)
+{
+    int w = pp->wpnr_no;
+    if (pp->id != 1 || !pc_headshots() || !pc_precise_head(pp) || pp->dam[11] <= 0 || pp->hp >= 0 || !(w == 6 || w == 7 || w == 11 || w == 12 || w == 13))
+        return 0;
+    if (trace) printf("tps: KILL BURST enemy %d weapon %d modes %d/%d type %d\n", (int)(pp - ene), w, pp->mode0, pp->mode2, pp->type);
+    return 1;
+}
+
 /* bhCheckGunAtari after a gun hit added to enemy pp's damage on joint jnt (d0 before): whether it was a
    precise hit (with the weapon), and a precise hit on the head does HEAD_DAMAGE percent */
 void pc_precise_dam(BH_PWORK* pp, int jnt, int d0, int precise, int wpn)
 {
     int i = (int)(pp - ene);
     if (i >= 0 && i < PC_ENE_SLOTS) tps_hit_precise[i] = precise ? wpn + 1 : 0;
-    if (precise && jnt == head_joint(pp->id)) pp->dam[jnt] = d0 + (pp->dam[jnt] - d0) * HEAD_DAMAGE / 100;
+    if (precise && jnt == head_joint(pp->id)) pp->dam[jnt] = d0 + (pp->dam[jnt] - d0) * head_damage(pp->id, wpn) / 100;
     if (trace) printf("tps: HIT wpn %d enemy %d (type %d, hp %d) joint %d damage %d%s, its state %d modes %d/%d, %.1f above its feet\n", wpn, i, pp->id,
                       pp->hp, jnt, pp->dam[jnt] - d0, !precise ? " (game's test)" : jnt == head_joint(pp->id) ? " (precise, head)" : " (precise)",
                       pp->type, pp->mode0, pp->mode2, pp->dpy - pp->py);
@@ -1210,6 +1238,31 @@ int pc_precise_head(BH_PWORK* pp)
 {
     int i = (int)(pp - ene);
     return i >= 0 && i < PC_ENE_SLOTS && tps_hit_precise[i] && tps_hit_precise[i] == pp->wpnr_no + 1;
+}
+
+/* zonzon.c bhEne_SetBlood, en01.c bhEne01_SetBlood: a precise hit's blood goes where the shot hit, on the joint it hit
+   (the game: a spot on that part from the enemy's blood table, a zombie's head and neck on its chest; the kill and
+   shotgun sprays on the chest or the hips). ofs: the hit point (dp, the ray's entry; ours, or the partner's from
+   EV_ENE_HIT) in that joint's frame, as the game places the sniper rifle's. -1: the game's place */
+int pc_blood_at_hit(BH_PWORK* pp, float* ofs)
+{
+    int j = pp->djnt_no;
+    const float* m;
+    float v[3], c[3], d;
+    if (!pc_precise_head(pp) || !pp->mlwP || !pp->mlwP->owP || j <= 0 || j >= (int)pp->mlwP->obj_num) return -1;
+    m = pp->mlwP->owP[j].mtx;
+    v[0] = pp->dpx - m[12]; v[1] = pp->dpy - m[13]; v[2] = pp->dpz - m[14];
+    if (v[0] * v[0] + v[1] * v[1] + v[2] * v[2] > 10.0f * 10.0f) return -1;   /* ponytail: not its own point (the game's piercing
+                                                                                  stores the nearest enemy's): the game's place */
+    /* v = x m0 + y m4 + z m8 (the rows: the joint's axes), solved by Cramer's rule */
+    c[0] = m[5] * m[10] - m[6] * m[9]; c[1] = m[6] * m[8] - m[4] * m[10]; c[2] = m[4] * m[9] - m[5] * m[8];   /* m4 x m8 */
+    if (!(fabsf(d = m[0] * c[0] + m[1] * c[1] + m[2] * c[2]) > 1e-8f)) return -1;
+    ofs[0] = (v[0] * c[0] + v[1] * c[1] + v[2] * c[2]) / d;
+    ofs[1] = (m[0] * (v[1] * m[10] - v[2] * m[9]) + m[1] * (v[2] * m[8] - v[0] * m[10]) + m[2] * (v[0] * m[9] - v[1] * m[8])) / d;   /* m0 . (v x m8) */
+    ofs[2] = (m[0] * (m[5] * v[2] - m[6] * v[1]) + m[1] * (m[6] * v[0] - m[4] * v[2]) + m[2] * (m[4] * v[1] - m[5] * v[0])) / d;   /* m0 . (m4 x v) */
+    if (trace) printf("tps: BLOOD enemy %d (type %d) joint %d at %.1f %.1f %.1f, %.2f from the joint, %.1f above its feet\n", (int)(pp - ene), pp->id, j,
+                      pp->dpx, pp->dpy, pp->dpz, sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]), pp->dpy - pp->py);
+    return j;
 }
 
 /* ---------------------------------------------------------------- "Locational Hit Reactions" (docs/THIRDPERSON.md)
@@ -1328,6 +1381,40 @@ static int react_turns(BH_PWORK* z, Turn* t)
 static float react_save[64][16];
 static ML_WORK* react_m;
 
+/* model m's node matrices to s (back: 1 = from s), each O_WORK's mtx (the work is 0x50 bytes, its matrix at 0x10) */
+static void node_mtx(ML_WORK* m, float (*s)[16], int back)
+{
+    for (int j = 0; j < (int)m->obj_num && j < 64; j++)
+        if (back) memcpy(m->owP[j].mtx, s[j], sizeof(s[j])); else memcpy(s[j], m->owP[j].mtx, sizeof(s[j]));
+}
+
+/* effect.c bhControlEffect and bhDrawEffect: 1 = every flinching zombie's turns put on its nodes, so the effects linked to
+   them (the blood at the hit, effect.c's and the particles' njCalcPoint on owP) go with the part as drawn; 0 = put back */
+#define REACT_FX 8   /* ponytail: zombies flinching at once whose effects follow; more keep theirs where the game has them */
+void pc_hit_react_fx(int on)
+{
+    static float save[REACT_FX][64][16];
+    static ML_WORK* sm[REACT_FX];
+    static int n;
+    int i, k, j;
+    if (!on) {
+        while (n > 0) { n--; node_mtx(sm[n], save[n], 1); }
+        return;
+    }
+    if (n || !tps_on || !g_tps.hit_react || !(tps_cam_active || in_scope()) || !sys) return;
+    for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS && n < REACT_FX; i++) {
+        Turn t[2];
+        ML_WORK* m = ene[i].mlwP;
+        int c;
+        if (!react[i].t0 || !m || !m->owP || !(c = react_turns(&ene[i], t))) continue;
+        node_mtx(m, save[n], 0);
+        sm[n++] = m;
+        for (k = 0; k < c; k++)
+            for (j = 0; j < (int)m->obj_num && j < 64; j++)
+                if (t[k].nodes >> j & 1) turn(m->owP[j].mtx, t[k].u, t[k].c, t[k].a);
+    }
+}
+
 /* eneset.c bhDrawEnemy, around drawing ep: 1 = its flinch (or its zombie's, a part linked to a node that flinches:
    caps, the upper body) put on for the draw (1 returned: put it back after), 0 = put back */
 int pc_hit_react(BH_PWORK* ep, int on)
@@ -1337,7 +1424,7 @@ int pc_hit_react(BH_PWORK* ep, int on)
     ML_WORK* m = ep->mlwP;
     int n, k, j;
     if (!on) {
-        if (react_m) memcpy(react_m->owP, react_save, sizeof(react_save[0]) * (react_m->obj_num < 64 ? react_m->obj_num : 64));
+        if (react_m) node_mtx(react_m, react_save, 1);
         react_m = NULL;
         return 0;
     }
@@ -1348,7 +1435,7 @@ int pc_hit_react(BH_PWORK* ep, int on)
         n = react_turns(z, t);
     }
     if (!n) return 0;
-    memcpy(react_save, m->owP, sizeof(react_save[0]) * (m->obj_num < 64 ? m->obj_num : 64));
+    node_mtx(m, react_save, 0);
     react_m = m;
     for (k = 0; k < n; k++)
         for (j = 0; j < (int)m->obj_num && j < 64; j++)

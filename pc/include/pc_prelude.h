@@ -124,6 +124,14 @@ int   pc_precise_hits(void);
 int   pc_precise_hit(struct BH_PWORK* pp, int wpn, const float* c1, const float* c2, float* hp);
 void  pc_precise_dam(struct BH_PWORK* pp, int jnt, int d0, int precise, int wpn);
 int   pc_precise_head(struct BH_PWORK* pp);
+/* third person (pc/glue/tps_glue.c): "Headshots & Piercing": bhCheckGunAtari: 1 = the player's shot with weapon wpn goes
+   through the enemies as the magnum's; en01.c bhEne01_DmgCheck: 1 = the zombie's killing head hit bursts its head.
+   A precise hit's blood (zonzon.c bhEne_SetBlood, en01.c bhEne01_SetBlood): the joint it hit and, in ofs, the hit point
+   in that joint's frame; -1 = the game's place */
+int   pc_pierce(int wpn);
+int   pc_head_burst(struct BH_PWORK* pp);
+int   pc_blood_at_hit(struct BH_PWORK* pp, float* ofs);
+void  pc_hit_react_fx(int on);   /* effect.c bhControlEffect, bhDrawEffect: "Locational Hit Reactions", the linked effects follow the flinch */
 /* F2 cheat "Unlock all" (pc/glue/cheat_glue.c): bhPlItemCheck passes for a key at its lock; bhControlPlayer's examine
    press in a key's use spot (1: taken) and bhControlEvent around scd1 (0 before, 1 after) use the key there;
    bhUseItemCheck / bhCmpB found the key used tested; bhInitEvent: a room's entry script is about to run */

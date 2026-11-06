@@ -3197,6 +3197,13 @@ int pc_extra_objects(void)
     return pc_cfg_extra_objects();
 }
 int coop_extra_objects(void) { return rule(OPT_EXTRA_OBJECTS); }   /* the guest's lobby: the host's */
+/* third person "Headshots & Piercing" (OPT2_HEADSHOTS, protocol 41; tps_glue.c): the setting, a guest plays by the host's
+   rule once it knows it (the shooter's head damage and piercing, the head bursts of the side running the zombie) */
+int pc_headshots(void)
+{
+    if (coop_on && !is_host && !echo_delay && peer_opts >= 0) return (peer_opts & (OPT2_HEADSHOTS << 8)) != 0;
+    return g_tps.headshots;
+}
 
 /* Shared loot, "important items for both" (OPT_IMPORTANT, docs/COOP.md "Loot modes"): the item kinds each player
    takes for itself, as individual loot does for every item - one taking it leaves the partner's copy lying. Without
@@ -7102,7 +7109,7 @@ void coop_frame(void)
                         (pc_cfg_no_ink_ribbon() ? OPT_NO_RIBBON : 0) | (g_coop.skip_sync ? OPT_SKIP_SYNC : 0) |
                         (g_coop.gameover_both ? OPT_GAMEOVER_BOTH : 0) | (g_coop.skip_detector ? OPT_SKIP_DETECTOR : 0) |
                         (g_coop.quick_start && !biorand_next() ? OPT_QUICK_START : 0) : 0;   /* BioRand: its own start inventory */
-    tx.opts2 = is_host && pc_cfg_extra_objects() ? OPT2_EXTRA_OBJECTS : 0;   /* (protocol 33) */
+    tx.opts2 = is_host ? (pc_cfg_extra_objects() ? OPT2_EXTRA_OBJECTS : 0) | (g_tps.headshots ? OPT2_HEADSHOTS : 0) : 0;   /* (protocols 33, 41) */
     tx.regroup = regroups;
     tx.seq = frame_no;
     if (echo_delay) {
