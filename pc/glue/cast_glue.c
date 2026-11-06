@@ -298,6 +298,7 @@ int actor_double_shown(const BH_PWORK* ep);      /* actor_glue.c */
 uint64_t SDL_GetTicks(void);
 extern int PatId[4];
 #define VOICE_PT 28
+#define VOICE_SHORT_MS 1200          /* lines shorter than this (gasps, grunts, cries on a hit) stay quiet, not replaced */
 static struct {
     int on, rec, ms;                    /* on: 1 an inserted line plays, 2 the original's time is over */
     const unsigned char* lip;           /* the inserted line's lips for the LipSet after it (pc_voice_lip) */
@@ -440,13 +441,18 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
         if (!logged++) host_log("voices: the lines are not read yet: line %d/%d stays\n", disc, vid);
         return vid;
     }
+    ms = adx_length_ms(PatId[1], vid);
+    if (ms > 0 && ms < VOICE_SHORT_MS) {   /* a gasp or grunt: quiet (a whole line in its place would be cut by the next one) */
+        host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a short sound: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms);
+        vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = NULL; vl.t0 = SDL_GetTicks();   /* (the script still waits its length) */
+        return -1;
+    }
     if (!(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr))) return vid;
     if (!part[l->disc - 1]) {   /* the line's archive as a partition of its own (the game's 1 is the room's disc's) */
         ADXF_LoadPartitionNw(VOICE_PT + l->disc - 1, l->disc == 1 ? (char*)"\\VOICE1.AFS" : (char*)"\\VOICE2.AFS", NULL, NULL);
         part[l->disc - 1] = ADXF_GetPtStat(VOICE_PT + l->disc - 1) == 3 ? 1 : -1;   /* (ADXF_STAT_READEND) */
     }
     if (part[l->disc - 1] < 0) return vid;
-    ms = adx_length_ms(PatId[1], vid);
     why = lip < 0 ? mouth_add(sp, vid, l->lip) : NULL;
     host_log("voices: room %04d record %d: %s's line %d/%d (%d ms), shown as %s -> %s's line %d/%d (%d ms) from RM_%04d, %s%s%s\n", room_file_now(), sp,
              cast_name(own), disc, vid, ms, m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?", cast_name(chr), l->disc, l->vid,

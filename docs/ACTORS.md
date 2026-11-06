@@ -1180,6 +1180,10 @@ the line.
   (`exp0[268]`) at the inserted line's entry; `LipStart` plays it, and the model shown takes the record's lips as
   always (`face_step`: the bank past or still in the model's face table is its first). The bank stays the script's
   (each face table has its own banks; the phonemes are 0..5 in every entry).
+* **Short sounds**: a line of a swapped speaker shorter than `VOICE_SHORT_MS` (1.2 s: gasps, grunts, cries on a hit)
+  stays quiet instead of being replaced (`pc_voice_on` answers -1; the script still waits its length), so a whole line
+  no longer starts there only to be cut by the next one, and a longer inserted line before it plays on through it.
+  Measured: 0030 17 of 31 lines quiet, 9350 11 of 33, 1020 none; the scenes last as long as before.
 * **Timing**: the script waits for a line with `AdxCk` (op 27, 66 in the scripts, all slot 1); `CheckPlayEndAdx(1)`
   answers from `pc_voice_playing`: "playing" for exactly the original line's length (its ADX header, `adx_length_ms`),
   whatever the inserted line's, then "ended". So the scene keeps its timing: a longer line goes on over what follows
