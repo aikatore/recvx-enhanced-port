@@ -5,8 +5,10 @@
 ### New
 
 - **Randomize Voice Lines**: in cutscenes, a character shown as another story character speaks random lines of
-  that character, with the matching mouth movements. Lines can repeat and may not fit the scene. Off by default;
-  on the BioRand RANDOMIZER page, in the multiplayer lobby and in the Enhanced Settings.
+  that character, with the matching mouth movements. With Talking Mouths (on by default) the mouth also moves
+  where the original line kept it still, when it is clear who is speaking. A character shown as a zombie or a
+  creature moans, growls and shrieks with that enemy's own sounds instead. Lines can repeat and may not fit the
+  scene. Off by default; on the BioRand RANDOMIZER page, in the multiplayer lobby and in the Enhanced Settings.
 - **Locational Hit Reactions**: in the over-the-shoulder camera, a zombie shot in the head, an arm or a leg now
   flinches there: the head snaps back, the arm jerks away, the leg buckles. Damage, stun and timing stay the same.
   A co-op partner sees it too. On by default, with a setting to turn it off.

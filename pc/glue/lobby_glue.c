@@ -922,10 +922,10 @@ enum { R_MODE, R_HOSTSTEP, R_JOINSTEP,
        R_START, R_ITEMS, R_FOLLOW, R_RULES,
        R_BIORAND, R_LOOT, R_IMP, R_TFREEZE, R_SKIPS, R_RIBBON, R_GOVER, R_ENEMYPG, R_EVENTPG,
        R_RAND, R_VARIETY, R_RATES, R_TYPES, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTASSIGN, R_CASTIMP,
-       R_VOICES, R_QUICK, R_DETECTOR, R_EXTRAOBJ,
+       R_VOICES, R_MOUTHS, R_QUICK, R_DETECTOR, R_EXTRAOBJ,
        R_HOST, R_GO, R_COPY, R_RCOPY, R_KICK, R_STOP, R_JOIN,
        R_BACK, R_N };
-static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
                                               5, 5, 5, 5, 5, 5, 5, 6 };
 _Static_assert(sizeof(row_group) == R_N, "row_group");
 enum { F_NONE, F_NAME, F_ADDR, F_PORT, F_SEED, F_SERVER, F_PW };
@@ -974,7 +974,7 @@ static int row_visible(int r)
                              (r == R_IMP && host && !g_coop.loot);   /* only shared loot has it */
     if (lb.step == 4) return (r >= R_RAND && r <= R_PLACE && (r != R_RSEED || host)) || r == R_CASTPG;
     if (lb.step == 7)   /* the cutscene cast: its model and assignment rows while it is on; the imported models' while we have some */
-        return r == R_CAST || r == R_VOICES || ((r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP || r == R_CASTCUSTOM) && shown_eo()->cast &&
+        return r == R_CAST || r == R_VOICES || (r == R_MOUTHS && shown_eo()->voices) || ((r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP || r == R_CASTCUSTOM) && shown_eo()->cast &&
                                (r != R_CASTIMP || __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0) && (r != R_CASTCUSTOM || shown_eo()->cast_all == 2));
     if (lb.step == 5) return (r == R_QUICK && !biorand_next()) || r == R_DETECTOR || r == R_EXTRAOBJ;   /* BioRand has its own start inventory */
     switch (r) {
@@ -1157,6 +1157,7 @@ static void change(int r, int dir)
     case R_CASTASSIGN: settings_step(eset(&g_enemy_opts.cast_assign), dir); break;
     case R_CASTIMP: settings_step(eset(&g_enemy_opts.cast_imports), dir); break;
     case R_VOICES: settings_step(eset(&g_enemy_opts.voices), dir); break;
+    case R_MOUTHS: settings_step(eset(&g_voice_mouths), dir); break;   /* (each screen's own: not locked for a guest) */
     default: return;
     }
     CallSystemSe(0, 2);
@@ -1167,7 +1168,7 @@ static int has_value(int r)
 {
     return r == R_MODE || r == R_RELAY || r == R_BIORAND || r == R_LOOT || r == R_IMP || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON || r == R_GOVER || r == R_QUICK || r == R_DETECTOR || r == R_EXTRAOBJ || r == R_START || r == R_ITEMS || r == R_FOLLOW || r == R_CHARMODE ||
            r == R_EXTRA || r == R_PLACE || r == R_RAND || r == R_VARIETY || r == R_TYPES || r == R_EVENTS || r == R_CAST || r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP ||
-           r == R_VOICES;
+           r == R_VOICES || r == R_MOUTHS;
 }
 
 /* the joining player's items for coop_glue.c (own inventory on join) */
@@ -1448,6 +1449,7 @@ static void row_text(int r, char* label, char* val, int n)
     case R_CASTASSIGN: strcpy(label, "ASSIGN"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_assign)->names[eo->cast_assign & 1]); break;
     case R_CASTIMP: strcpy(label, "IMPORTED MODELS"); snprintf(val, n, "%s", eo->cast_imports ? "On" : "Off"); break;
     case R_VOICES: strcpy(label, "RANDOMIZE VOICES"); snprintf(val, n, "%s", eo->voices ? "On" : "Off"); break;
+    case R_MOUTHS: strcpy(label, "TALKING MOUTHS"); snprintf(val, n, "%s", g_voice_mouths ? "On" : "Off"); break;
     case R_SEED: strcpy(label, "SEED"); if (lb.edit == F_SEED) snprintf(val, n, "%s", lb.buf); else snprintf(val, n, "%d", eo->seed); break;
     case R_RSEED: strcpy(label, "RANDOM SEED"); break;
     case R_JOIN: strcpy(label, session_on() ? "LEAVE" : "JOIN"); break;
@@ -1516,6 +1518,7 @@ static const char* row_help(int r)
     case R_CASTASSIGN: return eset(&g_enemy_opts.cast_assign)->help;
     case R_CASTIMP: return eset(&g_enemy_opts.cast_imports)->help;
     case R_VOICES: return eset(&g_enemy_opts.voices)->help;
+    case R_MOUTHS: return eset(&g_voice_mouths)->help;
     case R_SEED: return eset(&g_enemy_opts.seed)->help;
     case R_RSEED: return "Picks a new random seed.";
     case R_HOST: return lb.mode ? "Open a lobby on the co-op server. Give your partner the room code shown here."

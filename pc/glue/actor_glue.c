@@ -1885,6 +1885,7 @@ int cast_n;                             /* cast_glue.c: records drawn as other m
 int cast_draw(BH_PWORK* ep);
 void cast_tick(void);
 void cast_show(void);
+void pc_voice_tick(void);               /* cast_glue.c: an enemy model's sounds in place of a line, each at its time */
 void cast_double_parts(BH_PWORK* ep, int pid);
 int actor_put_enemy(BH_PWORK* ep)
 {
@@ -2016,6 +2017,12 @@ static void face_step(Disguise* d, const BH_PWORK* ep)
     }
 }
 
+int actor_talks(int who)
+{
+    const Disguise* d = &dg[who];
+    return d->model >= 0 && d->rig.ok && ((d->face > 5 && !bank_still(d, 0)) || (d->skin && d->fbone[4] >= 0));
+}
+
 /* ep is a shown cutscene double of the character played */
 static int double_acting(const BH_PWORK* ep, int pid)
 {
@@ -2051,6 +2058,7 @@ void actor_double_tick(void)
     int i, pid = sys->ply_id & 3;
     memset(posed_src, 0, sizeof(posed_src));
     cast_show();   /* (the pieces and head parts hidden last tick) */
+    pc_voice_tick();
     if (cast_n) cast_tick();   /* the cutscene cast, the same way */
     if (d->model < 0 || !d->rig.ok) return;
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {

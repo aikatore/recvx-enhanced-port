@@ -1197,6 +1197,19 @@ player's random or chosen look) says random lines of the character shown, with t
 with the cast off and a player look, 9350 as Chris, 7220 per cutscene), `batch2.sh` (the same scenes off and on: the
 same scene lengths, every inserted line's lips set), `coop.sh` (host and guest in 9350 and 9370: the same lines).
 
+**Enemy sounds (2026-11-06)**: the user's request: "if its an enemy model all voicelines should be replaced with sounds
+of that enemy". A speaker shown as a zombie look or a creature makes that enemy's own sounds in place of each line,
+chained over the line's time (no lips; the scene's timing stays). Which sounds, where they come from, which kinds keep
+the line: [ACTORS.md](ACTORS.md) "Voice lines", "Enemy models". No new setting, no co-op protocol change.
+
+**Tests (2026-11-06, Linux; job dir `voicecreature/`, not committed):** `batch1.sh`, `batch2.sh` (1020, 0030, 0000,
+9350 with the played character's double as a zombie, Nosferatu, the Tyrant, Monster Steve, a Bandersnatch, the
+anatomist, Alexia's first form, two scripted zombies; the cast with all models: the Hunter, the Tyrant, Monster
+Steve): every line of such a speaker replaced by its sounds, the scene lengths as with the option off (122.2, 97.3,
+64.3, 125.9 s), the synth trace (`RECVX_TRACE_SND`) playing each from the extra bank and nothing after the scene;
+`batch3.sh` (two runs each: the same sounds), `coop.sh` (host and guest in 9350 and 9370 with Wesker as the Hunter: the
+same 12 lines, the same sounds).
+
 ### S12: Custom enemy rates, Types per Room, more extra enemies (2026-11-06)
 
 The user's request: per-type rates for our enemy randomizer as BioRand's enemy sliders (Mutated Steve included), Wild and
@@ -1204,11 +1217,11 @@ Mild kept as presets, a Custom choice, a limit of enemy types per room with No L
 the co-op lobby too.
 
 - **RANDOMIZER page** (heading ENEMIES): Enemy Randomizer; with it on, **Enemy Selection** (the settings row formerly
-  "Randomizer Variety": Mild, Wild, **Custom**), with Custom **Enemy Rates** (`K_RATES`, the label and "9 of 11", the kinds
+  "Randomizer Variety": Mild, Wild, **Custom**), with Custom **Enemy Rates** (`K_RATES`, the label and "9 of 12", the kinds
   with a rate), **Types per Room** (No Limit, 1..8) and Randomize Event Enemies; then Enemy Seed, RANDOM SEED, Extra
   Enemies (now up to 8), Rearranged Enemies. 23 rows at most.
 - **Enemy Rates** opens `pc/glue/rate_list.c` (`bm.list` 2, where the cast's list opens): every kind the randomizer
-  places (`enemyopt_glue.c enemy_rate_*`: the ten base kinds, then the variants with a randomizer weight), each with a
+  places (`enemyopt_glue.c enemy_rate_*`: the eleven base kinds (the Hunter and the Sweeper separate since 2026-11-06), then the variants with a randomizer weight), each with a
   slider Off..10 drawn as BioRand's (the filled part, the rest; arrows), the value and its share of the draws, BACK below.
   Up/down, L1/R1, Page Up/Down, Home/End move; left/right or a click on an arrow steps; a click on the track sets that
   value; confirm steps up and wraps to Off; the wheel moves a row; cancel, a right click or BACK return. Help: BioRand's

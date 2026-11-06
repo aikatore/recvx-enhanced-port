@@ -518,7 +518,7 @@ count for both. Code: `pc/glue/enemyopt_glue.c`, one decomp hook at the end of
 | "Enemy Randomizer" (GAMEPLAY) | `enemy_random` | 0/1 | `RECVX_ENEMY_RANDOM` |
 | "Enemy Seed" (GAMEPLAY) | `enemy_seed` | seed for placements and randomizer | `RECVX_ENEMY_SEED` |
 | "Enemy Selection" (GAMEPLAY) | `enemy_variety` | 0 = Mild, **1 = Wild**, 2 = Custom | `RECVX_ENEMY_VARIETY` |
-| Custom's rates (BIORAND screen and lobby RANDOMIZER pages, F1) | `enemy_rates` line: `id:rate` per kind by type id, `vID:rate` per variant | 0 (Off)..10 | `RECVX_ENEMY_RATES` (same text) |
+| Custom's rates (BIORAND screen and lobby RANDOMIZER pages, F1) | `enemy_rates` line: `id:rate` per kind by type id (`5.0` Hunter, `5.1` Sweeper: type and model; a plain `5:rate`, as saved before the two were split, sets both), `vID:rate` per variant | 0 (Off)..10 | `RECVX_ENEMY_RATES` (same text) |
 | "Types per Room" (GAMEPLAY) | `enemy_types` | **0 = No Limit**, 1..8 | `RECVX_ENEMY_TYPES` |
 | "Randomize Event Enemies" (GAMEPLAY) | `enemy_random_events` | 0/**1** | `RECVX_ENEMY_EVENTS` |
 | "Randomize Cutscene Cast" and its page (GAMEPLAY, CUTSCENE CAST) | `cast_random`, `cast_models`, `cast_assign`, `cast_imports`, `cast_custom_off` lines | the story characters drawn as other models in cutscenes, visual only (no enemy is touched): [ACTORS.md](ACTORS.md) "Cutscene cast" | `RECVX_CAST` |
@@ -592,7 +592,7 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
 | zombie | 24 | 5 / 5 | |
 | Cerberus | 1 | 4 / 4 | |
 | Bandersnatch | 1 (Bandersnatch 2 is an event's arm: never) | 4 / 4 | |
-| Hunter, Sweeper | 2 | 3 / 4 | not in kill-count rooms (may leap out of a room) |
+| Hunter, Sweeper | 1 each | 3 / 4 together (Custom's presets: Hunter 2 / 2, Sweeper 1 / 2) | not in kill-count rooms (may leap out of a room). One kind of both looks in Wild and Mild; two kinds with a rate each in Custom (and for Types per Room under Custom) |
 | Black Widow | 1 | 2 / 3 | open space (25 slots with its brood); not in kill-count rooms (climbs walls) |
 | anatomist zombie | 1 | 2 / 2 | |
 | Tyrant | 2 | - / 2 | open space; not in kill-count rooms; not where the script uses `rm_flg` bits 29..31 (its code clears `rm_flg & 7` every frame) |
@@ -617,14 +617,15 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
   record, any Mild kind that does.
 * **Custom** (Enemy Selection's third choice, as BioRand's enemy ratio sliders): each kind's
   weight is its rate, Off or 1..10 (`EnemyOpts.rate`, recvx.ini `enemy_rates`), one per kind
-  above and per variant with a randomizer weight (Mutated Steve too). The kinds' rules stay; a
+  above (the Hunter and the Sweeper each their own) and per variant with a randomizer weight (Mutated Steve too). The kinds' rules stay; a
   record draws from the kinds that fit it by rate alone (no "unused kinds first"), so a kind at
   10 among kinds at 1 takes most records, and a kind at Off is never placed. Records that cannot
   change keep their type (event-driven records, single-look types, boss rooms, a record where
-  nothing else with a rate fits): an Off zombie still appears where the room's own zombie stays.
+  nothing else with a rate fits): an Off zombie still appears where the room's own zombie stays. An event-driven Hunter
+  takes the Sweeper's look only while the Sweeper has a rate (and the other way round).
   Fliers become fliers as in Wild (both at Off: they stay). Picking Wild or Mild presets the
   rates to that variety's weights (variants capped at 10), so Custom starts from the last one
-  picked. Variants past the 22nd have no rate and are not placed by Custom (the rates fill the
+  picked. Variants past the 21st have no rate and are not placed by Custom (the rates fill the
   co-op event, see "Co-op").
 * **Types per Room** (`enemy_types`, 1..8, default No Limit): at most that many kinds in a room.
   The records that keep their type count first; then, in record order, once the room has that
@@ -801,8 +802,10 @@ records); every room must get the same records and extras on both visits, and no
 
 `pc/tools/enemy_rates_check.sh OUT [SEED...]` (headless, about 3 minutes): a new game tours 22 rooms per
 seed with eight extras, once with Custom rates (zombies Off, Cerberus 10, the rest 1: no record may become a
-zombie, Cerberus must take most ground records), once Wild with Types per Room 1 and once Custom with
-Types per Room 2 (no room over its limit unless logged, every extra of a type the room's records have).
+zombie, Cerberus must take most ground records), twice with Hunter 10 and Sweeper Off and the other way round
+(no record may become the one at Off, some must become the other), once Wild with Types per Room 1 and once
+Custom with Types per Room 2 (no room over its limit unless logged, Hunter and Sweeper two kinds there; every
+extra of a type the room's records have).
 
 Test aids:
 

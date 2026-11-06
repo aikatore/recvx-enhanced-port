@@ -32,6 +32,7 @@ void snd_synth_xbanks_stop(void);       /* (lock held) stop what plays from the 
    case), or a player voice bank CORE_00n bank 4 (key 0xFFF0 + n, docs/ACTORS.md "Voices"); 1..31 or 0 (none) */
 int  snd_xbank_load(int key);
 void snd_xbank_release(void);
+int  snd_xbank_prog_ms(int xb, int tq);   /* how long program tq of extra bank xb plays, ms; 0: none there, or a looping one */
 /* co-op (coop_glue.c): the partner's weapon bank - the shot bank of an ARMS_nnn.SPQ - beside our own
    arms bank (SE bank 1): its programs play as arms programs SND_PARTNER_TQ + n. NULL / 0: none */
 #define SND_PARTNER_TQ 0x40

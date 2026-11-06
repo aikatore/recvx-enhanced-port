@@ -98,6 +98,23 @@ int voice_count(int chr);     /* lines of character chr, -1: the catalogue is no
 const VoiceLine* voice_line(int chr, int i);
 /* the line of character chr said in place of file vid of disc's archive in room file room for seed (NULL: chr has none) */
 const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr);
+/* "Talking Mouths" (ini voice_mouths, default 1; each screen's own): an inserted line in place of one without a LipSet
+   moves the speaker's mouth with its lips, where the speaker is sure. voice_sure: in room file room, file vid's VoiceOn
+   names record rec, no LipSet follows, and every line of that script with a LipSet moves the mouth of the record it
+   names (its scripter put the speaker there); voice_sure_count: how many, -1 not read yet */
+extern int g_voice_mouths;
+int voice_sure(int room, int vid, int rec);
+int voice_sure_count(void);
+/* An enemy model (catalogue entry m: a zombie look, a creature) makes its own sounds in place of the line instead
+   (docs/ACTORS.md "Voice lines"): the room file whose sound pack's enemy bank (SE bank 3) has them and their programs
+   (prog: max >= 44), place alt 0, 1, 2 the next one to look in when the programs are not in that bank (a zombie: its
+   look's moans in its room, any moans there, RM_0030's); the count, 0 none (not an enemy, or one without sounds). */
+int voice_creature(int m, int alt, int* room, unsigned char* prog, int max);
+/* the sounds said in place of file vid of disc's archive in room file room for seed, a line of ms milliseconds: of n
+   sounds (n <= 64) of len[i] ms, pick[k] the k-th to play at at[k] ms from the line's start, until the line's time is
+   filled (one at least, none starting in its last 250 ms): each a random one of those that fit in the time left (else
+   the shortest), not the one before again; the count (<= max) */
+int voice_creature_seq(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, unsigned char* pick, int* at, int max);
 
 #ifdef __cplusplus
 }

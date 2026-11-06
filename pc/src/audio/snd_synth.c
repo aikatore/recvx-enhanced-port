@@ -798,6 +798,16 @@ void snd_partner_arms(const void* hd, uint32_t hd_size, const void* bd, uint32_t
     snd_synth_unlock();
 }
 
+int snd_xbank_prog_ms(int xb, int tq)
+{
+    uint32_t n = 0;
+    if (xb < 1 || xb > 31 || tq < 0 || tq > 127) return 0;
+    snd_synth_lock();
+    if (g_snd_banks.xbd[xb - 1].size) n = tq_length(&g_snd_banks.xhd[xb - 1], tq);
+    snd_synth_unlock();
+    return n && n != 0xFFFF ? (int)(n * 1000u / (16 * 240)) : 0;   /* (the slot counts 16 a tick at 240 Hz, unbent) */
+}
+
 void snd_synth_xbanks_stop(void)
 {
     snd_synth_flush();
