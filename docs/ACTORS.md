@@ -653,7 +653,14 @@ weapon of a hand the model lacks floated at the invisible source's hand.
 * **The shot** (`actor_hands_back`, game.c before `bhControlPlayer`): the game's own matrices of
   nodes 5, 9, 13 are saved before they are moved and put back before the next player control, so
   the game fires (`bhCheckGunAtari` from the muzzle at `owP[9]`), swings the knife and places the
-  lighter light from the real skeleton; only the drawing uses the model's hands. Third-person aim:
+  lighter light from the real skeleton; only the drawing uses the model's hands. They are put back
+  only while the skeleton is the one they were saved from (the chest, node 3, unchanged): a script that
+  hides the player and moves it computes it again, and a hidden player's skeleton is not computed again
+  by `bhControlPlayer`. Put back over that, the head stayed where the player had stood; in 9100 (Chris
+  and the Spotters in the pipe corridor, entered from the east doors) that spot is in a Spotter's
+  searchlight, which tests the player's nodes (`bhEff_E11_CheckCollisionPlayer`, from its draw), so the
+  room's "spotted" event started on the scene's own task level: the Spotters flew off and the scene
+  stayed on its camera with the player hidden. Third-person aim:
   [THIRDPERSON.md](THIRDPERSON.md) "Free-aim pose".
 * **Lighter**: the game holds the lighter by an arm IK after the motion (`bhArmIkMdk` on node 6
   towards a point in front of chest node 4, nodes 7..9 flagged 2). The same IK runs on the

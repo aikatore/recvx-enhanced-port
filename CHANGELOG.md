@@ -26,6 +26,8 @@
 - Killed Extra Enemies no longer come back when a room is entered again, and a room keeps the same extra
   enemies on every visit.
 - In third person, holding a movement key through a door keeps walking in the new room again.
+- Chris's Spotter cutscene in the Antarctic base's pipe corridor no longer gets stuck with the Spotters flying off
+  early when Chris is shown as another model, such as an imported Outbreak character.
 
 ## 0.7.4 (2026-11-04)
 

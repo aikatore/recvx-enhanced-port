@@ -1615,8 +1615,13 @@ int actor_put_body(int who, BH_PWORK* src)
    the source's nodes 5, 9 and 13 carry the model's (actor_pose, shadow). Before the next tick's
    player control the game's own come back (actor_hands_back, game.c): bhControlPlayer reads the hand
    for the shot (the wall test of bhCheckGunAtari starts at the muzzle, owP[9]), the knife and sounds,
-   so a taller model shot higher than the crosshair. */
-static struct { BH_PWORK* src; O_WORK* ow; float mtx[3][16]; } real[2];
+   so a taller model shot higher than the crosshair.
+   Put back only while the skeleton is still the one they were saved from (the chest, node 3, which we never move): a
+   script that moves the player and computes its skeleton again (9100: Chris hidden and put elsewhere for the
+   Spotter scene; a hidden player's skeleton is not computed again by bhControlPlayer) has the game's own nodes
+   there. Put back over them, the head stayed where the player had stood: in a Spotter's searchlight there
+   (bhEff_E11_CheckCollisionPlayer tests the player's nodes), the room's "spotted" event cut into the scene. */
+static struct { BH_PWORK* src; O_WORK* ow; float mtx[3][16], chest[16]; } real[2];
 static float aim_ofs[3];   /* our weapon hand as drawn minus the real one, in the frame of the real chest (node 3) */
 static float aim_rot[9];   /* the drawn weapon hand's rotation in that frame (the gender-matched pose's hand turns otherwise) */
 static int aim_set;        /* aim_rot is set */
@@ -1624,11 +1629,13 @@ static int aim_set;        /* aim_rot is set */
 static void hands_save(int who, BH_PWORK* src)
 {
     int i;
-    if (real[who].src == src && real[who].ow == src->mlwP->owP) return;   /* saved this tick */
+    if (real[who].src == src && real[who].ow == src->mlwP->owP && !memcmp(real[who].chest, real[who].ow[3].mtx, sizeof(real[who].chest)))
+        return;   /* saved this tick (and not computed again since) */
     if (src->mlwP->obj_num < 14) return;
     real[who].src = src;
     real[who].ow = src->mlwP->owP;
     for (i = 0; i < 3; i++) memcpy(real[who].mtx[i], real[who].ow[5 + 4 * i].mtx, sizeof(real[who].mtx[i]));
+    memcpy(real[who].chest, real[who].ow[3].mtx, sizeof(real[who].chest));
 }
 
 static void hands_back(int who)
@@ -1636,7 +1643,7 @@ static void hands_back(int who)
     O_WORK* ow = real[who].ow;
     int i, j;
     if (!real[who].src) return;
-    if (real[who].src->mlwP && ow == real[who].src->mlwP->owP) {
+    if (real[who].src->mlwP && ow == real[who].src->mlwP->owP && !memcmp(real[who].chest, ow[3].mtx, sizeof(real[who].chest))) {
         if (who == 0 && real[0].src == plp) {   /* local = world x R^T, R: the chest's rows */
             float dl[3];
             for (j = 0; j < 3; j++) dl[j] = ow[9].mtx[12 + j] - real[0].mtx[1][12 + j];
