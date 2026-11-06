@@ -142,11 +142,91 @@ int voice_count(int chr)
 
 const VoiceLine* voice_line(int chr, int i) { return voice_count(chr) > i && i >= 0 ? &lines[first[chr] + i] : NULL; }
 
+static unsigned mix(unsigned seed, int room, int disc, int vid, unsigned salt)
+{
+    unsigned h = seed * 2654435761u ^ ((unsigned)room * 40503u + (unsigned)vid * 0x9E3779B9u + (unsigned)disc * 0x85EBCA6Bu + salt * 0xC2B2AE35u);
+    h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12; h *= 0x297A2D39u; h ^= h >> 15;
+    return h;
+}
+
 const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr)
 {
-    unsigned h = seed * 2654435761u ^ ((unsigned)room * 40503u + (unsigned)vid * 0x9E3779B9u + (unsigned)disc * 0x85EBCA6Bu + (unsigned)chr * 0xC2B2AE35u);
     int n = voice_count(chr);
     if (n <= 0) return NULL;
-    h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12; h *= 0x297A2D39u; h ^= h >> 15;
-    return &lines[first[chr] + (int)(h % (unsigned)n)];
+    return &lines[first[chr] + (int)(mix(seed, room, disc, vid, (unsigned)chr) % (unsigned)n)];
+}
+
+/* ---------------------------------------------------------------- an enemy model's sounds in place of a line
+   Every enemy sound is a program of SE bank 3, which a room's sound pack fills with its own types' sounds (docs/ENEMIES.md
+   "Sounds of added types"). The programs here are each type's cries as its code requests them (enNN.c): those on the
+   enemy voice channel (SeNo bit 24: the zombies' moans, the dog's barks, Nosferatu's screams), else its hurt and death
+   cries, else what its moves sound like (the Tyrant has no voice: its blows and stomps). Each room's bank holds that
+   type's sounds and no other type's under those numbers (the numbers collide between types). Program numbers only:
+   the sounds are read from the disc. */
+static const struct { unsigned char id; unsigned short room; unsigned char n, prog[8]; } creature[] = {
+    {  3, 7080, 5, { 3, 4, 14, 16, 17 } },          /* Black Widow: bhEne03_CallSE's, bhEne03_DamageInit's 16, 17 */
+    {  4, 3020, 8, { 2, 3, 4, 6, 7, 9, 13, 14 } },  /* Cerberus: the voice channel's barks, growls, howls */
+    {  5, 8010, 2, { 17, 18 } },                    /* Hunter (both): bhEne05_InitDamage's hurt and death cries */
+    {  6, 6030, 3, { 0, 3, 4 } },                   /* Moth: death, grab, hurt */
+    {  7,  130, 3, { 5, 6, 7 } },                   /* Bat: the voice channel's 5, the death squeals */
+    {  9, 2000, 4, { 12, 14, 15, 16 } },            /* Bandersnatch (both): the voice channel's (RM_3130 has no bank 3) */
+    { 11, 7081, 2, { 1, 2 } },                      /* Spotter: its own two (the Hunters' rooms' bank) */
+    { 12, 5820, 3, { 7, 8, 9 } },                   /* Alexia (First Form): the voice channel's */
+    { 15, 5800, 3, { 10, 11, 12 } },                /* Nosferatu: the voice channel's (13 is in no bank) */
+    { 17, 9280, 3, { 2, 8, 9 } },                   /* Monster Steve: the voice channel's */
+    { 19, 5010, 5, { 5, 6, 7, 9, 13 } },            /* Tyrant (both): its voice channel's 2..4 are in no bank */
+    { 20, 9170, 4, { 0, 1, 2, 3 } },                /* Ant: its room's four */
+    { 21, 3140, 3, { 0, 1, 2 } },                   /* Albinoid (Infant): its room's three (RM_3120's are zombies') */
+    { 22, 7100, 7, { 1, 2, 4, 5, 6, 10, 11 } },     /* Albinoid (Adult): the voice channel's */
+    { 23, 9050, 5, { 3, 14, 16, 18, 20 } },         /* Giant Black Widow: bhEne23_CallSE's, bhEne23_DG04's 20 */
+    { 26,  110, 4, { 20, 21, 22, 23 } },            /* Anatomist Zombie: the voice channel's (bhEne26_SePlay) */
+};
+/* a zombie's moans: programs 20..23 + add_seno[the type of its model version] (en01.c bhEne01_SePlay, ene01_typ_tbl) */
+static const unsigned char zom_typ[][2] = { { 0, 0 }, { 1, 1 }, { 31, 2 }, { 18, 0 }, { 2, 3 }, { 3, 4 }, { 4, 5 }, { 32, 6 },
+    { 33, 7 }, { 34, 8 }, { 21, 9 }, { 19, 3 }, { 5, 10 }, { 6, 11 }, { 35, 12 }, { 36, 13 }, { 22, 14 }, { 20, 10 }, { 7, 15 },
+    { 8, 16 }, { 37, 17 }, { 38, 18 }, { 24, 15 }, { 9, 19 }, { 10, 20 }, { 25, 21 }, { 39, 22 }, { 40, 23 }, { 41, 24 },
+    { 42, 25 }, { 43, 26 } };
+static const unsigned char zom_add[27] = { 28, 32, 16, 0, 4, 8, 32, 36, 0, 8, 20, 24, 8, 12, 8, 12, 16, 4, 40, 36, 40, 0, 8, 24, 20, 28, 8 };
+#define ZOM_TYPES (int)(sizeof zom_typ / sizeof zom_typ[0])
+
+int voice_creature(int m, int alt, int* room, unsigned char* prog, int max)
+{
+    const ActorModel* am = m >= 0 && m < ACTOR_MODELS ? &actor_models[m] : NULL;
+    int i, n = 0, add = 0;
+    if (!am || max < 44) return 0;
+    if (am->id == 1 || am->id == 51 || am->id == 52) {   /* a zombie: its look's moans in its room, any there, RM_0030's */
+        for (i = 0; i < ZOM_TYPES && zom_typ[i][0] != am->mdlver; i++);
+        if (am->id == 1 && i < ZOM_TYPES) add = zom_add[zom_typ[i][1]];
+        else if (!alt) alt = 1;   /* (the scripted zombies have no code of their own: any moans) */
+        if (alt > 2) return 0;
+        *room = alt == 2 || am->room == 9050 ? 30 : am->room;   /* (RM_9050's bank 3 is the spiders': Bandaged 2) */
+        for (i = 20; i < 64; i++) if (alt || (i >= 20 + add && i < 24 + add)) prog[n++] = (unsigned char)i;
+        return n;
+    }
+    for (i = 0; !alt && i < (int)(sizeof creature / sizeof creature[0]); i++)
+        if (creature[i].id == am->id) {
+            *room = creature[i].room;
+            memcpy(prog, creature[i].prog, creature[i].n);
+            return creature[i].n;
+        }
+    return 0;   /* the fish (no sounds), the hazmat man, the story cast (lines of their own) */
+}
+
+int voice_creature_seq(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, unsigned char* pick, int* at, int max)
+{
+    int k, t = 0, fit[64], nf, i, j;
+    for (k = 0; k < max && n > 0 && n <= 64; k++) {
+        unsigned h = mix(seed, room, disc, vid, 0x100u + (unsigned)k);
+        for (i = nf = 0; i < n; i++)   /* the ones that fit in the time left (a quarter second over is fine), else the shortest */
+            if (ms <= 0 || len[i] <= ms - t + 250) fit[nf++] = i;
+        if (!nf) for (i = 1, fit[nf++] = 0; i < n; i++) if (len[i] < len[fit[0]]) fit[0] = i;
+        j = (int)(h % (unsigned)nf);
+        if (k && nf > 1 && fit[j] == pick[k - 1]) j = (j + 1) % nf;   /* (not the same sound twice in a row) */
+        i = fit[j];
+        pick[k] = (unsigned char)i;
+        at[k] = t;
+        t += len[i] + 60 + (int)((h >> 20) % 240);   /* (a breath between two) */
+        if (t >= ms - 250) return k + 1;   /* the line's time is filled: none starts in its last quarter second */
+    }
+    return k;
 }

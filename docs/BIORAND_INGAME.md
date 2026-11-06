@@ -1197,6 +1197,19 @@ player's random or chosen look) says random lines of the character shown, with t
 with the cast off and a player look, 9350 as Chris, 7220 per cutscene), `batch2.sh` (the same scenes off and on: the
 same scene lengths, every inserted line's lips set), `coop.sh` (host and guest in 9350 and 9370: the same lines).
 
+**Enemy sounds (2026-11-06)**: the user's request: "if its an enemy model all voicelines should be replaced with sounds
+of that enemy". A speaker shown as a zombie look or a creature makes that enemy's own sounds in place of each line,
+chained over the line's time (no lips; the scene's timing stays). Which sounds, where they come from, which kinds keep
+the line: [ACTORS.md](ACTORS.md) "Voice lines", "Enemy models". No new setting, no co-op protocol change.
+
+**Tests (2026-11-06, Linux; job dir `voicecreature/`, not committed):** `batch1.sh`, `batch2.sh` (1020, 0030, 0000,
+9350 with the played character's double as a zombie, Nosferatu, the Tyrant, Monster Steve, a Bandersnatch, the
+anatomist, Alexia's first form, two scripted zombies; the cast with all models: the Hunter, the Tyrant, Monster
+Steve): every line of such a speaker replaced by its sounds, the scene lengths as with the option off (122.2, 97.3,
+64.3, 125.9 s), the synth trace (`RECVX_TRACE_SND`) playing each from the extra bank and nothing after the scene;
+`batch3.sh` (two runs each: the same sounds), `coop.sh` (host and guest in 9350 and 9370 with Wesker as the Hunter: the
+same 12 lines, the same sounds).
+
 ## Risks and open questions
 
 1. **Memory: the CLI peaked at 6.0 GB RSS** for one CVX pack. With the game running, 8 GB

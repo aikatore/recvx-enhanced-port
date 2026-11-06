@@ -185,7 +185,7 @@ int   pc_detector_skipped(void);              /* co-op rule "Metal detector: Ski
 void  pc_dev_event_start(int level, unsigned int id);   /* --dev cutscene log (pc/glue/devcine_glue.c): event.c Event_init, task level runs event id */
 void  pc_dev_event_op(int movie);             /* ... event.c bhCamSet, bhCineSet (0), bhMovieStart (1): the running task's event shows a scene */
 /* "Randomize Voice Lines" (pc/glue/cast_glue.c, docs/ACTORS.md "Voice lines") */
-int   pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid);   /* event.c bhVoiceOn: the file to play (*ptid its partition); next: the script after it */
+int   pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid);   /* event.c bhVoiceOn: the file to play (*ptid its partition), -1 none (an enemy's sounds instead); next: the script after it */
 void  pc_voice_lip(struct BH_PWORK* pp, int rec);   /* event.c bhLipSet, after bhSetLip: the inserted line's lips */
 int   pc_voice_playing(int flag);             /* sdfunc.c CheckPlayEndAdx(1): AdxPlayFlag[1] as the script sees it (the line's own length) */
 void  pc_voice_stop(void);                    /* sdfunc.c StopVoice */
