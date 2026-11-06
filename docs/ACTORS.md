@@ -818,7 +818,8 @@ story character (`cast_character`) gets a model: Claire 91; Chris 92, 42; Steve 
 47; Alfred 94, 96 (both model versions), 44; Alexia 95; Rodrigo 98. Not: the man in the hazmat suit 99 (his helmet's mouth does not move, so neither cast nor a pick, in either pool);
 the bosses (Alfred's boss type 16, Alexia's forms 12..14), props and set pieces, enemies (zombies and
 creatures stay as they are; a first version swapped the cutscenes' zombies too, removed: the fights changed), anything
-spawned after the load. The creatures that only cutscenes show are cast too ("Creatures" below). Kept by hand (`cast_glue.c kept[]`):
+spawned after the load. The creatures and the zombies that only cutscenes show are cast too ("Creatures" and "Scene
+zombies" below). Kept by hand (`cast_glue.c kept[]`):
 
 | Room, record | Why |
 |---|---|
@@ -913,6 +914,40 @@ Two things the creatures needed in drawing:
   Wesker's 17 KB each, Chris's 65 KB, Claire's 128 KB; refused like a model under the margins). Monster Steve's
   arms end without a mesh at the hand node too (his claws are linked records in his fight): he gets Steve's
   hands.
+
+### Scene zombies
+
+Some zombies are only actors of a scene: zombie records (type 1) without a kill flag that the scene's events move
+(`LoadWork`, their motions by `CommonCtr` 34, the record in event mode by `CommonCtr` 23) and hide again, in a room
+no fight uses. They are cast as creatures (`cast.c cast_scene_zombie`, a table by room file and records; `rec_chr`
+`CAST_CROWD`, drawn and given hands as the creatures). Under the same setting as the creatures, the cutscene cast.
+The creature table did not cover them: it lists single creature records by type, and zombies were left out since the
+first version swapped fought ones too.
+
+* **What they become** (`cast_crowd_model`): a creature of *All Models* (Alexia's first form, Nosferatu, the Tyrant,
+  Monster Steve, the Hunter, the Sweeper, the Bandersnatch, the anatomist) or another zombie look, whatever the Model
+  Selection: *Cutscene Models* has no creatures, and these are monsters. *Custom* uses the checked ones of those
+  (none checked: they stay zombies). Never an imported model, never their own look.
+* **One per kind**: each zombie look is a kind of its own. With *Per Character* a look gets one model in every scene
+  (scene 0), *Per Cutscene* picks again per room. The looks are taken in turn over a shuffle of the pool by (seed,
+  scene), so the zombies of one scene mostly differ (9340: three looks, three monsters).
+* **Display only**: the record keeps its type, motions, script and timing; the model is posed from its skeleton as
+  every cast model (the zombie skeleton is a man's). Co-op: from the seed and the options the host sends
+  (`EV_EOPTS`), so both screens show the same; no protocol change.
+
+| Room, records | Scene | Why it is safe |
+|---|---|---|
+| 9340, 1..3 | the zombies around Chris ("Cutscene: Wesker and Claire (1)") | a cutscene room: it plays on entry and leaves for 9350 |
+| 0050, 2 | the zombie crawling at the courtyard fence | no kill flag; shown until its scene, hidden after it; the dogs are other records |
+
+Not cast (`enemies.py room` over every room with a zombie record without a kill flag, and the scenes played):
+
+* A scene that wakes zombies who then fight, or leads into a fight in the room: 0070 (the shower room), 9290 (the
+  cell block; record 5 waits in event mode among fought ones), and every zombie with a kill flag.
+* 0030 ("Claire meets Steve"): its zombie crowd is room objects with zombie meshes (`LoadWork 2`), not enemy records;
+  record 3 stays at the origin. 6020 (record 1: a shot of 0.6 s where it is hardly visible); set pieces seen in
+  gameplay (3140, 4001); records no scene of the scene list names (3050, 6030, 9310).
+* The bodies of type 52 (9050) and Steve's father (3000, a creature already).
 
 ### For the whole room visit
 

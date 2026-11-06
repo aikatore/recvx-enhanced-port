@@ -20,7 +20,11 @@ int cast_character(int id, int ver);
 /* the creature (CAST_CHARACTERS..CAST_ALL - 1) record rec of type id in room file room is, -1 none: only the records that
    exist just for a cutscene (docs/ACTORS.md "Creatures"), never an enemy that is fought */
 int cast_creature(int room, int rec, int id);
-/* the name of character or creature c ("Rodrigo", "Nosferatu") */
+/* the zombies only cutscenes show (docs/ACTORS.md "Scene zombies"): 1 for record rec (type id) of room file room. They
+   are cast as CAST_CROWD (after the creatures, outside cast_model's turn), each zombie look a kind of its own */
+int cast_scene_zombie(int room, int rec, int id);
+#define CAST_CROWD CAST_ALL
+/* the name of character or creature c ("Rodrigo", "Nosferatu", CAST_CROWD "Zombie") */
 const char* cast_name(int c);
 /* how a record of story character c (cast_character) is drawn while character ply (sys->ply_id & 3: 0 Claire, 1 Chris,
    2 Steve, 3 Wesker; -1 none) is played, pending (the one a story switch the script has set makes played, -1) is about
@@ -67,6 +71,11 @@ int cast_zombie_look(unsigned seed, unsigned scene, int c);
    then the creatures, are assigned at once from a shuffle of the pool seeded by (seed, scene), each in turn the next model
    not taken and not its own: different characters get different models while the pool has enough. */
 int cast_model(unsigned seed, unsigned scene, int c, int all, int imports, const unsigned char* off);   /* off: cast_pool's */
+/* What a scene zombie of type id, model version ver is drawn as (actor index, -1 none): a creature of "All models" (the
+   Tyrant, a Bandersnatch, ...) or another zombie look, whatever all is ("Custom": the checked ones of those; never an
+   import). One per look (the kind) and (seed, scene); the looks of a scene in turn over a shuffle, so they differ while
+   the pool has enough. */
+int cast_crowd_model(unsigned seed, unsigned scene, int id, int ver, int all, const unsigned char* off);
 /* identity of the imported models list (names, groups, order): co-op uses them only when both sides
    have the same; 0 with none */
 unsigned cast_import_id(void);

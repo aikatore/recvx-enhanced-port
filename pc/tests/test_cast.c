@@ -115,12 +115,12 @@ int main(void)
     /* how a record is drawn: Claire and Chris never cast: the one played the game's double, the other one the player's
        look for it (whoever is played, about to be or the partner's: Chris in 7240 and 7220 while the game still plays
        Claire, Claire in Steve's section and in Chris's part); Steve and Wesker as themselves while played, about to be
-       or the partner's; everyone else cast */
-    for (c = -1; c <= CAST_ALL; c++)
+       or the partner's; everyone else cast (the scene zombies too) */
+    for (c = -1; c <= CAST_CROWD + 1; c++)
         for (int p = -1; p < 4; p++)
             for (int q = -1; q < 4; q++)
                 for (int r = -1; r < 4; r++) {
-                    int want = c < 0 || c >= CAST_ALL ? CAST_OWN : c < 2 ? (c == p ? CAST_OWN : CAST_LOOK) : c < 4 && (c == p || c == q || c == r) ? CAST_OWN : CAST_PICK;
+                    int want = c == CAST_CROWD ? CAST_PICK : c < 0 || c >= CAST_ALL ? CAST_OWN : c < 2 ? (c == p ? CAST_OWN : CAST_LOOK) : c < 4 && (c == p || c == q || c == r) ? CAST_OWN : CAST_PICK;
                     CHECK(cast_role(c, p, q, r) == want);
                 }
     CHECK(cast_role(1, 0, 1, -1) == CAST_LOOK && cast_role(1, 0, -1, -1) == CAST_LOOK && cast_role(1, 1, -1, -1) == CAST_OWN);   /* Chris in 7240 / 7220; played */
@@ -166,6 +166,32 @@ int main(void)
                 CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL) >= 0);   /* "Cutscene Models": the five used up, a new round */
                 for (int d = 2; d < c; d++) CHECK(cast_model((unsigned)s, 0, d, 1, 0, NULL) != f);   /* "All Models" has enough: each its own */
             }
+    }
+    {   /* the zombies only cutscenes show: 9340's three and 0050's, nothing else; a creature or another zombie look, one per look and
+           (seed, scene), whatever the Model Selection; a look of its own never; "Custom" with none of them checked: none */
+        static const int vers[3] = { 35, 4, 38 };   /* 9340's records 1..3 */
+        int kinds[64] = { 0 }, nk = 0, same = 0;
+        unsigned char none[CAST_OFF_BYTES];
+        CHECK(cast_scene_zombie(9340, 1, 1) && cast_scene_zombie(9340, 3, 1) && cast_scene_zombie(50, 2, 1) && !cast_scene_zombie(50, 0, 4) && !cast_scene_zombie(9340, 0, 92) && !cast_scene_zombie(9340, 4, 1));
+        CHECK(!cast_scene_zombie(9341, 1, 1) && !cast_scene_zombie(70, 3, 1) && !cast_scene_zombie(9290, 3, 1) && !cast_scene_zombie(9340, 1, 52));
+        CHECK(cast_role(CAST_CROWD, 1, -1, -1) == CAST_PICK && !strcmp(cast_name(CAST_CROWD), "Zombie"));
+        CHECK(cast_crowd_model(1, 0, 1, 99, 1, NULL) < 0 && cast_crowd_model(1, 0, 15, 0, 1, NULL) < 0);   /* not a zombie look */
+        for (s = 0; s < 300; s++) {
+            int m[3];
+            for (int i = 0; i < 3; i++) {
+                int a = cast_crowd_model((unsigned)s, 0, 1, vers[i], 0, NULL), z = a >= 0 && a < ACTOR_MODELS ? actor_models[a].id : -1;
+                m[i] = a;
+                CHECK(a >= 0 && a < ACTOR_MODELS && a == cast_crowd_model((unsigned)s, 0, 1, vers[i], 0, NULL));   /* deterministic */
+                CHECK(a == cast_crowd_model((unsigned)s, 0, 1, vers[i], 1, NULL) && a == cast_crowd_model((unsigned)s, 0, 1, vers[i], 2, NULL));   /* any Model Selection */
+                CHECK(cast_character(z, 0) < 0 && actor_models[a].anim != ANIM_IDLE && !(z == 1 && actor_models[a].mdlver == vers[i]));   /* a creature or another look */
+                nk += !kinds[a]; kinds[a] = 1;
+            }
+            same += m[0] == m[1] || m[1] == m[2] || m[0] == m[2];
+        }
+        CHECK(nk > 12 && kinds[17] && kinds[22] && kinds[16] && kinds[25]);   /* the Tyrant, the Bandersnatch, Nosferatu, the anatomist among them */
+        CHECK(same < 300 / 4);   /* the looks of a scene mostly differ */
+        memset(none, 0xFF, sizeof(none));
+        CHECK(cast_crowd_model(5, 0, 1, 35, 2, none) < 0);
     }
     {   /* the seed decides: two seeds differ somewhere */
         int d = 0;

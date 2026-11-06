@@ -41,14 +41,30 @@ int cast_creature(int room, int rec, int id)
     return -1;
 }
 
+/* The zombies only cutscenes show (docs/ACTORS.md "Scene zombies"): records of type 1 without a kill flag that only a
+   scene's events move (LoadWork, its motions by CommonCtr 34) and hide, in a room no fight uses. Not the zombies a scene
+   wakes or that walk on into play (they are fought). A bit per record. */
+static const struct { short room; unsigned short recs; } crowds[] = {
+    { 50, 0x0004 },     /* record 2: the zombie crawling at the courtyard fence (hidden after its scene; the dogs are other records) */
+    { 9340, 0x000E },   /* records 1..3: the zombies around Chris (a cutscene room: it plays on entry and leaves for 9350) */
+};
+
+int cast_scene_zombie(int room, int rec, int id)
+{
+    for (int i = 0; i < (int)(sizeof(crowds) / sizeof(crowds[0])); i++)
+        if (crowds[i].room == room && id == 1 && rec >= 0 && rec < 16 && ((crowds[i].recs >> rec) & 1)) return 1;
+    return 0;
+}
+
 const char* cast_name(int c)
 {
-    static const char* const name[CAST_ALL] = { "Claire", "Chris", "Steve", "Wesker", "Alfred", "Alexia", "Rodrigo", "Nosferatu", "Tyrant", "Hunter", "Steve's father" };
-    return c >= 0 && c < CAST_ALL ? name[c] : "?";
+    static const char* const name[CAST_ALL + 1] = { "Claire", "Chris", "Steve", "Wesker", "Alfred", "Alexia", "Rodrigo", "Nosferatu", "Tyrant", "Hunter", "Steve's father", "Zombie" };
+    return c >= 0 && c <= CAST_CROWD ? name[c] : "?";
 }
 
 int cast_role(int c, int ply, int pending, int partner)
 {
+    if (c == CAST_CROWD) return CAST_PICK;
     if (c < 0 || c >= CAST_ALL) return CAST_OWN;
     if (c < 2) return c == ply ? CAST_OWN : CAST_LOOK;
     return c < 4 && (c == ply || c == pending || c == partner) ? CAST_OWN : CAST_PICK;
@@ -175,6 +191,33 @@ int cast_model(unsigned seed, unsigned scene, int c, int all, int imports, const
     }
     if (pick[c] < 0) return -1;
     return pool[pick[c]] == CAST_ZOMBIES ? cast_zombie_look(seed, scene, c) : pool[pick[c]];   /* (the zombie entry: which look, from the same seed and scene) */
+}
+
+/* a scene zombie's models: "All models"' creatures (no story character, no player file) and the zombie looks as one
+   entry; "Custom": the checked ones of those (by their positions there); never the imports */
+static int crowd_pool(int all, int* out, const unsigned char* off)
+{
+    int b[BUILTIN_MAX], k = builtins_of(b, all == 2), n = 0, i;
+    for (i = 0; i < k; i++)
+        if ((b[i] == CAST_ZOMBIES || (b[i] < ACTOR_MODELS && cast_character(actor_models[b[i]].id, 0) < 0)) && !(all == 2 && cast_off_at(off, i))) out[n++] = b[i];
+    return n;
+}
+
+int cast_crowd_model(unsigned seed, unsigned scene, int id, int ver, int all, const unsigned char* off)
+{
+    int n = crowd_pool(all, pool, off), i, k, t, look = -1, j = 0, z;
+    for (i = 0; i < ACTOR_MODELS && look < 0; i++)   /* the record's look and its kind: its place among the zombie looks */
+        if (zombie(i)) { if (actor_models[i].id == id && actor_models[i].mdlver == ver) look = i; else j++; }
+    if (look < 0 || n < 1) return -1;
+    rng = (seed * 2654435761u) ^ (scene * 4u + 0x5BD1E995u);
+    if (!rng) rng = 1;
+    rnd(); rnd();
+    for (i = n - 1; i > 0; i--) { k = (int)(rnd() % (unsigned)(i + 1)); t = pool[i]; pool[i] = pool[k]; pool[k] = t; }   /* Fisher-Yates */
+    t = pool[j % n];   /* (the kinds in turn over the shuffle: the looks of one scene differ while the pool has enough) */
+    if (t != CAST_ZOMBIES) return t;
+    z = cast_zombie_look(seed, scene, CAST_CROWD + j);   /* another zombie look: the next one after its own */
+    for (i = 1; z == look && i <= ACTOR_MODELS; i++) if (zombie((look + i) % ACTOR_MODELS)) z = (look + i) % ACTOR_MODELS;
+    return z == look ? -1 : z;
 }
 
 /* the "You appear as" chr of model m (a player file, a catalogue entry, an import; not CAST_ZOMBIES) */

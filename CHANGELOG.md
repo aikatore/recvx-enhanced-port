@@ -20,6 +20,9 @@
   each enemy type is chosen, Mutated Steve included, from off to very often, like BioRand's enemy sliders. Picking
   Wild or Mild first fills in their rates as a start. Also on the multiplayer lobby's randomizer page.
 - **Types per Room**: a new randomizer setting limits how many different enemy types share a room.
+- **Cutscene zombies in the cutscene cast**: zombies that only act in a cutscene, such as the ones around Chris
+  late in the game, now turn into other monsters like the Tyrant, a Bandersnatch or Nosferatu. Zombies that are
+  fought keep their look.
 
 ### Changes
 
