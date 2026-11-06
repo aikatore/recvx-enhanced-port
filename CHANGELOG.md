@@ -25,6 +25,8 @@
 - Killed Extra Enemies no longer come back when a room is entered again, and a room keeps the same extra
   enemies on every visit.
 - In third person, holding a movement key through a door keeps walking in the new room again.
+- With Dithering on, the picture asks less of the graphics card and no longer stutters briefly the first time a
+  room shows new kinds of surfaces.
 
 ## 0.7.4 (2026-11-04)
 

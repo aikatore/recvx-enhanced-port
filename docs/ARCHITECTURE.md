@@ -424,12 +424,12 @@ extra precision never shows. Without the truncation 61-77 % of the scene's chann
 between two levels. On top, some textures carry their own steps (gradients in 16-colour palettes,
 plateaus 2-3 levels apart, e.g. the graveyard's fogged wall), which no output precision removes.
 On: a frame with a 3D scene (the split of `stream.c aa_split`, now also found for Dithering) draws
-its 3D without the truncation (`gs_gl.c` variant `V_SMOOTH`, uniform `u_smooth` 1: a value between
+its 3D without the truncation (`gs_gl.c` variant `V_SMOOTH`: a value between
 two levels keeps its fraction, half a level lower, so the gradient runs through the middle of the
 GS's steps and the average brightness stays; whole values, alpha and the alpha test stay as the GS
 computes them). The 2D after the split is truncated as before. Draws that read a render target
 (the display copy into the display buffer at the end of the frame, effects) take the texel's
-fraction across: the GS results of its two neighbouring levels, blended by it (`u_smooth` 2). The
+fraction across: the GS results of its two neighbouring levels, blended by it (variant `V_RTMIX`). The
 present pass then rounds the kept fraction up or down by a threshold per window pixel (interleaved
 gradient noise; `present_fs` with `DITH`), after the supersampling and the picture calibration: the pattern is fixed
 on the screen, so it does not crawl or flicker, and in-between images get the same one. A pixel on a
