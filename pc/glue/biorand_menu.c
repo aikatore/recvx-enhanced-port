@@ -384,6 +384,7 @@ static void build_rows(void)
             if (__atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0) add(K_APPEAR, 2);
         }
         add_set(&g_enemy_opts.voices);   /* (for the cast and for the character model: their lines) */
+        if (g_enemy_opts.voices) add_set(&g_voice_mouths);
     } else if (bm.page == PG_PORT) {
         add(K_RANDPG, 0);   /* (row 1: sub_open) */
         add(K_HEAD, H_APPEAR);   /* ENHANCED SETTINGS APPEARANCE's model rows (the same settings) */

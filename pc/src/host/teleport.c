@@ -310,8 +310,9 @@ static int SDLCALL scan(void* ud)
     free(f); free(out); free(in);
     if (g_dev_tools) devcat_scan_done();
     voice_scan_done();
-    host_log("voices: lines with mouth movements: Claire %d, Chris %d, Steve %d, Wesker %d, Alfred %d, Alexia %d, Rodrigo %d\n", voice_count(0),
-             voice_count(1), voice_count(2), voice_count(3), voice_count(4), voice_count(5), voice_count(6));
+    host_log("voices: lines with mouth movements: Claire %d, Chris %d, Steve %d, Wesker %d, Alfred %d, Alexia %d, Rodrigo %d; "
+             "%d without one said surely by their record\n", voice_count(0), voice_count(1), voice_count(2), voice_count(3), voice_count(4),
+             voice_count(5), voice_count(6), voice_sure_count());
     __atomic_store_n(&state, 2, __ATOMIC_RELEASE);
     return 0;
 }

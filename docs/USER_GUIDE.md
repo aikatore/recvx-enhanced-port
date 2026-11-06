@@ -307,6 +307,7 @@ until the right square on the white strip is.
 | Model Selection | Cutscene Models | where the characters' new looks come from |
 | Model Assignment | Per Character | Per Character: the same model in every cutscene. Per Cutscene: each cutscene room picks again |
 | Randomize Voice Lines | Off | a character shown as another story character says that character's lines; shown as an enemy, it makes that enemy's sounds (below) |
+| Talking Mouths | On | with Randomize Voice Lines: the mouth also moves for new lines in place of lines without mouth movement, when it is clear who speaks (below) |
 
 Enemy options apply from the next room (ENEMIES.md, "Enemy options"). In co-op the host's enemy
 options and ink ribbons count for both.
@@ -339,7 +340,11 @@ voices (unless Randomize Voice Lines is on) and what happens stay as they are.
 * In co-op the host's settings and seed count, so both players see the same cast.
 * **Randomize Voice Lines** (also on its own, with only your character model changed): a character shown as another
   story character (Steve shown as Wesker) says random lines of that character instead of its own, and its mouth moves
-  with the new line where the original line moves it. Lines can repeat and be longer or shorter than the scene
+  with the new line where the original line moves it. **Talking Mouths** (on by default, right under it; each co-op
+  player decides for their own screen) also moves the mouth with the new line where the original line kept it still
+  (about a third of the lines), but only when the game's data makes clear who is speaking and the character is shown
+  with a moving mouth (a cutscene model, an imported model; your own character's double only with "Animated Faces").
+  Lines can repeat and be longer or shorter than the scene
   expects; the subtitles still show the original text. A character shown as a zombie or a creature (Nosferatu, the
   Tyrant, Monster Steve, a Hunter, ...) makes that enemy's own sounds instead: moans, growls and shrieks strung
   together for as long as the line lasts. The man in the hazmat suit and imported models keep the original line. The
