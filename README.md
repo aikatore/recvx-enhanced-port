@@ -4,7 +4,7 @@
 > No game data is included. You need your own legally obtained copy of *Resident Evil Code: Veronica X* (PS2, NTSC-U, SLUS-20184).
 
 Community Discordserver, thanks cristinathegamer056 for setting it up!
-[https://discord.gg/ZpDn46yv2](https://discord.gg/GXp7MKmnm)
+[https://discord.gg/GXp7MKmnm](https://discord.gg/GXp7MKmnm)
 
 # recvx-enhanced-port
 
