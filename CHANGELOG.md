@@ -4,18 +4,10 @@
 
 ### New
 
-- **Randomize Voice Lines**: in cutscenes, a character shown as another story character speaks random lines of
-  that character, with the matching mouth movements. With Talking Mouths (on by default) the mouth also moves
-  where the original line kept it still, when it is clear who is speaking. A character shown as a zombie or a
-  creature moans, growls and shrieks with that enemy's own sounds instead. Lines can repeat and may not fit the
-  scene. Off by default; on the BioRand RANDOMIZER page, in the multiplayer lobby and in the Enhanced Settings.
-- **Locational Hit Reactions**: in the over-the-shoulder camera, a zombie shot in the head, an arm or a leg now
-  flinches there: the head snaps back, the arm jerks away, the leg buckles. Damage, stun and timing stay the same.
-  A co-op partner sees it too. On by default, with a setting to turn it off. Blood now also comes from where the
-  shot hit, the head, an arm or a leg, instead of the chest.
-- **Headshots & Piercing**: in the over-the-shoulder camera, sniper and assault rifle headshots hit harder, a
-  killing headshot from the magnum, shotgun, Gold Lugers or a rifle bursts a zombie's head even when it staggers,
-  and sniper rifle shots go through enemies until they hit a wall. On by default; in co-op the host decides.
+- **Randomize Voice Lines**: in cutscenes, a character shown as someone else speaks random lines of that
+  character, or a monster's own sounds. Off by default.
+- **Locational Hit Reactions**: in the over-the-shoulder camera, zombies flinch where they are hit, and the
+  blood comes from there too.
 - **Custom enemy rates**: Randomizer Variety is now Enemy Selection, with a third choice, Custom. It sets how often
   each enemy type is chosen, Mutated Steve included, from off to very often, like BioRand's enemy sliders. Picking
   Wild or Mild first fills in their rates as a start. Also on the multiplayer lobby's randomizer page.
@@ -32,7 +24,6 @@
 
 ### Fixes
 
-- Claire's ponytail no longer hangs behind another model shown in her place in cutscenes.
 - Killed Extra Enemies no longer come back when a room is entered again, and a room keeps the same extra
   enemies on every visit.
 - In third person, holding a movement key through a door keeps walking in the new room again.
