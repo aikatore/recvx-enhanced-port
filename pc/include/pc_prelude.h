@@ -192,6 +192,9 @@ int   pc_cheat_save(void);                    /* the open save screen is the F2 
 int   pc_detector_skipped(void);              /* co-op rule "Metal detector: Skipped" (pc/glue/detector_glue.c): event.c bhPlItemCheck in 0/9 finds no metal */
 void  pc_dev_event_start(int level, unsigned int id);   /* --dev cutscene log (pc/glue/devcine_glue.c): event.c Event_init, task level runs event id */
 void  pc_dev_event_op(int movie);             /* ... event.c bhCamSet, bhCineSet (0), bhMovieStart (1): the running task's event shows a scene */
+/* a scene's cast shot (pc/glue/biorand_glue.c): its weapon's arms bank when the room sets no weapon (BioRand's RM_0030) */
+void  pc_cast_shot_event(int level, const unsigned char* p);   /* event.c Event_init: task level runs the event at p */
+int   pc_cast_shot_se(int w);                 /* event.c bhWeaponSeCall 1: the SE of the cast's shot with weapon w */
 /* "Randomize Voice Lines" (pc/glue/cast_glue.c, docs/ACTORS.md "Voice lines") */
 int   pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid);   /* event.c bhVoiceOn: the file to play (*ptid its partition), -1 none (an enemy's sounds instead); next: the script after it */
 void  pc_voice_lip(struct BH_PWORK* pp, int rec);   /* event.c bhLipSet, after bhSetLip: the inserted line's lips */

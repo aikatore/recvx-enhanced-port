@@ -3,11 +3,13 @@
    `type` is the item the pickup gives (its `id` stays the model), `wrk_no` its amount (decomp hitchk.c, sub1.c
    GetItem); the start inventory is a block of room 0/0's entry script under "ev_flg 1 clear" (C7 145 -> X,
    C7 0 -> X, C7 0xFF X n for the STANDARD slot, C9 counts; event.c). Here: rifle ammo stacking, the save words,
-   the load screen's question and a co-op guest's start inventory. Game thread. */
+   the load screen's question, a co-op guest's start inventory and the sound of a scene's cast shot. Game thread. */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
 #include "../../decomp/include/ps2/veronica/prog/item.h"
 #include "../../decomp/include/ps2/veronica/prog/flag.h"
+#include "../../decomp/include/ps2/veronica/prog/player.h"
+#include "../../decomp/include/ps2/veronica/prog/sdfunc.h"
 #include "../src/host/biorand.h"
 #include "../src/host/lang.h"
 #include "../src/host/biorand_opts.h"
@@ -23,6 +25,7 @@
 void host_log(const char* fmt, ...);
 
 int pc_in_game(void);   /* options_glue.c */
+static void shot_frame(void);
 
 /* "Rifle ammo stacks" (GAMEPLAY), always while BioRand is on (biorand_rifle_stack): the stack flag of the rifle and
    assault rifle bullets (item.c itemdata 40, 42) */
@@ -44,6 +47,7 @@ void biorand_frame(void)
         bhCrFlg(sys->ev_flg, 307);
         host_log("biorand: Nosferatu is dead: Claire's poison cured (ev_flg 307 cleared)\n");
     }
+    shot_frame();
 }
 
 /* ---------------------------------------------------------------- the save
@@ -194,4 +198,81 @@ void pc_biorand_start_kit(void)
     bhScePtr = save;
     free(d);
     host_log("biorand: start inventory from the pack's room 0/0 (%d actions)\n", ops);
+}
+
+/* ---------------------------------------------------------------- a cast member's shot in a scene
+   A scene's cast member fires with WeaponSeCall 1 (event.c bhWeaponSeCall; retail: Claire's three shots in RM_0030,
+   Steve's scene at the main gate). The shot sounds with the player's weapon (WpnTab seno0, from the arms sound bank,
+   SE bank 1), which the scene sets first with ArmsItemChange (RM_0030: the handgun, at the end none). BioRand's packs
+   (3.3.2 on, "Steve must not change the player's weapon") take both changes out: the player keeps their own weapon, so
+   the shots were silent (the knife or no weapon: no sound) or another gun's, as on a PS2 with such a pack. Here, in a
+   room whose scripts change no weapon, the event that has such a shot loads the shot weapon's arms bank while it runs
+   and the shot plays that weapon's sound; afterwards the player's bank is loaded again. The player's weapon stays. */
+extern BH_SCEWORK bhEtask[16];
+static int shot_w = -1, shot_lvl = -1, shot_bank;   /* the scene's weapon (WpnTab) and its task level; shot_bank: we loaded its bank */
+static const void* shot_evtp;
+
+static int arms_bank(int w) { return w >= 0 && w < 23 ? WpnTab[w].snd_wpno : -1; }
+
+/* the room's scripts (rom->evtp: u32 offsets of scd0, scd1 and the events): their count */
+static unsigned int scripts(void)
+{
+    const unsigned int* tab = (const unsigned int*)rom->evtp;
+    unsigned int first = tab[0], k;
+    for (k = 0; k * 4 < first && k < 1024; k++) if (tab[k] && tab[k] < first) first = tab[k];
+    return first / 4;
+}
+
+/* the first op (sub: its first operand, -1 any) of the room's script at o, up to the next script's start (the last one:
+   to its End / EvtEnd); -1 none */
+static int find_op(unsigned int o, int op, int sub)
+{
+    const unsigned char* d = (const unsigned char*)rom->evtp;
+    const unsigned int* tab = (const unsigned int*)rom->evtp;
+    unsigned int lim = 0, k, ns = scripts();
+    int n;
+    for (k = 0; k < ns; k++) if (tab[k] > o && (!lim || tab[k] < lim)) lim = tab[k];
+    for (k = 0; k < 8192 && (!lim || o < lim) && (n = coop_insn_len_raw(d + o)) > 0; k++, o += (unsigned int)n) {
+        if (d[o] == op && (sub < 0 || d[o + 1] == sub)) return (int)o;
+        if (!lim && (d[o] == 0 || d[o] == 255)) break;
+    }
+    return -1;
+}
+
+/* event.c Event_init: task level runs the event at p */
+void pc_cast_shot_event(int level, const unsigned char* p)
+{
+    const unsigned int* tab;
+    unsigned int k, ns;
+    int at;
+    if (level < 0 || level >= 16 || !rom || !rom->evtp) return;   /* (co-op's replay task is no level) */
+    if (level == shot_lvl) shot_w = -1;
+    if ((at = find_op((unsigned int)(p - (const unsigned char*)rom->evtp), 73, 1)) < 0) return;   /* WeaponSeCall 1 */
+    at = ((const unsigned char*)rom->evtp)[at + 5];
+    if (at >= 23 || !WpnTab[at].seno0) return;
+    tab = (const unsigned int*)rom->evtp;
+    for (k = 0, ns = scripts(); k < ns; k++) if (tab[k] && find_op(tab[k], 39, -1) >= 0) return;   /* ArmsItemChange: the scene arms itself */
+    shot_w = at, shot_lvl = level, shot_evtp = rom->evtp;
+    host_log("cast shot: task level %d fires weapon %d, the room sets no weapon: its arms bank %d for the scene\n", level, at, arms_bank(at));
+}
+
+/* event.c bhWeaponSeCall 1: the sound of the cast's shot with weapon w */
+int pc_cast_shot_se(int w)
+{
+    if (shot_bank && shot_w >= 0 && w >= 0 && w < 23 && arms_bank(w) == arms_bank(shot_w)) return WpnTab[w].seno0;
+    return WpnTab[plp->wpnr_no].seno0;
+}
+
+/* every frame: the scene's arms bank while its event runs, the player's after it; one sound bank request at a time
+   (the room's loading waits for ours as for its own) */
+static void shot_frame(void)
+{
+    int b;
+    if (shot_w >= 0 && (!pc_in_game() || !rom || rom->evtp != shot_evtp || !bhEtask[shot_lvl].status)) shot_w = -1;
+    if (!pc_in_game() || !plp || CheckTransEndSoundBank()) return;
+    if (shot_w >= 0 && !shot_bank && arms_bank(shot_w) != arms_bank(plp->wpnr_no)) b = arms_bank(shot_w), shot_bank = 1;
+    else if (shot_w < 0 && shot_bank) b = arms_bank(plp->wpnr_no), shot_bank = 0;
+    else return;
+    host_log("cast shot: arms bank %d (%s)\n", b, shot_bank ? "the scene's weapon" : "the player's again");
+    if (b >= 0) RequestArmsSoundBank(b);
 }
