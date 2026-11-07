@@ -32,6 +32,7 @@ other games can be added as further sources.
 | 17. Groups offered (round 6) | for now only the playable characters and the NPCs: F9 offers, extracts and lists only those; "Character Model" leaves out the other groups of an older manifest (`IMPORT_OFFERED`) |
 | 18. Left arm in idle and holds (round 6) | fixed: men's left arm pulled in across the thigh in idle, and the support hand pulled under the gun hand in long-gun holds ("Posture") |
 | 19. IMPORT screen | the in-game version of F9: title menu EXTRA > IMPORT > CHARACTERS > the game; the groups, the disc image, START IMPORT with progress, the counts, DELETE IMPORTED MODELS ("IMPORT screen") |
+| 20. Blink, hair (round 7) | fixed: only the brows moved (the crease bone was taken for the lid); hair see-through, too bright in streaks, with holes (Outbreak's alpha is 0..255, read as the PS2's 0..128); some NPCs lost hair pieces, visors and lenses (taken for the eyeball overlay). `.cvxm` version 4; older files get the alpha fixed when loaded, blink after importing again ("Round 7") |
 
 Resume notes: build with `cmake --build build`; headless run:
 `RECVX_MODS=<out> RECVX_IMPORT=outbreak2 RECVX_IMPORT_ISO=<image> build/pc/recvx --save-dir <tmp>`
@@ -133,7 +134,8 @@ next word), distance back `c & 0x7ff` words (0: that many zero words); count 0 a
   node rotations 0. Units are centimetre-like (Kevin is 173 high); y up, the character faces +z.
 
 **TIM2** textures: standard PS2 TIM2, 8-bit indexed 256x256 with a 32-bit CLUT (CSM1: entries
-8..15 and 16..23 of every 32 swapped), alpha 0x80 = opaque. Both header alignments occur (format
+8..15 and 16..23 of every 32 swapped), alpha 0..255 (0xFF opaque: every texture's largest value; not
+the PS2's usual 0x80, which Code: Veronica's textures use: the reader scales it, `imp_tim2_alpha_255`). Both header alignments occur (format
 id 0: 16-byte file header; 1: 128 bytes, e.g. most third costumes). The GS registers in the
 picture header are the same as Code: Veronica's for the same size and depth.
 
@@ -218,7 +220,8 @@ can map ([ACTORS.md](ACTORS.md#retargeting)). `imp_write_cvxm` (impmodel.c) buil
   vertices x 4 weights per pose).
 * **Textures**: the TIM2 pictures as the game's texture chunks (32-byte chunk header, the 0x80
   extended file header with `Gindex` = `0xF00000 + 16 * disc index + k`, picture format 3: loaded
-  without a palette list); the chunks follow each other without padding.
+  without a palette list); the chunks follow each other without padding. The CLUTs' alpha is in the
+  PS2 range (0x80 opaque) since version 4 ("Round 7").
 * **In game** (`actor_glue.c load_import_model`): the file is read into the display slot's buffer,
   realized like a room model, its textures uploaded (refused with too little texture memory, as
   the catalogue's). Actor index `ACTOR_MODELS + k`, chr `COOP_CHR_IMPORT + k`; listed after the
@@ -329,16 +332,17 @@ hand holds the grip where Claire's does, so no arm correction was needed.
 
 ### Faces
 
-Outbreak's player models move their faces with five bones under the head (group 2): upper and
-lower lid per eye (23..26, a centimetre apart, the lid vertices weighted 25..100% to them) and
-the jaw (27, at the ear, the chin and lower lip weighted to it; the mouth has teeth and an
-inside). The eyes: the face texture has the irises painted in, and a small eyeball mesh over them
-(12..18 vertices on the head only, textured with a white swatch; Outbreak scrolls its UVs to turn
-the eyes). Without that scrolling it covered the irises white ("blind"), so the extractor leaves
-it out (`ob2.c read_mesh`, for the `.glb` and the `.cvxm`; the manifest notes it). The converter keeps these five bones
-(roles found from the positions: the lowest is the jaw, per side the higher lid is the upper one)
-and lists them in the `.cvxm` header (version 2; version 1 files still load, without a face;
-version 3 adds each upper lid's travel to close).
+Outbreak's player models move their faces with five bones under the head (group 2): two lid bones
+per eye (23..26, a centimetre apart; both on the upper lid, see "The blink") and the jaw (27, at the
+ear, the chin and lower lip weighted to it; the mouth has teeth and an inside). The eyes: the face
+texture has the irises painted in, and a small eyeball mesh over them (8..24 vertices on the head,
+some also on a lid bone, textured with an eyeball picture; Outbreak scrolls its UVs to turn the
+eyes). Without that scrolling it covered the irises ("blind"), so the extractor leaves it out
+(`ob2.c eye_overlay`, for the `.glb` and the `.cvxm`; the manifest notes it). The converter keeps
+these five bones (roles found from the positions: the lowest is the jaw, per side the lower lid bone
+is the lid, the higher one the crease above it) and lists them in the `.cvxm` header (version 2;
+version 1 files still load, without a face; version 3 adds each lid's travel to close; version 4
+has the lid first and the travel measured on the eye's opening).
 
 Code: Veronica: the player characters blink by switching the head's texture list (`player.c`,
 `PlyEyeTab`: after 30 ticks a 3% chance per tick, then 8 ticks: half, closed, half, open); the
@@ -346,24 +350,26 @@ story cast's cutscene models talk with a face mask (`face.c`, `face_bh.c`: muscl
 driven per phoneme from the room's lip data, `bhLipSet`; `MASK_WORK.param.jawang` is the jaw
 angle in degrees).
 
-`actor_glue.c imp_face`, before the skinning of every pose: the same blink (own random numbers:
-the game's `rand()` is left alone), the upper lids moved down along the head's up axis until their
-margin meets the lower lid (the lower lid stays); and the jaw:
+`actor_glue.c imp_face`, before the skinning of every pose (the player, the co-op partner, a
+cutscene double and the cast alike): the same blink (own random numbers: the game's `rand()` is left
+alone), the lids moved down along the head's up axis until their margin meets the bottom of the eye's
+opening (the crease and the brows stay); and the jaw:
 
-The blink (fourth report: "the whole forehead moves"). Cause: Outbreak weights skin up to the brow
-to the upper lid bone (Cindy: vertices 3 cm above the lid, some fully), while the lid's own margin
-often has only a tenth; and the lid bones sit at the same place in every model (the eyes do not),
-so the old travel (1.7 x the bone gap: 1.7 cm) was 3 to 4 times the eye's opening. The forehead and
-brows went down with the lids. Now `ob2.c lid_falloff` sets the weights on the upper lid bone from
-the height: fully from the lid's margin (the lowest of its vertices with the most weight: the
-middle of the lid) up to 4 mm above it, fading out at 12 mm, the rest on the head; it also measures
-the travel, from the margin to the lower lid's highest vertex within a centimetre to the side, and
-the `.cvxm` (version 3) carries it (0.2..1.3 cm). The game takes at least 0.9 x the lid bones'
-gap (Kevin's lid rows are 2 mm apart, the eyes painted on the face are taller; version 2 files: 1.1
-x the gap). Checked front and side at open, half and closed for all 8 characters: the brows and the
-forehead stay; most close fully, Cindy's and Alyssa's to a slit (their painted eyes reach below the
-lower lid's row). Re-extract after updating (F9) so the models get the new weights. Test aid:
-`RECVX_IMPORT_BLINK=0..1` holds the lids.
+The blink (seventh report: "they move only their eyebrows instead of blinking"). Cause: Outbreak's two
+lid bones per eye are not an upper and a lower lid. Measured on all 30 playable models and their
+cutscene versions: the lower bone (24 / 26) holds the lid's margin (its vertices along the top of the
+eyeball overlay, the top of the opening), the higher one (23 / 25) the skin above it up to the brow;
+no vertex below the eye is on either. Rounds 2 and 4 moved the higher bone, so the crease and the
+brows went down a few millimetres while the margin, and with it the open eye, stayed. Now
+`ob2.c keep_body` takes the lower bone as the lid, and `lid_falloff` measures its travel: from the
+margin (the lowest of the lid bone's most weighted vertices over the eye) down to the bottom of the
+eyeball overlay (`ImpModel.eye`, kept from `eye_overlay` before the mesh is left out): 0.4..1.2 cm
+on the playable models. Weights on the lid bone away from that eye go to the head (a corner of
+Alyssa's sunglasses, costume 2, is on it). A model without an eyeball overlay (some NPCs; they also
+have no lid weights) does not blink. Files of versions 2 and 3 name the crease as the lid and
+know no opening: they no longer blink (no brow motion either) until imported again. Checked in game
+at open, half and closed for all 30 playable models (`RECVX_IMPORT_BLINK=0..1` holds the lids;
+`RECVX_IMPORT_POSE` logs each lid's travel at load).
 
 * **Cutscenes**: while the model stands in for a cast double, the jaw turns by the double's
   current `jawang` (the lip sync the game computes for the double anyway). Checked in the
@@ -383,6 +389,39 @@ Do the Outbreak models support mouth movement? The playable and cutscene models 
 (teeth and the inside of the mouth are modelled) and the four lid bones; no lip shapes (no morph
 targets, no bones in the lips) and no mouth texture swaps were found. So the mouth can open and
 close; it cannot form vowels.
+
+### Round 7: hair and missing parts
+
+Report: "some hair like from Alyssa, Cindy and other characters have transparent textures and
+sometimes holes in their head or some textures are broken".
+
+* **Cause 1, the alpha scale.** Outbreak's CLUTs give alpha as 0..255: 534 of the 535 textures read (playable, cutscene,
+  NPC models) have 0xFF as their largest value, and the hair's strand edges and tips
+  use the values in between. The converter took the PS2's usual scale (0x80 opaque, as Code:
+  Veronica's textures and the GS blending have it). So the hair strips (drawn alpha-blended, last)
+  blended at up to twice their colour (light streaks), texels meant at a half (0x80) showed fully and
+  those below were see-through where they should not be; and the test which strips are see-through
+  missed the strands between 0x80 and 0xFE, so they were drawn opaque in the wrong order. With the
+  game's alpha test (anything above 0 writes depth) the inner hair layers then went missing behind the
+  outer ones: the scalp and the background showed through (Alyssa's top and back, a black gap at the
+  back of Alyssa's costume 4). Fix: `ob2.c` scales each texture's CLUT alpha as it reads it
+  (`imp_tim2_alpha_255`: 0xFF -> 0x80), so the PNGs, the `.glb`, the strip test and the `.cvxm` all
+  have the PS2 scale. Files of versions 1..3 are scaled when loaded (`load_import_model`), so older
+  imports show the hair right without importing again; only the strips' order (see-through strips
+  last) comes with a new import.
+* **Cause 2, parts taken for the eyeball overlay.** Round 3 left out every mesh under 40 vertices that
+  hangs on the head alone. On 11 NPCs that also took glasses lenses, the firefighters' visors, the gas
+  masks' lens glass, hair pieces and a ponytail band: holes in the head. `eye_overlay` now takes only a
+  mesh on the head and its face bones covering both eyes, at most 2 units high and 6 from the middle,
+  whose top lies at the lid's margin; it also finds the overlay of Mark's costume 3 and four NPCs that
+  have a vertex on a lid bone (their eyes looked white). Needs a new import.
+* **"Broken textures"**: the 60 decoded pictures of the 30 playable models (CSM1 swizzle, 8-bit
+  indices, the CLUT) are whole and in place; what looked broken were the light streaks and the
+  missing layers above.
+
+Checked (headless, `RECVX_TELEPORT` to a lit room, third person close-ups `RECVX_TPS_ORBIT` front
+and back): all 30 playable models before and after, the 13 NPCs whose meshes changed, Alyssa's old
+files with the new build. Screenshots stay in the job directory (game content, not committed).
 
 ## F9 window
 

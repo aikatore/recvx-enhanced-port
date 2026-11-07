@@ -12,13 +12,16 @@ typedef struct ImpNode {
     int face;               /* IMP_FACE_*: a face bone of the converted model (kept) */
 } ImpNode;
 
-enum { IMP_FACE_NONE, IMP_FACE_LID_UP_L, IMP_FACE_LID_LO_L, IMP_FACE_LID_UP_R, IMP_FACE_LID_LO_R, IMP_FACE_JAW, IMP_FACES };
+/* the face bones: per eye the upper lid (its margin: what closes) and the crease above it (Outbreak's two
+   lid bones are both on the upper lid; the crease's skin reaches up to the brow and stays), the jaw */
+enum { IMP_FACE_NONE, IMP_FACE_LID_L, IMP_FACE_CREASE_L, IMP_FACE_LID_R, IMP_FACE_CREASE_R, IMP_FACE_JAW, IMP_FACES };
 
 typedef struct ImpStrip { int first, n, tex; } ImpStrip;   /* idx[first .. first + n): a triangle strip; tex: texture slot or -1 */
 
 typedef struct ImpModel {
     int nmesh;              /* meshes of the source model (information) */
     int eyes_left_out;      /* eyeball overlay meshes not converted (ob2.c read_mesh) */
+    float eye[2][4];        /* per eye (left, right) the overlay's x min, x max, y min, y max: the opening; y max <= y min: not known */
     float lid_travel[2];    /* the blink: how far the upper lid (left, right) goes down to close (model units; ob2.c lid_falloff) */
     int nn;
     ImpNode node[IMP_NODES];
@@ -39,6 +42,9 @@ int  imp_tris(const ImpModel* m);   /* triangles the strips make (degenerate one
 void imp_world(const ImpModel* m, float (*W)[16]);   /* world rest matrices (column-major) */
 /* a TIM2 picture as RGBA8 (malloc'd; 4/8-bit indexed with a 32-bit CLUT, 16/24/32-bit direct); 0 = unsupported */
 int  imp_tim2_rgba(const unsigned char* t, int len, int* w, int* h, unsigned char** rgba);
+/* a TIM2 picture whose CLUT gives alpha as 0..255 (Outbreak's: 0xFF opaque, every texture's largest)
+   moved to the PS2 convention the rest of this code and the game's blending use (0x80 opaque), in place */
+void imp_tim2_alpha_255(unsigned char* t, int len);
 /* texture slot k as a PNG file */
 int  imp_write_png(const ImpModel* m, int k, const char* path);
 /* glTF 2.0 binary: the skeleton, one skinned mesh (a primitive per texture), embedded PNGs;
@@ -61,14 +67,17 @@ typedef struct ImpFit {
 int  imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gindex, const ImpFit* fit, char* err, int en);
 
 /* .cvxm layout (little endian), read by pc/glue/actor_glue.c:
-     0  "RXIM", u32 version (2), u32 model chunk list offset (60: its u32 size word, the MLB at 64),
+     0  "RXIM", u32 version (4), u32 model chunk list offset (60: its u32 size word, the MLB at 64),
         u32 texture block offset (64-aligned), u32 skin offset, u32 vertices, u32 nodes,
-        28: u8 face[5]: the object index of each face bone (IMP_FACE_* - 1: upper and lower lid
-        left, upper and lower lid right, jaw), 255 none (version 1: no face table)
-        36: float lid_travel[2] (left, right; the game's units; version 3, else 0)
+        28: u8 face[5]: the object index of each face bone (IMP_FACE_* - 1: lid and crease left, lid
+        and crease right, jaw), 255 none (version 1: no face table; versions 2 and 3 have the two lid
+        bones the other way round: the crease first)
+        36: float lid_travel[2] (left, right; the game's units; version 3, else 0; version 4: from the
+        lid's margin to the bottom of the eye's opening)
+     version 4 also: the CLUTs' alpha in the PS2 range (0x80 opaque; before: Outbreak's 0..255)
      model chunk list: u32 size, MLB (bhMlbBinRealize), u32 -1
      texture block: "TIM2" chunks as bhSetMemPvpTexture reads them, then an end chunk (-1)
      skin: per vertex float pos[3], nrm[3] (model space, the game's units), u8 node[4], float w[4] */
 #define CVXM_MAGIC 0x4D495852u   /* "RXIM" */
-#define CVXM_VERSION 3
+#define CVXM_VERSION 4
 typedef struct CvxmSkin { float pos[3], nrm[3]; unsigned char node[4]; float w[4]; } CvxmSkin;

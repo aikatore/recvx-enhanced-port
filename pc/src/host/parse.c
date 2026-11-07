@@ -164,7 +164,7 @@ int pc_cvxm_check(const uint8_t* f, uint32_t n, PcCvxm* out, char* why, int wn)
     memset(out, 0, sizeof(*out));
     if (n < 64 || pc_rd32(f) != CVXM_MAGIC) return no(why, wn, "not a .cvxm file");
     ver = pc_rd32(f + 4);
-    if (ver < 1 || ver > 3 || pc_rd32(f + 8) != 60) return no(why, wn, "version %u is not known", ver);
+    if (ver < 1 || ver > 4 || pc_rd32(f + 8) != 60) return no(why, wn, "version %u is not known", ver);
     toff = pc_rd32(f + 12); soff = pc_rd32(f + 16); nv = pc_rd32(f + 20);
     /* the chunk list: one MLB, then the end */
     csz = pc_rd32(f + 60);
