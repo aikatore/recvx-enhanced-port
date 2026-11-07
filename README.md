@@ -102,6 +102,7 @@ submodule is skipped by design (the PC build does not use it). On the first star
 selector asks for the disc image; the choice is remembered. The Windows build is cross-compiled
 with mingw-w64: see [docs/BUILDING.md](docs/BUILDING.md).
 
+
 ## Documentation
 
 | Document | For |
