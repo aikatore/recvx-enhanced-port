@@ -20,6 +20,17 @@ static const char* const lines[] = {
     "type=blue_herb_bed stage=7 room=12 case=0 player=0 x=2.05 y=2.00 z=66.92 ax=0 ay=48672 az=0 floor=0",
     "type=blue_herb_bed stage=3 room=0 case=0 player=0 x=1.75 y=2.00 z=67.49 ax=0 ay=49868 az=0 floor=0",
     "type=item_box stage=3 room=8 case=0 player=0 x=7.95 y=0.00 z=4.59 ax=0 ay=65208 az=0 floor=0",
+    /* the second export (Claire, case 0; these rooms have no other case but 2/3, see there); floors 1 and 2 too */
+    "type=typewriter stage=9 room=31 case=0 player=0 x=14.75 y=39.00 z=61.96 ax=0 ay=33589 az=0 floor=2 text=\"Self-destruct te\"",
+    "type=blue_herb_bed stage=0 room=6 case=0 player=0 x=1.27 y=2.00 z=38.11 ax=0 ay=49430 az=0 floor=0",
+    /* (z 29.96 exported: 1.4 to -z, off the pillar's examine trigger 6 at z 35..43) */
+    "type=item_box stage=0 room=8 case=0 player=0 x=-34.39 y=0.00 z=28.60 ax=0 ay=16156 az=0 floor=0",
+    "type=blue_herb_bed stage=0 room=8 case=0 player=0 x=-5.40 y=2.00 z=-21.81 ax=0 ay=49158 az=0 floor=0",
+    "type=blue_herb_bed stage=7 room=14 case=0 player=0 x=96.47 y=38.00 z=75.20 ax=0 ay=16298 az=0 floor=1",
+    /* (exported at 5.31, 150.29 facing +x, its back to the corridor's west wall: over the whole of trigger 5, "A common
+       picture.", there; moved to the north wall next to it, facing -z. Case 0 only: RM_2031 has a zombie at 14.3, 148.4) */
+    "type=item_box stage=2 room=3 case=0 player=0 x=10.00 y=0.00 z=155.30 ax=0 ay=32768 az=0 floor=0",
+    "type=blue_herb_bed stage=4 room=2 case=0 player=0 x=8.06 y=52.00 z=72.39 ax=0 ay=32872 az=0 floor=1",
 };
 
 /* in the model's own frame (angle 0): the wall over it, the trigger box, where the player is when facing it */

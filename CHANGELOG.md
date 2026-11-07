@@ -27,6 +27,8 @@
 ### Changes
 
 - **More Extra Enemies**: Extra Enemies goes higher, up to one more for every roaming enemy of a room.
+- **More extra item boxes and herbs**: more rooms have an extra item box or blue herb planter, some of them on
+  upper floors, and one has an extra typewriter.
 
 ### Fixes
 

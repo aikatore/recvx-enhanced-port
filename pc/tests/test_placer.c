@@ -56,8 +56,9 @@ int main(int argc, char** argv)
         float r[4], w[4];
         int i;
         for (i = 0; i < extras_n(); i++) CHECK(extras_get(i, &q, &cases, &sh) && (cases >> q.rcase & 1));
-        CHECK(extras_n() == 12 && extras_get(0, &q, &cases, &sh) && cases == 3 && !strcmp(sh->key, "item_box") && sh->trig_type == 4);
+        CHECK(extras_n() == 19 && extras_get(0, &q, &cases, &sh) && cases == 3 && !strcmp(sh->key, "item_box") && sh->trig_type == 4);
         CHECK(extras_get(2, &q, &cases, &sh) && cases == 1 && !strcmp(sh->key, "blue_herb_bed"));
+        CHECK(extras_get(12, &q, &cases, &sh) && !strcmp(sh->key, "typewriter") && !strcmp(q.text, "Self-destruct te"));   /* (floor 2) */
         memset(&q, 0, sizeof q);
         q.pos[0] = 10; q.pos[2] = 20; q.ang[1] = 16384;   /* 90 degrees: model +z goes to world +x, model +x to world -z */
         r[0] = 0; r[1] = 1; r[2] = 2; r[3] = 3;

@@ -215,7 +215,7 @@ The GAMEPLAY setting **Extra Item Boxes and Herbs** (F1 / ENHANCED SETTINGS, Bio
 lobby's EXTRA EVENTS page; ini `extra_objects`, default off; in co-op the host's: `Pose.opts2`
 `OPT2_EXTRA_OBJECTS`, protocol 33, [COOP.md](COOP.md) "Extra item boxes and herbs") puts the placements of
 `pc/src/host/extras.c` into their rooms, working as the game's own objects: item boxes, blue herb planters and
-typewriters (no typewriter is placed yet). Code: `pc/src/host/extras.c`
+typewriters (one so far, 9/31). Code: `pc/src/host/extras.c`
 (the table, the shapes, the geometry; pure, ctest `placer`), `pc/glue/extras_glue.c` (the game's side), hooks
 `enemyopt_glue.c enemy_room_finished` (the room is set up), `event.c bhControlEvent` before scd1
 (`pc_extras_scd1`), the placer's `placer_frame` (loading) and `placer_draw` (drawing).
@@ -319,12 +319,41 @@ shows NO_DATA for any other):
 | 7/12 (RM_7120) | planter | 0 | its back to the wall at x 0 |
 | 3/0 (RM_3000) | planter | 0 | its back to the wall at x 0 (the same spot as 7/12's) |
 | 3/8 (RM_3080) | item box | 0 | in the corner of the walls at x 0 and z 0 (a pillar, walls 25 and 37, touches its back corner) |
+| 9/31 (RM_9310, self-destruct terminal) | typewriter | 0 | floor 2 (y 39), on the walkway's floor, keys toward +x; its back to the wall at x 12.5..13 (wall 33); save text "Self-destruct te" |
+| 0/6 (RM_0060, prison barracks) | planter | 0 | its back to the wall at x 0 (wall 33), next to the shelf (wall 19) |
+| 0/8 (RM_0080, guillotine room) | item box | 0 | its back to the wall at x -41..-39 (wall 15); moved 1.4 to -z (z 29.96 exported) |
+| 0/8 | planter | 0 | its back to the wall at x -10..-7.5 (wall 24) |
+| 7/14 (RM_7140, relief stairway) | planter | 0 | floor 1 (y 36), its back to the balustrade at x 97.8 (wall 11), in its corner with wall 29 |
+| 2/3 (RM_2030, hallway with the large doll) | item box | 0 | against the north wall at z 160 (wall 5), facing -z; moved (below) |
+| 4/2 (RM_4020, loading lift room) | planter | 0 | floor 1 (y 50), on the balcony, its back to the railing at z 70 (wall 17) |
 
-All 12 as exported, none moved. No placement overlaps a door, a pickup or another trigger of its floor in any of
-its cases (checked against every trigger, wall and entry of the room files; the job's `check.py`), and every one
-is on floor 0. The only rooms with other cases are 0/3, 1/2 and 4/0 (RM_0031, RM_1021, RM_4001): the walls and
-triggers around each spot are the same there, so those placements have both cases; the others' rooms have case
-0 only. A placement goes by stage, room and case only, whoever plays there (the export was made as Claire).
+The first 12 as exported, none moved, all on floor 0. Of the second export (7, made as Claire in case 0) two were
+moved, as the check below asked:
+
+* **0/8 item box**: exported at z 29.96, its +z end 1.1 over the pillar's examine trigger 6 (z 35..43, "Something
+  seems to have been tied up here..."); 1.4 to -z (z 28.60) it is clear of it, its back still to wall 15.
+* **2/3 item box**: exported at 5.31, 150.29 facing +x, its back to the corridor's west wall: the box stood over all of
+  trigger 5 there ("A common picture.", z 144..155, which the west wall's 19 units leave no way around), so the picture
+  could no longer be read. Moved to the north wall next to it (10.00, 155.30, facing -z: x 4..16, clear of the
+  picture's trigger at x up to 3 and of the door at x 20..30).
+
+No placement overlaps a door, a pickup or another trigger of its floor in any of its cases (checked against every
+trigger, wall and entry of the room files; the job's `check.py`), but one: the 9/31 typewriter's +z end (z 62..64.5)
+lies over the pickup trigger of the green herb behind it (trigger 6, x 13..20, z 62..70, the herb at 16.0, 67.0).
+The room's triggers come first, so facing the typewriter from there takes the herb while it is there; from its
+middle and -z half the typewriter answers, and the herb is still taken from beside it. Moved 2.7 to -z to clear it,
+its back would leave the wall and stand in the opening to the terminal's alcove, so it stays as exported.
+The rooms with other cases are 0/3, 1/2, 4/0 and 2/3 (RM_0031, RM_1021, RM_4001, RM_2031): the walls and triggers
+around the first three's spots are the same there, so those placements have both cases; RM_2031 has a zombie
+standing at 14.3, 148.4, next to the moved box, so 2/3 has case 0 only. The others' rooms have case 0 only. A
+placement goes by stage, room and case only, whoever plays there (both exports were made as Claire).
+
+**Upper floors** (9/31 floor 2, 7/14 and 4/2 floor 1) need nothing of their own: an extra's floor is
+`bhCheckFloorNum` at its origin (+0.5; the planter's origin is 2.0 above its bottom, the box's and typewriter's at
+it), its wall stands on that floor's level (`rom->grand`) with its own height, and its trigger has that `flr_no`.
+The wall test (`hitchk.c`) is by height (`py` .. `py + h`), so it stops the player on that floor and not one walking
+below (36 and more units lower here); `bhCheckExmAtari` takes triggers of the player's floor only. RECVX_EXTRAS `goto` puts the player on
+the extra's floor.
 
 ### Adding placements
 
