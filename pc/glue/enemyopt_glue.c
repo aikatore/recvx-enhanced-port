@@ -263,14 +263,14 @@ enum { K_BIG = 1,       /* needs open space around the record (not in corridors 
        K_RMFLG = 4,     /* its code writes rm_flg bits 0..2 (Tyrant clears them every frame): not where the script uses them */
        K_NOCOUNT = 8,   /* not where the doors count the kills: it may leave the room, fly out of reach or take too long */
        K_HEAVY = 16 };  /* an enemy variant marked heavy (boss-like): one per room */
-/* look: the model version it is (-1: every look of the type). A kind of the same type as the one before it (the Sweeper)
-   is that one's under Wild and Mild (make_kinds): one kind of both looks, weighted as both together. */
+/* look: the model version it is (-1: every look of the type). The Hunter and the Sweeper are two kinds in every variety
+   (Types per Room counts them as two); their Wild and Mild weights add up to the single Hunter kind's before the split. */
 static const struct { unsigned char id, w[2], flags; signed char look; const char* name; } kinds[] = {   /* (name: "Custom"'s list) */
     { 1, { 5, 5 }, 0, -1, "Zombie" },                       /* 24 looks */
     { 4, { 4, 4 }, 0, -1, "Cerberus" },
     { 9, { 4, 4 }, 0, -1, "Bandersnatch" },
     { 5, { 2, 2 }, K_NOCOUNT, 0, "Hunter" },                /* may leap out of a room */
-    { 5, { 1, 2 }, K_NOCOUNT, 1, "Sweeper" },               /* (Wild, Mild: with the Hunter, 3 / 4) */
+    { 5, { 1, 2 }, K_NOCOUNT, 1, "Sweeper" },               /* (with the Hunter 3 / 4, the old single kind's) */
     { 3, { 2, 3 }, K_BIG | K_NOCOUNT, -1, "Black Widow" },  /* (with its brood 25 slots; climbs walls) */
     { 26, { 2, 2 }, 0, -1, "Anatomist Zombie" },
     { 19, { 0, 2 }, K_BIG | K_RMFLG | K_NOCOUNT, -1, "Tyrant" },   /* both looks */
@@ -356,14 +356,11 @@ const char* enemy_rates_text(void) { return rates_ready ? rates_line(g_enemy_opt
    count kills, nor where the script uses rm_flg bits), plus big, heavy and the stages it may appear in. The
    same on both co-op sides as long as both have the same variants (built in; mods/enemies.ini). */
 typedef struct { unsigned char id, w[2], flags, cost; signed char ri, look; const EnemyVariant* v; } Kind;   /* ri: its rate (-1: none) */
-static int make_kinds(Kind* kd, int custom)
+static int make_kinds(Kind* kd)
 {
     int n = 0, i, j;
     for (i = 0; i < KINDS; i++) { kd[n].id = kinds[i].id; kd[n].w[0] = kinds[i].w[0]; kd[n].w[1] = kinds[i].w[1]; kd[n].flags = kinds[i].flags;
-                                  kd[n].cost = (unsigned char)slot_cost(kinds[i].id); kd[n].ri = (signed char)i; kd[n].look = kinds[i].look; kd[n++].v = NULL;
-                                  if (!custom && i && kinds[i - 1].id == kinds[i].id) {   /* Wild, Mild: the Sweeper is the Hunter's (one kind, either look) */
-                                      kd[n - 2].w[0] += kd[n - 1].w[0]; kd[n - 2].w[1] += kd[n - 1].w[1]; kd[n - 2].look = -1;
-                                      kd[n - 1].w[0] = kd[n - 1].w[1] = 0; } }
+                                  kd[n].cost = (unsigned char)slot_cost(kinds[i].id); kd[n].ri = (signed char)i; kd[n].look = kinds[i].look; kd[n++].v = NULL; }
     for (i = 0; i < variant_count(); i++) {
         const EnemyVariant* v = variant_at(i);
         int f = K_NOCOUNT | K_RMFLG;
@@ -431,7 +428,7 @@ static void randomize(const EnemyOpts* o)
 {
     int k, j, cost = 0, made = 0, nc = 0, guest = coop_is_guest(), room = room_file_now(), wild = o->variety != 0, custom = o->variety == 2;
     Kind kt[KINDS + VARIANT_MAX];
-    int nk = make_kinds(kt, custom), kused[KINDS + VARIANT_MAX] = { 0 }, room_kinds[2] = { -1, -1 }, heavy = 0, nset = 0;
+    int nk = make_kinds(kt), kused[KINDS + VARIANT_MAX] = { 0 }, room_kinds[2] = { -1, -1 }, heavy = 0, nset = 0;
     unsigned char held[128] = { 0 }, used[256] = { 0 }, cls[128] = { 0 }, set[KINDS + VARIANT_MAX] = { 0 };   /* cls: 1 another kind, 2 another look */
     char line[600];
     int ln = 0;
@@ -479,7 +476,7 @@ static void randomize(const EnemyOpts* o)
         rnd_seed((unsigned)o->seed, (unsigned)room * 977u + 0x3000u + (unsigned)k * 7919u);   /* each record its own draws */
         if (cls[k] == 2) {   /* another look of its type */
             if ((kd = kind_of(kt, save.id, save.mdlver)) >= 0 && (m = pick_look(kt, save.id, -1, off & ~(1u << kd), save.id, save.mdlver, used)))
-                kd = kind_of(kt, m->id, m->mdlver);   /* (Custom: a Hunter's look can be the Sweeper's kind) */
+                kd = kind_of(kt, m->id, m->mdlver);   /* (a Hunter's look can be the Sweeper's kind; Custom: not while it is Off) */
         } else {
             int w[KINDS + VARIANT_MAX], t = 0, fresh = 0, r, big = -1, mine = 0, mset = 0;
             for (i = 0; i < nk; i++) {

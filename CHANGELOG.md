@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changes
+
+- **Hunter and Sweeper**: the enemy randomizer now treats the Sweeper as its own enemy type in every mode, so Types
+  per Room counts them separately.
+
 ## 0.7.5 (2026-11-07)
 
 ### New

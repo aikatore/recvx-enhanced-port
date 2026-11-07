@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 41                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 42                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -45,7 +45,9 @@ extern "C" {
                                            39: EV_EOPTS types and rate[] (the randomizer's "Custom" rates and "Types per Room"), extra up to
                                                ENEMY_EXTRA_MAX, variety 2 (Custom);
                                            40: EV_FX of FX_REACT (third person "Locational Hit Reactions": where a shot hit a zombie);
-                                           41: OPT2_HEADSHOTS (third person "Headshots & Piercing", the host's) */
+                                           41: OPT2_HEADSHOTS (third person "Headshots & Piercing", the host's);
+                                           42: the randomizer's Hunter and Sweeper two kinds in Wild and Mild too (other
+                                               enemies from the same seed; nothing on the wire changed) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
 #define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */

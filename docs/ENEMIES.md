@@ -596,7 +596,7 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
 | zombie | 24 | 5 / 5 | |
 | Cerberus | 1 | 4 / 4 | |
 | Bandersnatch | 1 (Bandersnatch 2 is an event's arm: never) | 4 / 4 | |
-| Hunter, Sweeper | 1 each | 3 / 4 together (Custom's presets: Hunter 2 / 2, Sweeper 1 / 2) | not in kill-count rooms (may leap out of a room). One kind of both looks in Wild and Mild; two kinds with a rate each in Custom (and for Types per Room under Custom) |
+| Hunter, Sweeper | 1 each | Hunter 2 / 2, Sweeper 1 / 2 (3 / 4 together, as the single Hunter kind before the split) | not in kill-count rooms (may leap out of a room). Two kinds in every variety: Mild's two kinds per room, "each kind once" and Types per Room count them as two |
 | Black Widow | 1 | 2 / 3 | open space (25 slots with its brood); not in kill-count rooms (climbs walls) |
 | anatomist zombie | 1 | 2 / 2 | |
 | Tyrant | 2 | - / 2 | open space; not in kill-count rooms; not where the script uses `rm_flg` bits 29..31 (its code clears `rm_flg & 7` every frame) |
@@ -626,7 +626,7 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
   10 among kinds at 1 takes most records, and a kind at Off is never placed. Records that cannot
   change keep their type (event-driven records, single-look types, boss rooms, a record where
   nothing else with a rate fits): an Off zombie still appears where the room's own zombie stays. An event-driven Hunter
-  takes the Sweeper's look only while the Sweeper has a rate (and the other way round).
+  may take the Sweeper's look (and the other way round) in every variety; under Custom only while the other has a rate.
   Fliers become fliers as in Wild (both at Off: they stay). Picking Wild or Mild presets the
   rates to that variety's weights (variants capped at 10), so Custom starts from the last one
   picked. Variants past the 21st have no rate and are not placed by Custom (the rates fill the
@@ -804,12 +804,12 @@ rooms twice with the randomizer, placements and three extras on, killing everyth
 records); every room must get the same records and extras on both visits, and nothing killed may come back.
 `EXTRA=8` raises the extras; the other `RECVX_ENEMY_*` (Custom, its rates, Types per Room) pass through.
 
-`pc/tools/enemy_rates_check.sh OUT [SEED...]` (headless, about 3 minutes): a new game tours 22 rooms per
+`pc/tools/enemy_rates_check.sh OUT [SEED...]` (headless, about 4 minutes): a new game tours 22 rooms per
 seed with eight extras, once with Custom rates (zombies Off, Cerberus 10, the rest 1: no record may become a
 zombie, Cerberus must take most ground records), twice with Hunter 10 and Sweeper Off and the other way round
-(no record may become the one at Off, some must become the other), once Wild with Types per Room 1 and once
-Custom with Types per Room 2 (no room over its limit unless logged, Hunter and Sweeper two kinds there; every
-extra of a type the room's records have).
+(no record may become the one at Off, some must become the other), Wild and Mild each with Types per Room 1 and 2,
+and Custom with Types per Room 2 (no room over its limit unless logged, the Hunter and the Sweeper two kinds in every
+variety; every extra of a type the room's records have).
 
 Test aids:
 
