@@ -38,6 +38,12 @@
 - With Dithering on, the picture asks less of the graphics card and no longer stutters briefly the first time a
   room shows new kinds of surfaces.
 - With randomized event enemies, monsters changed by the cutscene cast now really show their new look in cutscenes.
+- Imported Outbreak characters now really blink: the eyelids close instead of only the eyebrows moving. This
+  needs the characters imported again (EXTRA > IMPORT).
+- The hair of imported Outbreak characters, such as Alyssa's and Cindy's, is no longer see-through in places,
+  streaked too bright or full of holes.
+- Some imported Outbreak NPCs no longer lose their glasses, visors, masks or hair pieces, and a few now show their
+  eyes instead of white ones. This needs the characters imported again.
 - The extra item boxes now make their opening sound in every room, like the game's own.
 
 ## 0.7.4 (2026-11-04)

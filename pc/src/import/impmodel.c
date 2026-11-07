@@ -148,6 +148,13 @@ int imp_tim2_rgba(const unsigned char* t, int len, int* W, int* H, unsigned char
     return 1;
 }
 
+void imp_tim2_alpha_255(unsigned char* t, int len)
+{
+    Pic p;
+    if (!pic(t, len, &p) || p.itype < 4 || p.itype > 5 || (p.ctype & 0x3f) != 3) return;
+    for (unsigned char* a = t + (p.pal - t) + 3; a < p.pal + p.clut; a += 4) *a = (unsigned char)((*a * 128 + 127) / 255);
+}
+
 /* a texture as PNG bytes (into b), or written to `path` */
 static int png(const ImpModel* m, int k, const char* path, Buf* b)
 {

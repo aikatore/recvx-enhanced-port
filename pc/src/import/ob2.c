@@ -236,6 +236,58 @@ static int read_amo(Rd* r, uint32_t o, Amo* a)
     return !r->bad;
 }
 
+/* The eyeball overlay: a few quads over both eyes (8..24 vertices on the head, some also on a lid bone),
+   textured with an eyeball that Outbreak turns by scrolling its UVs; drawn as it is, it hides the irises
+   the face texture has painted (the eyes looked blind). Left out; per eye its extent is the eye's opening
+   (m->eye, the blink: lid_falloff). Other small meshes on the head stay: hair pieces, masks, glasses (an
+   earlier test took every small mesh on the head alone: holes in some NPCs' heads). So: on the head and
+   its face bones only, both eyes, within 2 units of height and 6 of the middle, and where the face mesh
+   already read has lid weights, its top within 0.6 of the lid's margin (glasses sit lower or higher). */
+static int eye_overlay(Rd* r, uint32_t vert, uint32_t nv, uint32_t jnt, uint32_t nj, ImpModel* m)
+{
+    int head = -1, lid[2] = { -1, -1 }, jaw = -1;
+    float e[2][4] = { { 1e9f, -1e9f, 1e9f, -1e9f }, { 1e9f, -1e9f, 1e9f, -1e9f } }, lo = 1e9f, hi = -1e9f;
+    for (uint32_t j = 0; j < nj; j++) {   /* (keep: the node's group until keep_body) */
+        int n = (int)u32(r, jnt + 4 * j);
+        while (n >= 0 && n < m->nn && m->node[n].keep == 2) n = m->node[n].parent;
+        if (n < 0 || n >= m->nn || (head >= 0 && n != head)) return 0;
+        head = n;
+    }
+    for (int i = 0; i < m->nn; i++) {   /* the face bones under the head: the lowest is the jaw, per side the lower lid bone the margin */
+        const ImpNode* d = &m->node[i];
+        int a = d->parent;
+        while (a >= 0 && m->node[a].keep == 2) a = m->node[a].parent;
+        if (d->keep != 2 || a != head || fabsf(d->t[0]) + fabsf(d->t[1]) + fabsf(d->t[2]) <= 0.01f) continue;
+        if (jaw < 0 || d->t[1] < m->node[jaw].t[1]) jaw = i;
+    }
+    if (jaw < 0) return 0;   /* (no face bones: not a head) */
+    for (int i = 0; i < m->nn; i++) {
+        const ImpNode* d = &m->node[i];
+        int a = d->parent, s = d->t[0] > 0 ? 0 : 1;
+        while (a >= 0 && m->node[a].keep == 2) a = m->node[a].parent;
+        if (i == jaw || d->keep != 2 || a != head || fabsf(d->t[0]) <= 0.01f) continue;
+        if (lid[s] < 0 || d->t[1] < m->node[lid[s]].t[1]) lid[s] = i;
+    }
+    for (uint32_t v = 0; v < nv; v++) {
+        float x = f32(r, vert + 12 * v), y = f32(r, vert + 12 * v + 4);
+        float* b = e[x > 0 ? 0 : 1];
+        if (fabsf(x) > 6.0f) return 0;
+        b[0] = fminf(b[0], x); b[1] = fmaxf(b[1], x); b[2] = fminf(b[2], y); b[3] = fmaxf(b[3], y);
+        lo = fminf(lo, y); hi = fmaxf(hi, y);
+    }
+    if (hi - lo >= 2.0f || e[0][3] < e[0][2] || e[1][3] < e[1][2]) return 0;
+    for (int s = 0; s < 2; s++) {
+        float ym = 1e9f;
+        for (int v = 0; v < m->nv; v++)   /* (the lid's lowest vertex near the candidate: Alyssa's sunglasses have a corner on the lid bone) */
+            for (int k = 0; k < 4; k++)
+                if (lid[s] >= 0 && m->jnt[v][k] == lid[s] && m->wgt[v][k] >= 0.75f && m->pos[v][1] > e[s][2] - 0.5f && m->pos[v][1] < e[s][3] + 2.0f)
+                    ym = fminf(ym, m->pos[v][1]);
+        if (ym < 1e8f && fabsf(ym - e[s][3]) > 0.6f) return 0;
+    }
+    memcpy(m->eye, e, sizeof(e));
+    return 1;
+}
+
 /* append mesh `me` of the AMO to the model (weights to its joints; a mesh without weights hangs
    on the node that names it, its points in that node's frame) */
 static int read_mesh(Rd* r, const Mesh* me, const Amo* a, int mi, const int* meshnode, ImpModel* m, float (*W)[16])
@@ -256,13 +308,7 @@ static int read_mesh(Rd* r, const Mesh* me, const Amo* a, int mi, const int* mes
         p += sz;
     }
     if (!vert || !nv || !prims || nv > 65535 || m->nv > NBD_VERTS - (int)nv || r->bad) return 0;
-    if (wgt && jnt && nj == 1 && nv < 40) {   /* the eyeball overlay: a few quads on the head alone (the node
-        with the face bones below it), textured with a bare white eyeball; drawn, it hides the irises the face
-        texture has painted (the eyes looked blind; when Outbreak shows it is not known). Left out. */
-        int head = (int)u32(r, jnt);
-        for (int i = 0; i < m->nn; i++)
-            if (m->node[i].parent == head && m->node[i].keep == 2) { m->eyes_left_out++; return 1; }
-    }
+    if (wgt && jnt && nv < 40 && eye_overlay(r, vert, nv, jnt, nj, m)) { m->eyes_left_out++; return 1; }
     int base = m->nv, rigid = -1;
     if (!wgt || !jnt)
         for (int i = 0; i < m->nn; i++) if (meshnode[i] == mi) rigid = i;
@@ -364,7 +410,9 @@ int ob2_read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int
         if (!out || (got = ob2_sld(d + tp, (int)sz, out, cap)) < 64) { free(out); snprintf(err, en, "Texture %u is damaged.", k); imp_free(m); return 0; }
         unsigned char* fit = realloc(out, got);
         m->tim2[m->ntex] = fit ? fit : out;
-        m->tim2_len[m->ntex++] = got;
+        m->tim2_len[m->ntex] = got;
+        imp_tim2_alpha_255(m->tim2[m->ntex], got);   /* (Outbreak's alpha: 0xFF opaque; taken as 0x80, its hair blended at up to twice its colour) */
+        m->ntex++;
         tp += sz;
     }
     Amo a;
@@ -414,7 +462,8 @@ static void keep_body(ImpModel* m)
         if (n->face && (jaw < 0 || n->t[1] < m->node[jaw].t[1])) jaw = i;
     }
     /* the face bones (lids at the eyes, the jaw below them; all on the face root under the head):
-       the lowest is the jaw; per side (x) the higher lid is the upper one. Kept only when all five are found. */
+       the lowest is the jaw; per side (x) the lower lid bone holds the upper lid's margin (what closes),
+       the higher one the skin above it up to the brow (the crease). Kept only when all five are found. */
     int lid[2][2] = { { -1, -1 }, { -1, -1 } }, n = 0;
     for (int i = 0; i < m->nn; i++) {
         ImpNode* d = &m->node[i];
@@ -428,8 +477,8 @@ static void keep_body(ImpModel* m)
     if (n != 4 || jaw < 0) return;
     for (int s = 0; s < 2; s++) {   /* (Outbreak x+ is the character's left) */
         int up = m->node[lid[s][0]].t[1] > m->node[lid[s][1]].t[1] ? lid[s][0] : lid[s][1], lo = up == lid[s][0] ? lid[s][1] : lid[s][0];
-        m->node[up].face = s ? IMP_FACE_LID_UP_L : IMP_FACE_LID_UP_R;
-        m->node[lo].face = s ? IMP_FACE_LID_LO_L : IMP_FACE_LID_LO_R;
+        m->node[lo].face = s ? IMP_FACE_LID_L : IMP_FACE_LID_R;
+        m->node[up].face = s ? IMP_FACE_CREASE_L : IMP_FACE_CREASE_R;
     }
     m->node[jaw].face = IMP_FACE_JAW;
     for (int i = 0; i < m->nn; i++) if (m->node[i].face) m->node[i].keep = 1;
@@ -446,45 +495,31 @@ static const struct { const char* id; float in, down; } fits[] = {
     { "EP05", 0.9f, 0.35f },
 };
 
-/* The upper lids' weights for our blink (actor_glue.c imp_face moves the upper lid bone down). Outbreak
-   weights skin up to the brow to that bone, some of it fully (Cindy: up to 3 cm above the lid), and the
-   rest of the lid often only by a tenth (its blink must turn that bone differently): moved as they
-   were, the forehead went down with the lid. So the weights on the upper lid bone are set from the
-   height instead: fully from the lid's margin (the lowest of its vertices with the most weight: the
-   middle of the lid) up to 4 mm above it, fading out at 12 mm (Outbreak's model units are
-   centimetres); the rest stays on the vertex's other nodes (or goes to the bone's parent, the face
-   root, which is the head): the brow and the forehead stay. The travel to close: from the margin down
-   to the lower lid's highest vertex within a centimetre to the side of it. */
+/* The blink (actor_glue.c imp_face moves the lid bone down). Outbreak's two lid bones are both on the
+   upper lid: the lower holds the lid's margin (its vertices along the top of the eye's opening), the
+   higher the skin above it up to the brow (round 4 moved that one: the brows went down, the eyes stayed
+   open). The lid closes by the distance from its margin (the lowest of its most weighted vertices over
+   the eye) down to the bottom of the opening, the eyeball overlay's (read_mesh); a model without one
+   does not blink. Weights on the lid bone away from that eye (a corner of Alyssa's sunglasses) go to its
+   parent, the face root, which is the head: only the lid moves. */
 static void lid_falloff(ImpModel* m)
 {
-    const float full = 0.4f, band = 0.8f;
     for (int u = 0; u < m->nn; u++) {
-        int f = m->node[u].face, side = f == IMP_FACE_LID_UP_L ? 0 : 1, lo = -1, vm = -1;
-        if (f != IMP_FACE_LID_UP_L && f != IMP_FACE_LID_UP_R) continue;
-        for (int i = 0; i < m->nn; i++) if (m->node[i].face == f + 1) lo = i;
-        float wx = 0, ym = 1e9f, yl = -1e9f;
+        int f = m->node[u].face, s = f == IMP_FACE_LID_L ? 0 : 1, vm = -1;
+        const float* e = m->eye[s];   /* x min, x max, y min, y max */
+        float wx = 0, ym = 1e9f;
+        if ((f != IMP_FACE_LID_L && f != IMP_FACE_LID_R) || e[3] <= e[2]) continue;
         for (int v = 0; v < m->nv; v++)
-            for (int j = 0; j < 4; j++) if (m->jnt[v][j] == u && m->wgt[v][j] > wx) wx = m->wgt[v][j];
-        for (int v = 0; v < m->nv; v++)
-            for (int j = 0; j < 4; j++)
-                if (m->jnt[v][j] == u && m->wgt[v][j] >= 0.95f * wx && m->pos[v][1] < ym) { ym = m->pos[v][1]; vm = v; }
-        for (int v = 0; v < m->nv && vm >= 0; v++)
-            for (int j = 0; j < 4; j++)
-                if (m->jnt[v][j] == lo && m->wgt[v][j] >= 0.5f && fabsf(m->pos[v][0] - m->pos[vm][0]) < 1.0f && m->pos[v][1] > yl) yl = m->pos[v][1];
-        m->lid_travel[side] = vm >= 0 && yl > -1e8f && ym > yl ? 0.95f * (ym - yl) : 0;
-        for (int v = 0; v < m->nv && vm >= 0; v++)
             for (int j = 0; j < 4; j++) {
+                const float* p = m->pos[v];
                 if (m->jnt[v][j] != u || m->wgt[v][j] <= 0) continue;
-                float t = fminf(1.0f, fmaxf(0.0f, 1.0f - (m->pos[v][1] - ym - full) / band)), others = 1.0f - m->wgt[v][j];
-                int k;
-                m->wgt[v][j] = t;
-                if (others > 1e-4f) { for (k = 0; k < 4; k++) if (k != j) m->wgt[v][k] *= (1.0f - t) / others; }
-                else if (t < 1.0f) {   /* (all of it was on the lid: the rest to the parent, in a free slot) */
-                    for (k = 0; k < 4 && (k == j || m->wgt[v][k] > 0); k++) {}
-                    if (k < 4) { m->jnt[v][k] = (unsigned char)m->node[u].parent; m->wgt[v][k] = 1.0f - t; }
-                    else m->wgt[v][j] = 1.0f;
-                }
+                if (p[0] < e[0] - 0.8f || p[0] > e[1] + 0.8f || p[1] < e[2] - 0.5f || p[1] > e[3] + 1.5f) m->jnt[v][j] = (unsigned char)m->node[u].parent;
+                else wx = fmaxf(wx, m->wgt[v][j]);
             }
+        for (int v = 0; v < m->nv; v++)
+            for (int j = 0; j < 4; j++)
+                if (m->jnt[v][j] == u && m->wgt[v][j] >= 0.95f * wx && m->pos[v][0] >= e[0] && m->pos[v][0] <= e[1] && m->pos[v][1] < ym) { ym = m->pos[v][1]; vm = v; }
+        m->lid_travel[s] = vm >= 0 && ym > e[2] ? ym - e[2] : 0;
     }
 }
 

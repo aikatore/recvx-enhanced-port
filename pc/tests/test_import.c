@@ -131,6 +131,10 @@ int main(int argc, char** argv)
     CHECK(imp_tim2_rgba(t, len, &w, &h, &px) && w == 16 && h == 16);
     CHECK(px[4 * 8] == 16 && px[4 * 16] == 8 && px[4 * 7] == 7 && px[4 * 24] == 24 && px[3] == 255);
     free(px);
+    /* Outbreak's CLUT alpha (0xFF opaque) to the PS2's (0x80 opaque) */
+    t[64 + 256 + 3] = 0xFF; t[64 + 256 + 4 + 3] = 0x80; t[64 + 256 + 8 + 3] = 0;
+    imp_tim2_alpha_255(t, len);
+    CHECK(t[64 + 256 + 3] == 0x80 && t[64 + 256 + 4 + 3] == 0x40 && t[64 + 256 + 8 + 3] == 0);
 
     /* a humanoid: root, pelvis, spine, chest, neck, head, two arms of 3, two legs of 3, and a finger
        (zero length, merged into its hand) */

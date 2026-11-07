@@ -1197,6 +1197,9 @@ static int load_import_model(Disguise* d, int k)
         host_log("actor: %s is not usable: %s\n", path, why);
         return 0;
     }
+    if (rd32(d->keep + 4) < 4)   /* (before version 4: Outbreak's CLUT alpha, 0xFF opaque; here 0x80 is: hair blended at up to twice its colour) */
+        for (uint32_t q = rd32(d->keep + 12); rd32(d->keep + q) == 0x324D4954u; q += 32 + rd32(d->keep + q + 4))
+            imp_tim2_alpha_255(d->keep + q + 32, (int)rd32(d->keep + q + 4));
     texn = realize(d, d->keep + 60, own);
     if (d->w.mdl_n != 1 || !tex_room(actor_imports[k].name, texn)) return 0;
     if (own[0]) {
@@ -1211,13 +1214,11 @@ static int load_import_model(Disguise* d, int k)
         d->fbone[k] = rd32(d->keep + 4) >= 2 && d->keep[28 + k] < d->w.mdl[0].obj_num ? (signed char)d->keep[28 + k] : -1;
     d->blink = -1;
     d->blink_wait = 0;
-    for (int e = 0; e < 2; e++) {   /* how far each upper lid closes (version 3, ob2.c lid_falloff: the mesh's opening),
-        at least 0.9 x the gap between the lid bones (Kevin's lid rows are 2 mm apart, the eyes painted
-        between them are taller); version 2: 1.1 x that gap */
-        int up = d->fbone[2 * e], lo = d->fbone[2 * e + 1];
-        float t = 0, gap = up >= 0 && lo >= 0 ? d->w.mdl[0].objP[up].pos[1] - d->w.mdl[0].objP[lo].pos[1] : 0;
-        if (rd32(d->keep + 4) >= 3) { memcpy(&t, d->keep + 36 + 4 * e, 4); if (t == t) t = fmaxf(t, 0.9f * gap); }
-        else t = 1.1f * gap;
+    for (int e = 0; e < 2; e++) {   /* how far each lid closes (version 4, ob2.c lid_falloff: from its margin to the bottom of
+        the eye's opening). Versions 2 and 3 took the crease above the lid for the lid (the brows went down, the eyes
+        stayed open) and knew no opening: no blink until imported again */
+        float t = 0;
+        if (rd32(d->keep + 4) >= 4) memcpy(&t, d->keep + 36 + 4 * e, 4);
         d->lid_travel[e] = t > 0 && t < 0.3f ? t : 0;
         if (getenv("RECVX_IMPORT_POSE")) host_log("import: lid %d travel %.3f\n", e, d->lid_travel[e]);   /* (test aid) */
     }
@@ -1265,8 +1266,8 @@ static void imp_face(Disguise* d, const BH_PWORK* src, int step)
     if (getenv("RECVX_IMPORT_JAW")) jaw = (float)atof(getenv("RECVX_IMPORT_JAW"));   /* test aid: the jaw open this far (degrees) */
     if (getenv("RECVX_IMPORT_POSE") && step && d == &dg[ACTOR_DOUBLE] && jaw != 0) host_log("import: double's jaw %.1f frame %d\n", jaw, (int)gs_frame_count());   /* (test aid) */
     jaw *= 3.14159265f / 180.0f;
-    for (k = 0; k < 2; k++) {   /* the upper lid down along the head's up axis until its margin meets the lower lid
-        (the lower lid stays). Only the lid moves: ob2.c lid_falloff left the brow's weights on the head. */
+    for (k = 0; k < 2; k++) {   /* the lid down along the head's up axis until its margin meets the bottom of the eye's
+        opening (the crease above it and the brow stay) */
         int up = d->fbone[2 * k], c;
         if (up < 0 || shut <= 0) continue;
         for (c = 0; c < 3; c++) ow[up].mtx[12 + c] -= shut * d->lid_travel[k] * ow[up].mtx[4 + c];
