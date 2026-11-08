@@ -32,8 +32,8 @@ Related: [../ACTORS.md](../ACTORS.md) (models, skeletons, motions, enemy records
 `pc/src/audio/adx.c` implements it; small `#ifdef TARGET_PC` hooks in the decomp ask it first.
 
 * Location: `$RECVX_MODS`, default `mods` relative to the **working directory** the game is
-  started from (not the save directory). Names are case-sensitive on Linux; the game asks for
-  upper-case names.
+  started from (not the save directory). Names may be in any case (`sysmes.ald` serves `SYSMES.ALD`,
+  `mry.afs/12` serves `MRY.AFS/12`; on Linux the exact name is tried first, then the folder is searched).
 * The log shows `mods: <path> replaces the disc file (<size> bytes)` for every file it uses.
 * Files are read as from the disc (whole 2048-byte sectors, zero padded).
 * `mods/biorand/` is BioRand's pack (`pc/src/host/biorand.h`): while BioRand is on, a disc file is

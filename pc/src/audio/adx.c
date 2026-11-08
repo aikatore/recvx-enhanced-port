@@ -15,6 +15,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef _WIN32
+#include <dirent.h>
+#endif
 
 #define ADXF_STAT_STOP    1
 #define ADXF_STAT_READING 2
@@ -37,6 +40,43 @@
    disc does not have, and plain ISO files), <mods>/<AFS file>/<id> for entries of AFS archives
    (e.g. mods/MRY.AFS/12). While BioRand is on, <mods>/biorand/ (its pack: room files, SYSTEM.AFS/10, /11;
    not its title picture ADV.AFS/2) comes first; off, that folder is not looked at (pc/src/host/biorand.h). */
+/* dir/name, its letters' case as the folder has them: the game asks for upper-case names (SYSMES.ALD), a mod may
+   bring sysmes.ald (Windows' file system ignores case anyway) */
+static FILE* mod_fopen(const char* dir, const char* name, char* path, size_t npath)
+{
+    FILE* f;
+    snprintf(path, npath, "%s/%s", dir, name);
+    if ((f = pc_fopen(path, "rb"))) return f;
+#ifndef _WIN32
+    {
+        size_t at = strlen(dir) + 1, n;
+        if (at >= npath) return NULL;
+        while (name[0]) {   /* each part of name (MRY.AFS/12): the folder's entry of that name in any case */
+            const char* end = strchr(name, '/');
+            DIR* d;
+            struct dirent* e;
+            int found = 0;
+            n = end ? (size_t)(end - name) : strlen(name);
+            path[at - 1] = 0;
+            if (!(d = opendir(path))) return NULL;
+            while ((e = readdir(d)))
+                if (strlen(e->d_name) == n && !SDL_strncasecmp(e->d_name, name, n) && at + n + 1 < npath) {
+                    path[at - 1] = '/';
+                    memcpy(path + at, e->d_name, n + 1);
+                    found = 1;
+                    break;
+                }
+            closedir(d);
+            if (!found) { snprintf(path, npath, "%s/%s", dir, name); return NULL; }
+            at += n + 1;
+            name += n + (end != NULL);
+        }
+        f = pc_fopen(path, "rb");
+    }
+#endif
+    return f;
+}
+
 static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t npath, int* srcp)
 {
     static const char* dir;
@@ -46,10 +86,11 @@ static FILE* mod_open_path(const char* name, uint32_t* size, char* path, size_t 
     if (!dir) dir = SDL_getenv("RECVX_MODS") ? SDL_getenv("RECVX_MODS") : "mods";
     while (*name == '\\' || *name == '/') name++;
     if (biorand_active() && SDL_strcasecmp(name, "ADV.AFS/2")) {   /* (not its title picture: its colours are broken; the disc's, or an HD pack's) */
-        snprintf(path, npath, "%s/biorand/%s", dir, name);
-        f = pc_fopen(path, "rb");
+        char bd[512];
+        snprintf(bd, sizeof bd, "%s/biorand", dir);
+        f = mod_fopen(bd, name, path, npath);
     }
-    if (!f) { snprintf(path, npath, "%s/%s", dir, name); f = pc_fopen(path, "rb"); src = LF_MODS; }
+    if (!f) { f = mod_fopen(dir, name, path, npath); src = LF_MODS; }
     if (!f && (ld = pc_lang_file_dir(name))) {   /* the language's version of the file (lang.h; docs/LANGUAGES.md; its names upper case) */
         char up[64];
         int i;
