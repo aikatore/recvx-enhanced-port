@@ -572,6 +572,20 @@ are. The European English is not installed: its text is the US text, and it has 
   (read from the disc) for each one that is not, and logs it. An older import (lang.txt `# recvx language 1`,
   not Russian; or before 3, Russian, Brazilian Portuguese and Japanese: without the text crawl or the movies:
   `lang_old_import`) is logged at start and noted in IMPORT ("An older import: import again.").
+- **The memory card screens' words** (load and save; the port keeps the US layout): the slot labels MEMORY CARD
+  (463) and slot 1 / 2 (464, 465) stand one above the other on the slot screens (463's second line under 464) and
+  side by side in the file list's header (464 at x 420). The French, Spanish and Turkish ones are longer (the slot
+  word and the card's name in parentheses added to MEMORY CARD, on two lines): they overlapped each other and ran off
+  the screen. `pc_lang_sys_mes` puts in the short form of the language's own words, as the US
+  "MEMORY CARD" / "slot 1": French "MEMORY CARD" / "fente N°1", Spanish "MEMORY CARD" / "ranura 1", Turkish
+  "MEMORY CARD" / "yuva 1" (`shorter[]`). Each is keyed by the language, the message and a hash of the disc's exact
+  text (FNV-1a of its codes), so the port keeps no disc text and another import's or version's wording stays as it
+  is. A message of these screens (`DispMessageSelect`, `DispLoadMessageSelect`) whose longest line would end right
+  of x 610 (where the US text's furthest ends: no English line moves) is moved left (`save_glue.c pc_mes_fit_x`):
+  the French "no save data" question, the Turkish load and continue questions, a few German and Spanish card
+  messages, the Japanese and Korean English ones in their wider letters. A room's name in the file list longer than
+  the window (Italian, Turkish, Arabic, a few French, German, Spanish ones) is drawn narrower
+  (`pc_save_text_draw`, as a placed typewriter's text).
 - Rooms: `room.c bhSetRoom` (TARGET_PC) replaces `rom->mesp` with a merged table: per message the language's,
   the US one where the language has none, and where the US message shows nothing (a subtitle) the **Subtitles
   language's** message. Rooms of the mods folder keep their text; BioRand's are translated. `lang_frame` rebuilds
@@ -875,7 +889,8 @@ Movies and the opening's text crawl (2026-11-01, Linux, headless; job folder `la
   out: the German rooms 87 (`RM_5500`) and 26 (`RM_1050`), the Brazilian Portuguese signs in 28 rooms, the Arabic
   item label in `RM_0000`, and a non-text texture the Russian patch changed in 134 rooms.
 - **The executables' layouts**: the European executable moves text in about 100 places per language, the Russian
-  patch moves the memory card screens' and the item box's words; the port keeps the US positions.
+  patch moves the memory card screens' and the item box's words; the port keeps the US positions (and fits the memory
+  card screens' longer words into them: "How the port uses it").
 - **The European executables' save / load texts**: not imported yet (the European import predates `SAVELOAD.MES`).
 - **Japanese**: the US disc's later memory card messages (451..493) have no Japanese counterpart (English); the OPTION
   picture has no green arrows (key configuration TYPE); the title's plates are the US ones (the Japanese plates are

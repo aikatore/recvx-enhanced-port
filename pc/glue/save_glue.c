@@ -83,18 +83,45 @@ int pc_save_text_len(const SELECTFILEINFO* p)
 
 int pc_save_text_draw(const SELECTFILEINFO* p, float y, unsigned int col, int count)
 {
-    unsigned short mes[SAVE_TEXT_BYTES];
+    unsigned short buf[SAVE_TEXT_BYTES], *mes = buf;
     const char* s = row_text(p);
     void* keep = sys->mes_tp;
     float sx = FontScaleX, w;
-    if (!s) return 0;
-    glyphs(s, mes, SAVE_TEXT_BYTES);
+    if (s) glyphs(s, buf, SAVE_TEXT_BYTES);
+    else mes = (unsigned short*)((char*)sys->mes_sp + sys->mes_sp[p->saveroom + 215 + 1]);   /* the room's name (a translation's may be longer) */
     if ((w = bhMesLen(mes)) > 256.0f) FontScaleX = sx * 256.0f / w;   /* narrower to end inside the window (wide letters) */
     sys->mes_tp = mes;
     bhDispMessageEx(352.0f, y, -1.0f, 2, 0, col, count);   /* where the room's name is (mcDispFileName) */
     sys->mes_tp = keep;
     FontScaleX = sx;
     return 1;
+}
+
+/* The memory card screens' messages (DispMessageSelect, DispLoadMessageSelect) are placed for the US words; a longer
+   translation's line (a question at x 240, a slot label at 423) ran past the screen's right side. Such a message is
+   moved left until its widest line (its letters, not trailing spaces) ends at keep_in: 610, where the US text's
+   furthest ends, so no English line moves. */
+static float keep_in;
+void pc_mes_keep_in(float right) { keep_in = right; }
+float pc_mes_fit_x(float x, const unsigned short* dp)
+{
+    float w = 0, ink = 0, widest = 0;
+    if (keep_in <= 0) return x;
+    for (;; dp++) {
+        unsigned short c = *dp;
+        if (c == 0xFFFF || c == 0xFF00) {
+            if (ink > widest) widest = ink;
+            if (c == 0xFFFF) break;
+            w = ink = 0;
+        }
+        else if (c == 0xFF02 || c == 0xFF03) dp++;   /* (its operand) */
+        else if (c == 0xFF01) w += pc_font_space();
+        else if (c == 0xFF04) w += 28.0f;
+        else if (c < 0xFE00) ink = w += bhGetFontSize(c);
+    }
+    w = keep_in - widest * FontScaleX;
+    if (w < 16.0f) w = 16.0f;   /* (wider than the screen: from its left) */
+    return w < x ? w : x;
 }
 
 static int listing_save;    /* it is the save screen (pc_save_list) */

@@ -57,6 +57,7 @@ int tp_stage_first(int stg, int* n);   /* the stage's first room, *n rooms */
 int tp_entries(int i);              /* entries to choose from (1 for a room without any) */
 const char* tp_stage_name(int stg);
 const char* tp_room_name(int i, int with_file, char* buf, int n);
+const char* tp_place_name(int stg, int rom);   /* the name tp_room_name gives a room on the disc (no list needed), NULL none */
 const char* tp_entry_name(int i, int pos, char* buf, int n);      /* "Entry 2: from Palace: S.Room" */
 const char* tp_entry_sources(int i, int pos, char* buf, int n);   /* every room with a door to it, one per line */
 
