@@ -86,7 +86,8 @@ const char* pc_lang_file_dir(const char* name);     /* the folder of the languag
 void pc_lang_file_opened(const char* name, int src); /* a file the game opens (by name or "ARCHIVE.AFS/n"), from LF_* */
 /* the language's file f (size bytes) of a disc entry (dsize bytes at sector lsn): the parts read from the disc instead
    (pc_parse.h pc_lang_parts: its pictures without the language's writing; with Translated Pictures off, SYSTEM.AFS/1
-   and /2 but the fonts), at most max; their count */
+   and /2 but the fonts, and every picture of a picture file but those that keep the font's palette banks), at most
+   max; their count, -1: the disc's file instead (a picture file with Translated Pictures off, nothing kept) */
 struct PcPart;
 int pc_lang_disc_parts(const char* name, FILE* f, uint32_t size, uint32_t lsn, uint32_t dsize, struct PcPart* out, int max);
 extern int g_lang_pictures;                         /* Translated Pictures (ini translated_pictures): 0 the disc's pictures */
