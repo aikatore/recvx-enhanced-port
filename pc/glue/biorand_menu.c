@@ -88,7 +88,7 @@ enum { K_PAGE, K_OPT, K_RANDOM, K_COPY, K_PASTE, K_GEN, K_START, K_CHECK, K_APPE
     Character Model" (idx 0), its Model Selection (1), its Include Imported Models (2); K_CUSTOM: the cast's "Custom" list (idx 0), the
     character model's (1); K_RANDPG: the RANDOMIZER sub-page; K_RSEED: its RANDOM SEED; K_HEAD: a heading (heads[idx]), never selected;
     K_RATES: the enemy randomizer's "Custom" rates (rate_list.c, bm.list 2) */
-static const char* const heads[] = { "ENEMIES", "CUTSCENE CAST", "CHARACTER MODEL", "APPEARANCE", "ITEMS" };
+static const char* const heads[] = { "ENEMIES", "CUTSCENE CAST", "PLAYER MODEL", "APPEARANCE", "ITEMS" };
 enum { H_ENEMIES, H_CAST, H_RANDCHAR, H_APPEAR, H_ITEMS };
 static const char* const enemy_why = "BioRand can't randomize enemies in this game yet; this will be added later. For now, use RANDOMIZER on the EXTRA OPTIONS page.";
 typedef struct { int kind, idx; } Row;

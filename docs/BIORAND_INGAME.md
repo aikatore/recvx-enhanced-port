@@ -1107,7 +1107,7 @@ whoever wants them fixed rather than random; those are used in cutscenes too, as
   and Herbs; BACK.
 - **RANDOMIZER page**: heading ENEMIES: Enemy Randomizer, Randomizer Variety and Randomize Event Enemies (randomizer on),
   Enemy Seed, RANDOM SEED, Extra Enemies, Rearranged Enemies; heading CUTSCENE CAST: Randomize Cutscene Cast, Model
-  Selection, Choose Models (Custom), Model Assignment, Include Imported Models (with imports); heading CHARACTER MODEL:
+  Selection, Choose Models (Custom), Model Assignment, Include Imported Models (with imports); heading PLAYER MODEL (CHARACTER MODEL until 2026-11-08):
   Randomize Character Model (`K_APPEAR`); BACK. 15 to 18 rows: it scrolls (VISIBLE 10).
 - **Headings** (`K_HEAD`, `heads[]`; texts the menus already had, so translated): drawn as ENHANCED SETTINGS' groups
   (0.45, gold, lower in their row's slot for a gap above), text only (no box, so nothing for Smooth Menus to pair
@@ -1141,7 +1141,7 @@ rows and the refusal), `t_lang.sh` (German, Arabic).
 The user's requests: give "Randomize Character Model" the model selector the cutscene cast has; and let EXTRA OPTIONS'
 model rows open the co-op lobby's model page with its 3D preview instead of a text list.
 
-- **RANDOMIZER page, CHARACTER MODEL** (rows shown while Randomize Character Model is on, as the cast's while it is
+- **RANDOMIZER page, PLAYER MODEL** (rows shown while Randomize Character Model is on, as the cast's while it is
   on): Randomize Character Model (`K_APPEAR` idx 0), **Model Selection** (idx 1: Cutscene Models / All Models / Custom,
   ini `biorand_appear_models`, default 1 All Models), **Choose Models** with Custom (`K_CUSTOM` idx 1, "3 of 16"), and
   **Include Imported Models** while there are imports (idx 2, ini `biorand_appear_imports`). Texts and help: the
@@ -1169,7 +1169,7 @@ model rows open the co-op lobby's model page with its 3D preview instead of a te
   `pc_lobby_models(setting, chris)` (lobby_glue.c), which shows the lobby's own model page (step 6: `pick_open`,
   `pick_input`, `draw_models`, `draw_previews` with its preview buffers and 3D scene) in mode 30 in place of the BioRand
   screen, with BIORAND at the top and the help line below. The lobby's state is kept (`mp_keep`) and comes back (the
-  screen may be up over the lobby for a co-op guest); no co-op names, partner or status on it. Heading CHARACTER MODEL /
+  screen may be up over the lobby for a co-op guest); no co-op names, partner or status on it. Heading PLAYER MODEL /
   CLAIRE'S MODEL / CHRIS'S MODEL; the current one is the row's (`settings_get`); confirm sets it (`settings_set`, as
   before), BACK / cancel / a right click leave it; keys, pad, mouse and wheel as in the lobby. It ends on the next
   frame (`mp_end`), so the press that ended it is not the BioRand screen's; the previews are released then (the lobby
@@ -1188,7 +1188,7 @@ The user's request: as in the classic BioRands, a character whose cutscene model
 player's random or chosen look) says random lines of the character shown, with that line's mouth movements where it can.
 
 - **RANDOMIZER page**: "Randomize Voice Lines" (`g_enemy_opts.voices`, the settings table's row, `add_set`) under heading
-  CHARACTER MODEL, after Randomize Character Model's rows: it serves the cast and the character models alike. Also in
+  PLAYER MODEL, after Randomize Character Model's rows: it serves the cast and the character models alike. Also in
   ENHANCED SETTINGS / F1 (GAMEPLAY, CUTSCENE CAST) and the lobby's CUTSCENE CAST page (RANDOMIZE VOICES, the host's).
 - How it works, the numbers and the limits: [ACTORS.md](ACTORS.md) "Voice lines". BioRand's own pick of the look
   (`pc_biorand_appear`) is a look like any other: the double shown as it says its character's lines.

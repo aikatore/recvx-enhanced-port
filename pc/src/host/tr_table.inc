@@ -203,6 +203,7 @@
 { "CAMERA", { "CAMERA", "KAMERA", "CÁMARA", "カメラ", "КАМЕРА", "KAMERA", "CAMERA", "الكاميرا", "카메라", "TELECAMERA" } },
 { "CANCEL", { "ANNULER", "ABBRECHEN", "CANCELAR", "キャンセル", "ОТМЕНА", "İPTAL", "CANCELAR", "إلغاء", "취소", "ANNULLA" } },
 { "CHARACTER MODEL", { "MODELE DU PERSONNAGE", "SPIELFIGUR", "MODELO DE PERSONAJE", "キャラクターモデル", "МОДЕЛЬ ПЕРСОНАЖА", "KARAKTER MODELİ", "MODELO DE PERSONAGEM", "نموذج الشخصية", "인물 모델", "MODELLO DEL PERSONAGGIO" } },
+{ "PLAYER MODEL", { "MODELE DU JOUEUR", "SPIELERMODELL", "MODELO DE JUGADOR", "プレイヤーモデル", "МОДЕЛЬ ИГРОКА", "OYUNCU MODELİ", "MODELO DO JOGADOR", "نموذج اللاعب", "플레이어 모델", "MODELLO GIOCATORE" } },
 { "CHARACTERS", { "PERSONNAGES", "FIGUREN", "PERSONAJES", "キャラクター", "ПЕРСОНАЖИ", "KARAKTERLER", "PERSONAGENS", "الشخصيات", "인물", "PERSONAGGI" } },
 { "CHEATS", { "TRICHES", "", "TRUCOS", "チート", "ЧИТЫ", "HİLELER", "TRAPAÇAS", "الغش", "치트", "TRUCCHI" } },
 { "CHECK FOR UPDATES", { "RECHERCHER DES MISES A JOUR", "NACH UPDATES SUCHEN", "BUSCAR ACTUALIZACIONES", "更新を確認", "ПОИСК ОБНОВЛЕНИЙ", "GÜNCELLEME DENETLE", "BUSCAR ATUALIZAÇOES", "البحث عن تحديثات", "업데이트 확인", "CERCA AGGIORNAMENTI" } },
