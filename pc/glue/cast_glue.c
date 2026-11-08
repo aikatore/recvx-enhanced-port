@@ -38,7 +38,6 @@ extern unsigned char* bhScePtr;          /* event.c */
 extern BH_SCEWORK* bhCetask;
 static struct { const BH_SCEWORK *task, *skip; const unsigned char* end; int rec; } pre;   /* "Randomize Voice Lines": the last LipSet run
     no line before claims (pc_voice_lip; skip: the task whose next LipSet is its line's) */
-int tp_count(void);                     /* teleport.c: reads the room files once (and the voice lines: voice_scan_room) */
 
 #define CSLOTS (ACTOR_SLOTS - ACTOR_CAST)
 #define RECS 128
@@ -106,7 +105,7 @@ void cast_room(const EnemyOpts* o)
     voice_end();   /* (an inserted line going on into this room still fades out at its time) */
     pre.end = NULL;   /* (the last LipSet was the room before's) */
     voice_room();   /* (the lines and sounds said: this room's from now) */
-    if (o && o->voices) tp_count();   /* "Randomize Voice Lines": the lines are read with the room files, once, on a thread of their own */
+    if (o && o->voices) voices_want();   /* "Randomize Voice Lines": the lines for the room files now (read at the start already, else now) */
     if (!o || !rom || (!o->cast && !g_appear_per)) { cast_release(); return; }   /* ("Per Character": Claire's and Chris's looks without the cast) */
     imports = import_count(o);
     scene = o->cast_assign ? (unsigned)room + 1 : 0;
@@ -344,7 +343,8 @@ static struct {
     int mouth, mroom;                   /* "Talking Mouths": record + 1 whose mouth we started (mouth_add), in room file mroom */
     const void* mexp;                   /* ... its face state then, and the lips */
     const unsigned char* mlip;
-} vl;
+    int gnext, gpt;                     /* an inserted group (lines said as one): its next part's file, -1 none; its partition */
+} vl = { .gnext = -1 };
 
 /* the display slot record k is drawn by now (ACTOR_CAST + its cast slot, ACTOR_DOUBLE), -1 itself */
 static int shown_slot(int k)
@@ -368,12 +368,13 @@ static int shown_model(int k)
    (actor_glue.c face_step, imp_face). The next line, VoiceOff, a skip and the script's own LipSet for the record end it
    (mouth_stop). Only the inserted lines for now: the game's own lines without lips could call it too, with lips of their
    own making. NULL: started, else why not. */
-static const char* mouth_add(int sp, int vid, const unsigned char* lip)
+static const char* mouth_add(int sp, int vid, const unsigned char* lip, int sure)
 {
     BH_PWORK* ep = &ene[sp];
     int who = shown_slot(sp);
     if (!g_voice_mouths) return "Talking Mouths is off";
-    if (!voice_sure(room_file_now(), vid, sp)) return "the speaker is not sure";
+    if (!lip) return "the inserted line has no lips";
+    if (!sure && !voice_sure(room_file_now(), vid, sp)) return "the speaker is not sure";
     if (who < 0 || !(ep->flg & 0x1) || (ep->stflg & 0x41000000) || !ep->mlwP) return "its model is not drawn";
     if (!actor_talks(who)) return "its model has no mouth";
     if (!ep->mskp || !ep->exp0 || !ep->exp2) return "the record has no face";
@@ -395,24 +396,41 @@ static void mouth_stop(void)
 }
 
 /* A speaker shown as an enemy model (a zombie look, a creature: voice_creature) makes one of that enemy's sounds instead
-   of each line: its type's SE bank 3 from the disc as an extra bank (snd_xbank_load, released with the room), one program
-   found there (voice_creature_pick, from the seed and the line as voice_pick, weighted alike by how much of the line's
-   time it fills), on SE slot 10 (the shell casings', idle in cutscenes), unpositioned and at full volume as every line on
-   the disc is (mode 1). No ADX plays; the script waits the original line's time (pc_voice_playing); the mouth moves
-   with the original line's lips where the model has a face. It ends by itself, at the next line, StopVoice, a room
-   change, or VOICE_GRACE_MS after the original's end (cr.cap: a longer one where none of its sounds is short enough). */
+   of each line: its type's SE bank 3 from the disc as an extra bank (snd_xbank_load, released with the room), a few
+   programs found there (voice_creature_plan, from the seed and the line as voice_pick: one for a short line, filling it;
+   up to three a short gap apart in half of a longer one), on SE slot 10 (the shell casings', idle in cutscenes),
+   unpositioned and at full volume as every line on the disc is (mode 1). No ADX plays; the script waits the original
+   line's time (pc_voice_playing); the mouth moves with the original line's lips where the model has a face. It ends by
+   itself, at the next line, StopVoice, a room change, or VOICE_GRACE_MS after the original's end (cr.cap: a longer one
+   where none of its sounds is short enough). */
 int  snd_xbank_load(int key);                    /* audio/snd_iop.c */
 int  snd_xbank_prog_ms(int xb, int tq);          /* audio/snd_synth.c */
 void ExPlaySe(SND_REQ* r);                       /* sdc.c */
 void StopSe(unsigned int slot);
 void StopVoice(int fade);                        /* sdfunc.c */
+void PlayVoiceEx2(int PatId, int VoiceNo, NJS_POINT3* pPos, int Mode, int FadeInRate, int PauseFlag);
 extern SND_REQ RequestInfo;
 extern int pc_se_xbank;                          /* ps2_sg_sd.c: the extra bank of the next request */
 #define CR_SLOT 10
-static struct { int n, last, last_m; uint64_t end, cap; } cr;   /* n: its sound plays (until end), cut at cap (0 none); the
-    program played last and its model */
+static struct { int n, last, last_m, xb, k, seq_n, seq[3], len[3]; uint64_t end, cap; } cr;   /* n: its sounds play (the one
+    now until end), cut at cap (0 none); the program played last and its model; the bank, the sounds (seq), the one now (k) */
 
 static int frm_last[RECS], frm_step[RECS];   /* each record's motion frame (16.16) at the last tick, its step a tick */
+
+static void cr_play(int prog)
+{
+    RequestInfo.SlotNo = CR_SLOT;
+    RequestInfo.BankNo = 3;
+    RequestInfo.ListNo = (char)prog;
+    RequestInfo.Priority = 0;
+    RequestInfo.Pan = 0; RequestInfo.PanDelayTime = 0;
+    RequestInfo.Volume = 0; RequestInfo.VolumeDelayTime = 0;
+    RequestInfo.Pitch = 0; RequestInfo.PitchDelayTime = 0;
+    RequestInfo.FxInput = -1;
+    pc_se_xbank = cr.xb;
+    ExPlaySe(&RequestInfo);
+    pc_se_xbank = 0;
+}
 
 void pc_voice_tick(void)
 {
@@ -430,14 +448,23 @@ void pc_voice_tick(void)
             host_log("voices: the inserted line fades out %d ms after the original's end\n", VOICE_GRACE_MS);
         }
     }
+    if (vl.gnext >= 0 && !AdxPlayFlag[1] && !vl.fading) {   /* an inserted group: its next part when one ends */
+        const VoiceCurated* c = voice_curated(vl.gpt - VOICE_PT + 1, vl.gnext);
+        PlayVoiceEx2(vl.gpt, vl.gnext, NULL, 1, 0, 0);
+        vl.gnext = c && c->next != 0xFFFF ? c->next : -1;
+    }
     if (cr.n && cr.cap && now >= cr.cap) { StopSe(CR_SLOT); cr.n = 0; host_log("voices: the sound stops %d ms after the original's end\n", VOICE_GRACE_MS); }
-    else if (cr.n && now >= cr.end) cr.n = 0;   /* (it has ended by itself) */
+    else if (cr.n && now >= cr.end + (cr.k + 1 < cr.seq_n ? VOICE_CR_GAP_MS : 0)) {   /* (it has ended by itself: the next one after a gap) */
+        if (++cr.k < cr.seq_n) { cr_play(cr.seq[cr.k]); cr.end = now + (uint64_t)cr.len[cr.k]; }
+        else cr.n = 0;
+    }
 }
 
 static int creature_line(unsigned seed, int m, int disc, int vid, int sp, int own)
 {
     unsigned char cand[64];
-    int len[64], room = 0, n = 0, c, i, xb = 0, alt, ms, k;
+    int len[64], room = 0, n = 0, c, i, xb = 0, alt, ms, k, tot, at;
+    char list[96];
     for (alt = 0; !n && (c = voice_creature(m, alt, &room, cand, 64)) > 0; alt++) {   /* (the programs of the bank found) */
         if (!(xb = snd_xbank_load(room))) continue;
         for (i = 0; i < c; i++)
@@ -447,42 +474,48 @@ static int creature_line(unsigned seed, int m, int disc, int vid, int sp, int ow
     ms = adx_length_ms(PatId[1], vid);
     StopVoice(0);   /* (the line before, as PlayVoiceEx2 stops it; vl, cr cleared) */
     for (k = 0; k < n && cand[k] != cr.last; k++);   /* (the sound before, of this model in this room) */
-    k = voice_creature_pick(seed, room_file_now(), disc, vid, len, n, ms, ms > 0 ? ms + VOICE_GRACE_MS : 0, cr.last_m == m && k < n ? k : -1);
-    cr.last = cand[k]; cr.last_m = m;
+    cr.seq_n = voice_creature_plan(seed, room_file_now(), disc, vid, len, n, ms, VOICE_GRACE_MS, cr.last_m == m && k < n ? k : -1, cr.seq, 3);
+    for (i = 0, tot = 0, at = 0; i < cr.seq_n; i++) {   /* (programs and lengths; the log's list) */
+        cr.len[i] = len[cr.seq[i]]; cr.seq[i] = cand[cr.seq[i]];
+        tot += (i ? VOICE_CR_GAP_MS : 0) + cr.len[i];
+        at += snprintf(list + at, sizeof list - (size_t)at, "%s%d (%d ms)", i ? ", " : "", cr.seq[i], cr.len[i]);
+    }
+    cr.last = cr.seq[cr.seq_n - 1]; cr.last_m = m;
     vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = NULL; vl.t0 = SDL_GetTicks();   /* (the script waits the original's time) */
-    if (ms > 0 && ms < VOICE_SHORT_MS && len[k] > ms + VOICE_GRACE_MS) {   /* a gasp, and none of its sounds is as short: quiet */
+    if (ms > 0 && ms < VOICE_SHORT_MS && cr.len[0] > ms + VOICE_GRACE_MS) {   /* a gasp, and none of its sounds is as short: quiet */
         host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a short sound and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, actor_model(m)->name);
         return 1;
     }
-    host_log("voices: room %04d record %d: %s's line %d/%d (%d ms), shown as %s -> its sound from RM_%04d bank 3: %d (%d ms)%s\n", room_file_now(), sp,
-             cast_name(own), disc, vid, ms, actor_model(m)->name, room, cand[k], len[k], ms > 0 && len[k] > ms + VOICE_GRACE_MS ? ", none shorter: cut" : "");
-    RequestInfo.SlotNo = CR_SLOT;
-    RequestInfo.BankNo = 3;
-    RequestInfo.ListNo = (char)cand[k];
-    RequestInfo.Priority = 0;
-    RequestInfo.Pan = 0; RequestInfo.PanDelayTime = 0;
-    RequestInfo.Volume = 0; RequestInfo.VolumeDelayTime = 0;
-    RequestInfo.Pitch = 0; RequestInfo.PitchDelayTime = 0;
-    RequestInfo.FxInput = -1;
-    pc_se_xbank = xb;
-    ExPlaySe(&RequestInfo);
-    pc_se_xbank = 0;
+    host_log("voices: room %04d record %d: %s's line %d/%d (%d ms), shown as %s -> %d of its sounds from RM_%04d bank 3: %s%s\n", room_file_now(), sp,
+             cast_name(own), disc, vid, ms, actor_model(m)->name, cr.seq_n, room, list, ms > 0 && tot > ms + VOICE_GRACE_MS ? ", none shorter: cut" : "");
+    cr.xb = xb; cr.k = 0;
+    cr_play(cr.seq[0]);
     cr.n = 1;
-    cr.end = vl.t0 + (uint64_t)len[k];
-    cr.cap = ms > 0 && len[k] > ms + VOICE_GRACE_MS ? vl.t0 + (uint64_t)(ms + VOICE_GRACE_MS) : 0;
+    cr.end = vl.t0 + (uint64_t)cr.len[0];
+    cr.cap = ms > 0 && tot > ms + VOICE_GRACE_MS ? vl.t0 + (uint64_t)(ms + VOICE_GRACE_MS) : 0;
     return 1;
 }
 
 
-/* an inserted line's length (voice_pick), read once */
-static int line_ms(const VoiceLine* l)
+/* a file's length, read once */
+static int file_ms(int disc, int vid)
 {
     static short len[2][2048];   /* (ms / 8 + 1, 0 not read; the longest line is 28 s) */
-    int d = l->disc - 1;
-    if (d < 0 || d > 1 || l->vid >= 2048) return 0;
-    if (!len[d][l->vid]) len[d][l->vid] = (short)(adx_length_ms(VOICE_PT + d, l->vid) / 8 + 1);
-    return (len[d][l->vid] - 1) * 8;
+    int d = disc - 1;
+    if (d < 0 || d > 1 || vid < 0 || vid >= 2048) return 0;
+    if (!len[d][vid]) len[d][vid] = (short)(adx_length_ms(VOICE_PT + d, vid) / 8 + 1);
+    return (len[d][vid] - 1) * 8;
 }
+
+/* a line's length, read once; a group's (lines said as one, voice_curated) all its parts' */
+static int group_ms(int disc, int vid)
+{
+    const VoiceCurated* c;
+    int ms = file_ms(disc, vid), k;
+    for (k = 0; k < 8 && (c = voice_curated(disc, vid)) && c->next != 0xFFFF; k++) ms += file_ms(disc, vid = c->next);
+    return ms;
+}
+static int line_ms(const VoiceLine* l) { return group_ms(l->disc, l->vid); }   /* (voice_pick) */
 
 /* How long until the task says its next line, at least, in ms (the game's 30 ticks a second): its script from p walked
    as it waits, Sleep's ticks and the While-FrameCheck loops on a record's motion frame (the ticks that motion needs to
@@ -532,11 +565,14 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
 {
     static int logged, part[2];
     const EnemyOpts* o = enemy_opts();
-    int disc = (sys->ss_flg & 0x1) + 1, sp = -1, own, chr, m, lrec, ms, lip, lms, d, before = 0, fit, gap = 0;
+    int disc = (sys->ss_flg & 0x1) + 1, sp = -1, own, chr, m, lrec, ms, lip, lms, d, before = 0, fit, gap = 0, sure = 0, grunts, paused = 0;
     const VoiceLine* l;
+    const VoiceCurated *cv = voice_curated(disc, vid), *lc;   /* (checked by hand: docs/ACTORS.md "Lines checked by hand") */
     const char* why;
-#define KEEP(why) do { if (getenv("RECVX_CAST_TRACE")) host_log("voices: room %04d line %d/%d kind %d rec %d, speaker %d (%s), shown as %d: stays (%s)\n", room_file_now(), disc, vid, kind, rec, sp, sp >= 0 && sp < RECS ? cast_name(cast_character(ene[sp].id, ene[sp].mdlver)) : "-", m, why); vl.cap = 0; return vid; } while (0)
+    char from[12];
+#define KEEP(why) do { if (getenv("RECVX_CAST_TRACE") || cv) host_log("voices: room %04d line %d/%d kind %d rec %d, speaker %d (%s), shown as %d: stays (%s)\n", room_file_now(), disc, vid, kind, rec, sp, sp >= 0 && sp < RECS ? cast_name(cast_character(ene[sp].id, ene[sp].mdlver)) : "-", m, why); vl.cap = 0; return vid; } while (0)
     voice_end();   /* (an enemy's sound stops at the next line, as PlayVoiceEx2 stops a line) */
+    vl.gnext = -1;   /* (an inserted group starts no more parts) */
     m = -1;
     if (!o || !o->voices || !rom) return vid;
     if ((lip = voice_lipset(next, 512, coop_insn_len_raw, &lrec)) >= 0) sp = lrec;
@@ -545,6 +581,15 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     else if (!kind) sp = voice_said_by(room_file_now(), vid);
     pre.end = NULL;
     pre.skip = lip >= 0 && !before ? bhCetask : NULL;   /* (at the player: the record the script's other such lines name) */
+    if (cv && cv->flags & VOICE_CONFIRMED) {   /* the speaker checked by hand: that character's record (the LipSet's mouth stays the script's) */
+        if (cv->chr < 0) KEEP("none of the cast says it, checked by hand");
+        if (sp < 0 || sp >= rom->ene_n || sp >= RECS || cast_character(ene[sp].id, ene[sp].mdlver) != cv->chr) {
+            for (sp = 0; sp < rom->ene_n && sp < RECS && cast_character(ene[sp].id, ene[sp].mdlver) != cv->chr; sp++);
+            lip = -1; before = 0;
+            if (sp >= rom->ene_n || sp >= RECS) { sp = -1; KEEP("its speaker, checked by hand, is not in the room"); }
+        }
+        sure = 1;
+    }
     if (sp < 0 || sp >= rom->ene_n || sp >= RECS) KEEP("no speaker");
     own = cast_character(ene[sp].id, ene[sp].mdlver);
     m = shown_model(sp);
@@ -553,7 +598,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     if (own < 0 || chr < 0 || chr == own) KEEP(own < 0 ? "not a story character" : chr < 0 ? "shown as a model without lines" : "shown as its own character");
     ms = adx_length_ms(PatId[1], vid);
     if (voice_count(0) < 0) {   /* (the room files are being read: cast_room started it) */
-        tp_count();
+        voices_want();
         if (!logged++) host_log("voices: the lines are not read yet: line %d/%d quiet\n", disc, vid);
         return quiet(sp, ms);
     }
@@ -562,11 +607,18 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
             ADXF_LoadPartitionNw(VOICE_PT + d, d ? (char*)"\\VOICE2.AFS" : (char*)"\\VOICE1.AFS", NULL, NULL);
             part[d] = ADXF_GetPtStat(VOICE_PT + d) == 3 ? 1 : -1;   /* (ADXF_STAT_READEND) */
         }
+    if (cv && cv->flags & VOICE_PART) return quiet(sp, ms);   /* (a group's later part: the line in place of its first takes all their time) */
     used_cast = own >= 2;   /* (Claire, Chris: each screen's own look) */
-    fit = ms;
-    if (ms > 0 && ms < VOICE_SHORT_MS && (gap = voice_gap(next)) - 300 > ms + VOICE_GRACE_MS)   /* a gasp before a pause: a line in it */
-        fit = (gap - 300 < VOICE_GAP_MS ? gap - 300 : VOICE_GAP_MS) - VOICE_GRACE_MS;
-    if (!(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr, fit, fit > 0 ? fit + VOICE_GRACE_MS : 0, line_ms, line_used))) KEEP("no line picked");
+    fit = cv && cv->next != 0xFFFF ? group_ms(disc, vid) : ms;
+    grunts = cv && cv->flags & VOICE_GRUNT ? VOICE_PICK_GRUNTS : VOICE_PICK_ANY;   /* (a grunt for a grunt) */
+    if (grunts != VOICE_PICK_GRUNTS && ms > 0 && ms < VOICE_SHORT_MS && (gap = voice_gap(next)) - 300 > ms + VOICE_GRACE_MS)   /* a gasp before a pause: a line in it */
+        fit = (gap - 300 < VOICE_GAP_MS ? gap - 300 : VOICE_GAP_MS) - VOICE_GRACE_MS, paused = 1;
+    if (grunts != VOICE_PICK_GRUNTS && (fit <= 0 || fit >= VOICE_SHORT_MS)) grunts = VOICE_PICK_SPOKEN;   /* (a spoken line for one: never a grunt) */
+    if (!(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr, fit, fit > 0 ? fit + VOICE_GRACE_MS : 0, line_ms, line_used, grunts))) {
+        if (grunts != VOICE_PICK_GRUNTS) KEEP("no line picked");
+        host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a grunt and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr));
+        return quiet(sp, ms);
+    }
     if (part[l->disc - 1] < 0) KEEP("the archive did not load");
     lms = line_ms(l);
     if (ms > 0 && ms < VOICE_SHORT_MS && lms > fit + VOICE_GRACE_MS) {   /* a gasp or grunt, and the character has no short sound: quiet */
@@ -579,14 +631,19 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
         used_n = n;
     }
     if (used_n < (int)(sizeof used / sizeof used[0])) { used[used_n].l = l; used[used_n++].cast = own >= 2; }   /* (said in this room: not again while others are left) */
-    why = lip < 0 ? mouth_add(sp, vid, l->lip) : NULL;   /* (every catalogue line has lips) */
-    host_log("voices: room %04d record %d: %s's line %d/%d (%d ms), shown as %s -> %s's line %d/%d (%d ms%s) from RM_%04d, %s%s%s\n", room_file_now(), sp,
-             cast_name(own), disc, vid, ms, m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?", cast_name(chr), l->disc, l->vid,
-             lms, ms > 0 && lms > fit + VOICE_GRACE_MS ? ", none shorter: faded out" : fit > ms ? ", in the pause after it" : "", l->room,
-             lip >= 0 ? "with its lips" : "no lips in the script (the speaker is the VoiceOn's record): ",
-             lip >= 0 ? "" : why ? "a still mouth, " : "Talking Mouths: its lips added", why ? why : "");
+    why = lip < 0 ? mouth_add(sp, vid, l->lip, sure) : NULL;   /* (the catalogue lines have lips, but some checked by hand) */
+    lc = voice_curated(l->disc, l->vid);
+    snprintf(from, sizeof from, l->room != VOICE_NO_ROOM ? "RM_%04d" : "no scene", l->room);
+    host_log("voices: room %04d record %d: %s's line %d/%d (%d ms%s%s), shown as %s -> %s's line %d/%d (%d ms%s%s%s) from %s, %s%s%s\n", room_file_now(), sp,
+             cast_name(own), disc, vid, ms, sure ? ", speaker checked" : "", grunts == VOICE_PICK_GRUNTS ? ", a grunt" : "",
+             m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?", cast_name(chr), l->disc, l->vid,
+             lms, l->grunt ? ", a grunt" : "", lc && lc->next != 0xFFFF ? ", a group" : "",
+             ms > 0 && lms > fit + VOICE_GRACE_MS ? ", none shorter: faded out" : paused ? ", in the pause after it" : "", from,
+             lip >= 0 ? "with its lips" : sure ? "the speaker checked by hand: " : "no lips in the script (the speaker is the VoiceOn's record): ",
+             lip >= 0 ? (l->lip ? "" : " (none: the script's)") : why ? "a still mouth, " : "Talking Mouths: its lips added", why ? why : "");
     vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = lip >= 0 ? l->lip : NULL; vl.t0 = SDL_GetTicks();
-    if (before && ene[sp].exp0 && ene[sp].exp2) {   /* (the LipSet ran already: its lips now, afresh) */
+    vl.gnext = lc && lc->next != 0xFFFF ? lc->next : -1; vl.gpt = VOICE_PT + l->disc - 1;   /* (a group: its parts in order, pc_voice_tick) */
+    if (before && l->lip && ene[sp].exp0 && ene[sp].exp2) {   /* (the LipSet ran already: its lips now, afresh) */
         ((int*)ene[sp].exp0)[268] = (int)(uintptr_t)l->lip;
         ((LIP_WORK*)ene[sp].exp2)->flag = 0;
         vl.lip = NULL;

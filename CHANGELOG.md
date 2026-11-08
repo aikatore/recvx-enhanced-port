@@ -41,9 +41,9 @@
 - Replaced voice lines no longer run on long after the scene's speech, and Claire's and Chris's own
   voices no longer slip through, such as Claire waking up after the crash or shouting at the locked door behind
   the glass. Gasps and shouts are replaced by the character's own short sounds instead of silence, or by a whole
-  line where the scene pauses after them. Spoken lines are favoured over grunts where the original is long, the same
-  few lines no longer come back again and again in one scene, and a character shown as a monster makes one of its
-  sounds per line instead of an endless string of them.
+  line where the scene pauses after them. Spoken lines are favoured over grunts where the original is long, many
+  lines have their speakers checked by hand, the same few lines no longer come back again and again in one scene, and
+  a character shown as a monster makes a few of its sounds per line instead of an endless string of them.
 - Rearranged Enemies and Extra Enemies no longer place enemies in mid-air, such as over the pool and the stairs in
   the training facility's pool room.
 

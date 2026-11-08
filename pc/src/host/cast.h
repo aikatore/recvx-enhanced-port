@@ -6,6 +6,7 @@
 #ifndef RECVX_CAST_H
 #define RECVX_CAST_H
 #include "actors.h"
+#include <stddef.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -112,11 +113,21 @@ int cast_appear_pick(unsigned seed, int all, int imports, const unsigned char* o
    to a story character, per character, from the room files (voice_scan_room on the teleport list's thread, then
    voice_scan_done; read-only after that). insn: the script instructions' lengths (net/coop_proto.c coop_insn_len_raw). */
 typedef struct VoiceLine {
-    unsigned short room, vid;   /* the room file it is said in; its file in the disc's voice archive */
+    unsigned short room, vid;   /* the room file it is said in (VOICE_NO_ROOM: a line checked by hand no script says); its file in the disc's voice archive */
     unsigned char disc, chr;    /* 1 VOICE1.AFS (stages 0..5), 2 VOICE2.AFS; the character (cast_character) */
-    unsigned short lip_n;       /* its lip entry: pairs phoneme 0..5, time; 0xFF last (face.c bhSetLip) */
+    unsigned short lip_n;       /* its lip entry: pairs phoneme 0..5, time; 0xFF last (face.c bhSetLip); 0 none (a line checked by hand) */
+    unsigned char grunt;        /* a grunt, gasp or short sound (checked by hand: VOICE_GRUNT) */
     const unsigned char* lip;
 } VoiceLine;
+#define VOICE_NO_ROOM 0xFFFF
+/* the lines checked by hand (voice_curation.inc, made by pc/tools/voice_curation.py from the local voice tool's
+   voice_curation.json; docs/ACTORS.md "Lines checked by hand"): the character (VOICE_CONFIRMED: who says it, -1 none/other;
+   else the tool's guess, which counts for a VOICE_GRUNT only), flags, the next part of a group (lines said as one, 0xFFFF
+   none; VOICE_PART: a part after the first) */
+typedef struct { unsigned char disc; unsigned short vid; signed char chr; unsigned char flags; unsigned short next; } VoiceCurated;
+enum { VOICE_CONFIRMED = 1, VOICE_EXCLUDE = 2, VOICE_GRUNT = 4, VOICE_PART = 8 };
+const VoiceCurated* voice_curated(int disc, int vid);   /* NULL: not checked */
+void voice_curation_use(const VoiceCurated* t);         /* (tests: another table, { 0 } last; NULL the built-in one) */
 /* the LipSet after a VoiceOn (p: the script after it; before another VoiceOn, End or EvtEnd, within 16 instructions):
    its lip entry, *rec its record; -1 none */
 int voice_lipset(const unsigned char* p, int n, int (*insn)(const unsigned char*), int* rec);
@@ -128,15 +139,27 @@ void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const 
 void voice_scan_done(void);
 int voice_count(int chr);     /* lines of character chr, -1: the catalogue is not read yet */
 const VoiceLine* voice_line(int chr, int i);
+/* the catalogue on disk (teleport.c voices_want: <save_dir>/voices.cache): voice_cat_hash, the scan's and the hand-checked
+   table's part of the key; voice_cache_save, the one published now with the key (malloc'd, *size), NULL none;
+   voice_cache_load, one that is whole and has the key published (1), else 0 (nothing changes) */
+unsigned voice_cat_hash(void);
+/* teleport.c (game thread): the catalogue for the room files the game loads now (BioRand's: biorand_next): the one
+   published already, else voices.cache, else read on a thread of its own (cast_room; voices_frame: at the start, at the
+   title, whenever the option is turned on or BioRand's choice changes); 0: not now (a build runs, the disc not open yet) */
+int voices_want(void);
+void voices_frame(void);
+unsigned char* voice_cache_save(unsigned key, size_t* size);
+int voice_cache_load(const unsigned char* d, size_t n, unsigned key);
 /* the line of character chr said in place of file vid of disc's archive in room file room for seed, a line of ms
    milliseconds (NULL: chr has none): one of those that last at most max_ms (ms_of: a line's length, 0 unknown), the ones
    filling more of the ms the likelier (1 + 15 r^2, r the part filled; a gasp or shout, under VOICE_SHORT_MS, a tenth of
    that in place of a line as long or longer), else the shortest; ms or max_ms 0: any, alike; used (NULL: none): the
    lines said already in the room (the scene's order: the same in every run and on both co-op screens), left out
-   while others are left */
+   while others are left; grunts: VOICE_PICK_* (the lines checked by hand as grunts: none, only those, any) */
 #define VOICE_SHORT_MS 1200   /* gasps, grunts, shouts: the short sounds (cast_glue.c: a line this short gets one of them) */
+enum { VOICE_PICK_SPOKEN, VOICE_PICK_GRUNTS, VOICE_PICK_ANY };
 const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr, int ms, int max_ms, int (*ms_of)(const VoiceLine*),
-                            int (*used)(const VoiceLine*));
+                            int (*used)(const VoiceLine*), int grunts);
 /* "Talking Mouths" (ini voice_mouths, default 1; each screen's own): an inserted line in place of one without a LipSet
    moves the speaker's mouth with its lips, where the speaker is sure. voice_sure: in room file room, file vid's VoiceOn
    names record rec, no LipSet follows, and every line of that script with a LipSet moves the mouth of the record it
@@ -157,6 +180,13 @@ int voice_creature(int m, int alt, int* room, unsigned char* prog, int max);
    else the shortest; ms or max_ms 0: any, alike; not last (the one before; -1 none) while another ends in time; -1: none
    (n 0) */
 int voice_creature_pick(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, int max_ms, int last);
+/* ... the few sounds made in place of such a line, in order (out, at most max; the count, 0 none): one for a line under
+   VOICE_CR_LONG_MS (voice_creature_pick, max_ms ms + grace); for a longer one up to 3, VOICE_CR_GAP_MS apart, which
+   together with the gaps take at most half the line (the first always; another never the one just before; the first
+   not last either while another fits) */
+#define VOICE_CR_LONG_MS 2400
+#define VOICE_CR_GAP_MS 350
+int voice_creature_plan(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, int grace, int last, int* out, int max);
 
 #ifdef __cplusplus
 }

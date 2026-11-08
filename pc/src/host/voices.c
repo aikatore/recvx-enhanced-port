@@ -37,9 +37,6 @@ int voice_model_chr(int m)
     return -1;   /* imported models, the zombies' entry: no lines of their own */
 }
 
-/* the catalogue: built on the scan thread, published whole (voice_scan_done), read-only after that */
-static VoiceLine *scan, *lines;
-static int scan_n, scan_cap, lines_n, ready, first[CAST_CHARACTERS + 1];
 int g_voice_mouths = 1;
 /* the lines without a LipSet whose VoiceOn record is surely the speaker: in the same script, at least 9 in 10 of the lines
    with a LipSet that name that record are said by it; none naming it: every line with one names its speaker. Tried on the
@@ -48,23 +45,43 @@ int g_voice_mouths = 1;
    the player (kind 0) without a LipSet, which name no record: said by the record that every kind-0 line of the same
    script with a LipSet moves the mouth of (at least one; Claire waking up in RM_6000, Alfred in RM_1020) */
 typedef struct { unsigned short room, vid; unsigned char rec, k0; } Sure;
-static Sure* sure;
-static int sure_n, sure_cap;
 
-static void add(int room, int disc, int vid, int chr, const unsigned char* lip, int lip_n)
+/* the catalogue: built on the scan thread (scan, sure), published whole (voice_scan_done, voice_cache_load), read-only after
+   that. A newer one replaces it (other room files: the mods, BioRand; ponytail: the old one is kept, a few KB a rebuild,
+   since the game thread may still point into it) */
+typedef struct { const VoiceLine* lines; int first[CAST_CHARACTERS + 1]; const Sure* sure; int sure_n; } Cat;
+static Cat* cat;
+static VoiceLine* scan;
+static Sure* sure;
+static int scan_n, scan_cap, sure_n, sure_cap;
+static const Cat* cat_now(void) { return __atomic_load_n(&cat, __ATOMIC_ACQUIRE); }
+
+/* the lines checked by hand (docs/ACTORS.md "Lines checked by hand"): a few hundred rows, looked up once per line */
+static const VoiceCurated curation[] = {
+#include "voice_curation.inc"
+};
+static const VoiceCurated* cur = curation;
+void voice_curation_use(const VoiceCurated* t) { cur = t ? t : curation; }
+const VoiceCurated* voice_curated(int disc, int vid)
+{
+    for (const VoiceCurated* c = cur; c->disc; c++) if (c->disc == disc && c->vid == vid) return c;
+    return NULL;
+}
+
+static void add(int room, int disc, int vid, int chr, const unsigned char* lip, int lip_n, int grunt)
 {
     VoiceLine* l;
-    unsigned char* b;
+    unsigned char* b = NULL;
     if (scan_n == scan_cap) {
         VoiceLine* q = realloc(scan, sizeof(VoiceLine) * (size_t)(scan_cap + 256));
         if (!q) return;
         scan = q; scan_cap += 256;
     }
-    if (!(b = malloc((size_t)lip_n))) return;
-    memcpy(b, lip, (size_t)lip_n);
+    if (lip_n && !(b = malloc((size_t)lip_n))) return;
+    if (lip_n) memcpy(b, lip, (size_t)lip_n);
     l = &scan[scan_n++];
     l->room = (unsigned short)room; l->vid = (unsigned short)vid; l->disc = (unsigned char)disc; l->chr = (unsigned char)chr;
-    l->lip = b; l->lip_n = (unsigned short)lip_n;
+    l->lip = b; l->lip_n = (unsigned short)lip_n; l->grunt = (unsigned char)!!grunt;
 }
 
 /* lip entry k of the room's list (hed02: a u32 per enemy record, the room motions, the mouths, then the lips: size, bytes;
@@ -109,7 +126,7 @@ void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const 
         for (int j = 0; j < k; j++) if (offs[j] > offs[i] && (!next || offs[j] < (unsigned long)next)) next = offs[j];
         while (o >= 0 && o + 8 <= n && (!next || o < base + next)) {
             int op = d[o], len = insn(d + o), rec, lip;
-            const unsigned char* b;
+            const unsigned char* b = NULL;
             while (ne && ends[ne - 1] <= o) ne--;
             if (len <= 0) break;
             lip = op == OP_VOICEON ? voice_lipset(d + o + len, (int)(n - o - len), insn, &rec) : -1;
@@ -129,10 +146,18 @@ void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const 
                 if (lip >= 0) { k0bad |= k0rec >= 0 && rec != k0rec; k0rec = rec; }
                 else if (nq < 64) q[nq++] = (Sure){ (unsigned short)room, (unsigned short)(d[o + 2] | d[o + 3] << 8), 0, 1 };
             }
-            if (lip >= 0 && rec < nr && ep) {
-                long r = ep + rec * 0x24;   /* ETTY_WORK: id at 4, mdlver at 9 */
-                int chr = r + 0x24 <= n ? cast_character(d[r + 4] | d[r + 5] << 8, d[r + 9]) : -1, bn;
-                if (chr >= 0 && (bn = lip_entry(d, n, lip, &b)) > 0) add(room, disc, d[o + 2] | d[o + 3] << 8, chr, b, bn);
+            if (op == OP_VOICEON) {
+                int vid = d[o + 2] | d[o + 3] << 8, chr = -1, bn = 0;
+                const VoiceCurated* cv = voice_curated(disc, vid);
+                if (lip >= 0 && rec < nr && ep && (bn = lip_entry(d, n, lip, &b)) > 0) {
+                    long r = ep + rec * 0x24;   /* ETTY_WORK: id at 4, mdlver at 9 */
+                    chr = r + 0x24 <= n ? cast_character(d[r + 4] | d[r + 5] << 8, d[r + 9]) : -1;
+                } else bn = 0;
+                if (cv) {   /* checked by hand: its speaker, also without lips; a grunt the tool's guess without a LipSet's; not "do not use" */
+                    if (cv->flags & VOICE_CONFIRMED || (chr < 0 && cv->flags & VOICE_GRUNT)) chr = cv->chr;
+                    if (cv->flags & (VOICE_EXCLUDE | VOICE_PART)) chr = -1;   /* (a group's later parts: the first stands for it) */
+                }
+                if (chr >= 0 && (bn || cv)) add(room, disc, vid, chr, b, bn, cv && cv->flags & VOICE_GRUNT);
             }
             if (op == OP_IFEL && ne < 64) ends[ne++] = o + d[o + 1] + 1;
             else if (op == OP_ELSE) { if (ne) ne--; if (ne < 64) ends[ne++] = o + d[o + 1]; }
@@ -157,17 +182,29 @@ void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const 
 /* ponytail: a linear search; a few hundred entries, looked up once per line */
 int voice_sure(int room, int vid, int rec)
 {
-    if (!__atomic_load_n(&ready, __ATOMIC_ACQUIRE)) return 0;
-    for (int i = 0; i < sure_n; i++) if (sure[i].room == room && sure[i].vid == vid && sure[i].rec == rec) return 1;
+    const Cat* c = cat_now();
+    for (int i = 0; c && i < c->sure_n; i++) if (c->sure[i].room == room && c->sure[i].vid == vid && c->sure[i].rec == rec) return 1;
     return 0;
 }
 int voice_said_by(int room, int vid)
 {
-    if (!__atomic_load_n(&ready, __ATOMIC_ACQUIRE)) return -1;
-    for (int i = 0; i < sure_n; i++) if (sure[i].k0 && sure[i].room == room && sure[i].vid == vid) return sure[i].rec;
+    const Cat* c = cat_now();
+    for (int i = 0; c && i < c->sure_n; i++) if (c->sure[i].k0 && c->sure[i].room == room && c->sure[i].vid == vid) return c->sure[i].rec;
     return -1;
 }
-int voice_sure_count(void) { return __atomic_load_n(&ready, __ATOMIC_ACQUIRE) ? sure_n : -1; }
+int voice_sure_count(void) { const Cat* c = cat_now(); return c ? c->sure_n : -1; }
+
+static void publish(const VoiceLine* l, int n, const Sure* su, int sn)
+{
+    Cat* c = calloc(1, sizeof *c);
+    if (!c) return;
+    for (int k = 0, at = 0; k <= CAST_CHARACTERS; k++) {
+        while (at < n && l[at].chr < k) at++;
+        c->first[k] = at;
+    }
+    c->lines = l; c->sure = su; c->sure_n = sn;
+    __atomic_store_n(&cat, c, __ATOMIC_RELEASE);
+}
 
 static int by_line(const void* a, const void* b)
 {
@@ -175,13 +212,20 @@ static int by_line(const void* a, const void* b)
     if (x->chr != y->chr) return x->chr - y->chr;
     if (x->disc != y->disc) return x->disc - y->disc;
     if (x->vid != y->vid) return x->vid - y->vid;
+    if (!x->lip_n != !y->lip_n) return !x->lip_n - !y->lip_n;   /* (a room with its lips first) */
     return x->room - y->room;
 }
 
 void voice_scan_done(void)
 {
     int i, j, n = 0;
-    unsigned char* two = calloc((size_t)scan_n + 1, 1);
+    unsigned char* two;
+    for (const VoiceCurated* c = cur; c->disc; c++) {   /* the lines checked by hand that no room's script says (room VOICE_NO_ROOM) */
+        if (c->chr < 0 || !(c->flags & (VOICE_CONFIRMED | VOICE_GRUNT)) || c->flags & (VOICE_EXCLUDE | VOICE_PART)) continue;
+        for (i = 0; i < scan_n && (scan[i].disc != c->disc || scan[i].vid != c->vid); i++);
+        if (i == scan_n) add(VOICE_NO_ROOM, c->disc, c->vid, c->chr, NULL, 0, c->flags & VOICE_GRUNT);
+    }
+    two = calloc((size_t)scan_n + 1, 1);
     if (scan_n) qsort(scan, (size_t)scan_n, sizeof(VoiceLine), by_line);
     for (i = 0; two && i < scan_n; i++)   /* a file said by two characters in the scripts is nobody's */
         for (j = 0; j < scan_n && !two[i]; j++) two[i] = scan[j].disc == scan[i].disc && scan[j].vid == scan[i].vid && scan[j].chr != scan[i].chr;
@@ -190,22 +234,97 @@ void voice_scan_done(void)
         scan[n++] = scan[i];
     }
     free(two);
-    for (int c = 0, at = 0; c <= CAST_CHARACTERS; c++) {
-        while (at < n && scan[at].chr < c) at++;
-        first[c] = at;
-    }
-    lines = scan;
-    lines_n = n;
-    __atomic_store_n(&ready, 1, __ATOMIC_RELEASE);
+    publish(scan, n, sure, sure_n);
+    scan = NULL; sure = NULL; scan_n = scan_cap = sure_n = sure_cap = 0;   /* (the next build starts afresh) */
 }
 
 int voice_count(int chr)
 {
-    if (!__atomic_load_n(&ready, __ATOMIC_ACQUIRE)) return -1;
-    return chr >= 0 && chr < CAST_CHARACTERS ? first[chr + 1] - first[chr] : 0;
+    const Cat* c = cat_now();
+    if (!c) return -1;
+    return chr >= 0 && chr < CAST_CHARACTERS ? c->first[chr + 1] - c->first[chr] : 0;
 }
 
-const VoiceLine* voice_line(int chr, int i) { return voice_count(chr) > i && i >= 0 ? &lines[first[chr] + i] : NULL; }
+const VoiceLine* voice_line(int chr, int i)
+{
+    const Cat* c = cat_now();
+    return c && chr >= 0 && chr < CAST_CHARACTERS && i >= 0 && i < c->first[chr + 1] - c->first[chr] ? &c->lines[c->first[chr] + i] : NULL;
+}
+
+/* ---------------------------------------------------------------- the catalogue on disk (teleport.c voices_want)
+   "RVXV", the format, the key, the counts (lines, sure lines, lip bytes), an FNV-1a of the rest; then the lines (room,
+   file, disc, character, grunt, 0, lip length: 10 bytes), the sure lines (room, file, record, k0: 6), the lips. Little
+   endian, the same for every build. */
+#define CACHE_HEAD 28
+static unsigned fnv(unsigned h, const unsigned char* d, size_t n) { while (n--) h = (h ^ *d++) * 16777619u; return h; }
+static unsigned g16(const unsigned char* d) { return d[0] | d[1] << 8; }
+static unsigned g32(const unsigned char* d) { return d[0] | d[1] << 8 | d[2] << 16 | (unsigned)d[3] << 24; }
+static unsigned char* p16(unsigned char* d, unsigned v) { d[0] = (unsigned char)v; d[1] = (unsigned char)(v >> 8); return d + 2; }
+static unsigned char* p32(unsigned char* d, unsigned v) { return p16(p16(d, v & 0xFFFF), v >> 16); }
+
+unsigned voice_cat_hash(void)
+{
+    unsigned h = fnv(2166136261u, (const unsigned char*)"voices 2", 8);   /* (bump with a change to the scan or the format) */
+    for (const VoiceCurated* c = cur; c->disc; c++) {
+        unsigned char r[7] = { c->disc, (unsigned char)c->vid, (unsigned char)(c->vid >> 8), (unsigned char)c->chr, c->flags, (unsigned char)c->next, (unsigned char)(c->next >> 8) };
+        h = fnv(h, r, sizeof r);
+    }
+    return h;
+}
+
+unsigned char* voice_cache_save(unsigned key, size_t* size)
+{
+    const Cat* c = cat_now();
+    int nl = c ? c->first[CAST_CHARACTERS] : 0, i;
+    size_t lips = 0, n;
+    unsigned char *b, *d;
+    if (!c) return NULL;
+    for (i = 0; i < nl; i++) lips += c->lines[i].lip_n;
+    n = CACHE_HEAD + (size_t)nl * 10 + (size_t)c->sure_n * 6 + lips;
+    if (!(b = malloc(n))) return NULL;
+    memcpy(b, "RVXV", 4);
+    d = p32(p32(p32(p32(p32(b + 4, 1), key), (unsigned)nl), (unsigned)c->sure_n), (unsigned)lips) + 4;
+    for (i = 0; i < nl; i++) {
+        const VoiceLine* l = &c->lines[i];
+        d = p16(p16(d, l->room), l->vid);
+        *d++ = l->disc; *d++ = l->chr; *d++ = l->grunt; *d++ = 0;
+        d = p16(d, l->lip_n);
+    }
+    for (i = 0; i < c->sure_n; i++) { d = p16(p16(d, c->sure[i].room), c->sure[i].vid); *d++ = c->sure[i].rec; *d++ = c->sure[i].k0; }
+    for (i = 0; i < nl; i++) if (c->lines[i].lip_n) { memcpy(d, c->lines[i].lip, c->lines[i].lip_n); d += c->lines[i].lip_n; }
+    p32(b + 24, fnv(2166136261u, b + CACHE_HEAD, n - CACHE_HEAD));
+    *size = n;
+    return b;
+}
+
+int voice_cache_load(const unsigned char* d, size_t n, unsigned key)
+{
+    unsigned nl, ns, lips, i, at = 0;
+    const unsigned char *l, *q, *lp;
+    VoiceLine* v;
+    Sure* su;
+    unsigned char* lb;
+    if (n < CACHE_HEAD || memcmp(d, "RVXV", 4) || g32(d + 4) != 1 || g32(d + 8) != key) return 0;
+    nl = g32(d + 12); ns = g32(d + 16); lips = g32(d + 20);
+    if (nl > 65536 || ns > 65536 || lips > (1u << 24) || n != CACHE_HEAD + (size_t)nl * 10 + (size_t)ns * 6 + lips ||
+        g32(d + 24) != fnv(2166136261u, d + CACHE_HEAD, n - CACHE_HEAD)) return 0;
+    l = d + CACHE_HEAD; q = l + (size_t)nl * 10; lp = q + (size_t)ns * 6;
+    for (i = 0; i < nl; i++) {   /* (by character, the lips adding up) */
+        const unsigned char* e = l + i * 10;
+        if (e[4] < 1 || e[4] > 2 || e[5] >= CAST_CHARACTERS || (i && e[5] < l[(i - 1) * 10 + 5]) || (at += g16(e + 8)) > lips) return 0;
+    }
+    if (at != lips || !(v = calloc(nl + 1, sizeof *v)) || !(su = calloc(ns + 1, sizeof *su)) || !(lb = malloc(lips + 1))) return 0;   /* ponytail: a failed calloc leaks the other */
+    memcpy(lb, lp, lips);
+    for (i = 0, at = 0; i < nl; i++) {
+        const unsigned char* e = l + i * 10;
+        v[i].room = (unsigned short)g16(e); v[i].vid = (unsigned short)g16(e + 2); v[i].disc = e[4]; v[i].chr = e[5]; v[i].grunt = e[6];
+        v[i].lip_n = (unsigned short)g16(e + 8); v[i].lip = v[i].lip_n ? lb + at : NULL;
+        at += v[i].lip_n;
+    }
+    for (i = 0; i < ns; i++) { const unsigned char* e = q + i * 6; su[i] = (Sure){ (unsigned short)g16(e), (unsigned short)g16(e + 2), e[4], e[5] }; }
+    publish(v, (int)nl, su, (int)ns);
+    return 1;
+}
 
 static unsigned mix(unsigned seed, int room, int disc, int vid, unsigned salt)
 {
@@ -230,26 +349,34 @@ static unsigned line_weight(int len, int ms)
 }
 
 const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr, int ms, int max_ms, int (*ms_of)(const VoiceLine*),
-                            int (*used)(const VoiceLine*))
+                            int (*used)(const VoiceLine*), int grunts)
 {
-    const VoiceLine* l = chr >= 0 && chr < CAST_CHARACTERS ? &lines[first[chr]] : NULL;
-    int n = voice_count(chr), i, len, best = -1, best_ms = 0, pass;
+    const Cat* c = cat_now();
+    const VoiceLine* l = c && chr >= 0 && chr < CAST_CHARACTERS ? &c->lines[c->first[chr]] : NULL;
+    int n = l ? c->first[chr + 1] - c->first[chr] : 0, i, len, best = -1, best_ms = 0, pass;
     unsigned h, sum = 0;
     if (n <= 0) return NULL;
     h = mix(seed, room, disc, vid, (unsigned)chr);
     if (ms <= 0 || max_ms <= 0 || !ms_of) max_ms = 0;   /* (any, alike) */
+#define SKIP(x) (grunts != VOICE_PICK_ANY && (x)->grunt != (grunts == VOICE_PICK_GRUNTS))   /* (a grunt for a grunt, a spoken line for one) */
+    for (i = 0; i < n && SKIP(&l[i]); i++);
+    if (i == n) return NULL;
     for (pass = used ? 0 : 1; pass < 2 && !sum; pass++)   /* the ones not said yet in the room, else all */
         for (i = 0; i < n; i++) {
-            if (!pass && used(&l[i])) continue;
+            if (SKIP(&l[i]) || (!pass && used(&l[i]))) continue;
             if (!max_ms) sum += 1000u;
             else if ((len = ms_of(&l[i])) > 0 && len <= max_ms) sum += line_weight(len, ms);   /* (the ones that end in time, weighted) */
             else if (len > 0 && (best < 0 || len < best_ms)) { best = i; best_ms = len; }
         }
-    if (!sum) return best >= 0 ? &l[best] : &l[h % (unsigned)n];   /* (none ends in time: the shortest) */
+    if (!sum) {   /* (none ends in time: the shortest; none with a length: any) */
+        if (best >= 0) return &l[best];
+        for (i = (int)(h % (unsigned)n); SKIP(&l[i]); i = (i + 1) % n);
+        return &l[i];
+    }
     h %= sum;
     for (pass--, i = 0; i < n; i++) {
         unsigned w;
-        if (!pass && used(&l[i])) continue;
+        if (SKIP(&l[i]) || (!pass && used(&l[i]))) continue;
         if (!max_ms) w = 1000u;
         else if ((len = ms_of(&l[i])) > 0 && len <= max_ms) w = line_weight(len, ms);
         else continue;
@@ -257,6 +384,7 @@ const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr,
         h -= w;
     }
     return &l[i];
+#undef SKIP
 }
 
 /* ---------------------------------------------------------------- an enemy model's sounds in place of a line
@@ -315,9 +443,9 @@ int voice_creature(int m, int alt, int* room, unsigned char* prog, int max)
     return 0;   /* the fish (no sounds), the hazmat man, the story cast (lines of their own) */
 }
 
-int voice_creature_pick(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, int max_ms, int last)
+static int creature_pick(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, int max_ms, int last, unsigned salt)
 {
-    unsigned h = mix(seed, room, disc, vid, 0x100u), sum = 0;
+    unsigned h = mix(seed, room, disc, vid, salt), sum = 0;
     int i, best = 0, pass;
     if (n <= 0) return -1;
     if (ms <= 0 || max_ms <= 0) max_ms = 0x7FFFFFFF, ms = 1;   /* (any, alike) */
@@ -334,4 +462,28 @@ int voice_creature_pick(unsigned seed, int room, int disc, int vid, const int* l
             h -= w;
         }
     return best;
+}
+
+int voice_creature_pick(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, int max_ms, int last)
+{
+    return creature_pick(seed, room, disc, vid, len, n, ms, max_ms, last, 0x100u);
+}
+
+int voice_creature_plan(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, int grace, int last, int* out, int max)
+{
+    int k, t = 0, left, p;
+    if (n <= 0 || max <= 0) return 0;
+    if (ms < VOICE_CR_LONG_MS) {   /* (a short line, or one of no known length: one sound, as long as it) */
+        out[0] = creature_pick(seed, room, disc, vid, len, n, ms, ms > 0 ? ms + grace : 0, last, 0x100u);
+        return 1;
+    }
+    for (k = 0; k < max && k < 3; k++) {   /* (a few, the next in what is left of half the line) */
+        left = ms / 2 - t - (k ? VOICE_CR_GAP_MS : 0);
+        if (k && left <= 0) break;
+        p = creature_pick(seed, room, disc, vid, len, n, left, left, k ? out[k - 1] : last, 0x100u + (unsigned)k);
+        if (k && (p == out[k - 1] || len[p] > left)) break;   /* (none else fits) */
+        out[k] = p;
+        t += (k ? VOICE_CR_GAP_MS : 0) + len[p];
+    }
+    return k;
 }

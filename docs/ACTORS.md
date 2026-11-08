@@ -1252,12 +1252,95 @@ catalogue and the picks, the enemy models' sounds; no game state, ctest `cast`),
 ### The catalogue
 
 The lines another role may say: every line with a `LipSet` on a story character's record, with that lip entry's
-bytes copied from its room (`voice_scan_room`). Read once with the room files of the teleport list (`teleport.c`,
-its thread, about 2 s; started by the first room load with the option on, `cast_room` -> `tp_count`): the disc's rooms
-and the mods folder's and BioRand's, as the game loads them. Sorted by character, disc and file; a file in several
-rooms once (its first room's lips); a file two characters' `LipSet`s claim is nobody's (2 files). The log:
-`voices: lines with mouth movements: Claire 116, Chris 45, Steve 124, Wesker 46, Alfred 13, Alexia 10, Rodrigo 20`
-(374 lines, 19 KB of lips; Claire's two whose `LipSet` comes first among them). Nothing of the disc is in the repository.
+bytes copied from its room (`voice_scan_room`), and the lines checked by hand below. Sorted by character, disc and
+file; a file in several rooms once (its first room's lips); a file two characters' `LipSet`s claim is nobody's (2
+files) unless its speaker was checked by hand. Without the hand-checked table: 374 lines, Claire 116, Chris 45, Steve
+124, Wesker 46, Alfred 13, Alexia 10, Rodrigo 20 (19 KB of lips; Claire's two whose `LipSet` comes first among them).
+Nothing of the disc is in the repository.
+
+* **When it is read**: from the start, before the first cutscene: `voices_frame` (`teleport.c`, every frame of the
+  game thread) asks for it at the title as soon as the option is on (at the start, or turned on later) and again when
+  BioRand's choice for the next game changes (`biorand_next`); `cast_room` asks at every room load with the option on
+  (also a co-op guest's, whose option is the host's). `voices_want` then takes the catalogue it has, else
+  `<save_dir>/voices.cache`, else reads the room files on a thread of its own (`vscan`, about 2 s, its own handle on the
+  disc image; the teleport list reads them on its own when it is first needed). It is published whole
+  (`voice_scan_done`: an atomic pointer to the new catalogue), so the game thread never sees one half built; a newer
+  one replaces it, and the one before serves until then.
+* **The cache**: `voices.cache` holds the catalogue for one key: the disc image's size and the place and length of
+  each of its room files, the name, size and time of every mods and BioRand room file served, whether BioRand's are,
+  the scan's format version and the hand-checked table (`voice_cat_hash`). The file: `RVXV`, format 1, the key, the
+  counts, an FNV-1a checksum, then the lines, the sure lines and the lips (little endian, ~25 KB). It is written
+  atomically (`pc_save_file`) after a build that read every file, and taken only when the magic, the format, the key,
+  the sizes (they add up to the file's) and the checksum match; any other file is ignored (`voices: voices.cache is
+  for other room files or damaged: read anew`) and replaced. Another key (other mods, BioRand on or off, a new pack,
+  another disc, a new table) reads the room files again in the background.
+* **Too early**: a line before the catalogue is there (the first start without a cache and a scene right away)
+  stays quiet, as before (`voices: the lines are not read yet: line 1/0 quiet`).
+* The log: `voices: the lines read from the room files (2364 ms): Claire 151, Chris 77, Steve 148, Wesker 72, Alfred
+  14, Alexia 25, Rodrigo 20 lines (grunts 23 12 4 2 0 1 0, without lips 39 33 28 28 6 10 0); 135 without a LipSet said
+  surely by their record` (with the first table: 507 lines, 133 more than the scan's own 374), or `voices: the lines
+  from voices.cache (0 ms): ...` (20 KB).
+* Measured (headless, the user's settings, `RECVX_TEST_SCENE` of 6000): the first start without a cache had the lines
+  2.7 s after the start, at the title, long before the scene; the next start took them from the cache at 0.2 s; Claire's
+  first line in 6000 (2/1, waking up) was replaced both times. A damaged cache (one byte changed) and a new mods room
+  file were each read anew, and the start after the mods change took the new cache.
+* Test aid: `RECVX_VOICE_CHECKED=0`: without the hand-checked table (the scan's own rules only, before and after).
+
+### Lines checked by hand
+
+A local tool outside the repository (the voice tool: a browser page served from the user's disc image, which plays
+every line with the port's guess of its speaker) writes `voice_curation.json`; `pc/tools/voice_curation.py` turns it
+into `pc/src/host/voice_curation.inc`, a table of ids and flags only (no sound, no text): per checked line its disc,
+file, character (-1 none of the cast), flags `VOICE_CONFIRMED`, `VOICE_EXCLUDE`, `VOICE_GRUNT`, `VOICE_PART`, and a
+group's next part (`voice_curated`, `cast.h`). The rules:
+
+* **Speaker checked** (`VOICE_CONFIRMED`): the line is that character's, over the `LipSet`'s or the record's guess.
+  In the catalogue it is that character's line, also without a `LipSet` (no lips: it is inserted with a still mouth,
+  or with the script's own lips where the original moves one, as "Talking Mouths" has it: `the inserted line has no
+  lips`). As an original, the record of that character in the room says it (the first one of that character; none
+  there: the line stays, `its speaker, checked by hand, is not in the room`), and it is replaced when that one is shown
+  as another; Talking Mouths counts its speaker as sure. "None of the cast" (narration, radio, crowds, creatures): never
+  inserted and never replaced.
+* **Do not use** (`VOICE_EXCLUDE`): never inserted. As an original it is replaced as any line where its speaker is
+  swapped (the tool's help says "and not replaced", but these include Claire waking up in 6000, 2/1, and Alfred's
+  line at the player in 1020, 1/114: kept, they would let the swapped speaker's own voice through again, "Never the
+  original voice").
+* **Grunt** (`VOICE_GRUNT`): a gasp, grunt or short sound, also a longer one (a scream). Such a line is in the
+  character's own pool of grunts (also one without a `LipSet`, under the tool's guess of its speaker where it was not
+  checked). A grunt is replaced only by a grunt of the character shown (`voice_pick` `VOICE_PICK_GRUNTS`, weighted as
+  any line, not into the pause after it); a character without one stays quiet there (`... is a grunt and Alexia has
+  none: quiet`). A line of 1.2 s or more that is not a grunt never gets a grunt (`VOICE_PICK_SPOKEN`, also in the pause
+  after a short line); a short line not marked as one keeps the rules above (any line that ends in time,
+  `VOICE_PICK_ANY`).
+* **Groups** (`VOICE_PART`, `next`): lines the tool joined, said one after another as one line. The first part stands
+  for the group: in the catalogue its length is all the parts' (`cast_glue.c group_ms`), and when it is inserted the
+  parts play in order (`pc_voice_tick` starts the next part on ADX slot 1 when one ends; the next line, `VoiceOff`, a
+  skip or the fade at `VOICE_GRACE_MS` past the original stop it). As an original, the line in place of its first part
+  is picked to fill the time of all its parts, and its later parts stay quiet (the script still waits each one's own
+  length). The later parts are never inserted on their own. (No groups in the table yet.)
+* **Not checked**: the port's own guess as above.
+* The log marks them: `voices: room 9350 record 2: Wesker's line 2/514 (451 ms, speaker checked), shown as Claire
+  (Cutscene Model) -> Claire's line 2/283 (872 ms) from RM_6051, the speaker checked by hand: Talking Mouths: its lips
+  added`; `Wesker's line 2/500 (4452 ms, a grunt), shown as ... -> Claire's line 1/507 (2640 ms, a grunt) from
+  RM_1002`; `-> Claire's line 1/373 (2168 ms) from no scene` (a line no script says); a line that stays: `... stays
+  (none of the cast says it, checked by hand)`.
+* Measured (the first table: 171 speakers checked, 63 "do not use", 72 grunts, no groups; headless with the user's
+  settings, 0030, 1020, 9350, 9370 and 6000): 41 lines inserted, 9 of them checked by hand (3 that no script says),
+  2 grunts in place of grunts, 3 "do not use" originals replaced, no "do not use" line inserted, no grunt in place of a
+  spoken line, every checked speaker kept; 68 enemy-model lines, 59 with one sound, 7 with two, 2 with three (Claire
+  as a zombie on her 12 s line in 1020: 3 moans in 5.6 s). Every scene that ended lasted as long as without the
+  table (97.3, 122.2, 125.9, 87.5 s), and with the option off 6000 read nothing and logged no line. Co-op (9350, 9370):
+  the host, its lines read at the title, and the guest, its own option off and the lines read at its first room load
+  with the host's, said the same 18 lines.
+
+**Updating the table** after another pass with the tool (the tool saves `voice_curation.json` in its own folder):
+
+```
+python3 pc/tools/voice_curation.py /path/to/recvx-voice-tool/voice_curation.json
+```
+
+It writes `pc/src/host/voice_curation.inc` and prints the counts; rebuild. The JSON is the user's and is not in the
+repository. A new table changes the cache's key, so the first start reads the room files again.
 
 A model's character (`voice_model_chr`): the catalogue entries by type (`cast_character`: the cutscene models, the
 event models, Alfred's other uniforms), the player files 10..13 (14, Claire's second costume: Claire). Every other
@@ -1400,27 +1483,33 @@ own sounds in place of every line of it, from the speakers above (the cast, the 
   enemy spawner's when the room is the same); `snd_xbank_prog_ms` keeps the programs the bank has, with their lengths
   (the driver's count). None there (a zombie look whose room lacks its group): the next place, any moans in that room,
   then RM_0030's.
-* **Playing**: one sound per line, as an inserted line is one line: `voice_creature_pick(seed, room file, disc, file,
-  ...)`, a hashed pick among the sounds that end at most `VOICE_GRACE_MS` after the original line, weighted as
-  `voice_pick` by how much of the line's time they fill, and not the sound the same model made at the line before in
-  the room while another ends in time (none ends in time: the shortest; a line of unknown length: any). A short line (under `VOICE_SHORT_MS`) gets one only if one is that short, else it stays quiet. `bhVoiceOn`
-  then plays no ADX (`pc_voice_on` returns -1); the sound starts at once on SE slot 10 (the shell casings', idle in
-  cutscenes) from the extra bank (`pc_se_xbank`), unpositioned at full volume as every line on the disc (mode 1).
-  The script waits the original line's time as above, so the scene's timing stays. It ends by itself, or at the next
-  line, `VoiceOff`, a skip or a room change (`voice_end`: `StopSe`), and a longer one at the latest `VOICE_GRACE_MS`
-  after the original's end (`cr.cap`, `pc_voice_tick`). Before, the sounds were chained to fill each line's whole
-  time, so a long line was a run of cries and a scene with many lines sounded like one looping sound (the Hunter's
-  two cries over Wesker's eight-second line in 9350: nine of them in a row). Nothing loops by itself: a program
-  whose first sample loops has no length (`snd_xbank_prog_ms` 0) and is never picked, and the driver keys a sound
-  off at its length.
+* **Playing**: a few sounds per line (`voice_creature_plan(seed, room file, disc, file, ...)`): a line shorter than
+  `VOICE_CR_LONG_MS` (2.4 s) gets one, `voice_creature_pick`, a hashed pick among the sounds that end at most
+  `VOICE_GRACE_MS` after the original line, weighted as `voice_pick` by how much of the line's time they fill, and not
+  the sound the same model made at the line before in the room while another ends in time (none ends in time: the
+  shortest; a line of unknown length: any). A longer line gets up to three, `VOICE_CR_GAP_MS` (0.35 s) apart, which
+  with their gaps take at most half of the line's time: each picked as above to fill what is left of that half, never
+  the one just before (and the first not the line before's last); the first always plays (none that short: the
+  shortest). So a long line is a cry or two with pauses, never the whole line of sounds. A short line (under
+  `VOICE_SHORT_MS`) gets one only if one is that short, else it stays quiet. `bhVoiceOn` then plays no ADX
+  (`pc_voice_on` returns -1); the first sound starts at once on SE slot 10 (the shell casings', idle in cutscenes)
+  from the extra bank (`pc_se_xbank`), unpositioned at full volume as every line on the disc (mode 1), the next ones
+  each a gap after the one before ends (`pc_voice_tick`). The script waits the original line's time as above, so the
+  scene's timing stays. They end by themselves, or at the next line, `VoiceOff`, a skip or a room change (`voice_end`:
+  `StopSe`, no more of them), and at the latest `VOICE_GRACE_MS` after the original's end (`cr.cap`). Before, the
+  sounds were once chained to fill each line's whole time, so a long line was a run of cries and a scene with many
+  lines sounded like one looping sound (the Hunter's two cries over Wesker's eight-second line in 9350: nine of them in
+  a row); then one per line, which left long lines mostly silent. Nothing loops by itself: a program whose first
+  sample loops has no length (`snd_xbank_prog_ms` 0) and is never picked, and the driver keys a sound off at its
+  length.
 * **Mouth**: no lips of the sounds; the `LipSet` runs as the script has it, so a model with a face moves its
   mouth with the original line, as before.
 * **Co-op and replays**: the sounds come from the seed, the room file and the line (and the sound before, in the
   scene's order), like the inserted lines: the same in every run and on both screens (checked: host and guest, 12
   lines in 9350 and 9370, the same sounds); no protocol change. Measured with Wesker as the Hunter in 9350 and 9370:
   one sound per line (28 lines; before, 9 cries in a row for an 8 s line), the scenes as long as before.
-* The log: `voices: room 9350 record 2: Wesker's line 2/448 (8278 ms), shown as Hunter -> its sound from RM_8010
-  bank 3: 18 (1466 ms)`.
+* The log: `voices: room 9350 record 2: Wesker's line 2/448 (8278 ms), shown as Hunter -> 2 of its sounds from RM_8010
+  bank 3: 18 (1466 ms), 17 (514 ms)`.
 
 ### Talking Mouths
 
@@ -1428,9 +1517,10 @@ Setting "Talking Mouths" (right under "Randomize Voice Lines" in GAMEPLAY / F1, 
 lobby's CUTSCENE CAST page, TALKING MOUTHS; shown while the voice lines are on; ini `voice_mouths`, default 1;
 `g_voice_mouths`, `cast.h`): an inserted line in place of a line without a `LipSet` moves the speaker's mouth too.
 
-* **What moves it**: the inserted line's own lip entry. Every catalogue line has one (only lines with a `LipSet` are
-  in it; none of the 450 lip entries the disc's lines use is a still mouth: each has phonemes other than 0), and it came with that line from its own
-  scene, so it fits the sound. No mouth is made from the sound's loudness: an inserted line never lacks lips. (The
+* **What moves it**: the inserted line's own lip entry. Every catalogue line from a `LipSet` has one (none of the 450
+  lip entries the disc's lines use is a still mouth: each has phonemes other than 0), and it came with that line from
+  its own scene, so it fits the sound. No mouth is made from the sound's loudness: a line checked by hand that no
+  `LipSet` moves has none, and keeps a still mouth (`the inserted line has no lips`). (The
   game's own lines without lips, with the voice lines off, are left alone; they have no lip entry, so they would need
   one made from the sound, as `imp_face` does for the player's voice.)
 * **When**: `cast_glue.c mouth_add`, from `pc_voice_on` for an inserted line without a `LipSet`, if all hold:
@@ -1471,8 +1561,9 @@ lobby's CUTSCENE CAST page, TALKING MOUTHS; shown while the voice lines are on; 
 * About one in five lines without a `LipSet` (195) is given to the record that is only its sound position; such a
   line may be replaced although its real speaker is not swapped, or kept although it is. With Talking Mouths about
   one in thirty of the lines it gives a mouth may move the listener's mouth.
-* The inserted lines are the lines with mouth movements; lines without them (off-screen calls, many short
-  exclamations) are never inserted.
+* The inserted lines are the lines with mouth movements and the lines checked by hand; the other lines without them
+  (off-screen calls, many short exclamations) are never inserted.
+* The hand-checked table covers the lines checked so far (198 of 691 in the first pass); the rest keep the guesses.
 * An inserted line or sound can go on up to 1 s after the original line's end, also past the scene's end.
 * A line the script names no speaker for keeps its voice (the kind-0 lines of scripts that put several speakers at
   the player, the kind-2 ones); see "Never the original voice".

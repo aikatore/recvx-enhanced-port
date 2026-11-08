@@ -15,6 +15,7 @@
 #include "cheat.h"
 #include "biorand.h"
 #include "cast.h"
+#include "enemies.h"
 #include "../../include/pc_parse.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -227,13 +228,60 @@ static int is_room_name(const char* nm)
            SDL_isdigit(nm[5]) && SDL_isdigit(nm[6]);
 }
 
+static const char* mods_dir(void) { return SDL_getenv("RECVX_MODS") ? SDL_getenv("RECVX_MODS") : "mods"; }
+
+/* the room files as the game loads them: the disc's 205, the mods folder's over them, BioRand's pack over those (br); the
+   count, *nmod how many are the mods folder's */
+static int room_files(File* f, int br, int* nmod)
+{
+    char** list;
+    int nf = 0, i, key;
+    *nmod = 0;
+    for (i = 0; i < 205; i++) { SDL_strlcpy(f[nf].name, rdx_files[i], sizeof(f[nf].name)); f[nf].disc = i; f[nf++].mod = 0; }
+    for (int layer = 0; layer < 1 + br; layer++) {   /* the mods folder, then BioRand's pack over it (biorand.h) */
+        char dir[1100];
+        snprintf(dir, sizeof(dir), layer ? "%s/biorand" : "%s", mods_dir());
+        if (!(list = SDL_GlobDirectory(dir, "RM_*.RDX", SDL_GLOB_CASEINSENSITIVE, &key))) continue;   /* key: the count here */
+        for (int m = 0; m < key && nf < MAX_FILES; m++) {
+            char nm[12];
+            int j;
+            if (!is_room_name(list[m])) continue;
+            for (j = 0; j < 11; j++) nm[j] = (char)SDL_toupper(list[m][j]);
+            nm[11] = 0;
+            for (j = 0; j < nf && strcmp(f[j].name, nm); j++) {}
+            if (j == nf) { SDL_strlcpy(f[nf].name, nm, sizeof(f[nf].name)); f[nf++].disc = -1; }
+            *nmod += !f[j].mod;
+            f[j].mod = 1 + layer;
+        }
+        SDL_free(list);
+    }
+    return nf;
+}
+
+static void mod_path(const File* f, char* path, size_t n) { snprintf(path, n, f->mod == 2 ? "%s/biorand/%s" : "%s/%s", mods_dir(), f->name); }
+
+/* room file f expanded into *out (*cap; packed through *in, *pcap): its length, -1 unreadable */
+static long room_read(const File* f, FILE* iso, unsigned char** in, long* pcap, unsigned char** out, long* cap)
+{
+    long n = -1, m;
+    uint32_t lsn, size = 0;
+    FILE* h = NULL;
+    if (f->mod) {
+        char path[1100];
+        mod_path(f, path, sizeof(path));
+        if ((h = pc_fopen(path, "rb"))) { fseek(h, 0, SEEK_END); size = (uint32_t)ftell(h); fseek(h, 0, SEEK_SET); }
+    } else if (adx_afs_locate(17, f->disc, &lsn, &size) && !fseeko(iso, (off_t)lsn * 2048, SEEK_SET)) h = iso;
+    if (h && size > (uint32_t)*pcap) { unsigned char* p = realloc(*in, size); if (p) { *in = p; *pcap = size; } }
+    if (h && size <= (uint32_t)*pcap && fread(*in, 1, size, h) == size) n = size;
+    if (h && h != iso) fclose(h);
+    return n < 0 || (m = pc_prs_expand(*in, n, out, cap)) < 0x80 ? -1 : m;
+}
+
 static int SDLCALL scan(void* ud)
 {
-    const char* mods = SDL_getenv("RECVX_MODS") ? SDL_getenv("RECVX_MODS") : "mods";
     Uint64 t0 = SDL_GetTicks();
     File* f = calloc(MAX_FILES, sizeof(File));
     FILE* iso = pc_fopen(g_config.iso_path, "rb");
-    char** list;
     int nf = 0, nmod = 0, ent = 0, named = 0, bad = 0, i, key;
     long cap = 16 << 20, pcap = 4 << 20;
     unsigned char *out = malloc(cap), *in = malloc(pcap);
@@ -245,24 +293,7 @@ static int SDLCALL scan(void* ud)
         free(f); free(out); free(in);
         return 0;
     }
-    for (i = 0; i < 205; i++) { SDL_strlcpy(f[nf].name, rdx_files[i], sizeof(f[nf].name)); f[nf].disc = i; f[nf++].mod = 0; }
-    for (int layer = 0; layer < 1 + biorand_active(); layer++) {   /* the mods folder, then BioRand's pack over it (biorand.h) */
-        char dir[1100];
-        snprintf(dir, sizeof(dir), layer ? "%s/biorand" : "%s", mods);
-        if (!(list = SDL_GlobDirectory(dir, "RM_*.RDX", SDL_GLOB_CASEINSENSITIVE, &key))) continue;   /* key: the count here */
-        for (int m = 0; m < key && nf < MAX_FILES; m++) {
-            char nm[12];
-            int j;
-            if (!is_room_name(list[m])) continue;
-            for (j = 0; j < 11; j++) nm[j] = (char)SDL_toupper(list[m][j]);
-            nm[11] = 0;
-            for (j = 0; j < nf && strcmp(f[j].name, nm); j++) {}
-            if (j == nf) { SDL_strlcpy(f[nf].name, nm, sizeof(f[nf].name)); f[nf++].disc = -1; }
-            nmod += !f[j].mod;
-            f[j].mod = 1 + layer;
-        }
-        SDL_free(list);
-    }
+    nf = room_files(f, biorand_active(), &nmod);
     /* rows in stage/room order; a row is custom when no case of it is on the disc */
     for (i = 0; i < 1000; i++) at[i] = -1;
     for (key = 0; key < 1000; key++)
@@ -276,21 +307,10 @@ static int SDLCALL scan(void* ud)
             if (f[i].disc >= 0) rows[at[key]].r.custom = 0;
         }
     for (i = 0; i < nf; i++) {
-        long n = -1, m;
-        uint32_t lsn, size;
-        FILE* h = NULL;
-        if (f[i].mod) {
-            char path[1100];
-            snprintf(path, sizeof(path), f[i].mod == 2 ? "%s/biorand/%s" : "%s/%s", mods, f[i].name);
-            if ((h = pc_fopen(path, "rb"))) { fseek(h, 0, SEEK_END); size = (uint32_t)ftell(h); fseek(h, 0, SEEK_SET); }
-        } else if (adx_afs_locate(17, f[i].disc, &lsn, &size) && !fseeko(iso, (off_t)lsn * 2048, SEEK_SET)) h = iso;
-        if (h && size > (uint32_t)pcap) { unsigned char* p = realloc(in, size); if (p) { in = p; pcap = size; } }
-        if (h && size <= (uint32_t)pcap && fread(in, 1, size, h) == size) n = size;
-        if (h && h != iso) fclose(h);
-        if (n < 0 || (m = pc_prs_expand(in, n, &out, &cap)) < 0x80) { bad++; host_log("teleport: cannot read %s%s\n", f[i].mod ? "mods/" : "", f[i].name); continue; }
+        long m = room_read(&f[i], iso, &in, &pcap, &out, &cap);
+        if (m < 0) { bad++; host_log("teleport: cannot read %s%s\n", f[i].mod ? "mods/" : "", f[i].name); continue; }
         parse(out, m, at[file_key(f[i].name)]);
         if (g_dev_tools) devcat_scan_room(atoi(f[i].name + 3), out, (int)m);
-        voice_scan_room(atoi(f[i].name + 3), out, (int)m, coop_insn_len_raw);   /* "Randomize Voice Lines"' catalogue (cast.h) */
     }
     for (i = 0; i < nrows; i++) {
         const Row* r = &rows[i];
@@ -309,12 +329,131 @@ static int SDLCALL scan(void* ud)
     fclose(iso);
     free(f); free(out); free(in);
     if (g_dev_tools) devcat_scan_done();
-    voice_scan_done();
-    host_log("voices: lines with mouth movements: Claire %d, Chris %d, Steve %d, Wesker %d, Alfred %d, Alexia %d, Rodrigo %d; "
-             "%d without one said surely by their record\n", voice_count(0), voice_count(1), voice_count(2), voice_count(3), voice_count(4),
-             voice_count(5), voice_count(6), voice_sure_count());
     __atomic_store_n(&state, 2, __ATOMIC_RELEASE);
     return 0;
+}
+
+/* ---------------------------------------------------------------- "Randomize Voice Lines"' catalogue (cast.h voices_want)
+   Read from the room files as the game loads them (the disc's, the mods folder's, BioRand's) on a thread of its own, or
+   from <save_dir>/voices.cache when its key matches: the disc's room files (the image's size, each file's place and
+   length), every mods and BioRand room file served (name, size, time), the scan's version and the table of the lines
+   checked by hand (voice_cat_hash). Built anew in the background whenever the key changes; the one before serves meanwhile. */
+static int vbusy;             /* a build runs */
+static unsigned vkey;         /* the key of the catalogue published or being built, 0 none */
+static int vbr;               /* ... with BioRand's pack */
+
+static unsigned voices_key(int br)
+{
+    File* f = calloc(MAX_FILES, sizeof(File));
+    SDL_PathInfo pi;
+    unsigned h = voice_cat_hash() ^ (unsigned)br, v[4];
+    int nf, nmod, i;
+    if (!f) return 0;
+    if (SDL_GetPathInfo(g_config.iso_path, &pi)) h = (h ^ (unsigned)pi.size ^ (unsigned)(pi.size >> 32)) * 16777619u;
+    nf = room_files(f, br, &nmod);
+    for (i = 0; i < nf; i++) {
+        uint32_t lsn = 0, size = 0;
+        char path[1100];
+        memset(v, 0, sizeof v);
+        if (!f[i].mod) { adx_afs_locate(17, f[i].disc, &lsn, &size); v[0] = lsn; v[1] = size; }
+        else { mod_path(&f[i], path, sizeof path); if (SDL_GetPathInfo(path, &pi)) { v[0] = (unsigned)pi.size; v[1] = (unsigned)pi.modify_time; v[2] = (unsigned)(pi.modify_time >> 32); } v[3] = (unsigned)f[i].mod; }
+        for (const unsigned char* b = (const unsigned char*)f[i].name; *b; b++) h = (h ^ *b) * 16777619u;
+        for (const unsigned char* b = (const unsigned char*)v; b < (const unsigned char*)(v + 4); b++) h = (h ^ *b) * 16777619u;
+    }
+    free(f);
+    return h ? h : 1;
+}
+
+static void cache_path(char* p, size_t n) { snprintf(p, n, "%s/voices.cache", g_config.save_dir); }
+static int cache_fill(FILE* f, void* ud) { const size_t* b = ud; return fwrite((const void*)b[0], 1, b[1], f) == b[1] ? 0 : -1; }
+
+static void voices_log(const char* how, Uint64 t0)
+{
+    int g[CAST_CHARACTERS] = { 0 }, nl[CAST_CHARACTERS] = { 0 };
+    for (int c = 0; c < CAST_CHARACTERS; c++)
+        for (int i = 0; i < voice_count(c); i++) { g[c] += voice_line(c, i)->grunt; nl[c] += !voice_line(c, i)->lip_n; }
+    host_log("voices: %s (%u ms): Claire %d, Chris %d, Steve %d, Wesker %d, Alfred %d, Alexia %d, Rodrigo %d lines (grunts %d %d %d %d %d %d %d, "
+             "without lips %d %d %d %d %d %d %d); %d without a LipSet said surely by their record\n", how, (unsigned)(SDL_GetTicks() - t0),
+             voice_count(0), voice_count(1), voice_count(2), voice_count(3), voice_count(4), voice_count(5), voice_count(6),
+             g[0], g[1], g[2], g[3], g[4], g[5], g[6], nl[0], nl[1], nl[2], nl[3], nl[4], nl[5], nl[6], voice_sure_count());
+}
+
+static int SDLCALL vscan(void* ud)
+{
+    Uint64 t0 = SDL_GetTicks();
+    File* f = calloc(MAX_FILES, sizeof(File));
+    FILE* iso = pc_fopen(g_config.iso_path, "rb");
+    long cap = 16 << 20, pcap = 4 << 20, m;
+    unsigned char *out = malloc(cap), *in = malloc(pcap);
+    unsigned key = (unsigned)(uintptr_t)ud;
+    int nf, nmod, i, bad = 0, bad_disc = 0;
+    if (f && out && in && iso) {
+        nf = room_files(f, vbr, &nmod);
+        for (i = 0; i < nf; i++)
+            if ((m = room_read(&f[i], iso, &in, &pcap, &out, &cap)) >= 0) voice_scan_room(atoi(f[i].name + 3), out, (int)m, coop_insn_len_raw);
+            else bad++, bad_disc += !f[i].mod;   /* (a broken mods file is part of the key; the disc's should read) */
+        voice_scan_done();
+        voices_log(bad ? "the lines read from the room files, some unreadable" : "the lines read from the room files", t0);
+        {
+            size_t b[2] = { 0, 0 };
+            char path[1100];
+            unsigned char* d = voice_cache_save(key, &b[1]);
+            b[0] = (size_t)d;
+            cache_path(path, sizeof path);
+            if (d && !bad_disc && pc_save_file(path, "wb", cache_fill, b)) host_log("voices: cannot write %s\n", path);
+            free(d);
+        }
+    } else {
+        host_log("voices: cannot read the room files (%s)\n", iso ? "out of memory" : "disc image");
+        vkey = 0;
+    }
+    if (iso) fclose(iso);
+    free(f); free(out); free(in);
+    __atomic_store_n(&vbusy, 0, __ATOMIC_RELEASE);
+    return 0;
+}
+
+int voices_want(void)
+{
+    Uint64 t0 = SDL_GetTicks();
+    unsigned key;
+    uint32_t lsn, size;
+    char path[1100];
+    FILE* h;
+    static const VoiceCurated none[] = { { 0 } };
+    if (__atomic_load_n(&vbusy, __ATOMIC_ACQUIRE) || !g_config.iso_path[0] || !adx_afs_locate(17, 204, &lsn, &size)) return 0;   /* (a build runs; the disc's room archive not open yet) */
+    if (SDL_getenv("RECVX_VOICE_CHECKED") && !SDL_atoi(SDL_getenv("RECVX_VOICE_CHECKED"))) voice_curation_use(none);   /* (test aid: without the lines checked by hand) */
+    if (!(key = voices_key(biorand_next())) || key == vkey) return 1;
+    vkey = key; vbr = biorand_next();
+    cache_path(path, sizeof path);
+    if ((h = pc_fopen(path, "rb"))) {   /* the one saved, if it is for these room files and whole */
+        long n;
+        unsigned char* d = NULL;
+        int ok = fseek(h, 0, SEEK_END) == 0 && (n = ftell(h)) > 0 && n < (8 << 20) && !fseek(h, 0, SEEK_SET) && (d = malloc((size_t)n)) &&
+                 fread(d, 1, (size_t)n, h) == (size_t)n && voice_cache_load(d, (size_t)n, key);
+        fclose(h);
+        free(d);
+        if (ok) { voices_log("the lines from voices.cache", t0); return 1; }
+        host_log("voices: voices.cache is for other room files or damaged: read anew\n");
+    }
+    __atomic_store_n(&vbusy, 1, __ATOMIC_RELEASE);
+    {
+        SDL_Thread* t = SDL_CreateThread(vscan, "voices", (void*)(uintptr_t)key);
+        if (t) SDL_DetachThread(t);
+        else { __atomic_store_n(&vbusy, 0, __ATOMIC_RELEASE); vkey = 0; }
+    }
+    return 1;
+}
+
+void voices_frame(void)
+{
+    static int was, wbr;
+    int br;
+    if (!g_enemy_opts.voices || !g_config.iso_path[0]) { was = 0; return; }
+    br = biorand_next();
+    if (was && br == wbr) return;   /* (asked when turned on and when BioRand's choice changes, until it could be) */
+    wbr = br;
+    was = voices_want();
 }
 
 /* ---------------------------------------------------------------- the table */

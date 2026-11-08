@@ -8,6 +8,7 @@
 #include "../gs/stream.h"
 #include "../host/prof.h"
 #include "../host/cheat.h"
+#include "../host/cast.h"
 #include "../host/coop.h"
 #include "../host/tps.h"
 #include "../host/lobby.h"
@@ -93,6 +94,7 @@ int sceGsSwapDBuffDc(sceGsDBuffDc* db, int id)
     coop_frame();
     lobby_frame();
     biorand_frame();
+    voices_frame();   /* "Randomize Voice Lines"' catalogue, read before the first cutscene (cast.h) */
     tps_frame();
     hud_frame();
     stream_submit();
