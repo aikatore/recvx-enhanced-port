@@ -346,6 +346,7 @@ typedef struct {
 } AdxTalk;
 static AdxTalk talk[MAX_ADXT];
 static int output_mono;
+static uint64_t played_samples(AdxTalk* t);
 
 void ADXT_Init(void) {}
 void ADXT_Finish(void) {}
@@ -372,6 +373,8 @@ void ADXT_Stop(void* h)
 {
     AdxTalk* t = h;
     if (!t) return;
+    if (t->stat == ADXT_STAT_PLAYING && SDL_getenv("RECVX_CAST_TRACE") && t->rate)   /* test aid (the voice lines' log) */
+        host_log("adxt: stop talk %d at %d of %d ms\n", (int)(t - talk), (int)(played_samples(t) * 1000 / t->rate), (int)((uint64_t)t->total * 1000 / t->rate));
     if (t->voice >= 0) { audio_stream_stop(t->voice); t->voice = -1; }
     t->stat = ADXT_STAT_STOP;
 }
@@ -411,7 +414,7 @@ void ADXT_StartAfs(void* h, int ptid, int fid)
     t->paused = 0;
     t->stat = ADXT_STAT_PLAYING;
     t->voice = audio_stream_start_adx(mod ? path : g_config.iso_path, mod ? 0 : (uint64_t)lsn * SECTOR, size, t->vol);
-    host_log("adxt: start %d/%d (%u Hz, %u ch, %u samples, loop %d) voice %d%s%s\n", ptid, fid, t->rate, t->channels, t->total, t->loop, t->voice, mod ? " from " : "", mod ? path : "");
+    host_log("adxt: start %d/%d (%u Hz, %u ch, %u samples, loop %d) voice %d talk %d%s%s\n", ptid, fid, t->rate, t->channels, t->total, t->loop, t->voice, (int)(t - talk), mod ? " from " : "", mod ? path : "");
 }
 
 /* how long file fid of partition ptid plays (its ADX header, as ADXT_StartAfs finds it), ms; 0 unknown (the voice
@@ -447,6 +450,7 @@ int ADXT_GetStat(void* h)
     if (t->stat == ADXT_STAT_PLAYING && !t->loop && t->rate) {
         int done = t->voice >= 0 ? audio_stream_finished(t->voice) : played_samples(t) >= t->total;
         if (done) t->stat = ADXT_STAT_PLAYEND;
+        if (done && SDL_getenv("RECVX_CAST_TRACE")) host_log("adxt: end talk %d (%d ms)\n", (int)(t - talk), (int)((uint64_t)t->total * 1000 / t->rate));
     }
     return t->stat;
 }

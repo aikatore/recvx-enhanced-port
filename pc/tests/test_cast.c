@@ -9,6 +9,10 @@ int coop_insn_len_raw(const unsigned char* p);   /* net/coop_proto.c */
 #define CHECK(x) do { if (!(x)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); return 1; } } while (0)
 
 static int in(const int* p, int n, int v) { for (int i = 0; i < n; i++) if (p[i] == v) return 1; return 0; }
+static int line_ms(const VoiceLine* l) { return l->disc == 1 ? 3000 : 1000; }   /* (voice_pick: a 3 s line on disc 1, 1 s on disc 2) */
+static int line_ms_short(const VoiceLine* l) { return l->disc == 1 ? 3000 : 500; }
+static int used_first(const VoiceLine* l) { return l == voice_line(2, 0); }    /* (voice_pick: said already in the room) */
+static int used_second(const VoiceLine* l) { return l == voice_line(2, 1); }
 
 int main(void)
 {
@@ -381,14 +385,19 @@ int main(void)
                                             61, 0, 0, 2, 255, 0 };                               /* a LipSet of a missing entry; EvtEnd */
         static const unsigned char lips[] = { 5, 0, 0, 0, 1, 10, 2, 20, 0xFF, 3, 0, 0, 0, 3, 30, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
         const VoiceLine *l, *a;
-        int rec = -1, k;
+        int rec = -1, k, n3, n1 = 0;
         unsigned w[] = { 0x10, 0x100, 0x18, 0x200, 0x1C, 0x300, 0x108, 0x180, 0x188, 2, 0x210, 0x280, 0x300, 0x0C, 0x304, 0x0E, 0x308, 0x10 };
         for (k = 0; k < (int)(sizeof w / sizeof w[0]); k += 2) memcpy(d + w[k], &w[k + 1], 4);
         d[0x180 + 4] = 93; d[0x180 + 0x24 + 4] = 91;   /* record 0 Steve, 1 Claire */
         memcpy(d + 0x280, lips, sizeof lips);
         memcpy(d + 0x310, ev, sizeof ev);
-        CHECK(voice_count(0) == -1 && !voice_pick(1, 1020, 1, 5, 0));   /* (not read yet) */
+        CHECK(voice_count(0) == -1 && !voice_pick(1, 1020, 1, 5, 0, 0, 0, NULL, NULL));   /* (not read yet) */
         CHECK(voice_lipset(ev + 8, 64, coop_insn_len_raw, &rec) == 1 && rec == 1 && voice_lipset(ev + 36, 64, coop_insn_len_raw, &rec) == -1);
+        {   /* a LipSet right before the VoiceOn (RM_3130): only LipStart and MessageSet between */
+            static const unsigned char pre[] = { 61, 1, 1, 0, 63, 1, 1, 0, 31, 0, 0, 1, 25, 0, 76, 0, 1, 0, 0, 0, 61, 1, 1, 0, 25, 0, 77, 0, 1, 0, 0, 0 };
+            CHECK(voice_lipset_before(pre + 4, pre + 12, coop_insn_len_raw) && voice_lipset_before(pre + 24, pre + 24, coop_insn_len_raw) &&
+                  !voice_lipset_before(pre + 4, pre + 24, coop_insn_len_raw) && !voice_lipset_before(pre + 4, pre + 10, coop_insn_len_raw));
+        }
         voice_scan_room(1020, d, sizeof d, coop_insn_len_raw);
         voice_scan_room(1020, d, sizeof d, coop_insn_len_raw);   /* (the same lines again: once) */
         voice_scan_room(9000, d, sizeof d, coop_insn_len_raw);   /* (the other disc's archive: other lines) */
@@ -398,23 +407,40 @@ int main(void)
         voice_scan_room(1050, d, sizeof d, coop_insn_len_raw);
         d[0x310 + 34] = 1;
         voice_scan_room(1030, d, sizeof d, coop_insn_len_raw);
-        CHECK(!voice_sure(1030, 7, 1));   /* (not read yet) */
+        d[0x310 + 29] = 0;   /* 1060: VoiceOn 7 placed at the player (kind 0), as VoiceOn 8 whose LipSet names record 0 */
+        voice_scan_room(1060, d, sizeof d, coop_insn_len_raw);
+        d[0x310 + 1] = 0;    /* 1070: VoiceOn 5 too, whose LipSet names record 1: two speakers at the player */
+        voice_scan_room(1070, d, sizeof d, coop_insn_len_raw);
+        CHECK(!voice_sure(1030, 7, 1) && voice_said_by(1060, 7) == -1);   /* (not read yet) */
         voice_scan_done();
         /* "Talking Mouths": VoiceOn 7 without a LipSet is surely its record's where the script's lines with one that name that
            record are said by it (1030, not 1020), or no line names it and every one names its speaker (1050, not 1040) */
         CHECK(voice_sure(1030, 7, 1) && !voice_sure(1020, 7, 1) && voice_sure(1050, 7, 2) && !voice_sure(1040, 7, 2) && !voice_sure(1030, 7, 0) &&
-              !voice_sure(1030, 8, 0) && !voice_sure(1030, 5, 1) && voice_sure_count() == 2);
+              !voice_sure(1030, 8, 0) && !voice_sure(1030, 5, 1) && voice_sure_count() == 3);
+        /* a line at the player without a LipSet: the record the script's other such lines name (1060), none where they name
+           two (1070) or the line names a record (1030) */
+        CHECK(voice_said_by(1060, 7) == 0 && voice_sure(1060, 7, 0) && voice_said_by(1070, 7) == -1 && voice_said_by(1030, 7) == -1 &&
+              voice_said_by(1060, 8) == -1);
         CHECK(voice_count(0) == 2 && voice_count(2) == 2 && voice_count(1) == 0 && voice_count(3) == 0);
         l = voice_line(0, 0);
         CHECK(l && l->vid == 5 && l->disc == 1 && l->room == 1020 && l->lip_n == 3 && l->lip[0] == 3 && l->lip[2] == 0xFF);
         l = voice_line(2, 1);
         CHECK(l && l->vid == 6 && l->disc == 2 && l->room == 9000 && l->lip_n == 5 && l->lip[3] == 20 && !voice_line(2, 2));
-        for (s = 0, k = 0; s < 64; s++) {   /* deterministic, of the character asked for, both lines in use */
-            a = voice_pick((unsigned)s, 1020, 1, 40, 2);
-            CHECK(a && a->chr == 2 && a == voice_pick((unsigned)s, 1020, 1, 40, 2));
+        for (s = 0, k = 0, n3 = 0; s < 256; s++) {   /* deterministic, of the character asked for, both lines in use */
+            a = voice_pick((unsigned)s, 1020, 1, 40, 2, 0, 0, NULL, NULL);
+            CHECK(a && a->chr == 2 && a == voice_pick((unsigned)s, 1020, 1, 40, 2, 0, 0, NULL, NULL));
             k |= 1 << (a->disc - 1);
+            /* one that ends in time: the 1 s one where 3 s is too long, the shortest where none fits; where both do, the one
+               filling a 3 s original likelier (16 to 2.66) */
+            CHECK(voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, NULL) == voice_line(2, 1) && voice_pick((unsigned)s, 1020, 1, 40, 2, 300, 500, line_ms, NULL) == voice_line(2, 1));
+            a = voice_pick((unsigned)s, 1020, 1, 40, 2, 3000, 4000, line_ms, NULL);
+            CHECK(a == voice_pick((unsigned)s, 1020, 1, 40, 2, 3000, 4000, line_ms, NULL));
+            n3 += a == voice_line(2, 0);
+            CHECK(voice_pick((unsigned)s, 1020, 1, 40, 2, 3000, 4000, line_ms, used_first) == voice_line(2, 1) &&
+                  voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, used_second) == voice_line(2, 1));   /* (the other, else the one that fits) */
+            n1 += voice_pick((unsigned)s, 1020, 1, 40, 2, 9000, 9000, line_ms_short, NULL) == voice_line(2, 1);   /* (a 0.5 s gasp for a 9 s line) */
         }
-        CHECK(k == 3 && !voice_pick(1, 1020, 1, 40, 1) && !voice_pick(1, 1020, 1, 40, 7));
+        CHECK(n1 > 0 && n1 < 256 / 10 && k == 3 && n3 > 256 * 3 / 4 && n3 < 256 && !voice_pick(1, 1020, 1, 40, 1, 0, 0, NULL, NULL) && !voice_pick(1, 1020, 1, 40, 7, 0, 0, NULL, NULL));
         CHECK(voice_model_chr(3) == 2 && voice_model_chr(7) == 3 && voice_model_chr(13) == 6 && voice_model_chr(ACTOR_PART + 3) == 3 &&
               voice_model_chr(ACTOR_PART + 4) == 0 && voice_model_chr(17) == -1 && voice_model_chr(14) == -1 && voice_model_chr(ACTOR_MODELS) == -1 &&
               voice_model_chr(CAST_ZOMBIES) == -1);   /* Steve, Wesker's event model, Rodrigo, files, the Tyrant, the hazmat man, an import */
@@ -438,9 +464,9 @@ int main(void)
             memset(cast_off, 0, sizeof(cast_off));
         }
     }
-    {   /* an enemy model's sounds in place of a line (voices.c voice_creature, voice_creature_seq) */
-        unsigned char pr[64], pick[16], pick2[16];
-        int room = 0, n, k, m, at[16], at2[16], len[3] = { 400, 1200, 700 }, seen = 0;
+    {   /* an enemy model's sound in place of a line (voices.c voice_creature, voice_creature_pick) */
+        unsigned char pr[64];
+        int room = 0, n, k, m, at[3] = { 0 }, len[3] = { 400, 1200, 700 }, seen = 0;
         for (m = 0; m < ACTOR_MODELS && strcmp(actor_models[m].name, "Zombie: Prisoner"); m++);   /* (RM_5520, model 0: moans 48..51) */
         CHECK(m < ACTOR_MODELS && voice_creature(m, 0, &room, pr, 64) == 4 && room == 5520 && pr[0] == 48 && pr[3] == 51);
         CHECK(voice_creature(m, 1, &room, pr, 64) == 44 && room == 5520 && pr[0] == 20 && pr[43] == 63);
@@ -457,18 +483,17 @@ int main(void)
             if (voice_creature(m, 0, &room, pr, 64) > 0) k++;
             else CHECK(actor_models[m].id == 8 || actor_models[m].id == 99 || cast_character(actor_models[m].id, actor_models[m].mdlver) >= 0);
         CHECK(k == 46 && !voice_creature(ACTOR_PART + 1, 0, &room, pr, 64) && !voice_creature(ACTOR_MODELS, 0, &room, pr, 64) && !voice_creature(m - 1, 0, &room, pr, 8));
-        for (s = 0; s < 64; s++) {   /* deterministic, from 0 ms on, filling the line, never the same twice in a row */
-            n = voice_creature_seq((unsigned)s, 1020, 1, 40 + s % 3, len, 3, 5000, pick, at, 16);
-            CHECK(n > 1 && n == voice_creature_seq((unsigned)s, 1020, 1, 40 + s % 3, len, 3, 5000, pick2, at2, 16) && !memcmp(pick, pick2, (size_t)n) &&
-                  !memcmp(at, at2, sizeof(int) * (size_t)n) && at[0] == 0);
-            CHECK(at[n - 1] < 5000 - 250 && at[n - 1] + len[pick[n - 1]] + 300 >= 5000 - 250);
-            for (k = 1; k < n; k++) CHECK(at[k] >= at[k - 1] + len[pick[k - 1]] + 60 && (pick[k] != pick[k - 1] || len[pick[k]] == 400));
-            for (k = 0; k < n; k++) seen |= 1 << pick[k];
-            CHECK(voice_creature_seq((unsigned)s, 1020, 1, 40, len, 3, 400, pick, at, 16) == 1 && pick[0] == 0);   /* (a short line: the one that fits) */
-            CHECK(voice_creature_seq((unsigned)s, 1020, 1, 40, len, 3, 900, pick, at, 16) >= 1 && pick[0] != 1);
+        for (s = 0; s < 256; s++) {   /* one sound, deterministic; of those ending in time, the longer the likelier for a long line */
+            n = voice_creature_pick((unsigned)s, 1020, 1, 40 + s % 3, len, 3, 5000, 6000, -1);
+            CHECK(n >= 0 && n < 3 && n == voice_creature_pick((unsigned)s, 1020, 1, 40 + s % 3, len, 3, 5000, 6000, -1));
+            seen |= 1 << n; at[n]++;
+            CHECK(voice_creature_pick((unsigned)s, 1020, 1, 40, len, 3, 200, 1100, -1) != 1);   /* (the 1.2 s one ends too late) */
+            CHECK(voice_creature_pick((unsigned)s, 1020, 1, 40, len, 3, 100, 300, -1) == 0);    /* (none in time: the shortest) */
+            n = voice_creature_pick((unsigned)s, 1020, 1, 40, len, 3, 5000, 6000, -1);   /* not the one before again, unless it alone fits */
+            CHECK(voice_creature_pick((unsigned)s, 1020, 1, 40, len, 3, 5000, 6000, n) != n && voice_creature_pick((unsigned)s, 1020, 1, 40, len, 3, 200, 450, 0) == 0);
         }
-        CHECK(seen == 7 && voice_creature_seq(1, 1020, 1, 40, len, 3, 0, pick, at, 16) == 1 && voice_creature_seq(1, 1020, 1, 40, len + 1, 2, 300, pick, at, 16) == 1 &&
-              pick[0] == 1 && voice_creature_seq(1, 1020, 1, 40, len, 1, 60000, pick, at, 16) == 16 && !voice_creature_seq(1, 1020, 1, 40, len, 0, 5000, pick, at, 16));
+        CHECK(seen == 7 && at[1] > at[0] && voice_creature_pick(1, 1020, 1, 40, len, 0, 5000, 6000, -1) == -1 &&
+              voice_creature_pick(1, 1020, 1, 40, len, 1, 0, 0, -1) == 0);
     }
     printf("cast: ok\n");
     return 0;

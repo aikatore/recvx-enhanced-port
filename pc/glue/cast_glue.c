@@ -19,6 +19,7 @@
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
 #include "../../decomp/include/ps2/veronica/prog/face.h"
+#include "../../decomp/include/ps2/veronica/prog/adxwrap.h"
 #include "../src/host/actors.h"
 #include "../src/host/cast.h"
 #include "../src/host/enemies.h"
@@ -31,6 +32,12 @@ extern int coop_on;
 extern int cast_n;                      /* actor_glue.c: hooks run while > 0 */
 unsigned coop_partner_import_id(void);  /* coop_glue.c: the partner's cast_import_id, 0 none */
 int coop_look_model(int c);             /* coop_glue.c: the player's look for Claire or Chris as a model, -1 themselves */
+static void voice_end(void);             /* "Randomize Voice Lines": the line's end (below) */
+static void voice_room(void);
+extern unsigned char* bhScePtr;          /* event.c */
+extern BH_SCEWORK* bhCetask;
+static struct { const BH_SCEWORK *task, *skip; const unsigned char* end; int rec; } pre;   /* "Randomize Voice Lines": the last LipSet run
+    no line before claims (pc_voice_lip; skip: the task whose next LipSet is its line's) */
 int tp_count(void);                     /* teleport.c: reads the room files once (and the voice lines: voice_scan_room) */
 
 #define CSLOTS (ACTOR_SLOTS - ACTOR_CAST)
@@ -96,7 +103,9 @@ void cast_room(const EnemyOpts* o)
         for (k = 0; k < (int)((const unsigned char*)sys->ply_stflg - b); k++) h = (h ^ b[k]) * 16777619u;   /* story, item, kill, key, map flags and items */
         host_log("cast: room %04d loaded: state %08x, player %.2f %.2f %.2f hp %d\n", room, h, plp ? plp->px : 0.0f, plp ? plp->py : 0.0f, plp ? plp->pz : 0.0f, plp ? plp->hp : 0);
     }
-    pc_voice_stop();
+    voice_end();   /* (an inserted line going on into this room still fades out at its time) */
+    pre.end = NULL;   /* (the last LipSet was the room before's) */
+    voice_room();   /* (the lines and sounds said: this room's from now) */
     if (o && o->voices) tp_count();   /* "Randomize Voice Lines": the lines are read with the room files, once, on a thread of their own */
     if (!o || !rom || (!o->cast && !g_appear_per)) { cast_release(); return; }   /* ("Per Character": Claire's and Chris's looks without the cast) */
     imports = import_count(o);
@@ -311,8 +320,9 @@ int cast_draw(BH_PWORK* ep)
    character's model (a cast pick, the player's look for Claire or Chris, the double's "Character Model") says a line of
    that character instead (voice_pick: from the seed, the room file and the line), played from that line's disc's archive
    (partitions VOICE_PT + 0/1), and the LipSet after it plays that line's lip entry. The script waits for it as long as for
-   its own line (pc_voice_playing): a longer one goes on over what follows (until the next line stops it), a shorter one
-   leaves a silence; the scene keeps its timing. Subtitles stay the script's (the original line's text). */
+   its own line (pc_voice_playing), and the line is one that ends by then or soon after (voice_pick: at most VOICE_GRACE_MS
+   longer; a shorter one leaves a silence); one still going then (none of that character fits) fades out (vl.cap). The
+   scene keeps its timing. Subtitles stay the script's (the original line's text). */
 int coop_insn_len_raw(const unsigned char* p);   /* net/coop_proto.c */
 int adx_length_ms(int ptid, int fid);            /* audio/adx.c */
 int ADXF_LoadPartitionNw(int ptid, char* fname, void* dir, void* ptinfo);
@@ -321,11 +331,16 @@ int actor_double_shown(const BH_PWORK* ep);      /* actor_glue.c */
 uint64_t SDL_GetTicks(void);
 extern int PatId[4];
 #define VOICE_PT 28
-#define VOICE_SHORT_MS 1200          /* lines shorter than this (gasps, grunts, cries on a hit) stay quiet, not replaced */
+#define VOICE_GRACE_MS 1000          /* an inserted line ends at most this long after the original's end */
+#define VOICE_GAP_MS 4000            /* a short line followed by a pause: a line of up to this long in it (voice_gap) */
+#define VOICE_FADE 8                 /* ... fading out over this many sound ticks (ExecAdxFadeManager) */
+extern unsigned int AdxPlayFlag[2];  /* sdfunc.c */
+extern ADXT_INFO AdxTInfo[4];        /* adxwrap.c */
 static struct {
     int on, rec, ms;                    /* on: 1 an inserted line plays, 2 the original's time is over */
     const unsigned char* lip;           /* the inserted line's lips for the LipSet after it (pc_voice_lip) */
-    uint64_t t0;
+    uint64_t t0, cap;                   /* cap: when the inserted line on ADX slot 1 fades out (0 none) */
+    int fading;                         /* ... it is fading out */
     int mouth, mroom;                   /* "Talking Mouths": record + 1 whose mouth we started (mouth_add), in room file mroom */
     const void* mexp;                   /* ... its face state then, and the lips */
     const unsigned char* mlip;
@@ -379,12 +394,13 @@ static void mouth_stop(void)
     ((LIP_WORK*)ep->exp2)->flag = 0;
 }
 
-/* A speaker shown as an enemy model (a zombie look, a creature: voice_creature) makes that enemy's sounds instead: its
-   type's SE bank 3 from the disc as an extra bank (snd_xbank_load, released with the room), the programs found there
-   chained over the original line's time (voice_creature_seq, from the seed and the line as voice_pick), each started by
-   pc_voice_tick on SE slot 10 (the shell casings', idle in cutscenes), unpositioned and at full volume as every line on
+/* A speaker shown as an enemy model (a zombie look, a creature: voice_creature) makes one of that enemy's sounds instead
+   of each line: its type's SE bank 3 from the disc as an extra bank (snd_xbank_load, released with the room), one program
+   found there (voice_creature_pick, from the seed and the line as voice_pick, weighted alike by how much of the line's
+   time it fills), on SE slot 10 (the shell casings', idle in cutscenes), unpositioned and at full volume as every line on
    the disc is (mode 1). No ADX plays; the script waits the original line's time (pc_voice_playing); the mouth moves
-   with the original line's lips where the model has a face. */
+   with the original line's lips where the model has a face. It ends by itself, at the next line, StopVoice, a room
+   change, or VOICE_GRACE_MS after the original's end (cr.cap: a longer one where none of its sounds is short enough). */
 int  snd_xbank_load(int key);                    /* audio/snd_iop.c */
 int  snd_xbank_prog_ms(int xb, int tq);          /* audio/snd_synth.c */
 void ExPlaySe(SND_REQ* r);                       /* sdc.c */
@@ -393,101 +409,198 @@ void StopVoice(int fade);                        /* sdfunc.c */
 extern SND_REQ RequestInfo;
 extern int pc_se_xbank;                          /* ps2_sg_sd.c: the extra bank of the next request */
 #define CR_SLOT 10
-#define CR_MAX 16
-static struct { int n, next, xb; unsigned char prog[CR_MAX]; int at[CR_MAX]; } cr;
+static struct { int n, last, last_m; uint64_t end, cap; } cr;   /* n: its sound plays (until end), cut at cap (0 none); the
+    program played last and its model */
+
+static int frm_last[RECS], frm_step[RECS];   /* each record's motion frame (16.16) at the last tick, its step a tick */
 
 void pc_voice_tick(void)
 {
-    int k = cr.next;
-    if (k >= cr.n || SDL_GetTicks() - vl.t0 < (uint64_t)cr.at[k]) return;
-    cr.next++;   /* (one a tick: after a pause the late ones follow one another) */
+    uint64_t now = SDL_GetTicks();
+    for (int r = 0; rom && r < (int)sys->ewk_n && r < RECS; r++) {   /* (voice_gap: how fast each record's motion runs) */
+        int f = ene[r].frm_no, d = f - frm_last[r];
+        frm_step[r] = d > 0 && d < 8 << 16 ? d : 0;
+        frm_last[r] = f;
+    }
+    if (vl.cap && now >= vl.cap) {   /* an inserted line longer than the original's time and grace: it fades out */
+        vl.cap = 0;
+        if (AdxPlayFlag[1]) {
+            RequestAdxFadeFunctionEx(1, -1, -127, VOICE_FADE);   /* (StopAdx at the end: ExecAdxFadeManager) */
+            vl.fading = 1;
+            host_log("voices: the inserted line fades out %d ms after the original's end\n", VOICE_GRACE_MS);
+        }
+    }
+    if (cr.n && cr.cap && now >= cr.cap) { StopSe(CR_SLOT); cr.n = 0; host_log("voices: the sound stops %d ms after the original's end\n", VOICE_GRACE_MS); }
+    else if (cr.n && now >= cr.end) cr.n = 0;   /* (it has ended by itself) */
+}
+
+static int creature_line(unsigned seed, int m, int disc, int vid, int sp, int own)
+{
+    unsigned char cand[64];
+    int len[64], room = 0, n = 0, c, i, xb = 0, alt, ms, k;
+    for (alt = 0; !n && (c = voice_creature(m, alt, &room, cand, 64)) > 0; alt++) {   /* (the programs of the bank found) */
+        if (!(xb = snd_xbank_load(room))) continue;
+        for (i = 0; i < c; i++)
+            if ((len[n] = snd_xbank_prog_ms(xb, cand[i])) > 0) cand[n++] = cand[i];   /* (a looping sample has no length: never) */
+    }
+    if (!n) return 0;
+    ms = adx_length_ms(PatId[1], vid);
+    StopVoice(0);   /* (the line before, as PlayVoiceEx2 stops it; vl, cr cleared) */
+    for (k = 0; k < n && cand[k] != cr.last; k++);   /* (the sound before, of this model in this room) */
+    k = voice_creature_pick(seed, room_file_now(), disc, vid, len, n, ms, ms > 0 ? ms + VOICE_GRACE_MS : 0, cr.last_m == m && k < n ? k : -1);
+    cr.last = cand[k]; cr.last_m = m;
+    vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = NULL; vl.t0 = SDL_GetTicks();   /* (the script waits the original's time) */
+    if (ms > 0 && ms < VOICE_SHORT_MS && len[k] > ms + VOICE_GRACE_MS) {   /* a gasp, and none of its sounds is as short: quiet */
+        host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a short sound and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, actor_model(m)->name);
+        return 1;
+    }
+    host_log("voices: room %04d record %d: %s's line %d/%d (%d ms), shown as %s -> its sound from RM_%04d bank 3: %d (%d ms)%s\n", room_file_now(), sp,
+             cast_name(own), disc, vid, ms, actor_model(m)->name, room, cand[k], len[k], ms > 0 && len[k] > ms + VOICE_GRACE_MS ? ", none shorter: cut" : "");
     RequestInfo.SlotNo = CR_SLOT;
     RequestInfo.BankNo = 3;
-    RequestInfo.ListNo = (char)cr.prog[k];
+    RequestInfo.ListNo = (char)cand[k];
     RequestInfo.Priority = 0;
     RequestInfo.Pan = 0; RequestInfo.PanDelayTime = 0;
     RequestInfo.Volume = 0; RequestInfo.VolumeDelayTime = 0;
     RequestInfo.Pitch = 0; RequestInfo.PitchDelayTime = 0;
     RequestInfo.FxInput = -1;
-    pc_se_xbank = cr.xb;
+    pc_se_xbank = xb;
     ExPlaySe(&RequestInfo);
     pc_se_xbank = 0;
-    if (getenv("RECVX_CAST_TRACE")) host_log("voices: record %d sound %d of %d: program %d at %d ms\n", vl.rec, k + 1, cr.n, cr.prog[k], (int)(SDL_GetTicks() - vl.t0));
+    cr.n = 1;
+    cr.end = vl.t0 + (uint64_t)len[k];
+    cr.cap = ms > 0 && len[k] > ms + VOICE_GRACE_MS ? vl.t0 + (uint64_t)(ms + VOICE_GRACE_MS) : 0;
+    return 1;
 }
 
-static int creature_line(unsigned seed, int m, int disc, int vid, int sp, int own)
+
+/* an inserted line's length (voice_pick), read once */
+static int line_ms(const VoiceLine* l)
 {
-    unsigned char cand[64], pick[CR_MAX];
-    int len[64], room = 0, n = 0, c, i, k, xb = 0, alt, ms;
-    char seq[CR_MAX * 24] = "";   /* (" + 63 (2262 ms)" each) */
-    for (alt = 0; !n && (c = voice_creature(m, alt, &room, cand, 64)) > 0; alt++) {   /* (the programs of the bank found) */
-        if (!(xb = snd_xbank_load(room))) continue;
-        for (i = 0; i < c; i++)
-            if ((len[n] = snd_xbank_prog_ms(xb, cand[i])) > 0) cand[n++] = cand[i];
+    static short len[2][2048];   /* (ms / 8 + 1, 0 not read; the longest line is 28 s) */
+    int d = l->disc - 1;
+    if (d < 0 || d > 1 || l->vid >= 2048) return 0;
+    if (!len[d][l->vid]) len[d][l->vid] = (short)(adx_length_ms(VOICE_PT + d, l->vid) / 8 + 1);
+    return (len[d][l->vid] - 1) * 8;
+}
+
+/* How long until the task says its next line, at least, in ms (the game's 30 ticks a second): its script from p walked
+   as it waits, Sleep's ticks and the While-FrameCheck loops on a record's motion frame (the ticks that motion needs to
+   get there at its pace now), up to the next VoiceOn or the event's end; an If, another loop or wait ends the walk
+   (the time so far is still a lower bound). From the game's state only: the same on both co-op screens. */
+static int voice_gap(const unsigned char* p)
+{
+    int k, len, ticks = 0;
+    for (k = 0; k < 64; k++, p += len) {
+        if (*p == 25 || *p == 255 || *p == 0 || (*p >= 1 && *p <= 3)) break;   /* (VoiceOn, EvtEnd, End; If, Else, Endif) */
+        if (*p == 0xF8) { ticks += p[2] | p[3] << 8; len = 4; continue; }   /* Sleep: its ticks */
+        if (*p == 0xFC) {   /* While FrameCheck(enemy record, half, frame) EvtNext Ewhile: until its motion frame gets there */
+            int to = (p[6] | p[7] << 8) << 16 | (p[5] ? 0x8000 : 0), w, t;
+            if (p[2] != 0x38 || p[3] != 1 || p[8] != 0xFE || p[9] != 0xFD || !rom || p[4] >= rom->ene_n) break;
+            w = rom->enep[p[4]].wrk_no;
+            if (w < 0 || w >= RECS || w >= (int)sys->ewk_n || !frm_step[w]) break;
+            t = (to - ene[w].frm_no) / frm_step[w];   /* (from now: the frame counts on through the waits before) */
+            if (t > ticks) ticks = t;
+            len = 10;
+            continue;
+        }
+        if ((len = coop_insn_len_raw(p)) <= 0) break;
     }
-    if (!n) return 0;
-    ms = adx_length_ms(PatId[1], vid);
-    StopVoice(0);   /* (the line before, as PlayVoiceEx2 stops it; vl, cr cleared) */
-    cr.n = voice_creature_seq(seed, room_file_now(), disc, vid, len, n, ms, pick, cr.at, CR_MAX);
-    for (k = 0; k < cr.n; k++) {
-        cr.prog[k] = cand[pick[k]];
-        snprintf(seq + strlen(seq), sizeof seq - strlen(seq), "%s%d (%d ms)", k ? " + " : "", cr.prog[k], len[pick[k]]);
-    }
-    cr.next = 0;
-    cr.xb = xb;
-    host_log("voices: room %04d record %d: %s's line %d/%d (%d ms), shown as %s -> its sounds from RM_%04d bank 3: %s\n", room_file_now(), sp,
-             cast_name(own), disc, vid, ms, actor_model(m)->name, room, seq);
-    vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = NULL; vl.t0 = SDL_GetTicks();
-    pc_voice_tick();   /* (the first one now) */
-    return 1;
+    return ticks * 1000 / 30;
+}
+
+/* the lines said since the room was loaded (voice_pick: not again while others fit; when all that fit were said, that
+   character's start a new round), in the scene's order: the same in every run; a room load starts afresh (cast_room). For the cast's characters only theirs count, so both co-op screens,
+   which show Claire and Chris each with its own player's look, still pick alike for them (used_cast) */
+static struct { const VoiceLine* l; int cast; } used[128];
+static int used_n, used_cast;
+static int line_used(const VoiceLine* l)
+{
+    for (int i = 0; i < used_n; i++) if (used[i].l == l && (used[i].cast || !used_cast)) return 1;
+    return 0;
+}
+
+/* a line not replaced: the speaker shown as another character (or as an enemy) says nothing of its own; quiet, and the
+   script waits the original line's time as for an inserted one */
+static int quiet(int sp, int ms)
+{
+    vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = NULL; vl.t0 = SDL_GetTicks();   /* (an inserted line before it plays on: vl.cap) */
+    return -1;
 }
 
 int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid)
 {
     static int logged, part[2];
     const EnemyOpts* o = enemy_opts();
-    int disc = (sys->ss_flg & 0x1) + 1, sp = -1, own, chr, m, lrec, ms, lip;
+    int disc = (sys->ss_flg & 0x1) + 1, sp = -1, own, chr, m, lrec, ms, lip, lms, d, before = 0, fit, gap = 0;
     const VoiceLine* l;
     const char* why;
-    pc_voice_stop();   /* (an enemy's sounds stop at the next line, as PlayVoiceEx2 stops a line) */
+#define KEEP(why) do { if (getenv("RECVX_CAST_TRACE")) host_log("voices: room %04d line %d/%d kind %d rec %d, speaker %d (%s), shown as %d: stays (%s)\n", room_file_now(), disc, vid, kind, rec, sp, sp >= 0 && sp < RECS ? cast_name(cast_character(ene[sp].id, ene[sp].mdlver)) : "-", m, why); vl.cap = 0; return vid; } while (0)
+    voice_end();   /* (an enemy's sound stops at the next line, as PlayVoiceEx2 stops a line) */
+    m = -1;
     if (!o || !o->voices || !rom) return vid;
     if ((lip = voice_lipset(next, 512, coop_insn_len_raw, &lrec)) >= 0) sp = lrec;
+    else if (pre.task == bhCetask && pre.end && pre.end < next - 8 && next - 8 - pre.end <= 16 && voice_lipset_before(pre.end, next - 8, coop_insn_len_raw)) { sp = pre.rec; lip = 0; before = 1; }   /* (its mouth started first) */
     else if (kind == 1) sp = rec;
-    if (sp < 0 || sp >= rom->ene_n || sp >= RECS) return vid;
+    else if (!kind) sp = voice_said_by(room_file_now(), vid);
+    pre.end = NULL;
+    pre.skip = lip >= 0 && !before ? bhCetask : NULL;   /* (at the player: the record the script's other such lines name) */
+    if (sp < 0 || sp >= rom->ene_n || sp >= RECS) KEEP("no speaker");
     own = cast_character(ene[sp].id, ene[sp].mdlver);
     m = shown_model(sp);
     chr = voice_model_chr(m);
     if (own >= 0 && chr < 0 && creature_line((unsigned)o->seed, m, disc, vid, sp, own)) return -1;   /* (bhVoiceOn plays nothing) */
-    if (own < 0 || chr < 0 || chr == own) return vid;
+    if (own < 0 || chr < 0 || chr == own) KEEP(own < 0 ? "not a story character" : chr < 0 ? "shown as a model without lines" : "shown as its own character");
+    ms = adx_length_ms(PatId[1], vid);
     if (voice_count(0) < 0) {   /* (the room files are being read: cast_room started it) */
         tp_count();
-        if (!logged++) host_log("voices: the lines are not read yet: line %d/%d stays\n", disc, vid);
-        return vid;
+        if (!logged++) host_log("voices: the lines are not read yet: line %d/%d quiet\n", disc, vid);
+        return quiet(sp, ms);
     }
-    ms = adx_length_ms(PatId[1], vid);
-    if (ms > 0 && ms < VOICE_SHORT_MS) {   /* a gasp or grunt: quiet (a whole line in its place would be cut by the next one) */
-        host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a short sound: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms);
-        vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = NULL; vl.t0 = SDL_GetTicks();   /* (the script still waits its length) */
-        return -1;
+    for (d = 0; d < 2; d++)
+        if (!part[d]) {   /* the archives as partitions of their own (the game's 1 is the room's disc's), both for the lengths */
+            ADXF_LoadPartitionNw(VOICE_PT + d, d ? (char*)"\\VOICE2.AFS" : (char*)"\\VOICE1.AFS", NULL, NULL);
+            part[d] = ADXF_GetPtStat(VOICE_PT + d) == 3 ? 1 : -1;   /* (ADXF_STAT_READEND) */
+        }
+    used_cast = own >= 2;   /* (Claire, Chris: each screen's own look) */
+    fit = ms;
+    if (ms > 0 && ms < VOICE_SHORT_MS && (gap = voice_gap(next)) - 300 > ms + VOICE_GRACE_MS)   /* a gasp before a pause: a line in it */
+        fit = (gap - 300 < VOICE_GAP_MS ? gap - 300 : VOICE_GAP_MS) - VOICE_GRACE_MS;
+    if (!(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr, fit, fit > 0 ? fit + VOICE_GRACE_MS : 0, line_ms, line_used))) KEEP("no line picked");
+    if (part[l->disc - 1] < 0) KEEP("the archive did not load");
+    lms = line_ms(l);
+    if (ms > 0 && ms < VOICE_SHORT_MS && lms > fit + VOICE_GRACE_MS) {   /* a gasp or grunt, and the character has no short sound: quiet */
+        host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a short sound and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr));
+        return quiet(sp, ms);
     }
-    if (!(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr))) return vid;
-    if (!part[l->disc - 1]) {   /* the line's archive as a partition of its own (the game's 1 is the room's disc's) */
-        ADXF_LoadPartitionNw(VOICE_PT + l->disc - 1, l->disc == 1 ? (char*)"\\VOICE1.AFS" : (char*)"\\VOICE2.AFS", NULL, NULL);
-        part[l->disc - 1] = ADXF_GetPtStat(VOICE_PT + l->disc - 1) == 3 ? 1 : -1;   /* (ADXF_STAT_READEND) */
+    if (line_used(l)) {   /* (all that fit were said: a new round of that character's, this one first) */
+        int i, n = 0;
+        for (i = 0; i < used_n; i++) if (used[i].l->chr != l->chr || (used_cast && !used[i].cast)) used[n++] = used[i];
+        used_n = n;
     }
-    if (part[l->disc - 1] < 0) return vid;
-    why = lip < 0 ? mouth_add(sp, vid, l->lip) : NULL;
-    host_log("voices: room %04d record %d: %s's line %d/%d (%d ms), shown as %s -> %s's line %d/%d (%d ms) from RM_%04d, %s%s%s\n", room_file_now(), sp,
+    if (used_n < (int)(sizeof used / sizeof used[0])) { used[used_n].l = l; used[used_n++].cast = own >= 2; }   /* (said in this room: not again while others are left) */
+    why = lip < 0 ? mouth_add(sp, vid, l->lip) : NULL;   /* (every catalogue line has lips) */
+    host_log("voices: room %04d record %d: %s's line %d/%d (%d ms), shown as %s -> %s's line %d/%d (%d ms%s) from RM_%04d, %s%s%s\n", room_file_now(), sp,
              cast_name(own), disc, vid, ms, m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?", cast_name(chr), l->disc, l->vid,
-             adx_length_ms(VOICE_PT + l->disc - 1, l->vid), l->room, lip >= 0 ? "with its lips" : "no lips in the script (the speaker is the VoiceOn's record): ",
+             lms, ms > 0 && lms > fit + VOICE_GRACE_MS ? ", none shorter: faded out" : fit > ms ? ", in the pause after it" : "", l->room,
+             lip >= 0 ? "with its lips" : "no lips in the script (the speaker is the VoiceOn's record): ",
              lip >= 0 ? "" : why ? "a still mouth, " : "Talking Mouths: its lips added", why ? why : "");
     vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = lip >= 0 ? l->lip : NULL; vl.t0 = SDL_GetTicks();
+    if (before && ene[sp].exp0 && ene[sp].exp2) {   /* (the LipSet ran already: its lips now, afresh) */
+        ((int*)ene[sp].exp0)[268] = (int)(uintptr_t)l->lip;
+        ((LIP_WORK*)ene[sp].exp2)->flag = 0;
+        vl.lip = NULL;
+    }
+    vl.cap = ms > 0 && lms > fit + VOICE_GRACE_MS ? vl.t0 + (uint64_t)(fit + VOICE_GRACE_MS) : 0;
     *ptid = VOICE_PT + l->disc - 1;
     return l->vid;
+#undef KEEP
 }
 
 void pc_voice_lip(BH_PWORK* pp, int rec)
 {
+    if (pre.skip == bhCetask) pre.skip = NULL;   /* (the line before's) */
+    else { pre.task = bhCetask; pre.end = bhScePtr; pre.rec = rec; }
     if (vl.mouth && rec == vl.mouth - 1) mouth_stop();   /* (the script's own lips for that record: they start afresh) */
     if (vl.on != 1 || !vl.lip || rec != vl.rec || !pp->exp0 || !pp->exp2) return;
     ((int*)pp->exp0)[268] = (int)(uintptr_t)vl.lip;   /* (bhSetLip's: the entry LipStart plays) */
@@ -503,11 +616,28 @@ int pc_voice_playing(int flag)
     return 0;
 }
 
-void pc_voice_stop(void)
+/* the line's end: the next line, a room change (an inserted line still playing keeps its fade-out time; one fading out
+   or past it stops now) */
+static void voice_end(void)
 {
+    if (vl.fading || (vl.cap && SDL_GetTicks() >= vl.cap)) {
+        AdxTInfo[1].FadeFunc = 0;
+        StopAdx(1);
+        AdxPlayFlag[1] = 0;
+        vl.cap = 0; vl.fading = 0;
+    }
     vl.on = 0;
     if (vl.mouth) mouth_stop();
-    if (cr.n) { cr.n = 0; StopSe(CR_SLOT); }   /* (an enemy's sounds stop as the line would) */
+    if (cr.n) { cr.n = 0; StopSe(CR_SLOT); }   /* (an enemy's sound stops as the line would) */
+}
+
+static void voice_room(void) { used_n = 0; cr.last = -1; }
+
+/* StopVoice (sdfunc.c): VoiceOff, a skip, the line before an enemy's sounds; the slot stops or fades as the game asks */
+void pc_voice_stop(void)
+{
+    voice_end();
+    vl.cap = 0;
 }
 
 /* --dev cutscene log (devcine_glue.c): this room visit's swaps, "r3 Alfred(94)->Tyrant, r5 Rodrigo(98)->Wesker,

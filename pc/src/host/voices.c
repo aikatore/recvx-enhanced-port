@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { OP_END = 0, OP_IFEL = 1, OP_ELSE = 2, OP_ENDIF = 3, OP_VOICEON = 25, OP_LIPSET = 61, OP_EVTEND = 255 };
+enum { OP_END = 0, OP_IFEL = 1, OP_ELSE = 2, OP_ENDIF = 3, OP_VOICEON = 25, OP_MESSAGE = 31, OP_LIPSET = 61, OP_LIPSTART = 63, OP_EVTEND = 255 };
 
 static unsigned rd32(const unsigned char* d, long n, long o) { return o >= 0 && o <= n - 4 ? d[o] | d[o + 1] << 8 | d[o + 2] << 16 | (unsigned)d[o + 3] << 24 : 0; }
 
@@ -21,6 +21,13 @@ int voice_lipset(const unsigned char* p, int n, int (*insn)(const unsigned char*
         if (p[o] == OP_VOICEON || p[o] == OP_END || p[o] == OP_EVTEND || (len = insn(p + o)) <= 0) return -1;
     }
     return -1;
+}
+
+int voice_lipset_before(const unsigned char* p, const unsigned char* von, int (*insn)(const unsigned char*))
+{
+    for (int k = 0, len; p < von && k < 4; k++, p += len)
+        if ((*p != OP_LIPSTART && *p != OP_MESSAGE) || (len = insn(p)) <= 0) return 0;
+    return p == von;
 }
 
 int voice_model_chr(int m)
@@ -37,8 +44,10 @@ int g_voice_mouths = 1;
 /* the lines without a LipSet whose VoiceOn record is surely the speaker: in the same script, at least 9 in 10 of the lines
    with a LipSet that name that record are said by it; none naming it: every line with one names its speaker. Tried on the
    US disc's lines with both (the LipSet's record the speaker), each judged by the others: 294 of the 428 pass and 284 of
-   those are right (97 %, against 81 % for all); 134 of the 192 lines without a LipSet pass */
-typedef struct { unsigned short room, vid; unsigned char rec; } Sure;
+   those are right (97 %, against 81 % for all); 133 of the 191 lines without a LipSet pass. Also (k0) the lines placed at
+   the player (kind 0) without a LipSet, which name no record: said by the record that every kind-0 line of the same
+   script with a LipSet moves the mouth of (at least one; Claire waking up in RM_6000, Alfred in RM_1020) */
+typedef struct { unsigned short room, vid; unsigned char rec, k0; } Sure;
 static Sure* sure;
 static int sure_n, sure_cap;
 
@@ -92,8 +101,11 @@ void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const 
     for (int i = 0; i < k; i++) {   /* each script to its End outside any if-block (an event's also at op 255), as teleport.c sweep */
         long o = base + offs[i], ends[64], next = 0;
         int ne = 0, nq = 0, bad = 0;
-        Sure q[64];   /* this script's lines without a LipSet that name a record (kind 1) */
+        Sure q[64];   /* this script's lines without a LipSet that name a record (kind 1), or are placed at the player (kind 0) */
         unsigned short named[256] = { 0 }, right[256] = { 0 };   /* its lines with one naming each record, those said by it */
+        int k0rec = -1, k0bad = 0;   /* the record its kind-0 lines with a LipSet move the mouth of; more than one */
+        long pre = -1;               /* the end of the last LipSet no line before claims (pre_rec's mouth, entry pre_lip) */
+        int pre_rec = 0, pre_lip = 0, claimed = 0;
         for (int j = 0; j < k; j++) if (offs[j] > offs[i] && (!next || offs[j] < (unsigned long)next)) next = offs[j];
         while (o >= 0 && o + 8 <= n && (!next || o < base + next)) {
             int op = d[o], len = insn(d + o), rec, lip;
@@ -101,9 +113,21 @@ void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const 
             while (ne && ends[ne - 1] <= o) ne--;
             if (len <= 0) break;
             lip = op == OP_VOICEON ? voice_lipset(d + o + len, (int)(n - o - len), insn, &rec) : -1;
+            if (op == OP_VOICEON) {
+                if (lip >= 0) claimed = 1;   /* (the next LipSet is this line's) */
+                else if (pre >= 0 && voice_lipset_before(d + pre, d + o, insn)) { lip = pre_lip; rec = pre_rec; }   /* (the LipSet right before) */
+                pre = -1;
+            }
+            if (op == OP_LIPSET) {
+                if (claimed) claimed = 0;
+                else { pre = o + len; pre_rec = d[o + 2]; pre_lip = d[o + 3]; }
+            }
             if (op == OP_VOICEON && d[o + 1] == 1) {   /* (kind 1: the line names a record) */
                 if (lip >= 0) { named[d[o + 6]]++; right[d[o + 6]] += rec == d[o + 6]; bad |= rec != d[o + 6]; }
-                else if (nq < 64) q[nq++] = (Sure){ (unsigned short)room, (unsigned short)(d[o + 2] | d[o + 3] << 8), d[o + 6] };
+                else if (nq < 64) q[nq++] = (Sure){ (unsigned short)room, (unsigned short)(d[o + 2] | d[o + 3] << 8), d[o + 6], 0 };
+            } else if (op == OP_VOICEON && !d[o + 1]) {   /* (kind 0: at the player) */
+                if (lip >= 0) { k0bad |= k0rec >= 0 && rec != k0rec; k0rec = rec; }
+                else if (nq < 64) q[nq++] = (Sure){ (unsigned short)room, (unsigned short)(d[o + 2] | d[o + 3] << 8), 0, 1 };
             }
             if (lip >= 0 && rec < nr && ep) {
                 long r = ep + rec * 0x24;   /* ETTY_WORK: id at 4, mdlver at 9 */
@@ -118,7 +142,8 @@ void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const 
         }
         for (int j = 0; j < nq; j++) {
             int r = q[j].rec;
-            if (named[r] ? right[r] * 10 < named[r] * 9 : bad) continue;
+            if (q[j].k0) { if (k0rec < 0 || k0bad) continue; q[j].rec = (unsigned char)k0rec; }
+            else if (named[r] ? right[r] * 10 < named[r] * 9 : bad) continue;
             if (sure_n == sure_cap) {
                 Sure* g = realloc(sure, sizeof(Sure) * (size_t)(sure_cap + 64));
                 if (!g) break;
@@ -135,6 +160,12 @@ int voice_sure(int room, int vid, int rec)
     if (!__atomic_load_n(&ready, __ATOMIC_ACQUIRE)) return 0;
     for (int i = 0; i < sure_n; i++) if (sure[i].room == room && sure[i].vid == vid && sure[i].rec == rec) return 1;
     return 0;
+}
+int voice_said_by(int room, int vid)
+{
+    if (!__atomic_load_n(&ready, __ATOMIC_ACQUIRE)) return -1;
+    for (int i = 0; i < sure_n; i++) if (sure[i].k0 && sure[i].room == room && sure[i].vid == vid) return sure[i].rec;
+    return -1;
 }
 int voice_sure_count(void) { return __atomic_load_n(&ready, __ATOMIC_ACQUIRE) ? sure_n : -1; }
 
@@ -183,11 +214,49 @@ static unsigned mix(unsigned seed, int room, int disc, int vid, unsigned salt)
     return h;
 }
 
-const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr)
+/* how much a line of len ms fills an original of ms: 1000 + 5000 r^2 (r the part of the original's time it fills): one that
+   fills it 6 times as likely as a one-word shout, one filling half 2.25 times (a soft preference: the pool stays wide) */
+static unsigned fill_weight(int len, int ms)
 {
-    int n = voice_count(chr);
+    unsigned r = (unsigned)((len < ms ? len : ms) * 1000LL / ms);
+    return 1000u + 5u * r * r / 1000u;
+}
+
+/* ... a line's: a gasp, grunt or shout (under VOICE_SHORT_MS) in place of a spoken line ten times less likely again */
+static unsigned line_weight(int len, int ms)
+{
+    unsigned w = fill_weight(len, ms);
+    return ms >= VOICE_SHORT_MS && len < VOICE_SHORT_MS ? w / 10u : w;
+}
+
+const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr, int ms, int max_ms, int (*ms_of)(const VoiceLine*),
+                            int (*used)(const VoiceLine*))
+{
+    const VoiceLine* l = chr >= 0 && chr < CAST_CHARACTERS ? &lines[first[chr]] : NULL;
+    int n = voice_count(chr), i, len, best = -1, best_ms = 0, pass;
+    unsigned h, sum = 0;
     if (n <= 0) return NULL;
-    return &lines[first[chr] + (int)(mix(seed, room, disc, vid, (unsigned)chr) % (unsigned)n)];
+    h = mix(seed, room, disc, vid, (unsigned)chr);
+    if (ms <= 0 || max_ms <= 0 || !ms_of) max_ms = 0;   /* (any, alike) */
+    for (pass = used ? 0 : 1; pass < 2 && !sum; pass++)   /* the ones not said yet in the room, else all */
+        for (i = 0; i < n; i++) {
+            if (!pass && used(&l[i])) continue;
+            if (!max_ms) sum += 1000u;
+            else if ((len = ms_of(&l[i])) > 0 && len <= max_ms) sum += line_weight(len, ms);   /* (the ones that end in time, weighted) */
+            else if (len > 0 && (best < 0 || len < best_ms)) { best = i; best_ms = len; }
+        }
+    if (!sum) return best >= 0 ? &l[best] : &l[h % (unsigned)n];   /* (none ends in time: the shortest) */
+    h %= sum;
+    for (pass--, i = 0; i < n; i++) {
+        unsigned w;
+        if (!pass && used(&l[i])) continue;
+        if (!max_ms) w = 1000u;
+        else if ((len = ms_of(&l[i])) > 0 && len <= max_ms) w = line_weight(len, ms);
+        else continue;
+        if (h < w) break;
+        h -= w;
+    }
+    return &l[i];
 }
 
 /* ---------------------------------------------------------------- an enemy model's sounds in place of a line
@@ -246,21 +315,23 @@ int voice_creature(int m, int alt, int* room, unsigned char* prog, int max)
     return 0;   /* the fish (no sounds), the hazmat man, the story cast (lines of their own) */
 }
 
-int voice_creature_seq(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, unsigned char* pick, int* at, int max)
+int voice_creature_pick(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, int max_ms, int last)
 {
-    int k, t = 0, fit[64], nf, i, j;
-    for (k = 0; k < max && n > 0 && n <= 64; k++) {
-        unsigned h = mix(seed, room, disc, vid, 0x100u + (unsigned)k);
-        for (i = nf = 0; i < n; i++)   /* the ones that fit in the time left (a quarter second over is fine), else the shortest */
-            if (ms <= 0 || len[i] <= ms - t + 250) fit[nf++] = i;
-        if (!nf) for (i = 1, fit[nf++] = 0; i < n; i++) if (len[i] < len[fit[0]]) fit[0] = i;
-        j = (int)(h % (unsigned)nf);
-        if (k && nf > 1 && fit[j] == pick[k - 1]) j = (j + 1) % nf;   /* (not the same sound twice in a row) */
-        i = fit[j];
-        pick[k] = (unsigned char)i;
-        at[k] = t;
-        t += len[i] + 60 + (int)((h >> 20) % 240);   /* (a breath between two) */
-        if (t >= ms - 250) return k + 1;   /* the line's time is filled: none starts in its last quarter second */
-    }
-    return k;
+    unsigned h = mix(seed, room, disc, vid, 0x100u), sum = 0;
+    int i, best = 0, pass;
+    if (n <= 0) return -1;
+    if (ms <= 0 || max_ms <= 0) max_ms = 0x7FFFFFFF, ms = 1;   /* (any, alike) */
+    for (i = 1; i < n; i++) if (len[i] < len[best]) best = i;
+    for (pass = n > 1 && last >= 0 && last < n ? 0 : 1; pass < 2 && !sum; pass++)   /* not the one before again, unless none else fits */
+        for (i = 0; i < n; i++)
+            if ((pass || i != last) && len[i] > 0 && len[i] <= max_ms) sum += fill_weight(len[i], ms);   /* (weighted as voice_pick's) */
+    if (!sum) return best;   /* (none ends in time: the shortest) */
+    h %= sum;
+    for (pass--, i = 0; i < n; i++)
+        if ((pass || i != last) && len[i] > 0 && len[i] <= max_ms) {
+            unsigned w = fill_weight(len[i], ms);
+            if (h < w) return i;
+            h -= w;
+        }
+    return best;
 }

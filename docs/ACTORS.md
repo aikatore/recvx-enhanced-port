@@ -1232,12 +1232,21 @@ catalogue and the picks, the enemy models' sounds; no game state, ctest `cast`),
   0..5 and time, 0xFF last), on that record's face; op 63 `LipStart` starts it (`face.c bhControlMask`).
 * The **speaker** is the record of the `LipSet` that follows the `VoiceOn` before another `VoiceOn`, `End` or
   `EvtEnd` (`voice_lipset`, at most 16 instructions; on the disc it is the next or the second next instruction).
-  A line without one: the `VoiceOn`'s record when kind is 1; else nobody (the line stays).
+  Without one, a `LipSet` right before it (only `LipStart` and `MessageSet` between, and not the line before's;
+  `voice_lipset_before`, at run time the last `LipSet` the task ran, `pc_voice_lip`): two lines of the disc start the
+  mouth first, Claire's cry that she cannot open the door while the researcher is killed behind the glass in 3130
+  (1/76, a kind-0 line that named nobody, so it kept her voice) and one of hers in 6051 (2/283). A line without
+  either: the `VoiceOn`'s record when kind is 1. A line placed at the player (kind 0) without one: the record that
+  every kind-0 line of the same script with a `LipSet` moves the mouth of (at least one, all the same record;
+  `voice_said_by`, from the catalogue's scan): Claire waking up after the crash in 6000 (2/1), Alfred in 1020
+  (1/114). Else nobody (the line stays): the scripters also put other speakers' lines at the player (Steve's in 1001,
+  Wesker's in 7070), so a kind-0 line is the player's only where its script says so.
 * Counted over all 205 room files of the US disc (with `pc/tools/rdx.py`'s room reader): 673 `VoiceOn` (562
-  distinct files), no `VoiceWait`. 451 have a `LipSet`: the speaker is the face that moves. 195 more name a record
-  (kind 1) and no mouth; where both exist the record and the `LipSet` agree in 345 of 428 lines (81 %), so about
-  one in five of these is said by someone else. 27 kind-0 and 3 kind-2 lines without a `LipSet` name nobody and
-  stay. The speaker's character is `cast_character` of the record's type (the seven; the hazmat man, the
+  distinct files), no `VoiceWait`. 451 have a `LipSet` after them and 2 one right before: the speaker is the face
+  that moves. 194 more name a record (kind 1) and no mouth; where both exist the record and the `LipSet` agree in
+  345 of 428 lines (81 %), so about one in five of these is said by someone else. 26 kind-0 and 3 kind-2 lines have
+  no `LipSet`; 2 of the kind-0 ones get a speaker as above, the other 24 and the kind-2 ones name nobody and stay.
+  The speaker's character is `cast_character` of the record's type (the seven; the hazmat man, the
   creatures and the zombies have none).
 
 ### The catalogue
@@ -1247,8 +1256,8 @@ bytes copied from its room (`voice_scan_room`). Read once with the room files of
 its thread, about 2 s; started by the first room load with the option on, `cast_room` -> `tp_count`): the disc's rooms
 and the mods folder's and BioRand's, as the game loads them. Sorted by character, disc and file; a file in several
 rooms once (its first room's lips); a file two characters' `LipSet`s claim is nobody's (2 files). The log:
-`voices: lines with mouth movements: Claire 114, Chris 45, Steve 124, Wesker 46, Alfred 13, Alexia 10, Rodrigo 20`
-(372 lines, 19 KB of lips). Nothing of the disc is in the repository.
+`voices: lines with mouth movements: Claire 116, Chris 45, Steve 124, Wesker 46, Alfred 13, Alexia 10, Rodrigo 20`
+(374 lines, 19 KB of lips; Claire's two whose `LipSet` comes first among them). Nothing of the disc is in the repository.
 
 A model's character (`voice_model_chr`): the catalogue entries by type (`cast_character`: the cutscene models, the
 event models, Alfred's other uniforms), the player files 10..13 (14, Claire's second costume: Claire). Every other
@@ -1261,10 +1270,22 @@ the line.
 * `bhVoiceOn` asks `pc_voice_on`: with the option on (`enemy_opts()->voices`: the host's in co-op), the catalogue read,
   a speaker of a story character shown as another one's model (`shown_model`: the cast's slot, `cast_glue.c as_model`,
   else the double's `actor_double_shown`), whose character has lines: `voice_pick(seed, room file, disc, file,
-  character)`, a hash of the enemy seed, the room file and the line into that character's lines. The same line in the
-  same room with the same seed is always the same: replays repeat, and both co-op games pick alike. The line is played
-  from its own disc's archive (partitions 28 `VOICE1.AFS`, 29 `VOICE2.AFS`, loaded at the first such line; a mods
-  folder's `VOICE1.AFS/<n>` counts as for the game's), so Chris's lines can be said in Claire's part.
+  character, length, ...)`, a hash of the enemy seed, the room file and the line into that character's lines that end
+  at most `VOICE_GRACE_MS` (1 s) after the original line's length, weighted softly by how much of the original's
+  time it fills: weight 1 + 5 r² (r the part of the original's time the line fills, at most 1: a line that fills it
+  is 6 times as likely as a one-word shout, one filling half 2.25 times), and a gasp, grunt or shout (shorter than
+  `VOICE_SHORT_MS`, 1.2 s) a tenth of that again in place of a line of 1.2 s or more, so spoken lines take the
+  place of spoken lines. None ends in time: the shortest (it fades out, "The end of an inserted line"). And not a
+  line said already since the room was loaded while another fits (`line_used`; for the cast's characters only the
+  cast's lines count, since Claire and Chris show each screen's own look): the hash alone, with the weighting
+  narrowing the pool to the lines of about the original's length, said the same few lines again and again in a
+  long scene. When all that fit were said, that character's lines start a new round. Measured in 9350, 9370, 1020,
+  1002, 3000 and 6060 (Claire as Wesker, Chris as Steve): 109 lines inserted, 3 said twice (Alexia's in 1020, who has
+  10 lines for 13), against 10 repeats in 79 before (Alexia 3 times the same line). The lengths are the lines' ADX headers (`cast_glue.c line_ms`, read once each). The same line in the
+  same room with the same seed in the same scene order is always the same: replays repeat, and both co-op games
+  pick alike (the lengths come from the disc, the order is the script's). The line is played from its own disc's archive (partitions 28 `VOICE1.AFS`, 29 `VOICE2.AFS`, both
+  loaded at the first such line; a mods folder's `VOICE1.AFS/<n>` counts as for the game's), so Chris's lines can be
+  said in Claire's part.
   The original line's speaker shown as itself, as its own character's other model, or anything without lines (and
   without sounds, "Enemy models"): the game's own line.
 * The mouth: the `LipSet` after it (the speaker's) runs as the game's, then `pc_voice_lip` points the record's lip data
@@ -1272,16 +1293,43 @@ the line.
   always (`face_step`: the bank past or still in the model's face table is its first). The bank stays the script's
   (each face table has its own banks; the phonemes are 0..5 in every entry).
 * **Short sounds**: a line of a swapped speaker shorter than `VOICE_SHORT_MS` (1.2 s: gasps, grunts, cries on a hit)
-  stays quiet instead of being replaced (`pc_voice_on` answers -1; the script still waits its length), so a whole line
-  no longer starts there only to be cut by the next one, and a longer inserted line before it plays on through it.
-  Measured: 0030 17 of 31 lines quiet, 9350 11 of 33, 1020 none; the scenes last as long as before.
+  gets one of the character's own short sounds, by the same pick (a line ending at most 1 s after it: in the catalogue
+  Claire has 35 under 1.2 s, Steve 30, Chris 23, Wesker 9, Rodrigo 1). It stays quiet only where the character has
+  none that short (Alfred, Alexia; `pc_voice_on` answers -1, the script still waits its length; log `... is a short
+  sound and Alfred has none: quiet`), and then an inserted line before it plays on through it. The catalogue's lines
+  all have a `LipSet` (so their lips); the lines without one are not added for this: the four characters with short
+  sounds have enough of their own.
+* **A short line before a pause**: where the task's script waits longer after a short line before its next line
+  or its end (`voice_gap`: its `Sleep` ticks and its While-`FrameCheck` loops on a record's motion frame, at that
+  motion's pace now, 30 ticks a second; an `If` or another wait ends the count, which stays a lower bound), the line
+  is picked to fill that pause: one ending 0.3 s before the next line, at most `VOICE_GAP_MS` (4 s), weighted as
+  above. So Claire's 0.5 s line in 6000 (2/4, out of the plane with Steve, then 10 s of the camera on her; quiet
+  before) is a whole line now. From the game's state only, so both co-op screens count alike. Log: `... (1768
+  ms, in the pause after it)`.
 * **Timing**: the script waits for a line with `AdxCk` (op 27, 66 in the scripts, all slot 1); `CheckPlayEndAdx(1)`
   answers from `pc_voice_playing`: "playing" for exactly the original line's length (its ADX header, `adx_length_ms`),
-  whatever the inserted line's, then "ended". So the scene keeps its timing: a longer line goes on over what follows
-  until the next line stops it (`PlayVoiceEx2` stops slot 1) or ends by itself; a shorter one leaves a silence. No
-  script uses `AdxTimeCk`. `StopVoice` (`VoiceOff`, the next line, a skip) ends it. Measured in 0030, 1020 and 9350 (with
-  the cast, a player look and both): every scene lasted as long to 0.1 s as with the option off (97.3, 122.2 and
-  125.9 s), with inserted lines from 0.5 to 17.6 s in place of 0.4 to 16 s ones.
+  whatever the inserted line's, then "ended". So the scene keeps its timing; many scripts time their lines by frame
+  counts instead (`FrameCheck`, 6000), which it does not touch either. No script uses `AdxTimeCk`.
+* **The end of an inserted line**: it ends by itself (the pick makes it end at most `VOICE_GRACE_MS` after the original
+  would), at the next line (`PlayVoiceEx2` stops slot 1; `bhVoiceOn` first stops the task's own line), at `StopVoice`
+  (`VoiceOff`, a skip), and at the latest `VOICE_GRACE_MS` after the original's end: a longer one (none of the
+  character's lines ends in time) fades out there over 8 sound ticks with the game's own fade
+  (`RequestAdxFadeFunctionEx`, `StopAdx` at its end; `vl.cap`, checked every tick by `pc_voice_tick`; log `voices: the
+  inserted line fades out 1000 ms after the original's end`). The next line or a room change during the fade stops it
+  at once; a room change before keeps the fade's time. A shorter line leaves a silence. Before, a line could run on
+  well after the scene's speech: a line picked at random from all of the character's could be many times the
+  original's length, and where the script had no next line (a scene's last line, a long gap, a scene timed by frames)
+  nothing cut it (Rodrigo's last 1.8 s line of the opening went on for 11 s as Wesker's).
+* **Measured** (`RECVX_TEST_SCENE`, 39 scenes of both discs, `RECVX_CAST_TRACE` with the slot's starts and ends in
+  the log, `adxt: stop talk 1 at ...`; once with the user's settings: the cast, Claire and Chris as zombies, and
+  once with Claire as Wesker and Chris as Steve): before, 32 inserted lines played on more than 1.5 s past the
+  original line's end, up to 19.6 s (Wesker's 2.2 s line in 9370 as Claire's 22 s one); now none past 1.0 s, but
+  for the 25 lines in a pause after a short one ("A short line before a pause"; 20 of them ended before the next
+  line, 5 were cut by a line of another task). Every scene that ended in the run (33 of 39) lasted as long to 0.1 s
+  as before, and with the option off the runs were the same (0030, 6000, 9350, 3130: the same ADX starts and stops).
+  In 9350, 9370 and 1020 (Claire as Wesker): the 19 short lines that were quiet are short lines of the character;
+  the lines of 1.2 s or more fill 0.76 of the original's time on average (0.54 before), and none of them is a gasp
+  or shout (29 % before).
 * The **mouth** follows the inserted line wherever the original line moves a mouth (two thirds of all lines: every
   catalogue line has lips): measured 19 of 30 lines in 0030 (the rest have no `LipSet`), 25 of 32 in 9350, 4 of 4 in
   1020; the faces' jaw then runs with the inserted line's phonemes (`RECVX_CAST_TRACE`: `voices: record 2 moves its
@@ -1296,10 +1344,21 @@ the line.
   language.
 * **Co-op**: the option goes with the host's enemy options (`EV_EOPTS` `voices`, protocol 38). The cast's picks are
   the host's on both screens, so both games say the same lines for them (checked: host and guest, the guest's own
-  option off, picked the same 12 lines in 9350 and 9370). Claire and Chris show each player's own look (and the
+  option off, picked the same 12 lines in 9350 and 9370, also with the length weighting, the lines not said again
+  and the pauses). Claire and Chris show each player's own look (and the
   played one's double each player's "Character Model"), so their lines follow each screen's look.
 * The log names every inserted line: `voices: room 9350 record 2: Wesker's line 2/448 (8278 ms), shown as Steve
-  (Cutscene Model) -> Steve's line 1/112 (877 ms) from RM_1050, with its lips`.
+  (Cutscene Model) -> Steve's line 1/112 (877 ms) from RM_1050, with its lips` (`, none shorter: faded out` after the
+  length where it is cut).
+* **Never the original voice**: a speaker that is swapped says no line of its own. The paths that let one through
+  before, and now: a kind-0 line of the player's character without a `LipSet` (Claire waking up in 6000: now her
+  record's, "Lines and speakers"); a line whose `LipSet` comes before it (Claire behind the glass in 3130: now hers,
+  and its lips are the inserted line's, set afresh as `LipStart` has already run); a short line (now one of the character's short sounds, else quiet); a line while
+  the catalogue is still being read (the first seconds after the first room load of a session: now quiet, `voices:
+  the lines are not read yet: line 1/0 quiet`, where it stayed). Every cutscene line goes through `bhVoiceOn`; the
+  scripts have no `VoiceWait` and no other op plays slot 1 (the title call is `adv.c`'s); the player's vocal sounds
+  are SE bank 4 ("Voices"), not dialogue. Still the original: a line whose speaker the script does not say (the
+  kind-0 and kind-2 lines above that name nobody; a kind-1 line whose record is the listener, about one in five).
 * Off: `pc_voice_on` returns at once and plays as `PlayVoice` did; nothing is read.
 
 ### Enemy models
@@ -1341,22 +1400,27 @@ own sounds in place of every line of it, from the speakers above (the cast, the 
   enemy spawner's when the room is the same); `snd_xbank_prog_ms` keeps the programs the bank has, with their lengths
   (the driver's count). None there (a zombie look whose room lacks its group): the next place, any moans in that room,
   then RM_0030's.
-* **Playing**: `voice_creature_seq(seed, room file, disc, file, ...)` chains sounds over the original line's length:
-  each a hashed pick among those that fit in the time left (a quarter second over is fine; none fits: the shortest),
-  not the one before again, a 60..300 ms breath between, none starting in the line's last quarter second; one at least
-  (a line of unknown length: one). `bhVoiceOn` then plays no ADX (`pc_voice_on` returns -1); `pc_voice_tick`
-  (`actor_double_tick`, every tick while a model is shown) starts each on SE slot 10 (the shell casings', idle in
+* **Playing**: one sound per line, as an inserted line is one line: `voice_creature_pick(seed, room file, disc, file,
+  ...)`, a hashed pick among the sounds that end at most `VOICE_GRACE_MS` after the original line, weighted as
+  `voice_pick` by how much of the line's time they fill, and not the sound the same model made at the line before in
+  the room while another ends in time (none ends in time: the shortest; a line of unknown length: any). A short line (under `VOICE_SHORT_MS`) gets one only if one is that short, else it stays quiet. `bhVoiceOn`
+  then plays no ADX (`pc_voice_on` returns -1); the sound starts at once on SE slot 10 (the shell casings', idle in
   cutscenes) from the extra bank (`pc_se_xbank`), unpositioned at full volume as every line on the disc (mode 1).
-  The script waits the original line's time as above, so the scene's timing stays (measured: 1020, 0030, 0000 and
-  9350 last as long as with the option off). The next line, `VoiceOff`, a skip or a room change stops the sounds
-  (`pc_voice_stop`: `StopSe`).
+  The script waits the original line's time as above, so the scene's timing stays. It ends by itself, or at the next
+  line, `VoiceOff`, a skip or a room change (`voice_end`: `StopSe`), and a longer one at the latest `VOICE_GRACE_MS`
+  after the original's end (`cr.cap`, `pc_voice_tick`). Before, the sounds were chained to fill each line's whole
+  time, so a long line was a run of cries and a scene with many lines sounded like one looping sound (the Hunter's
+  two cries over Wesker's eight-second line in 9350: nine of them in a row). Nothing loops by itself: a program
+  whose first sample loops has no length (`snd_xbank_prog_ms` 0) and is never picked, and the driver keys a sound
+  off at its length.
 * **Mouth**: no lips of the sounds; the `LipSet` runs as the script has it, so a model with a face moves its
   mouth with the original line, as before.
-* **Co-op and replays**: the sounds come from the seed, the room file and the line, like the inserted lines: the same
-  in every run and on both screens (checked: host and guest, 12 lines in 9350 and 9370, the same sounds); no protocol
-  change.
-* The log: `voices: room 1020 record 0: Claire's line 1/118 (11968 ms), shown as Zombie: Prisoner -> its sounds from
-  RM_5520 bank 3: 49 (2116 ms) + 50 (1683 ms) + ...`; with `RECVX_CAST_TRACE` each sound as it starts.
+* **Co-op and replays**: the sounds come from the seed, the room file and the line (and the sound before, in the
+  scene's order), like the inserted lines: the same in every run and on both screens (checked: host and guest, 12
+  lines in 9350 and 9370, the same sounds); no protocol change. Measured with Wesker as the Hunter in 9350 and 9370:
+  one sound per line (28 lines; before, 9 cries in a row for an 8 s line), the scenes as long as before.
+* The log: `voices: room 9350 record 2: Wesker's line 2/448 (8278 ms), shown as Hunter -> its sound from RM_8010
+  bank 3: 18 (1466 ms)`.
 
 ### Talking Mouths
 
@@ -1376,9 +1440,9 @@ lobby's CUTSCENE CAST page, TALKING MOUTHS; shown while the voice lines are on; 
     line names counts only if every line of the script with a `LipSet` names its speaker. The scripters used the
     record as the speaker in some scripts and as the listener now and then in others; a script that names its
     speakers for one record does so for its other lines too. Tried on the US disc's 428 lines that have both, each
-    judged by the other lines of its script: 294 pass, 284 of them right (97 %, against 81 % for all). 134 of the 192
-    lines without a `LipSet` pass (log: `voices: lines with mouth movements: ...; 134 without one said surely by their
-    record`). In 0030 Steve's seven lines pass, Claire's four do not (one of the three lines naming her is Steve's);
+    judged by the other lines of its script: 294 pass, 284 of them right (97 %, against 81 % for all). 133 of the 191
+    lines without a `LipSet` pass, and the 2 placed at the player that get a speaker ("Lines and speakers"; log: `voices:
+    lines with mouth movements: ...; 135 without one said surely by their record`). In 0030 Steve's seven lines pass, Claire's four do not (one of the three lines naming her is Steve's);
   * the record is drawn as a model now (`shown_slot`: its cast slot or the double; not hidden, `stflg` 0x41000000)
     whose model moves a mouth (`actor_glue.c actor_talks`: a face mask with a bank that moves, or an imported model's
     jaw; the double only with "Animated Faces");
@@ -1409,7 +1473,9 @@ lobby's CUTSCENE CAST page, TALKING MOUTHS; shown while the voice lines are on; 
   one in thirty of the lines it gives a mouth may move the listener's mouth.
 * The inserted lines are the lines with mouth movements; lines without them (off-screen calls, many short
   exclamations) are never inserted.
-* A longer line can go on briefly after the scene ends.
+* An inserted line or sound can go on up to 1 s after the original line's end, also past the scene's end.
+* A line the script names no speaker for keeps its voice (the kind-0 lines of scripts that put several speakers at
+  the player, the kind-2 ones); see "Never the original voice".
 * Enemy sounds: which program is a cry was read from the code (the voice channel, the hurt and death calls) and the
   samples' lengths, not by ear; the Hunter has two, the Tyrant none of its own (its blows stand in).
 * Talking Mouths moves no mouth for the game's own lines (the voice lines off, or a line kept), and none where the

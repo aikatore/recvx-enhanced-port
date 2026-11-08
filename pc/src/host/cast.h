@@ -120,13 +120,23 @@ typedef struct VoiceLine {
 /* the LipSet after a VoiceOn (p: the script after it; before another VoiceOn, End or EvtEnd, within 16 instructions):
    its lip entry, *rec its record; -1 none */
 int voice_lipset(const unsigned char* p, int n, int (*insn)(const unsigned char*), int* rec);
+/* ... or right before it: 1 when only LipStart and MessageSet lie between p (the end of a LipSet) and von (a VoiceOn): the
+   two lines of the disc whose mouth starts first (Claire's cry behind the glass in RM_3130, one in RM_6051) */
+int voice_lipset_before(const unsigned char* p, const unsigned char* von, int (*insn)(const unsigned char*));
 int voice_model_chr(int m);   /* the story character (cast_character) model m ("You appear as" actor index) is, -1: none (no lines) */
 void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const unsigned char*));   /* an expanded room file */
 void voice_scan_done(void);
 int voice_count(int chr);     /* lines of character chr, -1: the catalogue is not read yet */
 const VoiceLine* voice_line(int chr, int i);
-/* the line of character chr said in place of file vid of disc's archive in room file room for seed (NULL: chr has none) */
-const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr);
+/* the line of character chr said in place of file vid of disc's archive in room file room for seed, a line of ms
+   milliseconds (NULL: chr has none): one of those that last at most max_ms (ms_of: a line's length, 0 unknown), the ones
+   filling more of the ms the likelier (1 + 15 r^2, r the part filled; a gasp or shout, under VOICE_SHORT_MS, a tenth of
+   that in place of a line as long or longer), else the shortest; ms or max_ms 0: any, alike; used (NULL: none): the
+   lines said already in the room (the scene's order: the same in every run and on both co-op screens), left out
+   while others are left */
+#define VOICE_SHORT_MS 1200   /* gasps, grunts, shouts: the short sounds (cast_glue.c: a line this short gets one of them) */
+const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr, int ms, int max_ms, int (*ms_of)(const VoiceLine*),
+                            int (*used)(const VoiceLine*));
 /* "Talking Mouths" (ini voice_mouths, default 1; each screen's own): an inserted line in place of one without a LipSet
    moves the speaker's mouth with its lips, where the speaker is sure. voice_sure: in room file room, file vid's VoiceOn
    names record rec, no LipSet follows, and every line of that script with a LipSet moves the mouth of the record it
@@ -134,16 +144,19 @@ const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr)
 extern int g_voice_mouths;
 int voice_sure(int room, int vid, int rec);
 int voice_sure_count(void);
+/* the record that says file vid in room file room, a line placed at the player (VoiceOn kind 0) without a LipSet: the one
+   every kind-0 line of its script with a LipSet moves the mouth of; -1 none (such a line names no record) */
+int voice_said_by(int room, int vid);
 /* An enemy model (catalogue entry m: a zombie look, a creature) makes its own sounds in place of the line instead
    (docs/ACTORS.md "Voice lines"): the room file whose sound pack's enemy bank (SE bank 3) has them and their programs
    (prog: max >= 44), place alt 0, 1, 2 the next one to look in when the programs are not in that bank (a zombie: its
    look's moans in its room, any moans there, RM_0030's); the count, 0 none (not an enemy, or one without sounds). */
 int voice_creature(int m, int alt, int* room, unsigned char* prog, int max);
-/* the sounds said in place of file vid of disc's archive in room file room for seed, a line of ms milliseconds: of n
-   sounds (n <= 64) of len[i] ms, pick[k] the k-th to play at at[k] ms from the line's start, until the line's time is
-   filled (one at least, none starting in its last 250 ms): each a random one of those that fit in the time left (else
-   the shortest), not the one before again; the count (<= max) */
-int voice_creature_seq(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, unsigned char* pick, int* at, int max);
+/* the one sound made in place of file vid of disc's archive in room file room for seed, a line of ms milliseconds: of n
+   sounds of len[i] ms, one of those that last at most max_ms, weighted as voice_pick's by how much of the ms they fill,
+   else the shortest; ms or max_ms 0: any, alike; not last (the one before; -1 none) while another ends in time; -1: none
+   (n 0) */
+int voice_creature_pick(unsigned seed, int room, int disc, int vid, const int* len, int n, int ms, int max_ms, int last);
 
 #ifdef __cplusplus
 }
