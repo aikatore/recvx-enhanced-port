@@ -34,3 +34,4 @@ void ntex_state_save(void* out);
 void ntex_state_restore(const void* in);
 /* a texture for TEX0 if its TBP is a bound slot (1; 2: a capture, alpha stored as A/128), else 0 */
 int  ntex_lookup(uint64_t tex0, uint64_t texa, unsigned int* tex, int* w, int* h);
+int  ntex_count(void);   /* native textures held (the frame dump log: a leak shows as growth) */

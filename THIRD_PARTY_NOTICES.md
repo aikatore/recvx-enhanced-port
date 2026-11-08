@@ -35,6 +35,7 @@ with any binary release.
 | Component | Path | Source | License |
 |---|---|---|---|
 | BioRand option labels, help texts, defaults and seed-string format (written anew in C from RandoConfig.cs and MainWindow.xaml; no game data) | `pc/src/host/biorand_opts.c` | https://github.com/biorand/classic (commit c8df994) | MIT, Copyright (c) 2022-2026 Ted John |
+| BioRand's CVX item names (`ReCvItemIds.cs`) and original item spots (`data/recv/rdt.json`: room, spot id, item, count), turned into C tables by `pc/tools/biorand_spoiler_data.py` | `pc/src/host/spoiler_data.inc` | https://github.com/biorand/classic (commit 7955765) | MIT, Copyright (c) 2022-2026 Ted John |
 | SMAA shader functions (SMAA.hlsl expanded for GLSL 3.30, the parts SMAA 1x uses) and its area/search texture generators (Scripts/AreaTex.py, Scripts/SearchTex.py, ported to C; the textures are computed at start, not shipped) | `pc/src/gs/aa.c`, `pc/src/gs/smaa_tables.h` | https://github.com/iryoku/smaa | MIT, Copyright (C) 2013 Jorge Jimenez, Jose I. Echevarria, Belen Masia, Fernando Navarro, Diego Gutierrez |
 
 FXAA (`pc/src/gs/aa.c`) is our own implementation of the published FXAA 3.11 algorithm (Timothy

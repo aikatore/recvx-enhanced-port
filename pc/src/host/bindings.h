@@ -33,6 +33,7 @@ enum {
     B_CHEAT_SAVE, B_CHEAT_BOX,         /* the F2 cheats Save Now / Open Item Box (CHEAT_SAVE, CHEAT_BOX); no default key */
     B_CHEAT_LOAD,                      /* the F2 Load Game (CHEAT_LOAD); no default key */
     B_DEVCINE,                         /* --dev only: the cutscene log's window (overlay.cpp, docs/DEV_TOOLS.md); F6 */
+    B_SPOILER,                         /* --dev only: the BioRand spoiler log screen, a pause (spoiler_menu.c, docs/BIORAND_INGAME.md); F8 */
     B_COUNT
 };
 enum { BIND_KB, BIND_PAD };            /* device sets */

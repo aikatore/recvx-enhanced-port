@@ -327,6 +327,10 @@ add_executable(test_biorand_opts tests/test_biorand_opts.c src/host/biorand_opts
 target_compile_options(test_biorand_opts PRIVATE -std=gnu11 -Wall)
 target_link_libraries(test_biorand_opts PRIVATE m)
 add_test(NAME biorand_opts COMMAND test_biorand_opts)
+# BioRand's spoiler log (pc/src/host/spoiler.c): a made-up log's segments, keys, spots and start items; odd input
+add_executable(test_spoiler tests/test_spoiler.c src/host/spoiler.c)
+target_compile_options(test_spoiler PRIVATE -std=gnu11 -Wall)
+add_test(NAME spoiler COMMAND test_spoiler)
 
 # co-op packets (pc/src/net/coop_proto.c): malformed events of every type, transfers, the event
 # ring, the join code, world event actions, and a fuzz loop
