@@ -43,7 +43,7 @@
   replaced with by the cutscene cast or the Character Model.
 - A character swapped in cutscenes no longer shows the original character's hands, such as Wesker's large gloves;
   the new model has its own.
-- Randomize Voice Lines: replaced lines no longer run on long after the scene's speech, and Claire's and Chris's own
+- Replaced voice lines no longer run on long after the scene's speech, and Claire's and Chris's own
   voices no longer slip through, such as Claire waking up after the crash or shouting at the locked door behind
   the glass. Gasps and shouts are replaced by the character's own short sounds instead of silence, or by a whole
   line where the scene pauses after them. Spoken lines are favoured over grunts where the original is long, the same
