@@ -633,7 +633,9 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
   co-op event, see "Co-op").
 * **Types per Room** (`enemy_types`, 1..8, default No Limit): at most that many kinds in a room.
   The records that keep their type count first; then, in record order, once the room has that
-  many kinds a record draws only among them (if one of them fits it), else as before. A room
+  many kinds a record draws only among them (if one of them fits it), else as before; an event's
+  record taking another look of its type takes one of the room's kinds then too (an event Hunter
+  becomes a Sweeper only when the Sweeper is already one), else keeps its look. A room
   can only go over the limit when a record fits none of its kinds (a bat record among ground
   kinds: fliers stay fliers), logged as `over it` on the room's line. Extra enemies copy records,
   so they never add a kind. It depends only on the options, the room file and the draws (the

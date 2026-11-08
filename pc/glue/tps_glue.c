@@ -1389,19 +1389,21 @@ static void node_mtx(ML_WORK* m, float (*s)[16], int back)
 }
 
 /* effect.c bhControlEffect and bhDrawEffect: 1 = every flinching zombie's turns put on its nodes, so the effects linked to
-   them (the blood at the hit, effect.c's and the particles' njCalcPoint on owP) go with the part as drawn; 0 = put back */
+   them (the blood at the hit, effect.c's and the particles' njCalcPoint on owP) go with the part as drawn; 0 = put back,
+   1 returned when any were on. The hit tests an effect makes (weapon.c: bolts, grenades, blasts) take them off and put
+   them back, so they see the nodes as the game has them */
 #define REACT_FX 8   /* ponytail: zombies flinching at once whose effects follow; more keep theirs where the game has them */
-void pc_hit_react_fx(int on)
+int pc_hit_react_fx(int on)
 {
     static float save[REACT_FX][64][16];
     static ML_WORK* sm[REACT_FX];
     static int n;
-    int i, k, j;
+    int i, k, j, was = n > 0;
     if (!on) {
         while (n > 0) { n--; node_mtx(sm[n], save[n], 1); }
-        return;
+        return was;
     }
-    if (n || !tps_on || !g_tps.hit_react || !(tps_cam_active || in_scope()) || !sys) return;
+    if (n || !tps_on || !g_tps.hit_react || !(tps_cam_active || in_scope()) || !sys) return was;
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS && n < REACT_FX; i++) {
         Turn t[2];
         ML_WORK* m = ene[i].mlwP;
@@ -1413,6 +1415,7 @@ void pc_hit_react_fx(int on)
             for (j = 0; j < (int)m->obj_num && j < 64; j++)
                 if (t[k].nodes >> j & 1) turn(m->owP[j].mtx, t[k].u, t[k].c, t[k].a);
     }
+    return was;
 }
 
 /* eneset.c bhDrawEnemy, around drawing ep: 1 = its flinch (or its zombie's, a part linked to a node that flinches:
