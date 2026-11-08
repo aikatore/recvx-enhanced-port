@@ -6,7 +6,8 @@
 
 - **HUD**: the over-the-shoulder camera shows the equipped weapon with its loaded rounds and spare ammo, and a
   health gauge that changes colour with the condition and when poisoned. It sits on the side of the camera's
-  shoulder or fixed to one side, and can also be shown with the fixed cameras or turned off.
+  shoulder or fixed to one side, and can also be shown with the fixed cameras or turned off. Two styles: a weapon
+  circle with a health arc, or a minimal health bar with ammo counts.
 
 ### Changes
 
@@ -16,7 +17,6 @@
   Enhanced Settings, and the co-op lobby and co-op window show more of the host's rules.
 - **Custom cutscene cast**: the model list now starts with only the characters that have voice lines checked, and
   the four cutscene models are at its top.
-- **Cutscene cast**: other characters can now also be shown as Claire or Chris.
 - **Cutscene cast enemies**: the monsters seen only in cutscenes now have their own Enemy Models setting, with its own
   list of enemies to choose from, so they become other monsters instead of drawing from the characters' models. The
   characters' models are in that list too, unchecked at first, if you want monsters to become characters.

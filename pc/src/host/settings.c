@@ -507,6 +507,8 @@ const Setting g_settings[] = {
       .help = "Show health, the equipped weapon and its ammo in a corner. Auto shows them only with the over-the-shoulder camera." },
     { SP_TPS, "HUD Position", V(g_tps.hud_side), 0, 2, 1, (const char* const[]){ "Follow Shoulder", "Left", "Right" },
       .help = "Follow Shoulder places the HUD on the camera's shoulder side, or on the right with fixed cameras." },
+    { SP_TPS, "HUD Style", V(g_tps.hud_style), 0, 1, 1, (const char* const[]){ "Weapon Circle", "Minimal" },
+      .help = "Weapon Circle shows the weapon in a circle with a health arc. Minimal shows a health bar with the ammo counts." },
     { SP_TPS, "Lighting and Fog", V(g_tps.atmos), 0, 1, 1, atmos_names,
       .help = "Smooth fades lighting, fog and camera shading between views. Original changes them with each fixed camera." },
     { SP_TPS, "Horizontal Mouse Sensitivity", V(g_tps.sens_x), 5, 400, 5, .fmt = "%d%%", .group = "MOUSE AND AIM" },
