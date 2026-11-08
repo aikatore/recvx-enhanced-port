@@ -2118,6 +2118,36 @@ int actor_put_as(int who, BH_PWORK* ep)
     return 1;
 }
 
+/* trail_glue.c (the afterimages): the display actor drawn in ep's place now (actor_put_enemy: the cutscene cast, then
+   the double), posed from ep as its drawing poses it; -1: ep is drawn as itself */
+int cast_slot(const BH_PWORK* ep);
+int actor_drawn_for(BH_PWORK* ep)
+{
+    int who = cast_n ? cast_slot(ep) : -1;
+    if (who < 0 && actor_double_shown(ep) >= 0) who = ACTOR_DOUBLE;
+    if (who < 0) return -1;
+    if (ep != posed_src[who] || (who != ACTOR_DOUBLE && posed_t[who] != actor_ticks)) {
+        actor_pose(who, ep);
+        posed_src[who] = dg[who].mapped ? ep : NULL;
+        posed_t[who] = actor_ticks;
+    }
+    return dg[who].mapped ? who : -1;
+}
+
+/* trail_glue.c: display actor who drawn again at the node matrices m of an earlier pose (n: its node count; not its head part) */
+void actor_draw_nodes(int who, const NJS_MATRIX* m, int n)
+{
+    Disguise* d = &dg[who];
+    O_WORK* ow = d->w.mlwP->owP;
+    NJS_MATRIX now[n];
+    int i;
+    for (i = 0; i < n; i++) { memcpy(now[i], ow[i].mtx, sizeof(NJS_MATRIX)); memcpy(ow[i].mtx, m[i], sizeof(NJS_MATRIX)); }
+    imp_skin(d);   /* (an imported model's vertices for it) */
+    bhPutModel(&d->w);
+    for (i = 0; i < n; i++) memcpy(ow[i].mtx, now[i], sizeof(NJS_MATRIX));
+    imp_skin(d);
+}
+
 /* at the hand-off: the model for the cutscene doubles of the character played (appearance: a
    catalogue index, ACTOR_PART + part file - 10, or -1); loaded only while the room has one.
    "Swapped model in cutscenes" off: none, the game draws its doubles (hands, face, all their own) */
