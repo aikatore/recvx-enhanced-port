@@ -121,18 +121,31 @@ static int builtins_of(int* out, int custom)
 }
 #define BUILTIN_MAX (5 + ACTOR_MODELS + 1)   /* (with "Custom"'s: each look once) */
 static int crowd_pool(int all, int* out, const unsigned char* off);
-/* a "Custom" list's entries (its positions): 0 the cast's, 1 "Randomize Character Model"'s, 2 "Enemy Models"' (the
-   monsters of "All models" and the zombies' entry: a scene zombie's pool) */
-static int builtins(int* out, int list) { return list == 2 ? crowd_pool(1, out, NULL) : builtins_of(out, list ? -1 : 1); }
+/* "Enemy Models"' list: the monsters of "All models" and the zombies' entry (a scene zombie's pool; *mon of them: "All
+   Enemies"'), then the characters of the cast's list (their cutscene models, Claire's second costume; "Custom" only,
+   unchecked at first: cast_enemy_default). No imports: its bits ride in EV_EOPTS (CAST_ENEMY_BYTES) */
+static int enemy_list(int* out, int* mon)
+{
+    int b[BUILTIN_MAX], nb = builtins_of(b, 1), m = crowd_pool(1, out, NULL), n = m, i, j;
+    for (i = 0; i < nb; i++) {
+        for (j = 0; j < m && out[j] != b[i]; j++);
+        if (j == m) out[n++] = b[i];
+    }
+    if (mon) *mon = m;
+    return n;
+}
+/* a "Custom" list's entries (its positions): 0 the cast's, 1 "Randomize Character Model"'s, 2 "Enemy Models"' */
+static int builtins(int* out, int list) { return list == 2 ? enemy_list(out, NULL) : builtins_of(out, list ? -1 : 1); }
 static int imps(int list, int imports) { return list == 2 ? 0 : imports_n(imports); }   /* (no imports in the enemies' list) */
 
-/* "Enemy Models"' pool: CAST_ENEMY_ALL its whole list, CAST_ENEMY_CUSTOM the checked ones (eoff, by their positions there),
-   CAST_ENEMY_OFF none */
+/* "Enemy Models"' pool: CAST_ENEMY_ALL its list's monsters, CAST_ENEMY_CUSTOM the checked ones of the whole list (eoff, by
+   their positions there; the monsters first, so with no character checked the picks are those of before them), CAST_ENEMY_OFF none */
 static int enemy_pool(int enemy, int* out, const unsigned char* eoff)
 {
-    int n = crowd_pool(1, out, NULL), i, k;
-    for (i = k = 0; i < n; i++) if (enemy != CAST_ENEMY_CUSTOM || !cast_off_at(eoff, i)) out[k++] = out[i];
-    return enemy == CAST_ENEMY_OFF ? 0 : k;
+    int mon, n = enemy_list(out, &mon), i, k;
+    if (enemy != CAST_ENEMY_CUSTOM) return enemy == CAST_ENEMY_OFF ? 0 : mon;
+    for (i = k = 0; i < n; i++) if (!cast_off_at(eoff, i)) out[k++] = out[i];
+    return k;
 }
 
 int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
@@ -281,16 +294,18 @@ static int is_cine(int m) { for (int c = 0; c < 4; c++) if (cine[c] == m) return
 
 int cast_custom_list(int list, int imports, short* pos, int* model, int max)
 {
-    int b[BUILTIN_MAX], nb = builtins(b, list), n = 0, zombies, i, j, k, m, pass;
-    for (pass = 0; pass < 2; pass++)   /* the built-in ones in the list's order, but the four cutscene models (its last) first */
+    int b[BUILTIN_MAX], nb = builtins(b, list), n = 0, zombies, i, j, k, m, pass, mon = 0;
+    if (list == 2) enemy_list(b, &mon);   /* (the same entries: their monsters' count) */
+    for (pass = 0; pass < 3; pass++)   /* the built-in ones in the list's order, but the four cutscene models (its last) first;
+                                          the enemies' list: its monsters before them */
         for (i = zombies = 0; i < appear_count() && n < max; i++) {
             int chr = appear_at(i);
             if (chr >= COOP_CHR_IMPORT && chr != COOP_CHR_CINE) break;
             m = chr >= 1 && chr <= 5 ? ACTOR_PART + chr - 1 : chr >= COOP_CHR_ACTOR && chr <= COOP_CHR_MAX ? chr - COOP_CHR_ACTOR : -1;
             if (m >= 0 && m < ACTOR_MODELS && zombie(m)) { if (zombies++) continue; m = CAST_ZOMBIES; }   /* (at the first zombie look's place) */
-            if (is_cine(m) == pass) continue;
             for (j = 0; j < nb && b[j] != m; j++);
-            if (j < nb) { pos[n] = (short)j; model[n++] = m; }
+            if (j == nb || (list == 2 && j < mon ? 0 : 2 - is_cine(m)) != pass) continue;
+            pos[n] = (short)j; model[n++] = m;
         }
     for (k = 0; k < imps(list, imports) && n < max; k++) { pos[n] = (short)(nb + k); model[n++] = ACTOR_MODELS + k; }
     return n;
@@ -338,6 +353,12 @@ void cast_off_default(void)
         int m = j < nb ? b[j] : ACTOR_MODELS + j - nb;
         cast_off_put(cast_off, j, voice_model_chr(m) < 0 || m >= ACTOR_PART);
     }
+}
+
+void cast_enemy_default(unsigned char* eoff)
+{
+    int b[BUILTIN_MAX], mon, n = enemy_list(b, &mon);
+    while (n > mon) cast_off_put(eoff, --n, 1);
 }
 
 int cast_custom_count(int list, const unsigned char* off, int imports, int* total)

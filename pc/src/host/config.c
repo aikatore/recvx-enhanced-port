@@ -21,6 +21,7 @@
 #include <string.h>
 
 static int cast_custom_set;   /* 1: the cutscene cast's "Custom" list is its cast_custom_off lines (0: cast_default) */
+static int enemy_custom_set;  /* 1: "Enemy Models"' list is its enemy_custom_off lines (0: its characters unchecked too, cast_default) */
 static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "window_w", &g_config.window_w, 320, 16384 },
     { "window_h", &g_config.window_h, 240, 16384 },
@@ -112,6 +113,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "cast_assign", &g_enemy_opts.cast_assign, 0, 1 },  /* 0 fixed per character, 1 random per cutscene */
     { "cast_imports", &g_enemy_opts.cast_imports, 0, 1 },
     { "cast_custom_set", &cast_custom_set, 0, 1 },
+    { "enemy_custom_set", &enemy_custom_set, 0, 1 },
     { "cast_enemy_models", &g_enemy_opts.cast_enemy, 0, 3 },   /* its creatures and scene zombies (cast.h CAST_ENEMY_*: 0 same as cast, 1 all enemies,
                                                                   2 custom (enemy_custom_off lines), 3 off; absent: config_load) */
     { "voice_random", &g_enemy_opts.voices, 0, 1 },              /* "Randomize Voice Lines" (cast.h) */
@@ -159,11 +161,14 @@ static int player_id(void);
 
 /* the cutscene cast's "Custom" list as it starts (cast.h cast_off_default: the models with voice lines checked), once: in
    a file without cast_custom_set (a first start, or a file from before it) with no cast_custom_off line (had: it has one,
-   that list is kept) and "Custom" not chosen (it was shown all checked: that is kept). Every save writes it set. */
+   that list is kept) and "Custom" not chosen (it was shown all checked: that is kept). Every save writes it set. So for
+   "Enemy Models"' list: without enemy_custom_set (a first start, or a file from before its characters) they start
+   unchecked, its lines kept for the monsters. */
 static void cast_default(int had)
 {
     if (!cast_custom_set && !had && g_enemy_opts.cast_all != 2) cast_off_default();
-    cast_custom_set = 1;
+    if (!enemy_custom_set) cast_enemy_default(g_enemy_opts.cast_enemy_off);
+    cast_custom_set = enemy_custom_set = 1;
 }
 
 /* hex text <-> bytes (the player id and secret) */

@@ -350,8 +350,10 @@ voices (unless Randomize Voice Lines is on) and what happens stay as they are.
   releases, the Hunter Wesker sends out, Steve's father, the zombies around Chris and at the courtyard fence) are
   swapped too, by their own setting. *All Enemies* (the default) makes them other monsters: Alexia's first form,
   Nosferatu, the Tyrant, Monster Steve, the Hunter, the Sweeper, the Bandersnatch, the anatomist or another zombie.
-  *Custom* uses only the ones you check in its own list (Choose Enemies, at the same places as Choose Models; all
-  checked at first; none checked keeps them as they are). *Same as Cast* takes them from the Model Selection, as
+  *Custom* uses only the ones you check in its own list (Choose Enemies, at the same places as Choose Models; none
+  checked keeps them as they are). That list also has the characters' models after the monsters (Claire, Chris, Steve,
+  Wesker, Alfred, Alexia, Rodrigo and Claire's second costume): at first the monsters are checked and the characters
+  are not; check a character and the monsters can become that character. *Same as Cast* takes them from the Model Selection, as
   before this setting (a monster can then become a character). *Off* keeps them as they are. A monster never becomes
   itself, each kind keeps one model with Per Character, and monsters you fight are never swapped. An older settings
   file with Custom chosen keeps its monster choices here; otherwise it starts with All Enemies.

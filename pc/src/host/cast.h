@@ -43,14 +43,16 @@ int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
 /* "Enemy Models" (EnemyOpts.cast_enemy; docs/ACTORS.md "Enemy models"): what the creatures (cast_creature) and the scene
    zombies (cast_scene_zombie) are drawn as. SAME: as before it, the creatures from the characters' pool (Model Selection),
    the scene zombies from its monsters; ALL: both from the monsters of "All models" and the zombie looks (the
-   enemies' list, list 2 below); CUSTOM: the checked ones of that list (EnemyOpts.cast_enemy_off); OFF: themselves */
+   enemies' list's monsters, list 2 below); CUSTOM: the checked ones of that list, its characters too (EnemyOpts.cast_enemy_off);
+   OFF: themselves */
 enum { CAST_ENEMY_SAME, CAST_ENEMY_ALL, CAST_ENEMY_CUSTOM, CAST_ENEMY_OFF };
-#define CAST_ENEMY_BYTES 4   /* EnemyOpts.cast_enemy_off: a bit per entry of the enemies' list (9 now) */
+#define CAST_ENEMY_BYTES 4   /* EnemyOpts.cast_enemy_off: a bit per entry of the enemies' list (17 now: test_cast checks it fits) */
 
 /* "Custom" (docs/ACTORS.md "Cutscene cast"): a bit per "All models" entry, by its position in cast_pool(1, every
    import): the built-in entries, then import k. Set: not checked (so a new import starts checked). "Randomize
    Character Model" has a "Custom" list of its own (list 1 below; cast_appear_off): its "All models" entries, the same way;
-   so has "Enemy Models" (list 2; EnemyOpts.cast_enemy_off): the monsters and the zombies' entry, no imports. */
+   so has "Enemy Models" (list 2; EnemyOpts.cast_enemy_off): the monsters and the zombies' entry, then the characters of
+   the cast's list (their cutscene models, Claire's second costume), no imports. */
 #define CAST_CUSTOM_MAX (5 + ACTOR_MODELS + 1 + ACTOR_IMPORT_MAX)
 #define CAST_OFF_BYTES ((CAST_CUSTOM_MAX + 7) / 8)
 extern unsigned char cast_off[CAST_OFF_BYTES];   /* ours (recvx.ini cast_custom_off; co-op: the host's go to the guest) */
@@ -74,6 +76,9 @@ void cast_off_write(int list, const unsigned char* off, void (*line)(const char*
    (voice_model_chr: every look of Claire, Chris, Steve, Wesker, Alfred, Alexia and Rodrigo); the zombies, the creatures,
    the characters without lines and the imports listed now unchecked */
 void cast_off_default(void);
+/* the enemies' list as it starts (recvx.ini without enemy_custom_set: config.c): its characters unchecked in eoff, the
+   monsters as they are */
+void cast_enemy_default(unsigned char* eoff);
 /* the checked ones of list (bits off; imports: as cast_pool's) and its length */
 int  cast_custom_count(int list, const unsigned char* off, int imports, int* total);
 /* the zombie look (catalogue entry) character c gets when it draws the zombie entry: from (seed, scene, c) */

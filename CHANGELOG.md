@@ -18,7 +18,8 @@
   the four cutscene models are at its top.
 - **Cutscene cast**: other characters can now also be shown as Claire or Chris.
 - **Cutscene cast enemies**: the monsters seen only in cutscenes now have their own Enemy Models setting, with its own
-  list of enemies to choose from, so they become other monsters instead of drawing from the characters' models.
+  list of enemies to choose from, so they become other monsters instead of drawing from the characters' models. The
+  characters' models are in that list too, unchecked at first, if you want monsters to become characters.
 - **Sharper Outbreak characters**: the import now takes the detailed models of the Outbreak characters for their
   first costumes, with sharper faces, real eyes and fuller hair, in play, in cutscenes and in co-op. Import them
   again to get them; the other costumes have no detailed version and stay as they are.

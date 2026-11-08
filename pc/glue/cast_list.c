@@ -5,7 +5,7 @@
  * It edits cast_off (ours: recvx.ini cast_custom_off; a co-op host's go to the guest, coop_glue.c), or, opened for
  * "Randomize Character Model" (the RANDOMIZER page's CHARACTER MODEL, list 1), its own list cast_appear_off (recvx.ini
  * appear_custom_off; its "All models" entries, its "Include Imported Models"), or for the cast's "Enemy Models" (list 2)
- * its list g_enemy_opts.cast_enemy_off (recvx.ini enemy_custom_off; the monsters and the zombies, sent with the host's
+ * its list g_enemy_opts.cast_enemy_off (recvx.ini enemy_custom_off; the monsters, the zombies and the characters, sent with the host's
  * enemy options). Game thread. */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"

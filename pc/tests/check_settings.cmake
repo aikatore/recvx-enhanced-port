@@ -10,6 +10,7 @@ set(NOT_IN_TABLE
     biorand_appear_models    # BIORAND screen, RANDOMIZER page: Randomize Character Model's Model Selection (biorand_menu.c K_APPEAR)
     biorand_appear_imports   # ... its Include Imported Models
     cast_custom_set    # ini only: the cutscene cast's Custom list was saved (config.c cast_default), never edited
+    enemy_custom_set   # ini only: so was Enemy Models' list with its characters (config.c cast_default)
     borderless_extra   # ini only: the Windows borderless window's overhang past the monitor (settings.c), a driver workaround
 )
 file(READ "${SRC}/src/host/config.c" config)

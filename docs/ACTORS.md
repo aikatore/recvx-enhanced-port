@@ -926,7 +926,8 @@ first version swapped fought ones too.
 
 * **What they become** (`cast_crowd_model`): what *Enemy Models* says ("Enemy Models" below): a creature of *All
   Models* (Alexia's first form, Nosferatu, the Tyrant, Monster Steve, the Hunter, the Sweeper, the Bandersnatch, the
-  anatomist) or another zombie look; its *Custom* the checked ones of those (none checked: they stay zombies); *Same as
+  anatomist) or another zombie look; its *Custom* the checked ones of those and of the characters (none checked: they
+  stay zombies); *Same as
   Cast* as before it, the Model Selection's monsters whatever it is (*Cutscene Models* has none: all of them); *Off*
   themselves. Never an imported model, never their own look.
 * **One per kind**: each zombie look is a kind of its own. With *Per Character* a look gets one model in every scene
@@ -959,15 +960,21 @@ a pool of their own:
 | Value | The creatures | The scene zombies |
 |---|---|---|
 | *Same as Cast* (0) | from the characters' pool, after them in one shuffle (the behaviour before the setting) | the Model Selection's monsters |
-| *All Enemies* (1, default) | from the enemies' list | the same |
-| *Custom* (2) | the checked ones of the enemies' list | the same |
+| *All Enemies* (1, default) | from the enemies' list's monsters | the same |
+| *Custom* (2) | the checked ones of the enemies' list (its characters too) | the same |
 | *Off* (3) | themselves | themselves |
 
-* **The enemies' list** (`cast_custom_list(2, ...)`, `cast.c enemy_pool`): the monsters of *All Models* and the zombies'
-  one entry, nine: Alexia (First Form), Nosferatu, Tyrant, Monster Steve, Hunter, Hunter (Sweeper), Bandersnatch,
-  Anatomist Zombie, Zombies (Random Look). Only monsters: a player who wants characters for them has *Same as Cast*;
-  no imports (people). Its *Custom* list starts all checked; stored as the unchecked ones, `EnemyOpts.cast_enemy_off`
-  (a bit per position, 4 bytes), `recvx.ini` lines `enemy_custom_off = Tyrant` (the same keys as the cast's list). The
+* **The enemies' list** (`cast_custom_list(2, ...)`, `cast.c enemy_list`, `enemy_pool`): the monsters of *All Models* and
+  the zombies' one entry, nine: Alexia (First Form), Nosferatu, Tyrant, Monster Steve, Hunter, Hunter (Sweeper),
+  Bandersnatch, Anatomist Zombie, Zombies (Random Look); then the characters of the cast's *Custom* list, eight (since
+  2026-11-08): the cutscene models of Claire, Chris, Steve and Wesker, Claire's second costume, Alfred, Alexia, Rodrigo.
+  The monsters are *All Enemies*' pool; the characters only *Custom*'s, and only checked ones. No imports: the bits
+  ride in `EV_EOPTS` (4 bytes, 17 used; ctest `cast` checks they fit), where up to 2048 imports would not, and a new
+  import would start checked. Its *Custom* list starts with the monsters checked and the characters not; stored as the
+  unchecked ones, `EnemyOpts.cast_enemy_off` (a bit per position, the monsters first), `recvx.ini` lines
+  `enemy_custom_off = Tyrant` (the same keys as the cast's list) and `enemy_custom_set = 1` (`config.c cast_default`,
+  as the cast's `cast_custom_set`: a file without it, a first start or one from before the characters, gets them
+  unchecked, `cast_enemy_default`, its lines kept for the monsters). The
   same list code as the cast's (`cast_list.c` list 2): ENHANCED SETTINGS GAMEPLAY (Enemy Models, Choose Enemies), the
   BIORAND RANDOMIZER page, the lobby's CUTSCENE CAST page (ENEMY MODELS, CHOOSE ENEMIES), F1 (check boxes under Enemy
   Models).
@@ -975,15 +982,22 @@ a pool of their own:
   enemies' pool by (seed, scene), each the next not taken and not its own (`model_char`), as the characters over theirs;
   the characters' turn then has only the characters (their picks are *Same as Cast*'s unless a creature traded with
   one there). Fixed per kind with *Per Character*. The rules stay: the scene right before a fight and every fought
-  enemy never cast, Claire and Chris never picked.
+  enemy never cast, Claire and Chris never picked. A checked character is a model like the monsters: a creature or a
+  scene zombie shown as it gets the model's character's hands (`actor_cast_hands`, as with *Same as Cast*), never its
+  own look (`model_char`). With no character checked the pool is the checked monsters in the same order, so the picks
+  are those of before them (ctest `cast`; old and new `cast.c` compared over 200 monster sets, 100 seeds, both
+  assignments: the same).
 * **Old files** (`config_load`): without `cast_enemy_models`, a file with the cast's *Custom* gets *Custom* here, its
   monsters' `cast_custom_off` lines also unchecked in the enemies' list (the same names); any other gets *All Enemies*
   (the scene zombies drew monsters with every Model Selection already). `RECVX_CAST_ENEMY=0..3` (test aid) sets it where
   the file does not.
-* Co-op: the host's value and list in `EV_EOPTS` (protocol 43, `Event` 96 bytes).
+* Co-op: the host's value and list in `EV_EOPTS` (protocol 43, `Event` 96 bytes; the characters' bits fit the same 4
+  bytes, so nothing on the wire changed for them).
 * Checked (seeds 1 and 7, 9340, 8030, 6040): *Same as Cast* with *All Models* gave the 8030 Hunter Alfred and Nosferatu
   Rodrigo; *All Enemies* Monster Steve / Nosferatu and a Bandersnatch / Monster Steve; *Custom* (Tyrant and Hunter
   checked) only those (the Hunter as the Tyrant); *Off* none, Wesker still cast; the characters the same in all four.
+  *Custom* with only Steve's cutscene model checked (seed 1): the three 9340 zombies and the 8030 Hunter are Steve, with
+  Steve's hands.
 
 ### For the whole room visit
 

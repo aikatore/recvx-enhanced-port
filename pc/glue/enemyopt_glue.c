@@ -85,10 +85,10 @@ void enemy_opts_from_host(const EnemyOpts* o)
         char rl[sizeof(rates_ini)];
         host_opts = *o;
         host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s, types per room %d%s, rates %s), seed %d, cutscene cast %d (%s, %s%s, enemy models %d, "
-                 "unchecked %02x%02x), voice lines %d\n",
+                 "unchecked %02x%02x%02x), voice lines %d\n",
                  o->extra, o->place, o->rand, variety_name(o->variety), o->types, o->events ? ", event enemies" : "", rates_line(o->rate, rl), o->seed, o->cast,
                  o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models", o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "",
-                 o->cast_enemy, o->cast_enemy_off[1], o->cast_enemy_off[0], o->voices);
+                 o->cast_enemy, o->cast_enemy_off[2], o->cast_enemy_off[1], o->cast_enemy_off[0], o->voices);
     }
 }
 
