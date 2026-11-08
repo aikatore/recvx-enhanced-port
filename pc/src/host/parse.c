@@ -235,7 +235,7 @@ int pc_cvxm_check(const uint8_t* f, uint32_t n, PcCvxm* out, char* why, int wn)
         q = a + sz;
     }
     if (!nv || soff % 4 || !pc_range_ok(soff, (uint64_t)nv * CVXM_SKIN, n)) return no(why, wn, "bad skin array (%u vertices)", nv);
-    out->vtx = vtx; out->skin = soff; out->nv = nv;
+    out->vtx = vtx; out->skin = soff; out->nv = nv; out->end = q + 8;
     return 1;
 }
 

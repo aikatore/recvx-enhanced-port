@@ -239,7 +239,8 @@ static void test_cvxm(void)
     PcCvxm cv;
     char why[96];
     mk_cvxm(f);
-    CHECK(pc_cvxm_check(f, SIZE, &cv, why, sizeof(why)) && cv.vtx == BODY + VL + 64 && cv.skin == SOFF && cv.nv == 3);
+    CHECK(pc_cvxm_check(f, SIZE, &cv, why, sizeof(why)) && cv.vtx == BODY + VL + 64 && cv.skin == SOFF && cv.nv == 3 &&
+          cv.end == TOFF + 32 + 0x100 + 8 + 64 + 8 && cv.end <= SOFF);   /* (the game's part ends before the skin: load_import_model) */
     /* the review's case: the vertex list near the end of the buffer, its vertex count matching */
     mk_cvxm(f); put32(b + MODEL, 304); memcpy(b + 304, b + VL, 64); CHECK(!cvxm_ok(f, SIZE));
     mk_cvxm(f); put16(b + VL + 6, 4); put32(f + 20, 4); CHECK(!cvxm_ok(f, SIZE));   /* 4 vertices declared, 3 there */
