@@ -9,6 +9,9 @@
 - **Menus**: the enemy rates, the cutscene cast's model list, Save Now and Open Item Box are now also in the
   Enhanced Settings, and the co-op lobby and co-op window show more of the host's rules.
 - **Custom cutscene cast**: the model list now starts with only the characters that have voice lines checked.
+- **Sharper Outbreak characters**: the import now takes the detailed models of the Outbreak characters for their
+  first costumes, with sharper faces, real eyes and fuller hair, in play, in cutscenes and in co-op. Import them
+  again to get them; the other costumes have no detailed version and stay as they are.
 - **Mods**: files in the mods folder are found whatever the case of their names, such as sysmes.ald for
   SYSMES.ALD.
 - **Load Game anywhere**: F2 and the Enhanced Settings' EXTRAS page can now open the load screen during play,
