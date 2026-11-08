@@ -7,7 +7,8 @@
 - **HUD**: the over-the-shoulder camera shows the equipped weapon with its loaded rounds and spare ammo, and a
   health gauge that changes colour with the condition and when poisoned. It sits on the side of the camera's
   shoulder or fixed to one side, and can also be shown with the fixed cameras or turned off. Two styles: a weapon
-  circle with a health arc, or a minimal health bar with ammo counts.
+  circle with a health arc, or a minimal health bar with ammo counts; grenade and arrow counts take the colour of
+  the loaded rounds.
 
 ### Changes
 
@@ -35,6 +36,8 @@
 - On the very first start, BIORAND's Include Imported Models now shows its real setting and changes on the first
   press.
 - In Russian, the text of the memory card, save and load screens and of the inventory is no longer red.
+- In French, Spanish and Turkish, the memory card slot labels no longer overlap, and on the save and load screens
+  long translated questions and room names stay on the screen.
 - In the final fight's cutscene and Wesker's other fast attacks, his trail of afterimages now shows the model he is
   replaced with by the cutscene cast or the Character Model.
 - A character swapped in cutscenes no longer shows the original character's hands, such as Wesker's large gloves;

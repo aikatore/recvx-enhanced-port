@@ -60,6 +60,8 @@ typedef struct TpsHud {
     volatile int icon_x, icon_y, icon_w, icon_h;   /* its icon cell in the icon picture (hud_icons), pixels; icon_w 0: none */
     volatile int rounds, rounds_pct;       /* loaded: a count, HUD_NONE / HUD_INF; pct: in percent (the inventory's) */
     volatile int spare, spare_pct;         /* the reload ammo in the bag, the same */
+    volatile int round_kind;   /* the rounds loaded, for their colour: 0 plain (white), 1..3 the grenade launcher's acid, flame,
+                                  gas rounds, 4 the bow gun's gunpowder arrows */
 } TpsHud;
 extern TpsHud g_hud;
 /* the item icons as one RGBA picture (both textures, one above the other) once the game thread has read them, else

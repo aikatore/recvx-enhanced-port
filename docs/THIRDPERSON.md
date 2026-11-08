@@ -213,7 +213,7 @@ unit (the character is about 17 units tall).
 | `RECVX_TPS_ORBIT=degrees` | turns only the view about the player (side views; aim unchanged, camera ignores walls) |
 | `RECVX_ATMOS_TRACE=1` | logs each game frame's cut, the game's fog, lights and filter, the player's view depth from the view drawn and from the cut camera, and the fog shown with our camera (range in view depth) and what "smooth" shows |
 | `RECVX_EFF_TRACE=1` | logs effects spawned and queued |
-| `RECVX_HUD_TRACE=1` | logs when the [HUD](#hud) hides ("hud: hidden at frame") and what it shows whenever that changes ("hud: shown at frame": side, health, condition 0..4, item, icon size, rounds, spare; -1 not shown, -2 unlimited) |
+| `RECVX_HUD_TRACE=1` | logs when the [HUD](#hud) hides ("hud: hidden at frame") and what it shows whenever that changes ("hud: shown at frame": side, health, condition 0..4, item, icon size, rounds (and their kind, 0..4, for the colour), spare; -1 not shown, -2 unlimited) |
 
 ## HUD
 
@@ -262,6 +262,10 @@ F-windows: sharp, untouched by anti-aliasing and dithering). Nothing in the game
   flame, gas rounds, 155 the bow gun with gunpowder arrows), so only the rounds loaded count. Shown as the inventory
   shows those stacks (percent for the percent weapons). Hidden for weapons nothing reloads (Gold Lugers, rocket and
   linear launchers) and with unlimited ammo; 0 shown in red.
+* **Round colours**: with the grenade launcher and the bow gun, both counts (loaded and spare, in both styles) take
+  the colour of the rounds loaded, as their inventory icons show them: acid rounds gold, flame rounds orange (not their icon's red: an empty count is red), gas
+  rounds green, gunpowder arrows orange; plain grenade rounds and arrows (grey icons) stay white. A count of 0 is
+  red all the same. No other weapon has a choice of rounds (`bhSearchBullet` only tells these two apart).
 * **The icon**: the inventory's (ITEM AFS file 145, textures 3 and 4, cells as `sub1.c ItemSet` and the trade
   screen pick them, `trade_glue.c pc_item_icon_cell`), read once when the HUD first shows, its dark blue cell
   background left out, and made into the overlay's own texture: the game's texture memory is not touched. If the
