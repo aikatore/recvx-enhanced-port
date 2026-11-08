@@ -1237,6 +1237,75 @@ then Custom: the ini has Wild's rates), `ui/t_lobby.sh` (the lobby: the gamepad 
 click on Mutated Steve's track, a right click back, Types per Room), `pc/tools/enemy_rates_check.sh`,
 `pc/tools/enemy_revisit_check.sh` (also with `EXTRA=8` and Custom), and a co-op run (host and guest the same records).
 
+### S13: the spoiler log screen (`--dev`, F8; 2026-11-08)
+
+The user's request: an in-game screen of BioRand's `log_pl0.txt`, each room in order with each item spot's original
+item and what replaced it, with the item icons, the door randomizer's segments if they can be read, opened with F8
+for now (later from the Select settings menu), `--dev` only, pausing the game like the pause and settings menus, with no
+leak however often it opens.
+
+**The log** (BioRand 3.3.2, `ItemRandomiser.cs`, `DoorRandomiser.cs`; parsed by `pc/src/host/spoiler.c`, ctest `spoiler`):
+
+| line | meaning |
+|---|---|
+| `BioRand 3.3.2 (7955765)`, `Seed: R840-...`, `Player: 0 Claire`, `Scenario: A` | the head |
+| `Creating segment from 1000 to 6000:` | the door randomizer's segment (only with Randomize Doors); its rooms are its `Connected` lines' |
+| `Connected 40C0:1 [EmblemCard] to 5020:2 (locked #129)` | a door of the segment; `[...]` the keys that door needs |
+| `4011:1 -> null` | the dead ends after the last segment (no segment of their own) |
+| `Placing key item (EmblemCard x1) in A160:6` | a key item spot; the original item is **not** in the log |
+| `------------ checkpoint ------------` | the key items' next part (with doors: the next segment) |
+| `Replaced 8170:7 [BlueHerb x1] with 8170:7 [M1P x1]` | any other spot: the original and the new item and counts |
+| `Swapped A [..] with B [..]`, `A [..] placed at B` | shuffled spots; linked spots (the same item twice) |
+| `Adding CombatKnife x1` (under `Randomizing Inventory 0:`) | the start inventory |
+| `1010 shall have Zombie` | an enemy line (CVX logs none today: BioRand does not randomize its enemies) |
+
+A room is BioRand's `RdtId`: stage + 1 and the room in hex, then the variant ("A1A0" = `RM_9260`). A spot is the item's id
+in the room's script. Item names are BioRand's `ReCvItemIds` names (= the game's item ids). The originals of key item
+spots come from BioRand's own `data/recv/rdt.json` (MIT): `pc/src/host/spoiler_data.inc`, made by
+`pc/tools/biorand_spoiler_data.py` from biorand/classic 7955765 (the commit of the user's pack); it matches every spot of
+five packs (one spot of an older 3.3.2 pack, 3060:254, is not in it: shown as "?").
+
+**Door segments** can be read: each `Creating segment` lists its doors, so a room belongs to the segment whose
+`Connected` lines name it first, except that a segment's start room (the previous one's end) is its own. The locks
+of a segment give its keys. Without door randomization there are no segments: the second view then groups the key
+items by BioRand's checkpoints ("parts", the order it placed them in).
+
+**The screen** (`pc/glue/spoiler_menu.c`): SPOILER LOG, the seed, the BioRand version and the player; two views,
+**BY AREA** (the start inventory, then each area by stage, each room with its name (the teleport list's,
+`tp_place_name`), `RM_` file and BioRand code, and its spots: the spot id, the original item's icon and name and count,
+an arrow, the new item's) and **BY SEGMENT** (each segment with its start and end rooms, "Locks need:" with the keys'
+icons, then its rooms and their spots; rooms of no segment last) or, without doors, **BY PART**; a **KEY ITEMS ONLY**
+toggle (key item spots highlighted in either case); the room the player is in is marked "(you are here)" and shown
+first on opening; scrolled into a group, its heading stays pinned at the top. Item names are the game's in its language
+(`g_cheat.names`), else BioRand's split at its capitals. Messages instead of the list: no BioRand game, no log in the
+pack, a file that is not a BioRand log, no spots.
+
+Input: up/down a row, left/right (L2/R2, Page Up/Down) a page, Home/End, L1/R1 the previous/next group, Triangle the
+view, Square the key items, Select the player's room; the mouse wheel (three rows), a click on a view, the toggle, the
+scroll bar or CLOSE; F8, Escape, the cancel button, START or a right click close it. Its texts are in the ten languages.
+
+**The pause.** F8 (hotkey row "Spoiler Log (Dev)", `B_SPOILER`, shown only with `--dev`; the main thread's
+`spoiler_key`) asks for the game's own PAUSE (`system.c bhSysCallEvent`, under its own conditions: in play, no event,
+door, menu or movie): `ss_flg 0x80000000`, `sp_flg` 0 (no player, enemy, effect or event step), the pad state kept. The
+screen is drawn in PAUSE's place (`bhSysCallScreenSaver` mode 10), over the frozen world dimmed, and when it closes the
+pause ends as from START (pad state and `sp_flg` back). The music plays on; the play time (`stv_tm`) is held. Not in
+co-op (the partner's game runs on). An F8 that finds no pause within three frames (a cutscene) is dropped.
+
+**Resources.** The log is read once per pack (`biorand_spoiler` in `biorand.c`: again only when `biorand_id` or the
+file's size or time changed), into one heap block freed on the next read and at the exit; the text is freed after the
+parse. The icons are the trade screen's textures (`pc_item_icons`, user 4: loaded from ITEM AFS file 145 into its
+static buffer while the screen is open, released when it closes; the room's textures are never touched). The rows are
+a static array (6 KB) rebuilt in place. Nothing else is allocated per open.
+
+**Tests (2026-11-08, Linux and mingw build; job dir `biorandlog/`, not committed):** `t.sh` (BIORAND > START, a teleport
+to 0/11, F8: the list, a scroll, L1/R1, the views, the toggle, Page Down, the mouse on the views, the wheel; Escape,
+the cancel button and F8 close; `--dev` off: F8 does nothing; a game without BioRand, a pack without the log, a junk
+log: their messages; the play time and the player's pose and motion frame the same at the open and the close, then
+counting on), ctest `spoiler`, `lang`. `stress.sh` (`RECVX_SPOILER_STRESS=2000:500`: 500 opens and closes with
+scrolls, views and the toggle): RSS 186.2 MB after the 1st, 50th and 200th close, then between 186.2 and 187.5 MB
+(open and closed) to the 500th; the game's texture entries 182 at every open; the cached GL textures 1 + 77..84 (a
+run with no opens: 1 + 74, RSS 181 MB).
+
 ### Weapons the scripts put in the hand (2026-11-08)
 
 The user's report: before the fight with Nosferatu a BioRand game force-equips the sniper rifle though it is not in the
@@ -1348,6 +1417,8 @@ retail.
 - **S11 done** (2026-11-06): Randomize Voice Lines on the RANDOMIZER page (and the lobby, ENHANCED SETTINGS). See "S11".
 - **S12 done** (2026-11-06): Custom enemy rates (Enemy Selection Custom, the Enemy Rates list), Types per Room, Extra
   Enemies up to 8; in the lobby too. See "S12".
+- **S13 done** (2026-11-08): the `--dev` spoiler log screen (F8): the log by area or door segment with the item icons,
+  a pause of the game's own. See "S13".
 - **STATUS: All steps done; open: Windows real-machine test list** ("S6", "Windows real-machine test list").
 - The job-dir tools (not committed): S5b's `s5b/` (`co.sh`, `scen.sh`, `mkpack.sh`, `build.sh`); S5a's `s5a/` (`run.sh`, `scen.sh`, `played.sh`, `look.sh`, `saveload.sh`); S1's `biorand-ui/enc.py` (it read the deleted JSON; the C
   encoder replaces it), `gen.sh`, `err.sh`; S4a's `s4a/cli_check.sh`; S4b's `s4b/` scripts (see "S4b").

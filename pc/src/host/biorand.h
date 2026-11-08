@@ -48,6 +48,11 @@ int  biorand_setting(void);           /* the co-op host's lobby rule BIORAND (in
 int  biorand_toggle(void);            /* the lobby rule's row: flips it; 0 when it is locked (biorand_locked) */
 int  biorand_rifle_stack(void);       /* rifle ammo stacks: the setting, always while BioRand is on */
 void* biorand_room0(int* size);       /* the pack's room 0/0 (RM_0000.RDX) expanded, malloc'd (free it); NULL none */
+/* the pack's spoiler log (log_pl0.txt, spoiler.h) as read, NULL when *state is not SPOILER_OK; read at the first call
+   and again only after the pack or the file changed (game thread; the --dev spoiler screen, spoiler_menu.c) */
+enum { SPOILER_NONE, SPOILER_OK, SPOILER_MISSING, SPOILER_BROKEN };
+struct Spoiler;
+const struct Spoiler* biorand_spoiler(int* state);
 /* generating (docs/BIORAND_INGAME.md S5; the BIORAND screen, game thread) */
 int  biorand_mods_free_mb(void);      /* the mods folder (created) has this much free space in MB; -1 unknown */
 int  biorand_iso_known(void);         /* the game's disc image path is set */

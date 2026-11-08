@@ -414,6 +414,8 @@ static GLuint decode(const Def* d, uint64_t tex0, uint64_t texa, int* w, int* h)
     return t;
 }
 
+int ntex_count(void) { int n = 0; for (int i = 0; i < MAX_NTEX; i++) n += ntex[i].used != 0; return n; }
+
 int ntex_lookup(uint64_t tex0, uint64_t texa, unsigned int* out_tex, int* out_w, int* out_h)
 {
     uint32_t tbp = tex0 & 0x3FFF, psm = (tex0 >> 20) & 0x3F, pal;

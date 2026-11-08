@@ -345,15 +345,20 @@ int tp_stage_first(int stg, int* n)
 
 const char* tp_stage_name(int stg) { return stg >= 0 && stg < 10 ? stages[stg] : "?"; }
 
+const char* tp_place_name(int stg, int rom)
+{
+    unsigned k = RoomNameSwitch((unsigned)(stg * 100 + rom));
+    if (k && k < SDL_arraysize(g_cheat.rooms) && g_cheat.rooms[k][0]) return g_cheat.rooms[k];
+    for (int j = 0; j < (int)SDL_arraysize(labels); j++) if (labels[j].stg == stg && labels[j].rom == rom) return labels[j].name;
+    return NULL;
+}
+
 const char* tp_room_name(int i, int with_file, char* b, int n)
 {
     const TpRoom* r = tp_room(i);
-    const char* nm = NULL;
-    unsigned k;
+    const char* nm;
     if (!r) { snprintf(b, n, "-"); return b; }
-    k = RoomNameSwitch(r->stg * 100 + r->rom);
-    if (k && k < SDL_arraysize(g_cheat.rooms) && g_cheat.rooms[k][0]) nm = g_cheat.rooms[k];
-    for (int j = 0; !nm && j < (int)SDL_arraysize(labels); j++) if (labels[j].stg == r->stg && labels[j].rom == r->rom) nm = labels[j].name;
+    nm = tp_place_name(r->stg, r->rom);
     if (r->custom && !r->tag[0]) snprintf(b, n, "Custom room %s", r->file);
     else if (r->custom || nm) snprintf(b, n, with_file ? "%s (%s)" : "%s", r->custom ? r->tag : nm, r->file);
     else snprintf(b, n, "Room %d (%s)", r->rom, r->file);

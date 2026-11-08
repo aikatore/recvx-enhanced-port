@@ -6,6 +6,7 @@
 #include "../../include/pc_parse.h"
 #include "../net/biorand_dl.h"
 #include "biorand_opts.h"
+#include "spoiler.h"
 #include "lang.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -209,4 +210,48 @@ void* biorand_room0(int* size)
     if (m < 0x80) { free(d); return NULL; }
     *size = (int)m;
     return d;
+}
+
+/* ---------------------------------------------------------------- the spoiler log (spoiler.h) */
+/* read once per pack: again only when its identity (biorand_id) or the log's size or time changed. One block on the
+   heap, freed when it is read again and at the exit */
+static struct { Spoiler* sp; unsigned int id; long long size, mtime; int state; } sl;   /* state: SPOILER_* */
+
+static void spoiler_free(void) { free(sl.sp); sl.sp = NULL; sl.id = 0; sl.state = SPOILER_NONE; }
+
+const Spoiler* biorand_spoiler(int* state)
+{
+    static int registered;
+    char path[1200];
+    SDL_PathInfo pi;
+    char* text = NULL;
+    FILE* f;
+    long n = -1;
+    snprintf(path, sizeof(path), "%s/biorand/log_pl0.txt", mods_dir());
+    if (!SDL_GetPathInfo(path, &pi)) pi.size = (Uint64)-1, pi.modify_time = 0;
+    if (sl.state != SPOILER_NONE && sl.id == biorand_id() && sl.size == (long long)pi.size && sl.mtime == (long long)pi.modify_time) {
+        *state = sl.state;
+        return sl.sp;
+    }
+    if (!registered++) atexit(spoiler_free);
+    spoiler_free();
+    sl.id = biorand_id(); sl.size = (long long)pi.size; sl.mtime = (long long)pi.modify_time;
+    sl.state = SPOILER_MISSING;
+    if ((f = pc_fopen(path, "rb"))) {
+        fseek(f, 0, SEEK_END);
+        n = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        sl.state = SPOILER_BROKEN;
+        if (n >= 0 && n <= (4 << 20) && (text = malloc((size_t)n + 1)) && fread(text, 1, (size_t)n, f) == (size_t)n &&
+            (sl.sp = malloc(sizeof(Spoiler))) && !spoiler_parse(text, (size_t)n, sl.sp))
+            sl.state = SPOILER_OK;
+        fclose(f);
+        free(text);
+        if (sl.state != SPOILER_OK) { free(sl.sp); sl.sp = NULL; }
+    }
+    host_log("biorand: spoiler log %s: %s", path, sl.state == SPOILER_OK ? "read" : sl.state == SPOILER_MISSING ? "missing" : "not a BioRand log");
+    if (sl.sp) host_log(" (%d spots, %d rooms, %d segments%s)", sl.sp->nitem, sl.sp->nroom, sl.sp->nseg, sl.sp->truncated ? ", cut" : "");
+    host_log("\n");
+    *state = sl.state;
+    return sl.sp;
 }
