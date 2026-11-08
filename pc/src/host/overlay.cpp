@@ -81,9 +81,9 @@ int overlay_event(const void* e)
         coop_visible = !coop_visible;
         return 1;
     }
-    for (int r = B_CHEAT_SAVE; r <= B_CHEAT_BOX; r++)   /* (unbound by default; not while typing in a field) */
+    for (int r = B_CHEAT_SAVE; r <= B_CHEAT_LOAD; r++)   /* (unbound by default; not while typing in a field) */
         if (!ImGui::GetIO().WantTextInput && bind_hotkey(ev, r)) {
-            __atomic_or_fetch(&g_cheat.request, r == B_CHEAT_SAVE ? CHEAT_SAVE : CHEAT_BOX, __ATOMIC_ACQ_REL);
+            __atomic_or_fetch(&g_cheat.request, r == B_CHEAT_SAVE ? CHEAT_SAVE : r == B_CHEAT_BOX ? CHEAT_BOX : CHEAT_LOAD, __ATOMIC_ACQ_REL);
             return 1;
         }
     if (g_dev_mode && bind_hotkey(ev, B_IMPORT)) {
@@ -488,6 +488,12 @@ static void cheat_window(void)
     ImGui::SameLine();
     if (ImGui::Button(tr("Open Item Box"))) __atomic_or_fetch(&c->request, CHEAT_BOX, __ATOMIC_ACQ_REL);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("Open the item box here, the same box as at any item box."));
+    ImGui::SameLine();
+    ImGui::BeginDisabled(g_coop.state != COOP_OFF);
+    if (ImGui::Button(tr("Load Game"))) __atomic_or_fetch(&c->request, CHEAT_LOAD, __ATOMIC_ACQ_REL);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s", tr(g_coop.state != COOP_OFF ? "Not during a co-op session." : "Open the load screen here. Back returns to the game as it was."));
 
     ImGui::SeparatorText(tr("Add Item"));
     char label[48];

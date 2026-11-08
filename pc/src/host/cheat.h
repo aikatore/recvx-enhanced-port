@@ -7,7 +7,8 @@ extern "C" {
 #endif
 
 enum { CHEAT_GIVE = 1, CHEAT_TELEPORT = 2, CHEAT_HEAL = 4, CHEAT_SPAWN = 8, CHEAT_DROP = 16,
-       CHEAT_SAVE = 32, CHEAT_BOX = 64 };   /* the typewriter's save screen / the item box, wherever the player is */
+       CHEAT_SAVE = 32, CHEAT_BOX = 64,     /* the typewriter's save screen / the item box, wherever the player is */
+       CHEAT_LOAD = 128 };                  /* the load screen, as the title's LOAD GAME (not in co-op) */
 #define CHEAT_ITEMS 156
 
 typedef struct CheatState {
