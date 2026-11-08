@@ -943,7 +943,13 @@ static void hud_draw(void)
         float u0 = (g_hud.icon_x + 0.5f) / hud_tw, v0 = (g_hud.icon_y + 0.5f) / hud_th, u1 = (g_hud.icon_x + iw - 0.5f) / hud_tw, v1 = (g_hud.icon_y + ih - 0.5f) / hud_th;
         dl->AddImage((ImTextureID)(intptr_t)hud_tex, ImVec2(x, y), ImVec2(x + iw * k, y + ih * k), ImVec2(u0, v0), ImVec2(u1, v1), A(IM_COL32(255, 255, 255, 255)));
     };
-    const ImU32 white = A(IM_COL32(255, 255, 255, 240)), red = A(IM_COL32(240, 90, 80, 255));
+    const ImU32 red = A(IM_COL32(240, 90, 80, 255));
+    /* the counts in the colour of the rounds loaded (g_hud.round_kind), as their inventory icons: plain grenade rounds
+       and arrows white (a grey icon), acid rounds gold, flame rounds red, gas rounds green, gunpowder arrows orange */
+    static const ImU32 round_col[] = { IM_COL32(255, 255, 255, 240), IM_COL32(255, 210, 60, 240), IM_COL32(255, 80, 50, 240),
+                                       IM_COL32(70, 230, 150, 240), IM_COL32(255, 150, 40, 240) };
+    int rk = g_hud.round_kind >= 0 && g_hud.round_kind <= 4 ? g_hud.round_kind : 0;
+    const ImU32 tint = A(round_col[rk]);
     if (g_tps.hud_style == 1) {
         /* Minimal: the bar in the corner, filled from the outer end; above it at the outer end the icon, then the rounds
            loaded and "/spare" smaller, on one baseline */
@@ -962,8 +968,8 @@ static void hud_draw(void)
         float tw = wi + (wi > 0 && wl > 0 ? gap : 0.0f) + wl + wsp, x = hud_left ? ox : ox - tw, base = by - vh * 0.012f;
         float asc = font->GetFontBaked(fs)->Ascent, sasc = font->GetFontBaked(ss)->Ascent;
         if (wi > 0) { icon(x, base - asc * 0.5f - g_hud.icon_h * ik * 0.5f, ik); x += wi + gap; }
-        if (g_hud.rounds != HUD_NONE) hud_count(dl, fs, x + wl * 0.5f, base - asc, g_hud.rounds, g_hud.rounds_pct, g_hud.rounds == 0 ? red : white);
-        if (*sp) hud_text(dl, ss, x + wl, base - sasc, g_hud.spare ? A(IM_COL32(215, 215, 220, 230)) : red, sp);
+        if (g_hud.rounds != HUD_NONE) hud_count(dl, fs, x + wl * 0.5f, base - asc, g_hud.rounds, g_hud.rounds_pct, g_hud.rounds == 0 ? red : tint);
+        if (*sp) hud_text(dl, ss, x + wl, base - sasc, !g_hud.spare ? red : rk ? tint : A(IM_COL32(215, 215, 220, 230)), sp);
         return;
     }
     float R = vh * 0.07f, th = R * 0.17f, ra = R + th * 1.1f, m = vh * 0.05f + ra + th * 0.5f;
@@ -988,7 +994,7 @@ static void hud_draw(void)
         icon(c.x - iw * k * 0.5f, iy - ih * k * 0.5f, k);
     }
     if (g_hud.rounds != HUD_NONE)
-        hud_count(dl, fs, c.x, c.y + R * 0.2f, g_hud.rounds, g_hud.rounds_pct, g_hud.rounds == 0 ? red : white);
+        hud_count(dl, fs, c.x, c.y + R * 0.2f, g_hud.rounds, g_hud.rounds_pct, g_hud.rounds == 0 ? red : tint);
     /* the reload ammo, on the inner side */
     if (g_hud.spare != HUD_NONE) {
         char b[16];
@@ -996,7 +1002,7 @@ static void hud_draw(void)
         snprintf(b, sizeof b, g_hud.spare_pct ? "%d%%" : "%d", g_hud.spare);
         float w = ImGui::GetFont()->CalcTextSizeA(ss, FLT_MAX, 0, b).x, ex = c.x - dir * (R + pad * 2), x = hud_left ? ex : ex - w, y = c.y + R * 0.15f;
         dl->AddRectFilled(ImVec2(x - pad, y - pad * 0.4f), ImVec2(x + w + pad, y + ss + pad * 0.4f), A(IM_COL32(8, 12, 18, 140)), ss * 0.3f);
-        hud_text(dl, ss, x, y, A(g_hud.spare ? IM_COL32(230, 230, 230, 240) : IM_COL32(240, 90, 80, 240)), b);
+        hud_text(dl, ss, x, y, !g_hud.spare ? A(IM_COL32(240, 90, 80, 240)) : rk ? tint : A(IM_COL32(230, 230, 230, 240)), b);
     }
 }
 

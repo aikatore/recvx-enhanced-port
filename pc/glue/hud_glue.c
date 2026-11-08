@@ -8,7 +8,7 @@
  * 60, Caution (orange) from 30, then Danger; poisoned (stflg 0x280000) over them all. The rounds are the equipped
  * slot's count as the inventory shows it (sub1.c BulletSet: a count, a percent, unlimited); the spare ammo the bag's
  * stacks the game reloads that weapon from (sub1.c bhSearchBullet: an ammo item's combination with the weapon, by
- * its kind of rounds for the grenade launcher and the bow gun).
+ * its kind of rounds for the grenade launcher and the bow gun); that kind of rounds also colours both counts.
  *
  * The weapon's picture is its inventory icon (ITEM AFS file 145, textures 3 and 4, as the trade screen draws them,
  * trade_glue.c), read once and turned into RGBA for the overlay's own texture: the game's texture memory is not used. */
@@ -143,6 +143,7 @@ void hud_frame(void)
     g_hud.rounds = !id || !counts(id) ? HUD_NONE : inf ? HUD_INF : shown(id, (int)(w & 0xFFFF));
     g_hud.rounds_pct = (itemdata[id].type & 0x1000) != 0;
     wpn = id == 6 && (kind & 0x7000) ? 151 + ((kind & 0x7000) >> 12) : id == 7 && (kind & 0x2000) ? 155 : id;   /* 152..154: acid, flame, gas rounds */
+    g_hud.round_kind = wpn >= 152 && wpn <= 155 ? wpn - 151 : 0;
     cells = (sys->gm_flg & 0x8000000) ? 10 : 8;   /* the side pack */
     for (i = 2; i < 2 + cells && g_hud.rounds >= 0; i++) {
         int y = (iv[i] >> 16) & 0xFF;
@@ -152,11 +153,11 @@ void hud_frame(void)
     g_hud.spare = any ? spare : HUD_NONE;
     g_hud.spare_pct = g_hud.rounds_pct;   /* (the percent weapons' ammo is in percent too) */
     if (trace) {
-        static int last[8];
-        int now[8] = { g_hud.on, g_hud.left, g_hud.hp, g_hud.cond, id, g_hud.rounds, g_hud.spare, g_hud.icon_w };
+        static int last[9];
+        int now[9] = { g_hud.on, g_hud.left, g_hud.hp, g_hud.cond, id, g_hud.rounds, g_hud.spare, g_hud.icon_w, g_hud.round_kind };
         if (memcmp(now, last, sizeof(now)))
-            printf("hud: shown at frame %u: %s, health %d/%d condition %d, item %d (icon %dx%d), rounds %d%s, spare %d\n", (unsigned)gs_frame_count(),
-                   g_hud.left ? "left" : "right", g_hud.hp, g_hud.hp_max, g_hud.cond, id, g_hud.icon_w, g_hud.icon_h, g_hud.rounds, g_hud.rounds_pct ? "%" : "",
+            printf("hud: shown at frame %u: %s, health %d/%d condition %d, item %d (icon %dx%d), rounds %d%s (kind %d), spare %d\n", (unsigned)gs_frame_count(),
+                   g_hud.left ? "left" : "right", g_hud.hp, g_hud.hp_max, g_hud.cond, id, g_hud.icon_w, g_hud.icon_h, g_hud.rounds, g_hud.rounds_pct ? "%" : "", g_hud.round_kind,
                    g_hud.spare);
         memcpy(last, now, sizeof(now));
     }
