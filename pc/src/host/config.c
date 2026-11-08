@@ -198,7 +198,13 @@ void config_load(void)
     int combined_seen = 0;
     FILE* f;
     path(p, sizeof(p));
-    if (!(f = pc_fopen(p, "r"))) { import_registry_load(); default_name(); player_id(); return; }
+    if (!(f = pc_fopen(p, "r"))) {   /* first start: the defaults (player_id saves them) */
+        import_registry_load();
+        g_biorand_appear_imports = g_enemy_opts.cast_imports;   /* (as below: absent, the cast's) */
+        default_name();
+        player_id();
+        return;
+    }
     while (fgets(line, sizeof(line), f))
         if (sscanf(line, " coop_join = %127s", g_coop.join) == 1) continue;
         else if (sscanf(line, " fixed_cam_version = %d", &v) == 1) { combined_seen = 1; continue; }
@@ -239,8 +245,8 @@ void config_load(void)
     if (!combined_seen && g_modern_on == 1) g_modern_on = MODERN_COMBINED;
     g_coop.chr = appear_canon(g_coop.chr);   /* an event double no longer listed: its listed twin (actors.c) */
     for (int c = 0; c < 2; c++) if (g_appear_own[c] >= 0) g_appear_own[c] = appear_canon(g_appear_own[c]);
-    g_enemy_opts.cast = g_enemy_opts.cast == 1 || g_enemy_opts.cast == 3;
-    if (g_biorand_appear_imports < 0) g_biorand_appear_imports = g_enemy_opts.cast_imports;   /* (a file from before it: the cast's, which it used) */   /* the cutscene cast had 1 Characters, 2 Enemies, 3 Both: the characters' on */
+    g_enemy_opts.cast = g_enemy_opts.cast == 1 || g_enemy_opts.cast == 3;   /* the cutscene cast had 1 Characters, 2 Enemies, 3 Both: the characters' on */
+    if (g_biorand_appear_imports < 0) g_biorand_appear_imports = g_enemy_opts.cast_imports;   /* (a file from before it: the cast's, which it used) */
     default_name();
     player_id();
 }
@@ -292,7 +298,7 @@ static int write_ini(FILE* f, void* ud)
     if (g_update_skip[0]) fprintf(f, "update_skip = %s\n", g_update_skip);
     if (g_biorand_seed[0]) fprintf(f, "biorand_seed = %s\n", g_biorand_seed);
     fprintf(f, "enemy_rates = %s\n", enemy_rates_text());   /* "Custom"'s rates (enemies.h) */
-    if (g_biorand_appear) fprintf(f, "biorand_appear = %d\n", g_biorand_appear);   /* (like biorand_seed: only once set, in the --dev screen) */
+    if (g_biorand_appear) fprintf(f, "biorand_appear = %d\n", g_biorand_appear);   /* (like biorand_seed: only once set, in the BIORAND menu) */
     if (!g_devcine_show) fprintf(f, "dev_cutscene_overlay = 0\n");   /* (only once turned off, in the --dev F6 window) */
     cast_off_write(0, off_line, f);
     cast_off_write(1, appear_off_line, f);

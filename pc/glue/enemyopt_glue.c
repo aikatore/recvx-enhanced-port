@@ -73,15 +73,17 @@ const EnemyOpts* enemy_opts(void)
 
 static int kept_n;
 static const char* variety_name(int v) { return v == 2 ? "custom" : v ? "wild" : "mild"; }
-static const char* rates_line(const unsigned char* rate);
+static char rates_ini[512];   /* recvx.ini enemy_rates (below: enemy_rates_ini) */
+static const char* rates_line(const unsigned char* rate, char* t);
 void enemy_opts_from_host(const EnemyOpts* o)
 {
     have_host_opts = o != NULL;
     if (!o) { kept_n = 0; memset(host_off, 0, sizeof(host_off)); }   /* (enemy_rand_kept, EV_CASTOFF: the host's go with its session) */
     if (o) {
+        char rl[sizeof(rates_ini)];
         host_opts = *o;
         host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s, types per room %d%s, rates %s), seed %d, cutscene cast %d (%s, %s%s), voice lines %d\n",
-                 o->extra, o->place, o->rand, variety_name(o->variety), o->types, o->events ? ", event enemies" : "", rates_line(o->rate), o->seed, o->cast,
+                 o->extra, o->place, o->rand, variety_name(o->variety), o->types, o->events ? ", event enemies" : "", rates_line(o->rate, rl), o->seed, o->cast,
                  o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models", o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "",
                  o->voices);
     }
@@ -315,7 +317,6 @@ void enemy_rate_preset(unsigned char* rate, int variety)
 /* recvx.ini enemy_rates: "id:rate" per base kind (its type id; "id.look:rate" for one look: 5.0 Hunter, 5.1 Sweeper; a pair
    without the look, as before they were split, sets every look's), "vID:rate" per variant; a kind the line lacks (new, or a
    mods file changed) keeps the preset of the file's Enemy Selection. Read before the variants are loaded, applied after. */
-static char rates_ini[512];
 static int rates_ready;
 void enemy_rates_ini(const char* text) { snprintf(rates_ini, sizeof(rates_ini), "%s", text); }
 static void rates_apply(const char* t)
@@ -339,18 +340,23 @@ void enemy_rates_load(void)
     rates_apply(getenv("RECVX_ENEMY_RATES"));   /* test aid, as the ini line */
     rates_ready = 1;
 }
-static const char* rates_line(const unsigned char* rate)
+/* into t (sizeof(rates_ini) bytes): its own buffer for each caller, as the game thread logs the host's rates
+   while config_save (the main thread) writes ours */
+static const char* rates_line(const unsigned char* rate, char* t)
 {
-    static char t[sizeof(rates_ini)];
     int n = 0;
     for (int i = 0; i < KINDS; i++)
-        n += kinds[i].look < 0 ? snprintf(t + n, sizeof(t) - n, "%s%d:%d", n ? " " : "", kinds[i].id, rate[i])
-                               : snprintf(t + n, sizeof(t) - n, "%s%d.%d:%d", n ? " " : "", kinds[i].id, kinds[i].look, rate[i]);
-    for (int j = 0; j < variant_count() && vrate(j) >= 0 && n < (int)sizeof(t) - 16; j++)
-        if (listed(j)) n += snprintf(t + n, sizeof(t) - n, " v%d:%d", variant_at(j)->id, rate[vrate(j)]);
+        n += kinds[i].look < 0 ? snprintf(t + n, sizeof(rates_ini) - n, "%s%d:%d", n ? " " : "", kinds[i].id, rate[i])
+                               : snprintf(t + n, sizeof(rates_ini) - n, "%s%d.%d:%d", n ? " " : "", kinds[i].id, kinds[i].look, rate[i]);
+    for (int j = 0; j < variant_count() && vrate(j) >= 0 && n < (int)sizeof(rates_ini) - 16; j++)
+        if (listed(j)) n += snprintf(t + n, sizeof(rates_ini) - n, " v%d:%d", variant_at(j)->id, rate[vrate(j)]);
     return t;
 }
-const char* enemy_rates_text(void) { return rates_ready ? rates_line(g_enemy_opts.rate) : rates_ini; }   /* (saved before the load: the file's) */
+const char* enemy_rates_text(void)   /* (saved before the load: the file's) */
+{
+    static char t[sizeof(rates_ini)];
+    return rates_ready ? rates_line(g_enemy_opts.rate, t) : rates_ini;
+}
 /* the kinds a room's records can become: those above, then the enemy variants with a randomizer weight
    (docs/ENEMIES.md "Enemy variants"): a variant takes its base kind's rules (another type's: not where doors
    count kills, nor where the script uses rm_flg bits), plus big, heavy and the stages it may appear in. The
@@ -475,8 +481,10 @@ static void randomize(const EnemyOpts* o)
         if (!cls[k]) continue;
         rnd_seed((unsigned)o->seed, (unsigned)room * 977u + 0x3000u + (unsigned)k * 7919u);   /* each record its own draws */
         if (cls[k] == 2) {   /* another look of its type */
-            if ((kd = kind_of(kt, save.id, save.mdlver)) >= 0 && (m = pick_look(kt, save.id, -1, off & ~(1u << kd), save.id, save.mdlver, used)))
-                kd = kind_of(kt, m->id, m->mdlver);   /* (a Hunter's look can be the Sweeper's kind; Custom: not while it is Off) */
+            unsigned eoff = off;
+            for (i = 0; o->types && nset >= o->types && i < KINDS; i++) eoff |= (unsigned)!set[i] << i;   /* Types per Room, the room full: its kinds only */
+            if ((kd = kind_of(kt, save.id, save.mdlver)) >= 0 && (m = pick_look(kt, save.id, -1, eoff & ~(1u << kd), save.id, save.mdlver, used)))
+                kd = kind_of(kt, m->id, m->mdlver);   /* (a Hunter's look can be the Sweeper's kind; Custom: not while it is Off, nor past Types per Room) */
         } else {
             int w[KINDS + VARIANT_MAX], t = 0, fresh = 0, r, big = -1, mine = 0, mset = 0;
             for (i = 0; i < nk; i++) {

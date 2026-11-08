@@ -131,7 +131,8 @@ int   pc_precise_head(struct BH_PWORK* pp);
 int   pc_pierce(int wpn);
 int   pc_head_burst(struct BH_PWORK* pp);
 int   pc_blood_at_hit(struct BH_PWORK* pp, float* ofs);
-void  pc_hit_react_fx(int on);   /* effect.c bhControlEffect, bhDrawEffect: "Locational Hit Reactions", the linked effects follow the flinch */
+int   pc_hit_react_fx(int on);   /* effect.c bhControlEffect, bhDrawEffect: "Locational Hit Reactions", the linked effects follow the flinch;
+                                  0 returns 1 when turns were on (weapon.c's hit tests take them off and put them back) */
 /* F2 cheat "Unlock all" (pc/glue/cheat_glue.c): bhPlItemCheck passes for a key at its lock; bhControlPlayer's examine
    press in a key's use spot (1: taken) and bhControlEvent around scd1 (0 before, 1 after) use the key there;
    bhUseItemCheck / bhCmpB found the key used tested; bhInitEvent: a room's entry script is about to run */

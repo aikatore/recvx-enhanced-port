@@ -708,7 +708,11 @@ one hit reaction for a zombie wherever a shot lands: walking, a jolt of its spin
   parts on those nodes (caps on the head) turn with it, and so do the effects linked to them (the blood
   at the hit, [Precise hits](#precise-hits)): the nodes are turned the same way while the effects step and
   are drawn (`effect.c bhControlEffect`, `bhDrawEffect` -> `pc_hit_react_fx`, up to 8 zombies at once) and put
-  back after. Each node's matrix is saved and put back whole (`node_mtx`; before, the copy took 64 bytes
+  back after. The hit tests an effect makes while they step (`weapon.c`: the bow gun's bolts in `bhCheckGunAtari`,
+  `bhCheckFlyAtari`, `bhSetBowDamage`, the blasts' `bhCheckBombAtari`) take the turns off and put them back
+  (`PC_UNFLINCHED`), so their hits, joints and damage are the game's (bolts at a zombie flinching from an earlier
+  hit, as a co-op partner's: identical with the setting on and off, checked with the flinch stretched to 40 ticks,
+  since one player's bolts come further apart than a flinch lasts). Each node's matrix is saved and put back whole (`node_mtx`; before, the copy took 64 bytes
   per node of the 80-byte node works, so the last nodes, the left arm's, kept the flinch until the zombie's
   next pose). The motion, the node angles, the hit volumes, damage,
   stun, damage modes, AI and timings are the game's: runs with the setting off and on are identical in every

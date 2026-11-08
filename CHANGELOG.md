@@ -12,6 +12,9 @@
 ### Fixes
 
 - With BioRand, Claire's shots in the cutscene at the prison's main gate are heard again.
+- Bow gun bolts now hit a zombie the same whether or not it is flinching from Locational Hit Reactions.
+- On the very first start, BIORAND's Include Imported Models now shows its real setting and changes on the first
+  press.
 
 ## 0.7.5 (2026-11-07)
 
