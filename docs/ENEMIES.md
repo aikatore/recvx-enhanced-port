@@ -847,9 +847,10 @@ with records the options touch, per seed in Wild, Mild and Custom (every kind at
 placements and eight extras, and logs every enemy two frames into each room (`RECVX_ENEMY_FLOORS`). Every walking
 enemy placed elsewhere or added, or turned into another type at its own spot, must stand within a unit of the
 ground under it ("Spots"); records that keep their type at the game's own spot are listed apart. Before the
-"Spots" rules, 4 seeds: 99 of 1853 placed or added walkers stood in mid-air (over the pool and stairs of RM_3060,
-the balconies of RM_2011, RM_9310's platform, RM_1120's ramp, RM_5580) or sunk in a crate or step (RM_1000,
-RM_1060, RM_5690, RM_7150, RM_7180, RM_7210), and RM_6090's Black Widow under the floor became another kind 12 times.
+"Spots" rules, 4 seeds: 87 of 1853 placed or added walkers stood in mid-air (74: over the pool and stairs of
+RM_3060, by the balconies of RM_2011, off RM_9310's platform, over RM_1120's ramp, in RM_5580) or sunk in a crate or
+step (13: RM_1060, RM_2011, RM_5690, RM_7180), and RM_6090's Black Widow under the floor became another kind in
+every run; with them, none.
 
 Test aids:
 
