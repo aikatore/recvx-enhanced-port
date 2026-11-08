@@ -4,11 +4,7 @@
 
 ### New
 
-- **HUD**: the over-the-shoulder camera shows the equipped weapon with its loaded rounds and spare ammo, and a
-  health gauge that changes colour with the condition and when poisoned. It sits on the side of the camera's
-  shoulder or fixed to one side, and can also be shown with the fixed cameras or turned off. Two styles: a weapon
-  circle with a health arc, or a minimal health bar with ammo counts; grenade and arrow counts take the colour of
-  the loaded rounds.
+- **HUD**: a new HUD shows health and ammo, with two styles to choose from.
 
 ### Changes
 
