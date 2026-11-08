@@ -16,6 +16,7 @@
   Enhanced Settings, and the co-op lobby and co-op window show more of the host's rules.
 - **Custom cutscene cast**: the model list now starts with only the characters that have voice lines checked, and
   the four cutscene models are at its top.
+- **Cutscene cast**: other characters can now also be shown as Claire or Chris.
 - **Cutscene cast enemies**: the monsters seen only in cutscenes now have their own Enemy Models setting, with its own
   list of enemies to choose from, so they become other monsters instead of drawing from the characters' models.
 - **Sharper Outbreak characters**: the import now takes the detailed models of the Outbreak characters for their

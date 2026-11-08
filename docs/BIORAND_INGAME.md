@@ -1147,7 +1147,7 @@ model rows open the co-op lobby's model page with its 3D preview instead of a te
   **Include Imported Models** while there are imports (idx 2, ini `biorand_appear_imports`). Texts and help: the
   cast's rows' (already translated).
 - **The pools** (`cast_appear_pick(seed, all, imports, off, c)`, cast.c `appear_pool`): Cutscene Models the story
-  characters' cutscene models but Claire's and Chris's (Steve, Wesker, Alfred, Alexia, Rodrigo: `cast_pool(0)`); All
+  characters' cutscene models but Claire's and Chris's (Steve, Wesker, Alfred, Alexia, Rodrigo: `cast_pool(0)` without them; the cast's own pool has them since 2026-11-08); All
   Models as before (`builtins_of(-1)`: the cast's All Models plus Steve's and Wesker's player files); Custom: those of
   All Models whose bit in `cast_appear_off` is clear; imports after them with Include Imported Models. The rule of
   before stays: never Claire's or Chris's own looks (so not in its Custom list either), Claire, Chris and Steve

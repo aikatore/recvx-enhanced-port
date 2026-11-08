@@ -1006,9 +1006,9 @@ settings, the log free of that line: `RECVX_TEST_SCENE=3200:RM_9340:8:0:1` with 
 
 | Model Selection | Pool |
 |---|---|
-| *Cutscene Models* | the cutscene models with a face mask: Steve (catalogue 3), Wesker (5), Alfred (8), Alexia (12), Rodrigo (13) |
-| *All Models* | every listed humanoid catalogue model (`anim` not `ANIM_IDLE`, not a hidden twin): the cast, Alexia's first form, Nosferatu, the Tyrant, Monster Steve, the Hunters, the Bandersnatch, the anatomist, and **the zombies as one entry** (`CAST_ZOMBIES`): a character that draws it gets one of the 27 zombie looks, from (seed, scene, character) (`cast_zombie_look`: Per Character, the same look everywhere; Per Cutscene, per room). As 27 entries they were more than half of the pool, and most characters became zombies. Not "Alfred Ashford (Wounded)" (a special state). No other family is large: Hunter and Sweeper two; the event models and Tyrant 2 are hidden twins already. No player file but Claire's second costume (*Custom* only): each has a talking twin ("Talking twins" below) |
-| *Custom* | the *All Models* entries and Claire's and Chris's looks the player checked ("Custom" below) |
+| *Cutscene Models* | the cutscene models with a face mask: Claire (catalogue 0), Chris (1), Steve (3), Wesker (5), Alfred (8), Alexia (12), Rodrigo (13). Claire and Chris are never cast themselves, but others may be shown as them (since 2026-11-08; before, only *Custom* had them) |
+| *All Models* | every listed humanoid catalogue model (`anim` not `ANIM_IDLE`, not a hidden twin): the cast, Alexia's first form, Nosferatu, the Tyrant, Monster Steve, the Hunters, the Bandersnatch, the anatomist, and **the zombies as one entry** (`CAST_ZOMBIES`): a character that draws it gets one of the 27 zombie looks, from (seed, scene, character) (`cast_zombie_look`: Per Character, the same look everywhere; Per Cutscene, per room). As 27 entries they were more than half of the pool, and most characters became zombies. Not "Alfred Ashford (Wounded)" (a special state). No other family is large: Hunter and Sweeper two; the event models and Tyrant 2 are hidden twins already. Claire's and Chris's cutscene models too. No player file: each has a talking twin ("Talking twins" below); Claire's second costume (no moving face) only in *Custom* |
+| *Custom* | the *All Models* entries and Claire's second costume, those the player checked ("Custom" below) |
 | with imported models | the imported models after them (playable characters and NPCs, `IMPORT_OFFERED`: people with jaw and lid bones, [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md) "Faces", so they count as cutscene models: their jaw follows the record's mask, `imp_face`) |
 
 ### Talking twins
@@ -1088,7 +1088,7 @@ not depend on them, so both co-op screens pick alike.
 shuffle of the pool by xorshift32 seeded with (seed, scene): each character in turn takes the first model
 of the shuffle not taken and not its own look (its own cutscene model or player file); when only its own
 are left it trades with an earlier character; with the pool used up (more characters than models: *Custom* with
-few checked) a new round over it begins. With *Cutscene Models* (five) each character gets another one. Every answer is the same
+few checked) a new round over it begins. With *Cutscene Models* (seven) each character gets another one. Every answer is the same
 whichever character is asked, and it depends on neither the character played nor the room (Per Character):
 the same in Claire's part and in Chris's.
 
