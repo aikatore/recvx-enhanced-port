@@ -7,6 +7,7 @@
 #include "../ps2_platform.h"
 extern "C" {
 #include "../audio/audio.h"
+#include "../render/gl_loader.h"   /* the HUD's icon texture */
 }
 #include "prof.h"
 #include "cheat.h"
@@ -81,9 +82,9 @@ int overlay_event(const void* e)
         coop_visible = !coop_visible;
         return 1;
     }
-    for (int r = B_CHEAT_SAVE; r <= B_CHEAT_BOX; r++)   /* (unbound by default; not while typing in a field) */
+    for (int r = B_CHEAT_SAVE; r <= B_CHEAT_LOAD; r++)   /* (unbound by default; not while typing in a field) */
         if (!ImGui::GetIO().WantTextInput && bind_hotkey(ev, r)) {
-            __atomic_or_fetch(&g_cheat.request, r == B_CHEAT_SAVE ? CHEAT_SAVE : CHEAT_BOX, __ATOMIC_ACQ_REL);
+            __atomic_or_fetch(&g_cheat.request, r == B_CHEAT_SAVE ? CHEAT_SAVE : r == B_CHEAT_BOX ? CHEAT_BOX : CHEAT_LOAD, __ATOMIC_ACQ_REL);
             return 1;
         }
     if (g_dev_mode && bind_hotkey(ev, B_IMPORT)) {
@@ -498,6 +499,12 @@ static void cheat_window(void)
     ImGui::SameLine();
     if (ImGui::Button(tr("Open Item Box"))) __atomic_or_fetch(&c->request, CHEAT_BOX, __ATOMIC_ACQ_REL);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("Open the item box here, the same box as at any item box."));
+    ImGui::SameLine();
+    ImGui::BeginDisabled(g_coop.state != COOP_OFF);
+    if (ImGui::Button(tr("Load Game"))) __atomic_or_fetch(&c->request, CHEAT_LOAD, __ATOMIC_ACQ_REL);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s", tr(g_coop.state != COOP_OFF ? "Not during a co-op session." : "Open the load screen here. Back returns to the game as it was."));
 
     ImGui::SeparatorText(tr("Add Item"));
     char label[48];
@@ -813,6 +820,18 @@ static void coop_window(void)
     if (changed) settings_save_later();
 }
 
+/* the game's picture in the window as gs_gl.c presents it: its top left x0, y0 and size vw, vh; returns its widening */
+static float picture(float* x0, float* y0, float* vw, float* vh)
+{
+    ImVec2 ds = ImGui::GetIO().DisplaySize;
+    float hs = gs_hor_scale(), a = 4.0f / 3.0f * hs;
+    *vw = ds.y * a; *vh = ds.y;
+    if (*vw > ds.x) { *vw = ds.x; *vh = ds.x / a; }
+    if (g_config.aspect == ASPECT_STRETCH && hs == 1.0f) { *vw = ds.x; *vh = ds.y; }
+    *x0 = (ds.x - *vw) * 0.5f; *y0 = (ds.y - *vh) * 0.5f;
+    return hs;
+}
+
 /* Above the partner's head (co-op): its name (option) and, while it is busy, what with, one
    box. Off screen or behind the camera (same room): a marker at the edge of the view pointing
    at it, with the name. Game screen (640x480, 4:3 area) to the window as gs_gl.c presents it;
@@ -820,11 +839,7 @@ static void coop_window(void)
 static void name_tag(void)
 {
     static const char* what[] = { "", "cutscene", "menu", "item box", "trading" };
-    ImVec2 ds = ImGui::GetIO().DisplaySize;
-    float hs = gs_hor_scale(), a = 4.0f / 3.0f * hs, vw = ds.y * a, vh = ds.y;
-    if (vw > ds.x) { vw = ds.x; vh = ds.x / a; }
-    if (g_config.aspect == ASPECT_STRETCH && hs == 1.0f) { vw = ds.x; vh = ds.y; }
-    float x0 = (ds.x - vw) * 0.5f, y0 = (ds.y - vh) * 0.5f;
+    float x0, y0, vw, vh, hs = picture(&x0, &y0, &vw, &vh);
     float x = x0 + (0.5f + (tag_x - 320.0f) / (640.0f * hs)) * vw;
     float y = y0 + tag_y / 480.0f * vh;
     bool behind = tag_flags == STREAM_PT_BEHIND;
@@ -858,6 +873,97 @@ static void name_tag(void)
     float tx = px - dx * (r + 4) - ns.x * 0.5f - dx * ns.x * 0.5f, ty = py - dy * (r + 4) - ns.y * 0.5f - dy * ns.y * 0.5f;
     dl->AddRectFilled(ImVec2(tx - 4, ty - 2), ImVec2(tx + ns.x + 4, ty + ns.y + 2), IM_COL32(0, 0, 0, 140), 4.0f);
     dl->AddText(font, bs, ImVec2(tx, ty), IM_COL32(255, 255, 255, 230), name);
+}
+
+/* The HUD (pc/glue/hud_glue.c, docs/THIRDPERSON.md "HUD"): in a bottom corner of the picture a dark disc with the
+   equipped weapon's inventory icon and its loaded rounds, the health gauge an arc of HUD_SWEEP round its outer side
+   from the bottom up (coloured by the condition, pulsing in Danger), the reload ammo beside it on the inner side; on
+   the left mirrored. It fades in and out (moving to the other corner too) and with the screen. Behind the windows. */
+#define HUD_SWEEP (200.0f * 3.14159265f / 180.0f)
+static float hud_a;              /* shown, 0..1 (eased) */
+static int hud_left;             /* the side drawn */
+static GLuint hud_tex;           /* the item icons */
+static int hud_tw, hud_th;
+
+static void hud_text(ImDrawList* dl, float size, float x, float y, ImU32 col, const char* s)
+{
+    float o = size * 0.06f > 1.0f ? size * 0.06f : 1.0f;
+    dl->AddText(ImGui::GetFont(), size, ImVec2(x + o, y + o), (col >> 25 << 24), s);   /* (half its alpha, black) */
+    dl->AddText(ImGui::GetFont(), size, ImVec2(x, y), col, s);
+}
+
+/* the rounds (n, its % or unlimited: a drawn infinity, the fonts have none) centred on x, top at y */
+static void hud_count(ImDrawList* dl, float size, float x, float y, int n, int pct, ImU32 col)
+{
+    char b[16];
+    if (n == HUD_INF) {
+        float r = size * 0.17f;
+        dl->AddCircle(ImVec2(x - r, y + size * 0.5f), r, col, 16, size * 0.08f);
+        dl->AddCircle(ImVec2(x + r, y + size * 0.5f), r, col, 16, size * 0.08f);
+        return;
+    }
+    snprintf(b, sizeof b, pct ? "%d%%" : "%d", n);
+    hud_text(dl, size, x - ImGui::GetFont()->CalcTextSizeA(size, FLT_MAX, 0, b).x * 0.5f, y, col, b);
+}
+
+static void hud_draw(void)
+{
+    static const ImU32 cond_col[] = { IM_COL32(70, 225, 95, 255), IM_COL32(230, 215, 40, 255), IM_COL32(240, 120, 25, 255),
+                                      IM_COL32(230, 35, 30, 255), IM_COL32(190, 60, 200, 255) };   /* the status screen's ECG (sub1.c), brighter */
+    float dt = ImGui::GetIO().DeltaTime, target = g_hud.on && g_hud.left == hud_left ? 1.0f - g_hud.fade : 0.0f, step = dt * 6.0f;
+    hud_a = target > hud_a ? (hud_a + step < target ? hud_a + step : target) : (hud_a - step > target ? hud_a - step : target);
+    if (hud_a <= 0.0f) { hud_left = g_hud.left; return; }   /* out: then in at the other side */
+    if (!hud_tex) {   /* once the game thread read them */
+        const unsigned int* px = hud_icons(&hud_tw, &hud_th);
+        if (px) {
+            glGenTextures(1, &hud_tex);
+            glBindTexture(GL_TEXTURE_2D, hud_tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, hud_tw, hud_th, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+    }
+    float x0, y0, vw, vh;
+    picture(&x0, &y0, &vw, &vh);
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    float al = hud_a, R = vh * 0.07f, th = R * 0.17f, ra = R + th * 1.1f, m = vh * 0.05f + ra + th * 0.5f, dir = hud_left ? -1.0f : 1.0f;
+    ImVec2 c(hud_left ? x0 + m : x0 + vw - m, y0 + vh - m);
+    auto A = [al](ImU32 col, float k = 1.0f) { return (col & 0xFFFFFF) | (ImU32)((col >> 24) * al * k) << 24; };
+    /* the disc */
+    dl->AddCircleFilled(c, R, A(IM_COL32(8, 12, 18, 150)), 48);
+    dl->AddCircle(c, R, A(IM_COL32(255, 255, 255, 45)), 48, 1.5f);
+    /* the health: from the bottom (pi/2, y down) up the outer side */
+    float a0 = 3.14159265f * 0.5f, a1 = a0 - dir * HUD_SWEEP, f = g_hud.hp_max > 0 ? (float)g_hud.hp / g_hud.hp_max : 0.0f;
+    f = f < 0 ? 0 : f > 1 ? 1 : f;
+    dl->PathArcTo(c, ra, a0, a1, 40);
+    dl->PathStroke(A(IM_COL32(0, 0, 0, 130)), 0, th + 2.0f);
+    if (f > 0) {
+        float k = g_hud.cond == HUD_DANGER ? 0.7f + 0.3f * cosf((float)ImGui::GetTime() * 6.0f) : 1.0f;   /* a pulse */
+        dl->PathArcTo(c, ra, a0, a0 + (a1 - a0) * f, 2 + (int)(38 * f));
+        dl->PathStroke(A(cond_col[g_hud.cond < 0 || g_hud.cond > HUD_POISON ? 0 : g_hud.cond], k), 0, th);
+    }
+    /* the weapon and its rounds */
+    float fs = R * 0.5f, iy = g_hud.rounds != HUD_NONE ? c.y - R * 0.2f : c.y;
+    if (hud_tex && g_hud.icon_w > 0) {
+        float iw = (float)g_hud.icon_w, ih = (float)g_hud.icon_h, k = 1.5f * R / iw < 0.75f * R / ih ? 1.5f * R / iw : 0.75f * R / ih;
+        float u0 = (g_hud.icon_x + 0.5f) / hud_tw, v0 = (g_hud.icon_y + 0.5f) / hud_th, u1 = (g_hud.icon_x + iw - 0.5f) / hud_tw, v1 = (g_hud.icon_y + ih - 0.5f) / hud_th;
+        dl->AddImage((ImTextureID)(intptr_t)hud_tex, ImVec2(c.x - iw * k * 0.5f, iy - ih * k * 0.5f), ImVec2(c.x + iw * k * 0.5f, iy + ih * k * 0.5f),
+                     ImVec2(u0, v0), ImVec2(u1, v1), A(IM_COL32(255, 255, 255, 255)));
+    }
+    if (g_hud.rounds != HUD_NONE)
+        hud_count(dl, fs, c.x, c.y + R * 0.2f, g_hud.rounds, g_hud.rounds_pct, A(g_hud.rounds == 0 ? IM_COL32(240, 90, 80, 255) : IM_COL32(255, 255, 255, 240)));
+    /* the reload ammo, on the inner side */
+    if (g_hud.spare != HUD_NONE) {
+        char b[16];
+        float ss = R * 0.42f, pad = ss * 0.25f;
+        snprintf(b, sizeof b, g_hud.spare_pct ? "%d%%" : "%d", g_hud.spare);
+        float w = ImGui::GetFont()->CalcTextSizeA(ss, FLT_MAX, 0, b).x, ex = c.x - dir * (R + pad * 2), x = hud_left ? ex : ex - w, y = c.y + R * 0.15f;
+        dl->AddRectFilled(ImVec2(x - pad, y - pad * 0.4f), ImVec2(x + w + pad, y + ss + pad * 0.4f), A(IM_COL32(8, 12, 18, 140)), ss * 0.3f);
+        hud_text(dl, ss, x, y, A(g_hud.spare ? IM_COL32(230, 230, 230, 240) : IM_COL32(240, 90, 80, 240)), b);
+    }
 }
 
 /* the title screen: what a co-op session started from F3 waits for (no hint without one: the menu has MULTIPLAYER) */
@@ -1278,7 +1384,7 @@ static void overlay_frame(void)
     const char* hint = lobby_hint();
     bool tag = coop_on && tag_flags && !cs.trade_open && (g_coop.nametag || cs.busy_kind || cs.trade_hint[0]);   /* co-op: the partner is drawn in the frame shown */
     bool ping = g_config.show_ping && coop_on && cs.state == COOP_CONNECTED;   /* co-op: next to the frame rate */
-    if (!visible && !cheats_visible && !coop_visible && !import_visible && !devcine_on && !g_config.show_fps && !ping && !crosshair && !hint && !tag) return;
+    if (!visible && !cheats_visible && !coop_visible && !import_visible && !devcine_on && !g_config.show_fps && !ping && !crosshair && !hint && !tag && !g_hud.on && hud_a <= 0.0f) return;
     {   /* readable on large displays: scale text with the window height (1080p = 1x) */
         int ww, wh;
         SDL_GetWindowSizeInPixels(win, &ww, &wh);
@@ -1287,6 +1393,7 @@ static void overlay_frame(void)
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
+    hud_draw();
     if (devcine_on && (dc_list || (dc_list = (DevCine*)SDL_malloc(sizeof(DevCine) * DC_MAX)))) {
         int open, n = devcine_snapshot(dc_list, &open);
         if (devcine_visible) devcine_window(dc_list, n, open);

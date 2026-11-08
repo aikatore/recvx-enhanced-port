@@ -100,10 +100,12 @@ static void exe_line(LangInfo* x, const char* line)
     }
 }
 
+static int font_banks_of = -1;   /* (the language of font_banks; -1: read them again) */
 /* <import_dir>/<source>/<code>/lang.txt of the sources that give languages */
 void lang_scan(void)
 {
     LangInfo fresh[LANG_COUNT];
+    font_banks_of = -1;   /* (an import or a delete) */
     memset(fresh, 0, sizeof(fresh));
     fresh[LANG_EN].ok = 1;
     for (int s = 0; s < IMPORT_SOURCES; s++) {
@@ -250,22 +252,54 @@ static int picture_file(const char* name)
 {
     return !strncmp(name, "ADV.AFS/", 8) || !strncmp(name, "MRY.AFS/", 8) || !strncmp(name, "ITEM1.AFS/", 10) || !strncmp(name, "ITEM2.AFS/", 10);
 }
+/* the palette banks the language's font draws with (its SYSTEM.AFS/1's first textures, as pc_lang_disc_parts keeps them):
+   another file's picture from the disc must not change their colours (the Russian font draws with colours 8..15 of
+   bank 0, which the US typewriter's ITEM1.AFS/144 fills with red; the patch changed them there) */
+static int font_keep(int l) { return lang_cjk(l) ? 0xF : 1; }
+static const uint64_t* font_banks(int l)
+{
+    static uint64_t banks[2];
+    char p[1300];
+    FILE* f;
+    long n;
+    unsigned char* b;
+    if (font_banks_of == l) return banks;
+    font_banks_of = l;
+    banks[0] = banks[1] = 0;
+    snprintf(p, sizeof(p), "%s/SYSTEM.AFS/1", lang_dir(l) ? lang_dir(l) : "");
+    if (!lang_dir(l) || !(f = pc_fopen(p, "rb"))) return banks;
+    if (!fseek(f, 0, SEEK_END) && (n = ftell(f)) > 0 && n <= (16 << 20) && !fseek(f, 0, SEEK_SET) && (b = malloc(n))) {
+        if (fread(b, 1, n, f) == (size_t)n) pc_lang_banks(b, (uint32_t)n, font_keep(l), banks);
+        free(b);
+    }
+    fclose(f);
+    return banks;
+}
+
 int pc_lang_disc_parts(const char* name, FILE* f, uint32_t size, uint32_t lsn, uint32_t dsize, PcPart* out, int max)
 {
     static char logged[32];
-    int sys1 = !strcasecmp_(name, "SYSTEM.AFS/1"), sys2 = !strcasecmp_(name, "SYSTEM.AFS/2"), n = 0;
-    uint64_t keep = sys1 ? (lang_cjk(data_lang()) ? 0xF : 1) : sys2 ? 2 : 0;   /* the fonts (the computer's: /2's texture 1) */
+    int sys1 = !strcasecmp_(name, "SYSTEM.AFS/1"), sys2 = !strcasecmp_(name, "SYSTEM.AFS/2"), pic = picture_file(name), n = -1, whole;
+    uint64_t keep = sys1 ? font_keep(data_lang()) : sys2 ? 2 : 0;   /* the fonts (the computer's: /2's texture 1) */
+    const uint64_t* hold = sys1 ? NULL : font_banks(data_lang());
     unsigned char *l, *d;
-    if (!picture_file(name) && !sys1 && !sys2) return 0;
-    if (size > (16u << 20) || dsize > (16u << 20)) return 0;
+    if (!pic && !sys1 && !sys2) return 0;
+    whole = pic && !g_lang_pictures;   /* (Translated Pictures off: the disc's file, unless a texture keeps the font's colours) */
+    if (size > (16u << 20) || dsize > (16u << 20)) return whole ? -1 : 0;
     l = malloc(size);
     d = malloc(dsize);
-    if (l && d && !fseek(f, 0, SEEK_SET) && fread(l, 1, size, f) == size && adx_disc_read(lsn, 0, d, dsize))
-        n = pc_lang_parts(l, size, d, dsize, keep, !g_lang_pictures && (sys1 || sys2), out, max);
+    if (l && d && !fseek(f, 0, SEEK_SET) && fread(l, 1, size, f) == size && adx_disc_read(lsn, 0, d, dsize)) {
+        PcPart all[PC_PARTS_MAX];
+        n = pc_lang_parts(l, size, d, dsize, keep, !g_lang_pictures, hold, out, max);
+        if (whole && n == pc_lang_parts(l, size, d, dsize, keep, 1, NULL, all, max < PC_PARTS_MAX ? max : PC_PARTS_MAX) &&
+            !memcmp(out, all, n * sizeof(PcPart)))
+            n = -1;   /* (no colours kept) */
+    }
     free(l);
     free(d);
-    if (n && strcmp(logged, name)) host_log("lang: %s: %d picture%s from the disc\n", name, n, n == 1 ? "" : "s");
-    if (n) snprintf(logged, sizeof(logged), "%s", name);
+    if (n < 0) return whole ? -1 : 0;
+    if ((n || whole) && strcmp(logged, name)) host_log("lang: %s: %d picture%s from the disc%s\n", name, n, n == 1 ? "" : "s", whole ? ", the font's colours kept" : "");
+    if (n || whole) snprintf(logged, sizeof(logged), "%s", name);
     return n;
 }
 
@@ -283,7 +317,8 @@ static int voice_file(const char* name) { return !strcmp(name, "ADV.AFS/3"); }
 const char* pc_lang_file_dir(const char* name)
 {
     if (voice_file(name)) return g_lang_voices ? lang_dir(data_lang()) : NULL;
-    return !g_lang_pictures && (picture_file(name) || picture_whole(name)) ? NULL : lang_dir(data_lang());
+    return !g_lang_pictures && picture_whole(name) ? NULL : lang_dir(data_lang());   /* (a picture file with Translated
+        Pictures off: pc_lang_disc_parts gives the disc's, but for a texture that keeps the font's colours) */
 }
 
 /* ---------------------------------------------------------------- textures of our own

@@ -287,6 +287,9 @@ static int creature_part(const BH_PWORK* ep)
     return rec_chr[k] >= CAST_CHARACTERS && as_model(l, k);
 }
 
+/* actor_glue.c actor_drawn_for (the afterimages, trail_glue.c): the display slot record ep is drawn as now, -1 itself */
+int cast_slot(const BH_PWORK* ep) { return ep >= ene && ep < ene + RECS && as_model(ep, (int)(ep - ene)) ? ACTOR_CAST + rec_slot[ep - ene] : -1; }
+
 /* actor_put_enemy: 1 = drawn */
 int cast_draw(BH_PWORK* ep)
 {

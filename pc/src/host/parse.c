@@ -235,7 +235,7 @@ int pc_cvxm_check(const uint8_t* f, uint32_t n, PcCvxm* out, char* why, int wn)
         q = a + sz;
     }
     if (!nv || soff % 4 || !pc_range_ok(soff, (uint64_t)nv * CVXM_SKIN, n)) return no(why, wn, "bad skin array (%u vertices)", nv);
-    out->vtx = vtx; out->skin = soff; out->nv = nv;
+    out->vtx = vtx; out->skin = soff; out->nv = nv; out->end = q + 8;
     return 1;
 }
 
@@ -347,11 +347,12 @@ uint32_t pc_mes_at(const uint8_t* t, uint32_t size, uint32_t i)
 }
 
 /* ---------------------------------------------------------------- a language's pictures */
-typedef struct { uint32_t off, len, ph; uint64_t banks[2]; } Tim;   /* ph: the picture header; banks: 0..127 */
+typedef struct { uint32_t off, len, ph; uint64_t banks[2]; int np; uint8_t pb[64]; } Tim;   /* ph: the picture header;
+    banks: 0..127; pb: the bank of each palette of its CLUT (np of them, in order; 255 a free one) */
 
 /* the banks the last PLI chunk before the TIM2 chunk at c names (bhSetMemPvpTexture: a PLI of size 0 keeps the one
    before; bank 255 is a free one each time, not shared) */
-static void tim_banks(const uint8_t* d, uint32_t c, uint64_t* banks)
+static void tim_banks(const uint8_t* d, uint32_t c, Tim* t)
 {
     if (c < 44) return;
     for (uint32_t p = c - 44 + 1; p-- > 0 && c - p < (1u << 16);) {   /* (a PLI chunk: 32 + 4 + 8 n bytes) */
@@ -360,11 +361,23 @@ static void tim_banks(const uint8_t* d, uint32_t c, uint64_t* banks)
         sz = pc_rd32(d + p + 4);
         if (sz == 0 || sz > c - p - 32 || (n = pc_rd32(d + p + 32)) == 0 || n > 64 || sz < 4 + 8 * n) continue;
         for (uint32_t k = 0; k < n; k++) {
-            unsigned b = d[p + 32 + 4 + 8 * k + 5];
-            if (b != 255) banks[(b >> 6) & 1] |= 1ull << (b & 63);
+            unsigned b = t->pb[k] = d[p + 32 + 4 + 8 * k + 5];
+            if (b != 255) t->banks[(b >> 6) & 1] |= 1ull << (b & 63);
         }
+        t->np = (int)n;
         return;
     }
+}
+
+/* 1: palette i of texture t (picture header ph, a CLUT of clut bytes) goes to a bank of hold; *step: its size in the CLUT */
+static int palette_held(const Tim* t, const uint8_t* ph, uint32_t clut, int i, const uint64_t* hold, uint32_t* step)
+{
+    unsigned b = t->pb[i], nb = ph[19] == 5 ? 16 : 1;   /* (256 colours: 16 banks) */
+    *step = nb == 16 ? 1024 : 128;                            /* (bhSetMemPvpTexture's CLUT steps) */
+    if (b == 255 || (uint64_t)(i + 1) * *step > clut) return 0;
+    for (unsigned k = b; k < b + nb; k++)   /* (as tim_banks: bit 6 the half) */
+        if (hold[k >> 6 & 1] >> (k & 63) & 1) return 1;
+    return 0;
 }
 
 /* the TIM2 files of d (one picture each), at most max */
@@ -380,8 +393,8 @@ static int tims(const uint8_t* d, uint32_t n, Tim* t, int max)
         if (!pc_range_ok(ph, 24, n)) continue;
         tot = pc_rd32(d + ph); clut = pc_rd32(d + ph + 4); img = pc_rd32(d + ph + 8); hsz = pc_rd16(d + ph + 12);
         if (tot < 24 || !pc_range_ok(ph, tot, n) || hsz < 24 || (uint64_t)hsz + img + clut > tot) continue;
-        t[k].off = o; t[k].len = ph - o + tot; t[k].ph = ph; t[k].banks[0] = t[k].banks[1] = 0;
-        if (o >= 32 && !memcmp(d + o - 32, "TIM2", 4)) tim_banks(d, o - 32, t[k].banks);   /* (a PVP chunk) */
+        t[k].off = o; t[k].len = ph - o + tot; t[k].ph = ph; t[k].banks[0] = t[k].banks[1] = 0; t[k].np = 0;
+        if (o >= 32 && !memcmp(d + o - 32, "TIM2", 4)) tim_banks(d, o - 32, &t[k]);   /* (a PVP chunk) */
         o += t[k++].len - 1;
     }
     return k;
@@ -414,12 +427,22 @@ static int tim_same(const uint8_t* a, const uint8_t* b)
     return 1;
 }
 
-int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, uint64_t keep, int all, PcPart* out, int max)
+void pc_lang_banks(const uint8_t* l, uint32_t nl, uint64_t keep, uint64_t* banks)
+{
+    enum { N = 64 };
+    Tim t[N];
+    int n = tims(l, nl, t, N);
+    banks[0] = banks[1] = 0;
+    for (int k = 0; k < n; k++)
+        if (keep >> k & 1) { banks[0] |= t[k].banks[0]; banks[1] |= t[k].banks[1]; }
+}
+
+int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, uint64_t keep, int all, const uint64_t* hold, PcPart* out, int max)
 {
     enum { N = 2 * PC_PARTS_MAX };
     Tim* t = malloc(2 * N * sizeof(Tim));
     Tim* u = t + N;
-    unsigned char swap[N];
+    unsigned char swap[N];   /* 1: the disc's texture; 2: the disc's but its palettes of hold's banks */
     int n, m, k, j, changed, np = 0;
     if (!t) return 0;
     n = tims(l, nl, t, N);
@@ -436,13 +459,32 @@ int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, 
         changed = 0;
         for (k = 0; k < n; k++) {
             uint32_t hsz = pc_rd16(l + t[k].ph + 12), img = pc_rd32(l + t[k].ph + 8), clut = pc_rd32(l + t[k].ph + 4);
-            if (!swap[k] || !memcmp(l + t[k].ph + hsz + img, d + u[k].ph + hsz + img, clut)) continue;
-            for (j = 0; j < n; j++)
+            const uint8_t *cl = l + t[k].ph + hsz + img, *cd = d + u[k].ph + hsz + img;
+            uint32_t step;
+            if (!swap[k] || !memcmp(cl, cd, clut)) continue;
+            for (int i = 0; swap[k] == 1 && hold && i < t[k].np; i++)   /* (a palette of the font's banks that differs) */
+                if (palette_held(&t[k], l + t[k].ph, clut, i, hold, &step) && memcmp(cl + i * step, cd + i * step, step)) {
+                    swap[k] = all ? 2 : 0;
+                    changed = 1;
+                }
+            for (j = 0; swap[k] && j < n; j++)
                 if (j != k && !swap[j] && ((t[j].banks[0] & t[k].banks[0]) | (t[j].banks[1] & t[k].banks[1]))) { swap[k] = 0; changed = 1; break; }
         }
     } while (changed);
-    for (k = 0; k < n && np < max; k++)
-        if (swap[k]) { out[np].off = t[k].off; out[np].disc = u[k].off; out[np].len = t[k].len; np++; }
+    for (k = 0; k < n && np < max; k++) {
+        uint32_t at = t[k].off, c = t[k].ph + pc_rd16(l + t[k].ph + 12) + pc_rd32(l + t[k].ph + 8), step;
+        if (!swap[k]) continue;
+        for (int i = 0; swap[k] == 2 && i <= t[k].np && np < max; i++) {   /* (2: all but those palettes; then the rest) */
+            uint32_t to = t[k].off + t[k].len;
+            if (i < t[k].np) {
+                if (!palette_held(&t[k], l + t[k].ph, pc_rd32(l + t[k].ph + 4), i, hold, &step)) continue;
+                to = c + i * step;
+            }
+            if (to > at) { out[np].off = at; out[np].disc = u[k].off + (at - t[k].off); out[np].len = to - at; np++; }
+            if (i < t[k].np) at = to + step;
+        }
+        if (swap[k] == 1) { out[np].off = t[k].off; out[np].disc = u[k].off; out[np].len = t[k].len; np++; }
+    }
     free(t);
     return np;
 }

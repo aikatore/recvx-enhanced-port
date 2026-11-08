@@ -234,7 +234,7 @@ pad only to the focused window: turn Steam Input off for the game.
 | F5 | third person on / off |
 | F11 | windowed / fullscreen |
 | Page Up; F or Page Down | fly up / down (noclip cheat) |
-| none until you set one | Save Anywhere, Item Box Anywhere (the F2 cheats Save Now, Open Item Box) |
+| none until you set one | Save Anywhere, Item Box Anywhere, Load Anywhere (the F2 cheats Save Now, Open Item Box, Load Game) |
 
 ## Settings
 
@@ -384,6 +384,8 @@ Weapon Shortcuts (on, [Weapon shortcuts](#weapon-shortcuts)), then the bindings.
 | Over-the-shoulder Camera | Off | also F5 |
 | Mouse Camera Style | Behind Character | Behind Character: the mouse turns you. Free Camera: the mouse orbits the camera, W/A/S/D walk relative to it |
 | Lighting and Fog | Smooth | fades when the room's camera cut changes. Original: changes with each camera cut, as the original |
+| HUD | Auto | a small display in a bottom corner: the equipped weapon's picture with the rounds loaded, the spare ammo for it in your inventory beside it, and a health gauge around it in the condition's colour (Fine green, Caution yellow, then orange, Danger red, Poison purple). Auto: with the over-the-shoulder camera only. On: also with the fixed cameras. Hidden in cutscenes, doors, menus and messages |
+| HUD Position | Follow Shoulder | the side of the camera's shoulder (Left Shoulder: left; fixed cameras: right), or always Left or Right |
 | Aim Assist | Off | Off: free aim. On: the game's lock-on (gamepad: aim assist) |
 | Precise Shots | On | free-aim shots hit only where the crosshair meets the body; head hits do more damage, and the blood comes from where the shot hit (the head, an arm, a leg) |
 | Locational Hit Reactions | On | a zombie shot in the head, an arm or a leg flinches there; damage and timing stay the same |
@@ -528,14 +530,17 @@ F2 (or the EXTRAS page) is for testing and fun:
 - **Save Now**: the typewriter's save screen where you stand; no ink ribbon needed or used. Loading the
   save puts you back on that spot.
 - **Open Item Box**: your item box wherever you are, the same box as at every item box.
+- **Load Game**: the load screen where you stand, with the save system you play with. A loaded save starts
+  as from the title's LOAD GAME; backing out returns to the game as it was. Not in a co-op session.
 
-On the EXTRAS page, Heal Now, Save Now and Open Item Box run when you leave the menu; they need a game in
-progress.
+On the EXTRAS page, Heal Now, Save Now, Load Game and Open Item Box run when you leave the menu; they need a
+game in progress.
 
-Save Now and Open Item Box work while you control your character: not in a cutscene, door, menu,
+Save Now, Load Game and Open Item Box work while you control your character: not in a cutscene, door, menu,
 message, grab, first-person view, with the weapon raised or in the Battle Game. F2 says why when
-not. Both can have a key: OPTION -> ENHANCED SETTINGS -> CONTROLS or F1 -> Controls, HOTKEYS (Save
-Anywhere, Item Box Anywhere; none by default; ini `key_cheat_save`, `key_cheat_box`).
+not. Each can have a key: OPTION -> ENHANCED SETTINGS -> CONTROLS or F1 -> Controls, HOTKEYS (Save
+Anywhere, Item Box Anywhere, Load Anywhere; none by default; ini `key_cheat_save`, `key_cheat_box`,
+`key_cheat_load`).
 
 In co-op only the host can spawn enemies. Both players can save anywhere. With shared loot the item
 box opens only while your partner doesn't have it open ("Your partner is using the item box.").

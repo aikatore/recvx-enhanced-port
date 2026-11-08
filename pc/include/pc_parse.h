@@ -54,6 +54,8 @@ typedef struct PcCvxm {
     uint32_t vtx;       /* file offset of the vertex chunk's first vertex (imp_skin writes nv x 32 bytes there) */
     uint32_t skin;      /* of the skin array (nv entries) */
     uint32_t nv;
+    uint32_t end;       /* where what the game reads ends (the texture block's end mark); the skin, read by imp_skin
+                           only, lies after it in the files of impmodel.c */
 } PcCvxm;
 #define PC_CVXM_NODES 64          /* objects (impmodel.c CV_MAX; the rig's NODES) */
 #define PC_CVXM_TEX 16            /* textures (IMP_TEX) */
@@ -100,10 +102,14 @@ uint32_t pc_mes_at(const uint8_t* t, uint32_t size, uint32_t i);
    from the disc when it shows the same picture (every pixel within 8 of the disc's colour, 16 of its alpha: a
    re-encode, no writing changed), or, with all, whenever it pairs (but the textures of keep, a bit mask by index: the
    fonts); never when that changes a palette bank (the PLI chunk before it) that a texture staying the language's
-   draws with. out: the parts to read from the disc (offset in l, offset in d, length). Returns their count. */
+   draws with, nor when it changes one of hold (banks 0..127, NULL none: the banks of another file's textures staying
+   the language's, the font's): with all, its picture and other palettes are still the disc's, the palettes that go
+   to hold's banks the language's. out: the parts to read from the disc (offset in l, offset in d, length). Returns their count. */
 typedef struct PcPart { uint32_t off, disc, len; } PcPart;
 #define PC_PARTS_MAX 64
-int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, uint64_t keep, int all, PcPart* out, int max);
+int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, uint64_t keep, int all, const uint64_t* hold, PcPart* out, int max);
+/* the palette banks (0..127) the textures of keep (a bit mask by index, as above) of the file l draw with */
+void pc_lang_banks(const uint8_t* l, uint32_t nl, uint64_t keep, uint64_t* banks);
 
 #ifdef __cplusplus
 }

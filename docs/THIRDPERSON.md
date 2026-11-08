@@ -185,6 +185,8 @@ unit (the character is about 17 units tall).
 | Aiming Sensitivity (percent of the above) | `tps_aim_sens` | 70 |
 | Invert Mouse Y | `tps_invert_y` | 0 |
 | Crosshair | `tps_crosshair` | 1 |
+| HUD ([HUD](#hud); 0 = Auto, 1 = On, 2 = Off) | `hud` | 0 |
+| HUD Position (0 = Follow Shoulder, 1 = Left, 2 = Right) | `hud_position` | 0 |
 | Aim Assist (0 = free aim) | `tps_auto_aim` | 0 |
 | Precise Shots ([Precise Shots](#precise-hits)) | `tps_precise_hits` | 1 |
 | Locational Hit Reactions ([Locational hit reactions](#locational-hit-reactions)) | `tps_hit_react` | 1 |
@@ -210,6 +212,53 @@ unit (the character is about 17 units tall).
 | `RECVX_TPS_ORBIT=degrees` | turns only the view about the player (side views; aim unchanged, camera ignores walls) |
 | `RECVX_ATMOS_TRACE=1` | logs each game frame's cut, the game's fog, lights and filter, the player's view depth from the view drawn and from the cut camera, and the fog shown with our camera (range in view depth) and what "smooth" shows |
 | `RECVX_EFF_TRACE=1` | logs effects spawned and queued |
+| `RECVX_HUD_TRACE=1` | logs when the [HUD](#hud) hides ("hud: hidden at frame") and what it shows whenever that changes ("hud: shown at frame": side, health, condition 0..4, item, icon size, rounds, spare; -1 not shown, -2 unlimited) |
+
+## HUD
+
+A small display in a bottom corner of the picture, our own drawing (no other game's art): a dark
+semi-transparent disc with the equipped weapon's inventory icon and the rounds loaded under it, the health
+gauge as an arc round the disc's outer side, and the reload ammo in the bag beside the disc on the inner side.
+Code: `pc/glue/hud_glue.c` (game thread, at the frame hand-off: what to show, into `g_hud`, `tps.h`) and
+`overlay.cpp hud_draw` (the overlay, drawn in the window's resolution after the game's picture and behind the
+F-windows: sharp, untouched by anti-aliasing and dithering). Nothing in the game changes.
+
+* **When**: "HUD" Auto (default) shows it while the over-the-shoulder camera is the view, On also with the fixed
+  cameras, Off never. Only in play: the player in control, hit, thrown or held by an enemy. Hidden in events and
+  cutscenes (event, cinema, the player hidden by an event), door and room loads, movies, the inventory, map, files,
+  item box, save screen and OPTION (status screen `ts_flg 0x80`, menu modes; a weapon loading after a switch does
+  not count), messages and questions (`st_flg 0x200`), the co-op trade screen, the weapon shortcut screen, at the
+  title and once dead (`mode0` 3, 6, health below 0). The screen's fades fade it too (`fade_an`); it eases in
+  and out over about a sixth of a second.
+* **Where**: 5% of the picture's height in from its bottom and side edge, in the picture as presented (4:3: inside
+  the 4:3 picture; widescreen: at the window's edge). "HUD Position": Follow Shoulder takes the camera's side
+  ("Left Shoulder": left), right with the fixed cameras; Left or Right fix it. On the left everything is mirrored.
+  Changing side fades it out and in at the other corner. Size: the disc's radius is 7% of the picture's height.
+* **Health**: the arc runs 200 degrees from the bottom of the disc up its outer side and over the top, filled by
+  health over the most a heal gives (`sys->gm_mode` 2: 320, else 160; sub1.c, system.c). Its colour is the status
+  screen's condition (sub1.c, the ECG's panel colours, brighter): Fine from 120 health (green), Caution from 60
+  (yellow), Caution from 30 (orange), Danger below (red, pulsing), Poison over all of them (`plp->stflg 0x280000`,
+  purple). The thresholds are the game's, not a share of the bar.
+* **Rounds**: the equipped slot's count (`sys->itm[ply_id * 16]`, word 0 the equipped index) as the inventory
+  shows it (sub1.c `BulletSet`): a count, a percent of the item's most for the assault rifle, sub machine gun and
+  M-100P (`itemdata` type 0x1000), an infinity for an unlimited weapon (word bit 0x08000000, `at_flg 0x40000000`, the
+  F2 Infinite Ammo cheat: `bhCheckBullet`'s test). Weapons the inventory shows no number for (the knife; also the
+  lighter, nothing equipped): only the icon or the empty disc. The dual Gold Lugers and sub machine guns have one
+  slot and one count; the grenade launcher's and the bow gun's count is that of the rounds loaded. A count of 0 is red.
+* **Spare ammo**: the bag's stacks (8 cells, 10 with the side pack; the item box does not count) that reload the
+  equipped weapon as `bhSearchBullet` would: an ammo item (`itemdata` type 0x2) with a combination with the weapon
+  that loads it (`combidata` flags 1 or 5; 4, a change of the launcher's rounds, and 7, making arrows, do not). The
+  grenade launcher and bow gun are matched by their rounds (`bhSearchBullet`'s ids: 152..154 the launcher with acid,
+  flame, gas rounds, 155 the bow gun with gunpowder arrows), so only the rounds loaded count. Shown as the inventory
+  shows those stacks (percent for the percent weapons). Hidden for weapons nothing reloads (Gold Lugers, rocket and
+  linear launchers) and with unlimited ammo; 0 shown in red.
+* **The icon**: the inventory's (ITEM AFS file 145, textures 3 and 4, cells as `sub1.c ItemSet` and the trade
+  screen pick them, `trade_glue.c pc_item_icon_cell`), read once when the HUD first shows, its dark blue cell
+  background left out, and made into the overlay's own texture: the game's texture memory is not touched. If the
+  file cannot be read, the disc shows the counts without a picture.
+* **Co-op**: each player's own character (`ply`); no partner display.
+* Per frame: a few table lookups and a scan of the bag; the overlay draws a handful of shapes. No allocations
+  after the icons' one read.
 
 ## How the original camera works
 

@@ -520,7 +520,8 @@ are. The European English is not installed: its text is the US text, and it has 
   texels and palettes) then replaces it as in English. Measured on the imports (`langicons/tools/tdiff.py`,
   `small.py`): such textures differ by at most 1, every texture with writing by 77 or more. Never when that would
   change a palette bank (the PLI chunk before it) a texture staying the language's draws with (the Russian font is
-  drawn with another texture's bank). What this takes from the disc:
+  drawn with another texture's bank), nor one the language's font draws with, in any file (`lang_glue.c font_banks`:
+  its `SYSTEM.AFS/1`'s font textures; `pc_lang_parts` `hold`). What this takes from the disc:
   - Turkish: the **item pictures** (`ITEM1/2.AFS/145` textures 3, 4: the patch redrew both sheets with a palette
     each, but both fill palette bank 48, so one sheet showed with the other's colours: the lighter, the Calico, the
     keys scrambled; now the disc's, and the HD pack's), the English map pictures (`MRY.AFS`, all but 1..4), the
@@ -536,11 +537,17 @@ are. The European English is not installed: its text is the US text, and it has 
   typewriter's keys and clipboard (`ITEM1.AFS/144`), the computer's screens with words (Brazilian Portuguese
   `SYSTEM.AFS/2` texture 2). No import again: the imports stay as they are.
 - **Translated Pictures** (LANGUAGE, under Subtitles, shown with an imported language; ini
-  `translated_pictures`, default 0 since 2026-11-01): Off reads the archives' pictures from the disc (`pc_lang_file_dir(name)` gives
-  no folder for `ADV.AFS/`, `MRY.AFS/`, `ITEM1.AFS/`, `ITEM2.AFS/`) and in `SYSTEM.AFS/1` and `/2` every texture
-  but the fonts (`/1` texture 0, Japanese and Korean 0..3; `/2` texture 1, the computer's font) and those the bank rule keeps:
-  the pictures are English (the text stays the language's), so an HD pack replaces them; only the font stays the
-  language's. The rooms and movies of the language's folder (`RM_0000.RDX`: the opening's text crawl; `MOVIE/`: the
+  `translated_pictures`, default 0 since 2026-11-01): Off reads the archives' pictures from the disc (`ADV.AFS/`,
+  `MRY.AFS/`, `ITEM1.AFS/`, `ITEM2.AFS/`: `pc_lang_disc_parts` returns -1 and `ADXF_OpenAfs` opens the disc's entry)
+  and in `SYSTEM.AFS/1` and `/2` every texture but the fonts (`/1` texture 0, Japanese and Korean 0..3; `/2` texture 1,
+  the computer's font) and those the bank rule keeps: the pictures are English (the text stays the language's), so an
+  HD pack replaces them; only the font stays the language's. One exception: a palette of a disc picture that goes to a
+  bank the language's font draws with and differs from the language's stays the language's (the picture and its other
+  palettes are the disc's; `pc_lang_parts` `hold`, the parts skip that palette). The Russian font draws with colours
+  8..15 of bank 0, which the US disc's typewriter (`ITEM?.AFS/144` texture 2, palette 1) and inventory (`/145`
+  texture 0, palette 6) fill with red, and the patch changed those palettes (before 2026-11-08 the save, load and memory
+  card screens and the inventory showed the Russian text red). Measured on every import (job folder `mcred/`,
+  `holdscan.py`): no other language, no other file. The rooms and movies of the language's folder (`RM_0000.RDX`: the opening's text crawl; `MOVIE/`: the
   Japanese logo) are pictures too (`picture_whole`): with it off, the disc's. It applies to the files loaded next (the
   next screen, the next room, the next movie).
 - **Translated Title Call** (LANGUAGE, under Translated Pictures, shown when an imported language has a sound

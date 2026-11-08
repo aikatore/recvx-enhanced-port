@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### New
+
+- **HUD**: the over-the-shoulder camera shows the equipped weapon with its loaded rounds and spare ammo, and a
+  health gauge that changes colour with the condition and when poisoned. It sits on the side of the camera's
+  shoulder or fixed to one side, and can also be shown with the fixed cameras or turned off.
+
 ### Changes
 
 - **Hunter and Sweeper**: the enemy randomizer now treats the Sweeper as its own enemy type in every mode, so Types
@@ -9,8 +15,13 @@
 - **Menus**: the enemy rates, the cutscene cast's model list, Save Now and Open Item Box are now also in the
   Enhanced Settings, and the co-op lobby and co-op window show more of the host's rules.
 - **Custom cutscene cast**: the model list now starts with only the characters that have voice lines checked.
+- **Sharper Outbreak characters**: the import now takes the detailed models of the Outbreak characters for their
+  first costumes, with sharper faces, real eyes and fuller hair, in play, in cutscenes and in co-op. Import them
+  again to get them; the other costumes have no detailed version and stay as they are.
 - **Mods**: files in the mods folder are found whatever the case of their names, such as sysmes.ald for
   SYSMES.ALD.
+- **Load Game anywhere**: F2 and the Enhanced Settings' EXTRAS page can now open the load screen during play,
+  like Save Now. Backing out returns to the game as it was. Not available in co-op.
 
 ### Fixes
 
@@ -18,6 +29,9 @@
 - Bow gun bolts now hit a zombie the same whether or not it is flinching from Locational Hit Reactions.
 - On the very first start, BIORAND's Include Imported Models now shows its real setting and changes on the first
   press.
+- In Russian, the text of the memory card, save and load screens and of the inventory is no longer red.
+- In the final fight's cutscene and Wesker's other fast attacks, his trail of afterimages now shows the model he is
+  replaced with by the cutscene cast or the Character Model.
 
 ## 0.7.5 (2026-11-07)
 

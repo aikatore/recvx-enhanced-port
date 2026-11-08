@@ -1066,7 +1066,7 @@ the same in Claire's part and in Chris's.
 
 * **Slots**: one display slot per model the room shows (`ACTOR_CAST + k`, 6), shared by every record drawn
   as it; a seventh model leaves its records as themselves. Their model data share one 3 MB buffer
-  (`cast_mem`; the cast's own models 0.1..0.2 MB, imported ones up to 1.35 MB), given back once all the
+  (`cast_mem`; the cast's own models 0.1..0.2 MB, imported ones up to 1.07 MB, their skin kept outside it), given back once all the
   cast's slots are unloaded: with the room's textures (`spawn_glue.c spawn_release`, the door) and at
   `njReleaseTextureAll`. Each slot also has 128 KB for a face mask (`face_mem`).
 * **As the cutscene double** ("Cutscene doubles"): every tick of a cutscene before the objects follow
@@ -1110,6 +1110,21 @@ the same in Claire's part and in Chris's.
 * **Zero-length bones**: Rodrigo's and the hazmat man's shoulders are two nodes at one place, and the
   arm's rotation is the second's (see "Retargeting"). Taken from the first, the models on Rodrigo kept
   their upper arms near their rest pose, raised like a T-pose, while his hung down or lay on the table.
+* **Afterimages**: Wesker's fast moves leave a trail of 3D afterimages (`effsub1b.c` effects 135/136, which the
+  scripts of 1002, 9321, 9370 "Chris fights Wesker" and the Battle Game's 5820 link to his record): each frame the
+  game copies the skinned vertices of one object of the record (his body, object 1, and his gloved fist, a hand
+  piece) and draws the copy for five frames at that frame's matrix, fading (material alpha 200 down to 40). Drawn
+  as another model, the record left Wesker's trail behind it. Now, at each copy, the model's node matrices are
+  kept (`pc/glue/trail_glue.c pc_trail_grab`; `actor_glue.c actor_drawn_for`: the display actor in the record's
+  place, the cast's slot or the double, posed from the record as its drawing poses it, so records sharing a slot
+  each leave their own pose), and the afterimage is that model drawn again at them, with the game's alpha and
+  light (`pc_trail_draw` -> `actor_draw_nodes`: an imported model's vertices skinned for that pose and back; the
+  materials' alpha put back after). A hand piece the model hides (it has hands of its own) leaves none. Not
+  swapped (the cast off, a record drawn as itself, a model without a humanoid map) the game's copy is drawn as
+  before; the game still makes its copy, so an afterimage not kept (32 at a time, models of up to 128 nodes) is
+  Wesker's, never a stale one. Checked in 9370 with Steve, Alfred, Alexia, Rodrigo, the Hunter, the Tyrant, the
+  anatomist and imported models, in 1002 (two records sharing one slot) and 9321, and with Wesker played (the
+  double as "Character Model"); with the cast off, frames identical to before.
 * Off (and in every room without cast records, `cast_n` 0) none of this runs: frames are identical to a
   build without it (`layout_check.sh`). On, the game's state is unchanged: the opening, Steve's scene
   (0030) and a room after them gave the same flags, items and player position at every room load and the
