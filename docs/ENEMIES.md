@@ -541,8 +541,8 @@ from the game's `rand()`.
   Bandersnatch, albinoid adult, anatomist (living or dead), and spawns a copy of each from the
   current room file (`spawn_add`, so it reaches the guest as an added enemy): same type and model
   version (no upload), variant 0, placed 15..35 units from the source where a line test against
-  the walls (`hitchkl.c bhCollisionCheckLine2`) is clear, at least 40 units from every entry
-  position. A spot within 40 units of the player (a loaded save, a retry) skips that extra for the visit.
+  the walls (`hitchkl.c bhCollisionCheckLine2`) is clear and it can stand ("Spots" below), at least
+  40 units from every entry position. A spot within 40 units of the player (a loaded save, a retry) skips that extra for the visit.
 * The same on every visit: the picks, spots and angles depend only on (seed, room file, record),
   each extra with its own draws, never on which records are dead or where the player came in.
 * **Dead flag**: an extra copied from a record that the entry script hides by kill bit b
@@ -566,9 +566,37 @@ from the game's `rand()`.
 
 * At room load each unmarked record of a roaming type (as above plus bats) starts 8..30 units from
   its own spot or (half the time) another such record's spot on the same floor, in a direction
-  with a clear line, 40+ units from every entry position, at a random angle. Kill bits, slots and
-  types stay; a waiting Cerberus (variant 1/2) becomes variant 0.
+  with a clear line, where it can stand ("Spots"), 40+ units from every entry position, at a random
+  angle. Kill bits, slots and types stay; a waiting Cerberus (variant 1/2) becomes variant 0.
 * Not moved: story/cutscene/scripted enemies, bosses and set pieces, NPCs.
+
+### Spots
+
+Rearranged placements and extra enemies take their spots from `find_spot`: up to 16 tries around the
+source, each with its own draws.
+
+* **A walker stands on the ground**: the ground under the spot (`hitchk.c bhGetGroundPosition` from
+  10 units above the feet: the highest box top, slope or floor slab, the type 7 walls) must be within a
+  unit of the source's height, on the same floor number and not a slope (type 6), and the enemy is put at
+  that height. The lowest floor of a room without floor slabs reports no ground at all: there a spot
+  without ground is fine when the source has none either.
+* **No drop near it** (`no_drop`): 6 units each way along x and z, no ground more than a unit lower (nor
+  none where the source had some).
+* Skipped so: spots over a pool or a pit, past or at a ledge, over stairs or in a crate. The
+  wall line runs at waist height and skips the odd wall types, so the knee-high lips along ledges never
+  stopped it: in the training facility's pool room (RM_3060) zombies from the deck stood over the pool,
+  9 units above its floor, and those from the balcony over the stairs below it. On a slope an enemy's
+  wall check pushes it along the slope at its own height (a Cerberus put at the foot of those stairs
+  slid in under them); a Hunter put by the edge of RM_2011's top balcony leapt off it and stayed at the
+  balcony's height, and a Cerberus by the edge of RM_9310's platform was pushed off it.
+* A skipped spot uses the draws it used before, so a placement changes only where it was invalid, or
+  where it started from another record's spot that changed.
+* Bats keep their height (fliers hover where they are placed); extras are never fliers.
+* The game's own records off the ground on purpose are event enemies (a zombie above a slope in
+  RM_0140, Bandersnatches on RM_3100's catwalk, the Hunter of RM_9110, two zombies 3 units
+  below RM_9060's floor), never moved or copied, and RM_6090's free Black Widow (variant 6) under the floor.
+  The randomizer keeps each record's spot and gives such a record only another look of its type (the
+  same test at its own spot), and ground records never become fliers.
 
 ### Randomizer
 
@@ -587,6 +615,7 @@ the record's own slot during the load.
 | bosses and everything in their rooms (ids 2, 12..17, 19, 23, 24, 29, 30, 53..55: Gulp Worm, Alexia, Nosferatu, Alfred, Monster Steve, Tyrant fights, Giant Black Widow, tentacles, knights) | kept: the whole room | the scripts wait for the boss's death or drive it |
 | NPCs (ids >= 31), props (0), fish, albinoids, ants, moths, ceiling trap, scripted object | kept | water/wall/set-piece types, or no AI of their own |
 | a record without a floor (`flr_no < 0`) | kept | hangs somewhere for an event |
+| a free or shown ground record that does not stand on the ground ("Spots": RM_6090's Black Widow under the floor) | another look of its type | its own type does what it does there; another kind would be stuck in the air or under the floor |
 
 **Kinds** a free or shown record can become (`enemyopt_glue.c kinds[]`); a kind is drawn first by
 weight, then one of its looks (the spawner's entries of that type, from any stage's room file):
@@ -813,6 +842,16 @@ zombie, Cerberus must take most ground records), twice with Hunter 10 and Sweepe
 and Custom with Types per Room 2 (no room over its limit unless logged, the Hunter and the Sweeper two kinds in every
 variety; every extra of a type the room's records have).
 
+`pc/tools/enemy_floor_check.sh OUT [SEED...]` (headless, about 25 minutes): a new game tours the 114 room files
+with records the options touch, per seed in Wild, Mild and Custom (every kind at 5), each with the randomizer,
+placements and eight extras, and logs every enemy two frames into each room (`RECVX_ENEMY_FLOORS`). Every walking
+enemy placed elsewhere or added, or turned into another type at its own spot, must stand within a unit of the
+ground under it ("Spots"); records that keep their type at the game's own spot are listed apart. Before the
+"Spots" rules, 4 seeds: 87 of 1853 placed or added walkers stood in mid-air (74: over the pool and stairs of
+RM_3060, by the balconies of RM_2011, off RM_9310's platform, over RM_1120's ramp, in RM_5580) or sunk in a crate or
+step (13: RM_1060, RM_2011, RM_5690, RM_7180), and RM_6090's Black Widow under the floor became another kind in
+every run; with them, none.
+
 Test aids:
 
 | Env var | Effect |
@@ -822,5 +861,6 @@ Test aids:
 | `RECVX_ENEMY_EXTRA`, `_PLACE`, `_RANDOM`, `_SEED`, `_VARIETY`, `_EVENTS`, `_TYPES`, `_RATES` | override the enemy options (`_RATES` as the `enemy_rates` line) |
 | `RECVX_ENEMY_KILL=n[:r\|:x]` | from n game frames into each room, every 20 frames each living, shown enemy of the room's records and its extra enemies (ids 1..30, in its AI) takes a heavy hit as from the player's weapon (the knife's without one: weapons 0 and 1, none and the lighter, never hit in the game; `:r` only the records, `:x` only the extras); logs the living ones at frame n, each death (`flg & 2`, what `DieCk` turns into the kill bit) and per room how many died (Black Widows take damage through their body parts and do not die from it) |
 | `RECVX_HEADSHOT=n` | n game frames into each room, every living zombie in its AI (records and added ones) takes one head hit as from the magnum (weapon 6 on joint 11, the game's burst path); its head state (`exp0 + 0x78`), hp and modes are logged every 15 frames for 90 frames |
+| `RECVX_ENEMY_FLOORS=n` | n game frames into each room (2: the frame after the extras came), every enemy (ids 1..30) is logged with its position, floor and room-file type, the ground under it as `find_spot` sees it ("Spots", ` slope` on a slope) and the bottom of the box that ground is the top of (a shelf with room below is no crate), its floor's height and what the options did to it (`moved`, `random`, `extra`, `orig`; `other`: a part an enemy's Init put in a slot of its own) |
 | `RECVX_ENEMY_TRACE=dist` | traces enemy steps (co-op targets) |
 | `RECVX_TRACE_SND=1` | logs sound requests and extra banks |

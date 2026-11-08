@@ -38,6 +38,7 @@ void spawn_keep_texlist(const NJS_TEXLIST* l);
 void bhCheckEneWorkNum(void);   /* eneset.h */
 void bhStFlg(unsigned int* flg, unsigned int bit);   /* flag.h */
 int bhCkFlg(unsigned int* flg, unsigned int bit);
+int bhCheckFloorNum(float py);   /* pwksub.h */
 
 EnemyOpts g_enemy_opts = { .variety = 1, .events = 1, .cast_enemy = CAST_ENEMY_ALL };   /* settings (F1, recvx.ini) */
 _Static_assert(sizeof(g_enemy_opts.cast_enemy_off) == CAST_ENEMY_BYTES, "EnemyOpts.cast_enemy_off");
@@ -117,6 +118,7 @@ static unsigned char rec_flags[128];
 static short rec_kill[128];             /* each record's kill bit as the entry script hides it by (EneSetCk; -1: none, it comes back on every visit) */
 static const ActorModel* rand_src[128];   /* randomized records: where their new type comes from */
 static unsigned short rand_var[128];    /* and which enemy variant they became (0: none) */
+static unsigned char moved_rec[128];    /* records "Rearranged Enemies" moved (RECVX_ENEMY_FLOORS) */
 static int all_dead_check;              /* the script counts kills (DieEventCk): "all dead" doors */
 static int rm_flg_used;                 /* the script tests or sets rm_flg bits 29..31 (= 0x4, 0x2, 0x1), which some types write */
 
@@ -174,9 +176,6 @@ static void scan_script(void)
     }
 }
 
-/* a free spot near (x, z) on floor `flr`: no wall between it and the spot (plus a body's width
-   beyond), away from the entry positions; 1 = found. Only the room file and the draws decide it (not where
-   the player stands), so a room gets the same spots on every visit. */
 static int near_entry(float x, float z)
 {
     int i;
@@ -187,23 +186,72 @@ static int near_entry(float x, float z)
     return 0;
 }
 
-static int find_spot(float x, float y, float z, int flr, float rmin, float rmax, float* ox, float* oz)
+/* the ground under (x, z) seen from 10 units above y (hitchk.c bhGetGroundPosition: the highest box top, slope or floor
+   slab at most that high; -1000: none, as on the lowest floor of a room without floor slabs); *hit (if not NULL): the box
+   it is the top of, NULL for none */
+static float ground_at(float x, float y, float z, const ATR_WORK** hit)
+{
+    NJS_POINT3 q = { x, y + 10.0f, z };
+    ATR_WORK* htp = sys->htp;
+    float g = bhGetGroundPosition(&q);
+    if (hit) *hit = sys->htp;
+    sys->htp = htp;
+    return g;
+}
+/* a slope (type 6 box: stairs, ramps), where an enemy's wall check pushes it along the slope at its own height (seen with a
+   Cerberus) */
+static int slope(const ATR_WORK* hp) { return hp && hp->type == 6; }
+
+/* the record stands on the ground there (as find_spot wants a walker's spot; slopes too: the game put it there) */
+static int on_ground(const BH_PWORK* ep)
+{
+    float g = ground_at(ep->px, ep->py, ep->pz, NULL);
+    return g <= -999.0f || fabsf(g - ep->py) <= 1.0f;
+}
+
+/* no drop within 6 units of a walker's spot along x and z: ground there no more than a unit below y (none only where the
+   source had none). Nearer an edge, a Hunter put on RM_2011's top balcony leapt off it and stayed at the balcony's height,
+   and a Cerberus on RM_9310's platform was pushed off it. */
+static int no_drop(float x, float y, float z, float g0)
+{
+    static const signed char d[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+    int i;
+    for (i = 0; i < 4; i++) {
+        float g = ground_at(x + 6.0f * d[i][0], y, z + 6.0f * d[i][1], NULL);
+        if (g > -999.0f ? g < y - 1.0f : g0 > -999.0f) return 0;
+    }
+    return 1;
+}
+
+/* a free spot near (x, z) on floor `flr` at height y: no wall between it and the spot (plus a body's width beyond), away
+   from the entry positions; 1 = found (*ox, *oy, *oz). A walker (`walk`) must stand there: ground under the spot within a
+   unit of y on the same floor number and not a slope (*oy: that ground), or none where the source has none either (the
+   lowest floor of a room without floor slabs), and no drop near it; spots over a pool, a pit or stairs, at or past a
+   ledge or in a crate are skipped. A flier keeps y. Only the room file and the draws decide it (not where the player
+   stands), so a room gets the same spots on every visit; a skipped spot uses the draws it used before. */
+static int find_spot(float x, float y, float z, int flr, int walk, float rmin, float rmax, float* ox, float* oy, float* oz)
 {
     int k, start = rnd() & 7;
+    float g0 = walk ? ground_at(x, y, z, NULL) : 0;
+    const ATR_WORK* hp;
     for (k = 0; k < 16; k++) {
         float a = (float)((start + k * 3) & 15) * (6.2831853f / 16.0f);
         float r = rmin + (rmax - rmin) * (float)(rnd() & 1023) / 1023.0f;
-        float tx = x + r * sinf(a), tz = z + r * cosf(a);
+        float tx = x + r * sinf(a), tz = z + r * cosf(a), g = -1000.0f;
         NJS_POINT3 p1 = { x, y + 10.0f, z }, p2 = { x + (r + 8.0f) * sinf(a), y + 10.0f, z + (r + 8.0f) * cosf(a) };
         if (near_entry(tx, tz)) continue;
         if (bhCollisionCheckLine2(&p1, &p2, 0x4400, (char)flr)) continue;
-        *ox = tx; *oz = tz;
+        if (walk && ((g = ground_at(tx, y, tz, &hp)) > -999.0f ? slope(hp) || fabsf(g - y) > 1.0f || bhCheckFloorNum(g + 0.5f) != bhCheckFloorNum(y + 0.5f)
+                                                          : g0 > -999.0f)) continue;
+        if (walk && !no_drop(tx, y, tz, g0)) continue;
+        *ox = tx; *oy = g > -999.0f ? g : y; *oz = tz;
         return 1;
     }
     return 0;
 }
 
 /* ---------------------------------------------------------------- (b) rearranged placements */
+static int flier_record(int id) { return id == 7 || id == 11; }   /* bats and Spotters: they hover where they are placed */
 static int roams(int id) { return id == 1 || id == 3 || id == 4 || id == 5 || id == 7 || id == 9 || id == 26; }
 
 static void place(const EnemyOpts* o)
@@ -214,18 +262,20 @@ static void place(const EnemyOpts* o)
     for (k = 0; k < nc; k++) {
         BH_PWORK* ep = &ene[cand[k]];
         ETTY_WORK* r = &rom->enep[cand[k]];
-        float x = ep->px, z = ep->pz, nx, nz;
+        float x = ep->px, z = ep->pz, nx, ny, nz;
         rnd_seed((unsigned)o->seed, (unsigned)room_file_now() * 131u + (unsigned)cand[k] + 0x5000u);
         if (nc > 1 && (rnd() & 1)) {   /* start from another record's spot on the same floor */
             BH_PWORK* q = &ene[cand[rnd() % nc]];
             if (q->flr_no == ep->flr_no && fabsf(q->py - ep->py) < 1.0f) { x = q->px; z = q->pz; }
         }
-        if (!find_spot(x, ep->py, z, ep->flr_no, 8.0f, 30.0f, &nx, &nz)) continue;
+        if (!find_spot(x, ep->py, z, ep->flr_no, !flier_record(ep->id), 8.0f, 30.0f, &nx, &ny, &nz)) continue;
         ep->px = ep->pxb = r->px = nx;
+        ep->py = ep->pyb = r->py = ny;
         ep->pz = ep->pzb = r->pz = nz;
         ep->ay = r->ay = (short)(rnd() & 0xFFFF);
         if (ep->id == 4 && ep->type) ep->type = r->type = 0;   /* a Cerberus waiting in its wake-up area would wait forever */
         bhCalcModel(ep);
+        moved_rec[cand[k]] = 1;
         moved++;
     }
     if (nc) host_log("enemies: room %04d: %d of %d free-roaming enemies placed elsewhere (seed %d)\n", room_file_now(), moved, nc, o->seed);
@@ -387,7 +437,6 @@ static int make_kinds(Kind* kd)
     return n;
 }
 static int ground_record(int id) { return id == 1 || id == 3 || id == 4 || id == 5 || id == 9; }
-static int flier_record(int id) { return id == 7 || id == 11; }
 static int look_ok(const ActorModel* m, int id) { return m->id == id && !(id == 9 && m->mdlver == 1); }   /* (Bandersnatch 2 is an event's arm) */
 static int kind_of(const Kind* kt, int id, int ver) { for (int i = 0; i < KINDS; i++) if (kt[i].id == id && (kt[i].look < 0 || kt[i].look == ver)) return i; return -1; }
 
@@ -456,6 +505,8 @@ static void randomize(const EnemyOpts* o)
         if (!rec_flags[k]) cls[k] = 1;
         else if (o->events) cls[k] = rec_flags[k] & (REC_EVENT | REC_HP) ? 2 : 1;
         if (cls[k] == 1 && ep->flr_no < 0) cls[k] = 0;   /* (no floor under it: one hanging somewhere for an event) */
+        if (cls[k] == 1 && ground_record(ep->id) && !on_ground(ep)) cls[k] = 2;   /* placed off the ground on purpose (RM_6090's Black Widow
+                                                                                    under the floor): only another look of its type */
         nc += cls[k] != 0;
     }
     if (!nc) return;
@@ -525,7 +576,7 @@ static void randomize(const EnemyOpts* o)
         if (!m) {   /* its own kind drawn, without another look (Cerberus, bat), or nothing else fits */
             if (kd >= 0 && kd < nk) kused[kd] = 1;
             in_set(set, &nset, kind_of(kt, save.id, save.mdlver));
-            host_log("enemies: record %d stays type %d model %d (%s)\n", k, save.id, save.mdlver, cls[k] == 2 ? "event enemy, no other look of its type"
+            host_log("enemies: record %d stays type %d model %d (%s)\n", k, save.id, save.mdlver, cls[k] == 2 ? "event enemy or off the ground, no other look of its type"
                      : kd >= 0 && kd < nk && kt[kd].id == save.id ? "its own kind drawn" : "nothing else fits");
             continue;
         }
@@ -586,6 +637,7 @@ void enemy_room_finished(void)
         scan_script();
         memset(rand_src, 0, sizeof(rand_src));
         memset(rand_var, 0, sizeof(rand_var));
+        memset(moved_rec, 0, sizeof(moved_rec));
         if (o->rand) randomize(o);
         if (o->place) place(o);
     }
@@ -681,6 +733,34 @@ static void headshot_test(void)
     }
 }
 
+/* Test aid RECVX_ENEMY_FLOORS=n: n game frames into each room (2: the frame after the extras came), every enemy (ids 1..30)
+   of the room's records and its extras is logged with its floor, the ground under it (ground_at, as find_spot tests a
+   spot) and the bottom of the box that ground is the top of, and what the options did to it: moved (Rearranged), random (another type or look), extra, orig (other: a part an
+   enemy's Init put in a slot of its own). */
+static void floor_test(void)
+{
+    static int n = -2, gen = -1, t;
+    int k, i;
+    if (n == -2) n = getenv("RECVX_ENEMY_FLOORS") ? atoi(getenv("RECVX_ENEMY_FLOORS")) : -1;
+    if (n < 0 || !sys || !plp || !rom || !(sys->tk_flg & 0x80) || !(sys->sp_flg & 0x2) || (sys->gm_flg & 0x9) || (sys->cb_flg & 0x1)) return;
+    if (gen != enemy_room_gen) { gen = enemy_room_gen; t = 0; }
+    if (++t != n) return;
+    for (k = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS; k++) {
+        const BH_PWORK* ep = &ene[k];
+        const char* what = "other";
+        const ATR_WORK* hp;
+        float g;
+        if (!(ep->flg & 0x1) || ep->id < 1 || ep->id > 30) continue;
+        if (k < rom->ene_n && k < 128) what = moved_rec[k] ? "moved" : rand_src[k] ? "random" : "orig";
+        for (i = 0; xtra_gen == enemy_room_gen && i < xtra_n; i++) if (xtra[i].slot == k) what = "extra";
+        g = ground_at(ep->px, ep->py, ep->pz, &hp);
+        printf("test: floors room %04d slot %d %s id %d from %d flr %d pos %.2f %.2f %.2f ground %.2f bottom %.2f level %.2f%s%s\n", room_file_now(), k,
+               what, ep->id, k < rom->ene_n ? rom->enep[k].id : ep->id, ep->flr_no, ep->px, ep->py, ep->pz, g,
+               !hp ? g : hp->type == 7 ? hp->py + hp->h : hp->py, rom->grand[bhCheckFloorNum(ep->py + 0.5f) + 2], slope(hp) ? " slope" : "",
+               ep->stflg & 0x1000000 ? " hidden" : "");
+    }
+}
+
 /* An extra enemy is remembered dead like the record it copies: ed_flg EXTRA_DEAD + the kill bit the room's entry script
    hides that record by (EneSetCk), set when the extra dies, and it stays away while that is set. EneSetCk tests only
    bits 0..511 (retail uses 0..357, rooms built with pc/tools up to 511), so 512..1023 are free; they are saved and
@@ -695,6 +775,7 @@ void enemy_extras_frame(void)
     int cand[128], nc = 0, k, made = 0, room;
     kill_test();
     headshot_test();
+    floor_test();
     if (!sys || !plp || !rom) return;
     if (xtra_gen == enemy_room_gen && !coop_is_guest())   /* (a guest gets the host's flags) */
         for (k = 0; k < xtra_n; k++) {
@@ -727,8 +808,8 @@ void enemy_extras_frame(void)
         if (rand_src[cand[k]]) { am = *rand_src[cand[k]]; n.variant = rand_var[cand[k]]; }   /* a randomized record: a copy of its new type (and variant) */
         n.room = am.room; n.rec = am.rec; n.id = am.id; n.mdlver = am.mdlver;
         rnd_seed((unsigned)o->seed, (unsigned)room * 7u + 2u + (unsigned)cand[k] * 7919u);
-        n.py = r->py; n.flr = r->flr_no; n.ay = (short)(rnd() & 0xFFFF);   /* (from the record, not where its enemy walked to) */
-        if (!find_spot(r->px, r->py, r->pz, r->flr_no, 15.0f, 35.0f, &n.px, &n.pz)) continue;
+        n.flr = r->flr_no; n.ay = (short)(rnd() & 0xFFFF);   /* (from the record, not where its enemy walked to) */
+        if (!find_spot(r->px, r->py, r->pz, r->flr_no, 1, 15.0f, 35.0f, &n.px, &n.py, &n.pz)) continue;
         made++;
         dx = n.px - plp->px; dz = n.pz - plp->pz;
         if (bit >= 0 && bhCkFlg(sys->ed_flg, bit)) why = "dead (killed before)";

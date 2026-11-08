@@ -49,6 +49,8 @@
   line where the scene pauses after them. Spoken lines are favoured over grunts where the original is long, the same
   few lines no longer come back again and again in one scene, and a character shown as a monster makes one of its
   sounds per line instead of an endless string of them.
+- Rearranged Enemies and Extra Enemies no longer place enemies in mid-air, such as over the pool and the stairs in
+  the training facility's pool room.
 
 ## 0.7.5 (2026-11-07)
 
