@@ -6,7 +6,7 @@
  * record drawn as another model (the cutscene cast, the double of the character played) left Wesker's trail behind
  * that model. Here the trail is the model's: at each copy its node matrices are kept (actor_drawn_for: posed from the
  * record as its drawing poses it) and the model is drawn again at them, fading as the game's copy. A hand piece the
- * model hides (it has hands of its own: cast_glue.c hands_hide) leaves none. The game's copy is still made: an
+ * model hides (hands of its own, or another character's unarmed ones: cast_glue.c hands_hide) leaves none. The game's copy is still made: an
  * afterimage whose entry was taken by a newer one is drawn from it (Wesker), never from a stale buffer.
  */
 #include "../../decomp/include/ps2/veronica/prog/types.h"

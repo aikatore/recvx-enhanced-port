@@ -5,7 +5,7 @@ over the internet or a LAN (UDP). Co-op is an optional addon: with it off the ga
 as without it (every hook is `#ifdef TARGET_PC` and `if (coop_on)`).
 
 Part 1 is for players: how to host, join and play. Part 2 is the reference: architecture,
-protocol 42, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
+protocol 43, security and limits. Related: [SERVER.md](SERVER.md) (the optional co-op server),
 [USER_GUIDE.md](USER_GUIDE.md) (settings, controls), [ACTORS.md](ACTORS.md) (models and voices),
 [ENEMIES.md](ENEMIES.md) (enemy options), [ARCHITECTURE.md](ARCHITECTURE.md),
 [BUILDING.md](BUILDING.md).
@@ -1250,7 +1250,7 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   waits (up to 900 frames). It also carries the randomizer records the host had to keep.
 * `EV_EOPTS` (host): the enemy options (extra, placements, randomizer, seed, variety, event
   enemies, and the cutscene cast's on/off, models, assignment and imported models: protocol 29; its "Custom" list:
-  `EV_CASTOFF`, protocol 31), at
+  `EV_CASTOFF`, protocol 31; its "Enemy Models" and that list: protocol 43), at
   every new session, before each game state and on every change. Placements and
   randomizer are computed from the room file (records, script, collision) and the seed only, so
   both make the same records in the same slots, event records included.
@@ -1383,7 +1383,7 @@ interpolated with the in-between frames; it snaps on camera cuts and in vanilla 
 
 ## Protocol 42
 
-`COOP_VERSION` is **42**; both players need builds with the same version (a mismatch is reported,
+`COOP_VERSION` is **43**; both players need builds with the same version (a mismatch is reported,
 e.g. "The host uses co-op compatibility version 38; yours is 40. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
@@ -1399,7 +1399,9 @@ and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid
 `Pose.opts`, so a further rule needs a field of its own); 24 enemy slots 0..254 (`COOP_ENE_SLOTS`, the PC's
 255 slots) in every slot field, and `EV_FX` marks its `FX_*` references in `refs` (the bytes 253..255 are slots now); 25 `Pose.use`, the trigger the sender is using (one player at a puzzle at a time, see "Puzzles"; the pose grew to 112 bytes); 26 `EneSnap.id`, the enemy type in the slot: a snapshot applies only to a slot holding the same type (`hokan_count` is 16 bits now; the snapshot stays 100 bytes); 27 `PoseExt.br`, `br_seed`, `br_id` (BioRand: the host's choice and each side's pack; `Pose.opts` has no free bit, so a field of its own; the extension grew to 104 bytes); 28 direct sessions are encrypted after a handshake bound to the whole join code (`PKT_HELLO`, `PKT_HELLO_ACK`, see "Security"), so `Pose.auth`, the 32-bit join-code proof, is gone (`rsv`, zero), the goodbye's `COOP_REJ_STATE`, and a generic `EV_FX` only for the effects co-op sends, each field checked (see "Effects and voices"); 29 the cutscene cast: `EV_EOPTS` carries `cast`, `cast_all`, `cast_assign`, `cast_imports` (the event stays 88 bytes) and `PoseExt.imp_id`, the sender's imported models (the extension grew to 108 bytes); 30 `EV_BRSEED`, the host's BioRand seed string and CLI checksum (a guest can generate the host's pack, see "BioRand"; the pose and extension are unchanged); 31 `EV_CASTOFF`, the host's cutscene cast "Custom" list, and `EV_EOPTS` `cast_all` 2 (Custom); 32 the cutscene cast's pools without the player files that have a talking twin (Claire's, Chris's, Steve's, Wesker's: their cutscene models stand for them, [ACTORS.md](ACTORS.md) "Talking twins"), so the same seed picks other models and the `EV_CASTOFF` bits name other entries (the event is unchanged); 33 `Pose.opts2`, more game rules
 in the first of the pose's spare bytes (`OPT2_EXTRA_OBJECTS` 1, see "Extra item boxes and herbs"; unknown bits refused; the pose stays 112
-bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. 37 `Pose.legs` and `legs_frm` in the two spare bytes (third person "Move While Aiming": the legs walking under the aim, see "Pose"). 38 `EV_EOPTS` `voices`, "Randomize Voice Lines" ([ACTORS.md](ACTORS.md) "Voice lines"; the event stays 88 bytes). 39 `EV_EOPTS` fills the union's 80 bytes with `types` (the randomizer's Types per Room) and `rate[32]` (its Custom rates), `variety` 2 (Custom) and `extra` up to 8 (the event stays 88 bytes; [ENEMIES.md](ENEMIES.md) "Randomizer"). 40 `EV_FX` of `FX_REACT` (third person "Locational Hit Reactions": the region where the sender's shot hit a zombie and the shot's direction, see "Effects and voices"; the event is unchanged in size). 41 `OPT2_HEADSHOTS` 2 in `Pose.opts2`, the host's "Headshots & Piercing" (the rifles' head damage, head bursts on killing head hits, the sniper rifle's piercing; [THIRDPERSON.md](THIRDPERSON.md#headshots-and-piercing)); the pose is unchanged in size. 42 the randomizer makes the Hunter and the Sweeper two kinds in Wild and Mild too (as in Custom; [ENEMIES.md](ENEMIES.md) "Randomizer"), so the same seed places other enemies (nothing on the wire changed). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. 37 `Pose.legs` and `legs_frm` in the two spare bytes (third person "Move While Aiming": the legs walking under the aim, see "Pose"). 38 `EV_EOPTS` `voices`, "Randomize Voice Lines" ([ACTORS.md](ACTORS.md) "Voice lines"; the event stays 88 bytes). 39 `EV_EOPTS` fills the union's 80 bytes with `types` (the randomizer's Types per Room) and `rate[32]` (its Custom rates), `variety` 2 (Custom) and `extra` up to 8 (the event stays 88 bytes; [ENEMIES.md](ENEMIES.md) "Randomizer"). 40 `EV_FX` of `FX_REACT` (third person "Locational Hit Reactions": the region where the sender's shot hit a zombie and the shot's direction, see "Effects and voices"; the event is unchanged in size). 41 `OPT2_HEADSHOTS` 2 in `Pose.opts2`, the host's "Headshots & Piercing" (the rifles' head damage, head bursts on killing head hits, the sniper rifle's piercing; [THIRDPERSON.md](THIRDPERSON.md#headshots-and-piercing)); the pose is unchanged in size. 42 the randomizer makes the Hunter and the Sweeper two kinds in Wild and Mild too (as in Custom; [ENEMIES.md](ENEMIES.md) "Randomizer"), so the same seed places other enemies (nothing on the wire changed); 43 `EV_EOPTS` carries the cutscene cast's
+"Enemy Models" (`cast_enemy` 0..3) and its own "Custom" list (`cast_enemy_off`, 4 bytes: a bit per entry of the enemies'
+list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96. `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1477,7 +1479,7 @@ enemy's (`mode[0]` 0) to one whose own Init ran.
 
 ### Events
 
-`Event` (88 bytes): `id` (reliable, in order), `type`, `idx` (enemy slot 0..254 or a type-specific index),
+`Event` (96 bytes): `id` (reliable, in order), `type`, `idx` (enemy slot 0..254 or a type-specific index),
 `stg`, `rom` (events for another room are dropped), then an 80-byte payload.
 
 | Type | Id | Direction | Payload |
@@ -1496,7 +1498,7 @@ enemy's (`mode[0]` 0) to one whose own Init ran.
 | `EV_BOX` | 12 | either | Shared item box: words taken out and put in (up to 16) |
 | `EV_BOXFIX` | 13 | host | Box correction: items the joiner could not have |
 | `EV_SPAWN` | 14 | host | An added enemy (`SpawnNote`), or a randomizer record the host kept |
-| `EV_EOPTS` | 15 | host | Enemy options: extra 0..3, placements, randomizer, seed, variety 0..1, event enemies 0..1, cutscene cast 0..1, its models 0..1, assignment 0..1, imported models 0..1 |
+| `EV_EOPTS` | 15 | host | Enemy options: extra 0..3, placements, randomizer, seed, variety 0..1, event enemies 0..1, cutscene cast 0..1, its models 0..1, assignment 0..1, imported models 0..1, its enemy models 0..3 and their unchecked entries (4 bytes) |
 | `EV_ATR` | 16 | either | 1..2 room records (wall, trigger, floor, object) after a world event |
 | `EV_FX` | 17 | either | An effect started here (`FX_BURST` 308, `FX_PARTICLE` 302, `FX_ARM`, `FX_REACT`, or a generic entry). What it follows (`idx`), its model's owner and `exp0` are each an enemy slot or, with their bit in `refs` (`FXR_IDX` 1, `FXR_OWNER` 2, `FXR_EXP0` 4), `FX_RECEIVER` 0, `FX_SENDER` 1 or `FX_NONE` 2 |
 | `EV_GRANT` | 18 | either | An event gave the sender an item: item, count, floor, position |

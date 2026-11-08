@@ -689,9 +689,11 @@ weapon of a hand the model lacks floated at the invisible source's hand.
   pieces (fist, open hand, holding poses) and props to the double's hand nodes and swaps them per
   gesture. `actor_double_tick` (from `coop_control_remote`, after `bhControlEnemy`, before
   `bhControlObjItm`) poses the double's model and moves the double's hand nodes to the model's
-  hand positions, so pieces and props sit on the model's wrists. The pieces stay the double's
-  (Claire's gloved hands on Steve). Two doubles of the played character are each drawn in their
-  own pose (`dbl_posed`).
+  hand positions, so pieces and props sit on the model's wrists. A model of another character hides
+  the double's one-node pieces and shows its own hands, as the cutscene cast's ("Cutscene cast", "Drawing":
+  `cast_double_parts` -> `hands_hide`, `actor_doubles` -> `actor_cast_hands`, `actor_put_enemy` ->
+  `cast_hands_draw`); before, Claire's gloved hands were on Steve. Two doubles of the played character are each
+  drawn in their own pose (`dbl_posed`).
 * **Talking faces** (setting "Animated Faces (Experimental)", APPEARANCE page, ini
   `appear_cutscene_face`, default 0): the cast talks through a face mask (`face.c`, `face_bh.c`,
   the model's `MASK` chunk; `fmCnkInitContext` inserts jaw/tongue/eye pivots, 27 -> 31 nodes;
@@ -861,12 +863,10 @@ character is one of the types above (checked over all room files: Claire 91; Chr
 A few creatures appear in cutscenes as records that no fight uses: a scripted actor without AI, or an
 enemy type in a room that is only a cutscene. They are cast like the characters (`cast.c cast_creature`, a
 table by room file, record and type), each kind as a character of its own after the seven, so with *Per
-Character* a kind gets one model in all its scenes and *Per Cutscene* picks again per room. They draw from
-the same pool as the characters (*Cutscene Models*, *All Models*, *Custom*, the imports), after them: the
-characters' picks are those of before, and with *Cutscene Models* (five models for five characters) a
-creature starts a new round, so it shows as one of the cast (Nosferatu as Alfred). Never its own look (the
-Tyrant not as the Tyrant, the Hunter not as a Hunter or Sweeper, Steve's father not as a zombie). No new
-setting: the cast is opt-in already, and these records change nothing in play.
+Character* a kind gets one model in all its scenes and *Per Cutscene* picks again per room. What they draw from
+is the setting *Enemy Models* ("Enemy Models" below; default *All Enemies*: other monsters). Never its own look
+(the Tyrant not as the Tyrant, the Hunter not as a Hunter or Sweeper, Steve's father not as a zombie). These records
+change nothing in play.
 
 | Room, record (type) | Creature | Why it is safe |
 |---|---|---|
@@ -906,11 +906,11 @@ Two things the creatures needed in drawing:
   but the script's objects of the room.
 * **Hands**: a creature has no hand pieces of the script's (Nosferatu has no arms; the Tyrant, the Hunter and
   Steve's father have theirs in their mesh), so a model without hands of its own (the cutscene models, the player
-  files) stood there with its sleeves ending at the wrists. A slot a creature record uses gets the unarmed
-  pieces of the character the model is (`actor_glue.c actor_cast_hands`; `appear_voice`: the cast their own,
+  files) stood there with its sleeves ending at the wrists. Every cast slot (and the double's) whose model has no
+  hands gets the unarmed pieces of the character the model is (`actor_glue.c actor_cast_hands`; `appear_voice`: the cast their own,
   other men Chris's, women Claire's; weapon file `c * 30 + 20`, as the lobby preview), linked to the model's
-  hand nodes and drawn after it on each hand without a mesh of its own while the record has no piece of the
-  script's on that hand (`cast_hands_draw`). Loaded with the model at the room load (two textures: Steve's and
+  hand nodes and drawn after it on each hand without a mesh of its own while the record shows no piece of the
+  script's on that hand (`cast_hands_draw`; a character's own pieces are hidden there, "Drawing"). Loaded with the model at the room load (two textures: Steve's and
   Wesker's 17 KB each, Chris's 65 KB, Claire's 128 KB; refused like a model under the margins). Monster Steve's
   arms end without a mesh at the hand node too (his claws are linked records in his fight): he gets Steve's
   hands.
@@ -924,16 +924,17 @@ no fight uses. They are cast as creatures (`cast.c cast_scene_zombie`, a table b
 The creature table did not cover them: it lists single creature records by type, and zombies were left out since the
 first version swapped fought ones too.
 
-* **What they become** (`cast_crowd_model`): a creature of *All Models* (Alexia's first form, Nosferatu, the Tyrant,
-  Monster Steve, the Hunter, the Sweeper, the Bandersnatch, the anatomist) or another zombie look, whatever the Model
-  Selection: *Cutscene Models* has no creatures, and these are monsters. *Custom* uses the checked ones of those
-  (none checked: they stay zombies). Never an imported model, never their own look.
+* **What they become** (`cast_crowd_model`): what *Enemy Models* says ("Enemy Models" below): a creature of *All
+  Models* (Alexia's first form, Nosferatu, the Tyrant, Monster Steve, the Hunter, the Sweeper, the Bandersnatch, the
+  anatomist) or another zombie look; its *Custom* the checked ones of those (none checked: they stay zombies); *Same as
+  Cast* as before it, the Model Selection's monsters whatever it is (*Cutscene Models* has none: all of them); *Off*
+  themselves. Never an imported model, never their own look.
 * **One per kind**: each zombie look is a kind of its own. With *Per Character* a look gets one model in every scene
   (scene 0), *Per Cutscene* picks again per room. The looks are taken in turn over a shuffle of the pool by (seed,
   scene), so the zombies of one scene mostly differ (9340: three looks, three monsters).
 * **Display only**: the record keeps its type, motions, script and timing; the model is posed from its skeleton as
   every cast model (the zombie skeleton is a man's). Co-op: from the seed and the options the host sends
-  (`EV_EOPTS`), so both screens show the same; no protocol change.
+  (`EV_EOPTS`), so both screens show the same.
 
 | Room, records | Scene | Why it is safe |
 |---|---|---|
@@ -948,6 +949,41 @@ Not cast (`enemies.py room` over every room with a zombie record without a kill 
   record 3 stays at the origin. 6020 (record 1: a shot of 0.6 s where it is hardly visible); set pieces seen in
   gameplay (3140, 4001); records no scene of the scene list names (3050, 6030, 9310).
 * The bodies of type 52 (9050) and Steve's father (3000, a creature already).
+
+### Enemy Models
+
+The creatures and the scene zombies are monsters; the characters' pool put Nosferatu in Alfred's or Rodrigo's model.
+*Enemy Models* (under Model Selection; ini `cast_enemy_models`, `EnemyOpts.cast_enemy`, `cast.h CAST_ENEMY_*`) gives them
+a pool of their own:
+
+| Value | The creatures | The scene zombies |
+|---|---|---|
+| *Same as Cast* (0) | from the characters' pool, after them in one shuffle (the behaviour before the setting) | the Model Selection's monsters |
+| *All Enemies* (1, default) | from the enemies' list | the same |
+| *Custom* (2) | the checked ones of the enemies' list | the same |
+| *Off* (3) | themselves | themselves |
+
+* **The enemies' list** (`cast_custom_list(2, ...)`, `cast.c enemy_pool`): the monsters of *All Models* and the zombies'
+  one entry, nine: Alexia (First Form), Nosferatu, Tyrant, Monster Steve, Hunter, Hunter (Sweeper), Bandersnatch,
+  Anatomist Zombie, Zombies (Random Look). Only monsters: a player who wants characters for them has *Same as Cast*;
+  no imports (people). Its *Custom* list starts all checked; stored as the unchecked ones, `EnemyOpts.cast_enemy_off`
+  (a bit per position, 4 bytes), `recvx.ini` lines `enemy_custom_off = Tyrant` (the same keys as the cast's list). The
+  same list code as the cast's (`cast_list.c` list 2): ENHANCED SETTINGS GAMEPLAY (Enemy Models, Choose Enemies), the
+  BIORAND RANDOMIZER page, the lobby's CUTSCENE CAST page (ENEMY MODELS, CHOOSE ENEMIES), F1 (check boxes under Enemy
+  Models).
+* **The picks** (`cast_model`, enemy not *Same as Cast*): the four creatures take their turn over a shuffle of the
+  enemies' pool by (seed, scene), each the next not taken and not its own (`model_char`), as the characters over theirs;
+  the characters' turn then has only the characters (their picks are *Same as Cast*'s unless a creature traded with
+  one there). Fixed per kind with *Per Character*. The rules stay: the scene right before a fight and every fought
+  enemy never cast, Claire and Chris never picked.
+* **Old files** (`config_load`): without `cast_enemy_models`, a file with the cast's *Custom* gets *Custom* here, its
+  monsters' `cast_custom_off` lines also unchecked in the enemies' list (the same names); any other gets *All Enemies*
+  (the scene zombies drew monsters with every Model Selection already). `RECVX_CAST_ENEMY=0..3` (test aid) sets it where
+  the file does not.
+* Co-op: the host's value and list in `EV_EOPTS` (protocol 43, `Event` 96 bytes).
+* Checked (seeds 1 and 7, 9340, 8030, 6040): *Same as Cast* with *All Models* gave the 8030 Hunter Alfred and Nosferatu
+  Rodrigo; *All Enemies* Monster Steve / Nosferatu and a Bandersnatch / Monster Steve; *Custom* (Tyrant and Hunter
+  checked) only those (the Hunter as the Tyrant); *Off* none, Wesker still cast; the characters the same in all four.
 
 ### For the whole room visit
 
@@ -999,8 +1035,10 @@ still picks from the files too (and its own *Custom* list lists them): it sets t
 
 *Custom* is the *All Models* pool (with Include Imported Models on, the imported models too) cut down to the
 entries the player checks in a list: SELECT ALL / DESELECT ALL, then a check box per entry, in the order and
-groups of the lobby's model page (`cast_custom_list`: the "You appear as" list's order, the zombies' one entry
-where their looks start, the imports last). Shared code `pc/glue/cast_list.c`, shown at three places: the lobby's
+groups of the lobby's model page (`cast_custom_list`: the "You appear as" list's order, but Claire's, Chris's, Steve's
+and Wesker's cutscene models, that list's last, first; the zombies' one entry where their looks start, the imports
+last). The order is only the display: each entry's bit is its position in the pool, so the picks, the ini lines and
+`EV_CASTOFF` do not depend on it. Shared code `pc/glue/cast_list.c`, shown at three places: the lobby's
 CUTSCENE CAST page (CHOOSE MODELS, "12 of 17", opens it as step 8), the BIORAND screen's EXTRA OPTIONS page
 (Choose Models) and OPTION > ENHANCED SETTINGS, GAMEPLAY (Choose Models right under Model Selection: the list in
 place of the page's rows, `options_glue.c` `st.list`); F1 shows the same list as check boxes under Model Selection
@@ -1083,16 +1121,27 @@ the same in Claire's part and in Chris's.
   `cast_n`, so `coop_control_remote` runs while a room has cast records.
 * **Hands**: the cast's cutscene models have no hands; the room script links hand pieces (the
   character's own gloved fist, open hand, a hand holding something: objects `sys->obwp[4..31]` with ids
-  1000..1137 in the rooms checked) to the record's hand nodes and swaps them per gesture. On a model
-  with no hands of its own (the cutscene models, the player files) they stay: they are its hands. On a
-  model with hands of its own (the zombies, the creatures, the imported models; `actor_own_hand`: a mesh
+  1000..1137 in the rooms checked) to the record's hand nodes and swaps them per gesture. They are the
+  record's character's hands: on another character's model they showed that character's gloves (Wesker's big
+  black ones on Alexia in 9350, Alfred's pale hands and cuffs on Steve in 1020). A model with no hands of its own
+  (the cutscene models, the player files) gets the unarmed pieces of the character it is (`actor_cast_hands`, as a
+  creature's model: Claire's, Chris's, Steve's or Wesker's; the cast's other models by `appear_voice`, other men
+  Chris's, women Claire's), and the record's one-node pieces are hidden as below; they stay only where the model
+  is the record's own character (`actor_cast_hands_chr`: Claire's costume for Claire, Monster Steve for Steve) or
+  its hands did not load. The unarmed piece is one pose (the fist or relaxed hand), so the script's gestures
+  (open hand, pointing) are lost there. On a model with hands of its own (the zombies, the creatures, the imported models; `actor_own_hand`: a mesh
   or skinned vertices on its hand node) the record's one-node pieces are hidden while it is drawn as the
   model (`cast_glue.c hands_hide`: the piece's mesh `NJD_EVAL_HIDE`, shown again at the next tick, as
   `actor_weapon_hands` does for the weapons' hand pieces): before, Rodrigo's gloves lay over a zombie's
   own hands. A piece of more nodes holds a prop in the same mesh as the hand (Claire's hand with the
   lighter, two of Rodrigo's) and stays whole; items the script links to a hand are other objects and stay.
   The same for a model without that hand at all (the Bandersnatch's left). A creature's record has no pieces:
-  a model without hands gets a character's unarmed ones there ("Creatures").
+  a model without hands gets a character's unarmed ones there ("Creatures"). Ours are drawn on a hand only while no
+  piece of the script's is shown there (`cast_hands_draw`: a kept piece with a prop is the hand). The same for the
+  double of the character played ("Cutscene doubles"). Wesker's afterimages (`trail_glue.c`) leave no trail of a
+  hidden piece. Test aid: `RECVX_CAST_TRACE=1` logs each piece hidden (`... hidden: the model has Claire's hands`) or
+  kept (`... kept: a prop in it`). Checked in 9350, 8030, 9370 (Wesker as Alexia), 1020 (Alfred as Steve; Claire's
+  double as Rodrigo), 0030 (Steve as Rodrigo).
 * **Head parts**: Claire's ponytail is an object of its own on her cutscene record's head (id 1200, 4
   nodes, node 5: 9150, 9320, 3210), and so are Wesker's sunglasses on his event model 47 (id 1127, 8030);
   the player's head part `sys->obwp[2]` when a script links it there. Drawn as another model, the record
@@ -1132,9 +1181,9 @@ the same in Claire's part and in Chris's.
 
 ### Limits
 
-* On a model without hands the
-  hand pieces are the record's (Rodrigo's gloves on Claire), sized for the record's hands; on one with
-  hands a piece that holds a prop in its own mesh is shown with its hand.
+* On a model without hands the hands are one unarmed pose of the model's character (no gestures), Alfred, Alexia
+  and Rodrigo have none of their own (Chris's or Claire's are used); a piece that holds a prop in its own mesh is the
+  record's and shown with its hand, on any model.
 * Records drawn as the same model share its face mask: the one posed last talks.
 * A line whose bank of mouth shapes the model lacks (or has still) is played with the model's first bank
   (as for the double); expressions keep the model's neutral face, only the eyes follow.

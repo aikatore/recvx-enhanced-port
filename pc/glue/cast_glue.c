@@ -194,7 +194,15 @@ static void hands_hide(BH_PWORK* ep, int who, int chr)
         for (o = 4; o < 32; o++) {   /* (0..3: the player's weapons and head part) */
             O_WRK* op = &sys->obwp[o];
             NJS_CNK_OBJECT* m = op->mlwP && op->mlwP->objP ? &op->mlwP->objP[0] : NULL;
-            if (!(op->flg & 0x1) || !(op->flg & 0x80) || op->lkwkp != (unsigned char*)ep || op->lkono != node || !m || op->mlwP->obj_num != 1) continue;
+            if (!(op->flg & 0x1) || !(op->flg & 0x80) || op->lkwkp != (unsigned char*)ep || op->lkono != node || !m) continue;
+            if (op->mlwP->obj_num != 1) {   /* (a prop in its mesh: kept) */
+                if (getenv("RECVX_CAST_TRACE") && !(hid_logged[o >> 3] & (1 << (o & 7)))) {
+                    hid_logged[o >> 3] |= (unsigned char)(1 << (o & 7));
+                    host_log("cast: room %04d record %d (type %d): its hand piece (object %d, id %d, %d nodes) on node %d kept: a prop in it\n", room_file_now(),
+                             (int)(ep - ene), ep->id, o, op->id, (int)op->mlwP->obj_num, node);
+                }
+                continue;
+            }
             if ((m->evalflags & 0x8) || hidden_n == HIDDEN_MAX) continue;   /* (hidden already: by the game, or a piece shared by two records) */
             m->evalflags |= 0x8;
             hidden[hidden_n++] = m;

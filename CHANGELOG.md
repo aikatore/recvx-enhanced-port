@@ -14,7 +14,10 @@
   per Room counts them separately.
 - **Menus**: the enemy rates, the cutscene cast's model list, Save Now and Open Item Box are now also in the
   Enhanced Settings, and the co-op lobby and co-op window show more of the host's rules.
-- **Custom cutscene cast**: the model list now starts with only the characters that have voice lines checked.
+- **Custom cutscene cast**: the model list now starts with only the characters that have voice lines checked, and
+  the four cutscene models are at its top.
+- **Cutscene cast enemies**: the monsters seen only in cutscenes now have their own Enemy Models setting, with its own
+  list of enemies to choose from, so they become other monsters instead of drawing from the characters' models.
 - **Sharper Outbreak characters**: the import now takes the detailed models of the Outbreak characters for their
   first costumes, with sharper faces, real eyes and fuller hair, in play, in cutscenes and in co-op. Import them
   again to get them; the other costumes have no detailed version and stay as they are.
@@ -32,6 +35,8 @@
 - In Russian, the text of the memory card, save and load screens and of the inventory is no longer red.
 - In the final fight's cutscene and Wesker's other fast attacks, his trail of afterimages now shows the model he is
   replaced with by the cutscene cast or the Character Model.
+- A character swapped in cutscenes no longer shows the original character's hands, such as Wesker's large gloves;
+  the new model has its own.
 
 ## 0.7.5 (2026-11-07)
 

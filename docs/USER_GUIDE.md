@@ -308,6 +308,8 @@ until the right square on the white strip is.
 | Randomize Cutscene Cast | Off | see [Cutscene cast](#cutscene-cast): the story characters as other models in cutscenes |
 | Model Selection | Cutscene Models | where the characters' new looks come from |
 | Choose Models | | with Custom, right under Model Selection: opens the list of models to check (below) |
+| Enemy Models | All Enemies | what the monsters seen only in cutscenes become: All Enemies, Custom (your own list, Choose Enemies), Same as Cast (the Model Selection) or Off (below) |
+| Choose Enemies | | with Enemy Models Custom, right under it: opens the list of enemies to check |
 | Model Assignment | Per Character | Per Character: the same model in every cutscene. Per Cutscene: each cutscene room picks again |
 | Include Imported Models | Off | shown once you have imported models: they can be picked too. In co-op both players need the same ones |
 | Randomize Voice Lines | Off | a character shown as another story character says that character's lines; shown as an enemy, it makes that enemy's sounds (below) |
@@ -331,16 +333,27 @@ voices (unless Randomize Voice Lines is on) and what happens stay as they are.
   original character's). *All Models* also uses the creatures and the zombies
   (all zombie looks count as one choice, so zombies do not crowd out the rest); most of those keep a
   still face. Claire, Chris, Steve and Wesker always come as their cutscene models, so they talk;
-  Claire's second costume has none and keeps a still face. A model with hands of its own shows them instead of the character's gloves. Claire's
+  Claire's second costume has none and keeps a still face. The new model shows its own hands, not the original
+  character's (Wesker's big black gloves are gone when someone else plays his part). Claire's
   and Chris's looks are never given to someone else: how they look is up to "Character Model" (or Claire's and Chris's Model).
   *Custom* uses only the models you check in a list of the *All Models* ones (with SELECT ALL and
   DESELECT ALL): Choose Models right under Model Selection, in F1 under Model Selection, on the BIORAND
   screen (EXTRA OPTIONS, RANDOMIZER) or in the co-op lobby (GAME RULES, RANDOMIZER, CUTSCENE CAST, CHOOSE
-  MODELS). It is one list everywhere, and it is saved. With nothing checked, nobody changes. At first only
+  MODELS). It is one list everywhere, and it is saved. With nothing checked, nobody changes. The four cutscene
+  models (Claire, Chris, Steve, Wesker) come first. At first only
   the characters with voice lines are checked (Claire, Chris, Steve, Wesker, Alfred, Alexia, Rodrigo; not Claire's
   second costume, whose mouth does not move), so
-  with Randomize Voice Lines everyone in a cutscene speaks; check the monsters too if you want them (then
-  the zombies in some cutscenes can become monsters as well).
+  with Randomize Voice Lines everyone in a cutscene speaks; check the monsters too if you want the characters to
+  become monsters.
+* **Enemy Models**: the monsters that appear only in cutscenes (Nosferatu breaking free, the Tyrant Alfred
+  releases, the Hunter Wesker sends out, Steve's father, the zombies around Chris and at the courtyard fence) are
+  swapped too, by their own setting. *All Enemies* (the default) makes them other monsters: Alexia's first form,
+  Nosferatu, the Tyrant, Monster Steve, the Hunter, the Sweeper, the Bandersnatch, the anatomist or another zombie.
+  *Custom* uses only the ones you check in its own list (Choose Enemies, at the same places as Choose Models; all
+  checked at first; none checked keeps them as they are). *Same as Cast* takes them from the Model Selection, as
+  before this setting (a monster can then become a character). *Off* keeps them as they are. A monster never becomes
+  itself, each kind keeps one model with Per Character, and monsters you fight are never swapped. An older settings
+  file with Custom chosen keeps its monster choices here; otherwise it starts with All Enemies.
 * **Model Assignment**: *Per Character*: e.g. Steve is shown as Alfred in every cutscene, and no two
   characters share a model. *Per Cutscene*: each cutscene room picks again. Both come from
   the enemy seed: the same seed gives the same cast.
