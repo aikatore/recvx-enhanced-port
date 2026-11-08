@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### New
+
+- **HUD**: the over-the-shoulder camera shows the equipped weapon with its loaded rounds and spare ammo, and a
+  health gauge that changes colour with the condition and when poisoned. It sits on the side of the camera's
+  shoulder or fixed to one side, and can also be shown with the fixed cameras or turned off.
+
 ### Changes
 
 - **Hunter and Sweeper**: the enemy randomizer now treats the Sweeper as its own enemy type in every mode, so Types

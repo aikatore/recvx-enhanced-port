@@ -33,6 +33,8 @@ typedef struct TpsConfig {
     int pad_aim_sens;             /* right stick while aiming, percent of the above */
     int pad_invert_y;
     int pad_dead_move, pad_dead_look;   /* dead zones of the left / right stick, percent */
+    int hud;                  /* "HUD": 0 Auto (with this camera only), 1 On (also the fixed cameras), 2 Off (hud_glue.c) */
+    int hud_side;             /* "HUD Position": 0 the shoulder's side (fixed cameras: right), 1 left, 2 right */
     /* published by the game thread */
     volatile int cam_active;  /* the third-person camera drew the last frame */
     volatile int aiming;      /* weapon raised (crosshair) */
@@ -44,6 +46,25 @@ typedef struct TpsConfig {
 } TpsConfig;
 
 extern TpsConfig g_tps;
+
+/* The HUD (pc/glue/hud_glue.c, docs/THIRDPERSON.md "HUD"): what it shows, published by the game thread each frame,
+   drawn by the overlay (overlay.cpp hud_draw). A frame's fields may mix with the next one's: harmless. */
+enum { HUD_FINE, HUD_CAUTION, HUD_CAUTION2, HUD_DANGER, HUD_POISON };   /* the status screen's conditions (sub1.c) */
+enum { HUD_NONE = -1, HUD_INF = -2 };                                   /* rounds / spare: not shown, unlimited */
+typedef struct TpsHud {
+    volatile int on;          /* in play, shown by the setting */
+    volatile int left;        /* on the left */
+    volatile float fade;      /* the screen fade over it, 0..1 */
+    volatile int hp, hp_max, cond;
+    volatile int icon_x, icon_y, icon_w, icon_h;   /* its icon cell in the icon picture (hud_icons), pixels; icon_w 0: none */
+    volatile int rounds, rounds_pct;       /* loaded: a count, HUD_NONE / HUD_INF; pct: in percent (the inventory's) */
+    volatile int spare, spare_pct;         /* the reload ammo in the bag, the same */
+} TpsHud;
+extern TpsHud g_hud;
+/* the item icons as one RGBA picture (both textures, one above the other) once the game thread has read them, else
+   NULL; the overlay makes its texture from it once (render thread) */
+const unsigned int* hud_icons(int* w, int* h);
+void hud_frame(void);                         /* game thread, frame hand-off */
 
 /* "Move While Aiming": legs walking under the weapon motion (tps_glue.c tps_legs): the walk motion of the base set,
    its frame (16.16), the hips' turn off the facing (game units), the weight blended in (0: none) */

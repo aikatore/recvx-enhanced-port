@@ -384,6 +384,8 @@ Weapon Shortcuts (on, [Weapon shortcuts](#weapon-shortcuts)), then the bindings.
 | Over-the-shoulder Camera | Off | also F5 |
 | Mouse Camera Style | Behind Character | Behind Character: the mouse turns you. Free Camera: the mouse orbits the camera, W/A/S/D walk relative to it |
 | Lighting and Fog | Smooth | fades when the room's camera cut changes. Original: changes with each camera cut, as the original |
+| HUD | Auto | a small display in a bottom corner: the equipped weapon's picture with the rounds loaded, the spare ammo for it in your inventory beside it, and a health gauge around it in the condition's colour (Fine green, Caution yellow, then orange, Danger red, Poison purple). Auto: with the over-the-shoulder camera only. On: also with the fixed cameras. Hidden in cutscenes, doors, menus and messages |
+| HUD Position | Follow Shoulder | the side of the camera's shoulder (Left Shoulder: left; fixed cameras: right), or always Left or Right |
 | Aim Assist | Off | Off: free aim. On: the game's lock-on (gamepad: aim assist) |
 | Precise Shots | On | free-aim shots hit only where the crosshair meets the body; head hits do more damage, and the blood comes from where the shot hit (the head, an arm, a leg) |
 | Locational Hit Reactions | On | a zombie shot in the head, an arm or a leg flinches there; damage and timing stay the same |
