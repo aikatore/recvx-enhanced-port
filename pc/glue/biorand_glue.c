@@ -26,6 +26,7 @@ void host_log(const char* fmt, ...);
 
 int pc_in_game(void);   /* options_glue.c */
 static void shot_frame(void);
+void spoiler_tick(void);   /* spoiler_menu.c */
 
 /* "Rifle ammo stacks" (GAMEPLAY), always while BioRand is on (biorand_rifle_stack): the stack flag of the rifle and
    assault rifle bullets (item.c itemdata 40, 42) */
@@ -48,6 +49,7 @@ void biorand_frame(void)
         host_log("biorand: Nosferatu is dead: Claire's poison cured (ev_flg 307 cleared)\n");
     }
     shot_frame();
+    spoiler_tick();   /* the --dev spoiler log screen (spoiler_menu.c) */
 }
 
 /* ---------------------------------------------------------------- the save

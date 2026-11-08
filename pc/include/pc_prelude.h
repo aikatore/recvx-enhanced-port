@@ -324,6 +324,12 @@ void  pc_save_mouse(int saving, unsigned int state, int cg, short* cur_x, short*
 int   pc_sysload_native(struct SYSLOAD_SCREEN* p);   /* the system file: 0 memory card, else the screen's result (1 none, 2 read) */
 int   pc_syssave_native(struct SYSSAVE_SCREEN* p);   /* 0 memory card, else the screen's result (1 failed, 2 written) */
 
+/* the --dev spoiler log (pc/glue/spoiler_menu.c, F8): its screen is a pause of the game's own (system.c) */
+int   pc_spoiler_want(void);                /* bhSysCallEvent, the game could pause: F8 asks for it (taken once) */
+int   pc_spoiler_up(void);                  /* the pause is the spoiler screen's */
+int   pc_spoiler_done(void);                /* bhSysCallEvent, paused by it: 1 the screen closed, the pause ends */
+int   pc_spoiler_frame(void);               /* bhSysCallScreenSaver, paused: its input and drawing; 1 it is up (no PAUSE) */
+
 /* mouse in the inventory screens (pc/glue/menu_glue.c) */
 unsigned int menu_pad(unsigned int pad);
 /* the co-op trade screen (pc/glue/trade_glue.c, docs/COOP.md "Trade screen") */

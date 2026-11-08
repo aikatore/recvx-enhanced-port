@@ -63,6 +63,7 @@ int pc_cfg_extra_objects(void) { return g_config.extra_objects; }   /* ... (coop
 /* the game tests a few joints of a model against the screen; with a wide or moving free
    camera that drops models that are partly visible, so third person never culls */
 extern int tps_cam_active;
+void spoiler_key(int k);                /* pc/glue/spoiler_menu.c: 1 F8, 2 Escape */
 int pc_model_cull(void) { return g_config.model_cull && !tps_cam_active; }
 int pc_frame_blend(void) { return g_config.frame_blend < 0 ? !g_config.interpolate : g_config.frame_blend; }
 int pc_battle_unlocked(void) { return g_config.battle_unlocked; }
@@ -179,6 +180,8 @@ void host_pump_events(void)
                 settings_apply_display();
                 settings_save_later();
             }
+            if (g_dev_tools && bind_hotkey(&ev, B_SPOILER)) spoiler_key(1);   /* the spoiler log screen (pc/glue/spoiler_menu.c) */
+            else if (ev.key.scancode == SDL_SCANCODE_ESCAPE && !ev.key.repeat) spoiler_key(2);   /* (it closes; else nothing) */
             if (bind_hotkey(&ev, B_TPS_TOGGLE) && !g_lobby_io.text_on) {
                 g_tps.on = !g_tps.on;
                 settings_save_later();

@@ -1738,8 +1738,10 @@ static void dump_frame(int interp)
     } else if (frame_no % 30 == 0) {
         static uint64_t last_ns;
         uint64_t now = SDL_GetTicksNS();
-        host_log("frame %llu: %u prims, %u flushes, %u rt reloads, %u decodes (%u kpx/30f), %.2f ms/frame avg\n", (unsigned long long)frame_no, stat_prims, stat_flushes,
-                 stat_reloads, stat_decodes, stat_decode_px / 1000, last_ns ? (now - last_ns) / 30.0 / 1e6 : 0.0);
+        unsigned live = 0;
+        for (int i = 0; i < MAX_TEX; i++) live += texcache[i].used != 0;   /* (the decoded textures held: a leak shows as growth) */
+        host_log("frame %llu: %u prims, %u flushes, %u rt reloads, %u decodes (%u kpx/30f), %.2f ms/frame avg, %u + %d cached GL textures\n", (unsigned long long)frame_no,
+                 stat_prims, stat_flushes, stat_reloads, stat_decodes, stat_decode_px / 1000, last_ns ? (now - last_ns) / 30.0 / 1e6 : 0.0, live, ntex_count());
         last_ns = now; stat_reloads = 0; stat_decodes = 0; stat_decode_px = 0;
         for (int r = 0; r < MAX_RT; r++) if (rts[r].used) {
             SDL_Surface* rs = SDL_CreateSurface(rts[r].pw, rts[r].ph, SDL_PIXELFORMAT_ABGR8888);
