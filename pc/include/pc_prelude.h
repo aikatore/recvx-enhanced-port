@@ -316,7 +316,9 @@ struct SELECTFILEINFO;
 struct SAVEFILE;
 void  pc_save_row_note(struct SELECTFILEWINDOW* win, int row, const struct SAVEFILE* f);   /* mcGetPortSelectDirInfo: the row's save, for its location text */
 int   pc_save_text_len(const struct SELECTFILEINFO* p);   /* letters of the row's location text (a placed typewriter's; a room without a save-menu name: message 215), -1 the room's name */
-int   pc_save_text_draw(const struct SELECTFILEINFO* p, float y, unsigned int col, int count);   /* 1: the row's own location text drawn (count letters, 0 all) */
+int   pc_save_text_draw(const struct SELECTFILEINFO* p, float y, unsigned int col, int count);   /* the row's location text, else its room's name, drawn narrower when longer than the window (count letters, 0 all); 1 */
+float pc_mes_fit_x(float x, const unsigned short* dp);   /* bhDispMessage: the memory card screens' x of a message, moved left to end inside the screen */
+void  pc_mes_keep_in(float right);                       /* the right edge pc_mes_fit_x keeps to (0: none) */
 void  pc_save_mouse(int saving, unsigned int state, int cg, short* cur_x, short* cur_y, short* sel,
                     struct SELECTFILEWINDOW* win, struct MEMORYCARDSTATE* mc);   /* both save systems: the mouse as the screen's cursor and pad bits */
 int   pc_sysload_native(struct SYSLOAD_SCREEN* p);   /* the system file: 0 memory card, else the screen's result (1 none, 2 read) */

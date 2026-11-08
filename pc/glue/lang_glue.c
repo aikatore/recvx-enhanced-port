@@ -857,6 +857,44 @@ static const unsigned char* sys_at(const unsigned char* t, uint32_t size, uint32
     return (*len = pc_mes_at(t, size, i)) ? t + pc_rd32(t + 4 + 4 * i) : NULL;
 }
 
+/* Shorter memory card slot labels: MEMORY CARD (463) and slot 1 / 2 (464, 465) at the US places, on the slot screens
+   one above the other (a second line of 463 under 464), in the file list's header side by side (464 at x 420). A
+   translation's longer ones overlapped each other there and ran off the screen; these are the short form of its own
+   words, as the US "MEMORY CARD" / "slot 1". Keyed by the language, the message and a hash of the disc's exact text
+   (FNV-1a of its codes: the port keeps no disc text), so another import's wording stays as it is. */
+static const struct { int lang, idx; uint32_t hash; const char* s; } shorter[] = {
+    { LANG_FR, 463, 0xCD16FA4A, "MEMORY CARD" },
+    { LANG_FR, 464, 0x83CCAE4F, "fente N°1" },
+    { LANG_FR, 465, 0x11C53F14, "fente N°2" },
+    { LANG_ES, 463, 0x856672B0, "MEMORY CARD" },
+    { LANG_ES, 464, 0xB57D73B1, "ranura 1" },
+    { LANG_ES, 465, 0xDB7FEE1A, "ranura 2" },
+    { LANG_TR, 463, 0x3CA1657F, "MEMORY CARD" },
+    { LANG_TR, 464, 0xDAA32889, "yuva 1" },
+    { LANG_TR, 465, 0x00A5A2F2, "yuva 2" },
+};
+static uint32_t mes_hash(const unsigned char* m, uint32_t len)   /* (len codes with the 0xFFFF) */
+{
+    uint32_t h = 0x811C9DC5;
+    for (uint32_t i = 0; i + 2 < 2 * len; i++) h = (h ^ m[i]) * 0x01000193;
+    return h;
+}
+/* message i's shorter text (*len codes), NULL: its own */
+static const unsigned char* sys_shorter(uint32_t i, const unsigned char* m, uint32_t* len)
+{
+    static uint16_t out[sizeof(shorter) / sizeof(shorter[0])][32];
+    for (size_t e = 0; e < sizeof(shorter) / sizeof(shorter[0]); e++) {
+        const char* s = shorter[e].s;
+        int j = 0, c;
+        if (shorter[e].lang != mes_lang || shorter[e].idx != (int)i || !m || mes_hash(m, *len) != shorter[e].hash) continue;
+        while (j < 31 && (c = lang_glyph(mes_lang, &s)) >= 0) out[e][j++] = c ? c : 0xFF01;   /* (0: a space) */
+        out[e][j] = 0xFFFF;
+        *len = j + 1;
+        return (const unsigned char*)out[e];
+    }
+    return NULL;
+}
+
 unsigned int* pc_lang_sys_mes(unsigned int* sp)
 {
     static unsigned char* fixed[2];   /* (and the one before: a message may still show) */
@@ -864,19 +902,24 @@ unsigned int* pc_lang_sys_mes(unsigned int* sp)
     static const unsigned short none = 0xFFFF;
     const unsigned char* t = (const unsigned char*)sp;
     unsigned char* us;
-    uint32_t size = sp[-1], n = 0, nu, us_size, at, bad = 0, len;
+    uint32_t size = sp[-1], n = 0, nu, us_size, at, bad = 0, shorts = 0, len;
     if (mes_lang == LANG_EN) return sp;
     if (size >= 4 && size < (1u << 20) && pc_range_ok(4, 4ull * pc_rd32(t), size)) n = pc_rd32(t);
-    for (uint32_t i = 0; i < n; i++) bad += !pc_mes_at(t, size, i);
+    for (uint32_t i = 0; i < n; i++) {
+        const unsigned char* m = sys_at(t, size, i, &len);
+        bad += !m;
+        shorts += sys_shorter(i, m, &len) != NULL;
+    }
     if (!(us = us_sys(&us_size))) return sp;   /* (nothing to fall back on) */
     nu = pc_range_ok(4, 4ull * pc_rd32(us), us_size) ? pc_rd32(us) : 0;
     if (n < nu) { bad += nu - n; n = nu; }
-    if (!bad) { free(us); return sp; }
+    if (!bad && !shorts) { free(us); return sp; }
     for (int pass = 0; pass < 2; pass++) {   /* its size, then the table */
         at = 4 + 4 * n;
         for (uint32_t i = 0; i < n; i++) {
-            const unsigned char* m = sys_at(t, size, i, &len);
-            if (!m && !(m = sys_at(us, us_size, i, &len))) { m = (const unsigned char*)&none; len = 1; }
+            const unsigned char* m = sys_at(t, size, i, &len), *s = sys_shorter(i, m, &len);
+            if (s) m = s;
+            else if (!m && !(m = sys_at(us, us_size, i, &len))) { m = (const unsigned char*)&none; len = 1; }
             if (pass) { memcpy(fixed[k] + 4 + 4 * i, &at, 4); memcpy(fixed[k] + at, m, 2 * len); }
             at += 2 * len;
         }
@@ -884,7 +927,7 @@ unsigned int* pc_lang_sys_mes(unsigned int* sp)
     }
     memcpy(fixed[k], &n, 4);
     free(us);
-    host_log("lang: %u system messages of %s are not whole (an older import): the English ones; import the language again\n", bad, lang_names[mes_lang]);
+    if (bad) host_log("lang: %u system messages of %s are not whole (an older import): the English ones; import the language again\n", bad, lang_names[mes_lang]);
     t = fixed[k];
     k ^= 1;
     return (unsigned int*)t;

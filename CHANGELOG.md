@@ -36,6 +36,8 @@
 - On the very first start, BIORAND's Include Imported Models now shows its real setting and changes on the first
   press.
 - In Russian, the text of the memory card, save and load screens and of the inventory is no longer red.
+- In French, Spanish and Turkish, the memory card slot labels no longer overlap, and on the save and load screens
+  long translated questions and room names stay on the screen.
 - In the final fight's cutscene and Wesker's other fast attacks, his trail of afterimages now shows the model he is
   replaced with by the cutscene cast or the Character Model.
 - A character swapped in cutscenes no longer shows the original character's hands, such as Wesker's large gloves;
