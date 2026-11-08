@@ -4,6 +4,7 @@
 #include "../src/host/actors.h"
 int coop_insn_len_raw(const unsigned char* p);   /* net/coop_proto.c */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #define CHECK(x) do { if (!(x)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); return 1; } } while (0)
 
@@ -333,6 +334,25 @@ int main(void)
         CHECK(voice_model_chr(3) == 2 && voice_model_chr(7) == 3 && voice_model_chr(13) == 6 && voice_model_chr(ACTOR_PART + 3) == 3 &&
               voice_model_chr(ACTOR_PART + 4) == 0 && voice_model_chr(17) == -1 && voice_model_chr(14) == -1 && voice_model_chr(ACTOR_MODELS) == -1 &&
               voice_model_chr(CAST_ZOMBIES) == -1);   /* Steve, Wesker's event model, Rodrigo, files, the Tyrant, the hazmat man, an import */
+        {   /* "Custom" as it starts: the models with lines checked, and only those are cast */
+            short ps[CAST_CUSTOM_MAX];
+            int md[CAST_CUSTOM_MAX], n, on = 0, seen = 0;
+            cast_off_default();
+            n = cast_custom_list(0, 0, ps, md, CAST_CUSTOM_MAX);
+            for (k = 0; k < n; k++) {
+                int chr = voice_model_chr(md[k]);
+                CHECK(cast_off_at(cast_off, ps[k]) == (chr < 0));
+                if (chr >= 0) { on++; seen |= 1 << chr; }
+                if (getenv("CAST_DEFAULT_LIST")) printf("%s %s\n", chr >= 0 ? "[x]" : "[ ]", cast_entry_name(md[k]));
+            }
+            CHECK(seen == 0x7F && on == cast_custom_count(0, cast_off, 0, NULL) && on < n);   /* (all seven) */
+            for (s = 0; s < 64; s++)
+                for (int c = 2; c < CAST_ALL; c++) {
+                    int m = cast_model((unsigned)s, (unsigned)s, c, 2, 0, cast_off);
+                    CHECK(m < 0 || voice_model_chr(m) >= 0);
+                }
+            memset(cast_off, 0, sizeof(cast_off));
+        }
     }
     {   /* an enemy model's sounds in place of a line (voices.c voice_creature, voice_creature_seq) */
         unsigned char pr[64], pick[16], pick2[16];

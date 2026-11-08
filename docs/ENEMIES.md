@@ -525,7 +525,7 @@ count for both. Code: `pc/glue/enemyopt_glue.c`, one decomp hook at the end of
 | Custom's rates (ENHANCED SETTINGS GAMEPLAY's Enemy Rates, the BIORAND screen and lobby RANDOMIZER pages, F1) | `enemy_rates` line: `id:rate` per kind by type id (`5.0` Hunter, `5.1` Sweeper: type and model; a plain `5:rate`, as saved before the two were split, sets both), `vID:rate` per variant | 0 (Off)..10 | `RECVX_ENEMY_RATES` (same text) |
 | "Types per Room" (GAMEPLAY) | `enemy_types` | **0 = No Limit**, 1..8 | `RECVX_ENEMY_TYPES` |
 | "Randomize Event Enemies" (GAMEPLAY) | `enemy_random_events` | 0/**1** | `RECVX_ENEMY_EVENTS` |
-| "Randomize Cutscene Cast" and its page (GAMEPLAY, CUTSCENE CAST) | `cast_random`, `cast_models`, `cast_assign`, `cast_imports`, `cast_custom_off` lines | the story characters drawn as other models in cutscenes, visual only (no enemy is touched): [ACTORS.md](ACTORS.md) "Cutscene cast" | `RECVX_CAST` |
+| "Randomize Cutscene Cast" and its page (GAMEPLAY, CUTSCENE CAST) | `cast_random`, `cast_models`, `cast_assign`, `cast_imports`, `cast_custom_off` lines, `cast_custom_set` | the story characters drawn as other models in cutscenes, visual only (no enemy is touched): [ACTORS.md](ACTORS.md) "Cutscene cast" | `RECVX_CAST` |
 
 Every option first reads the room script once per load (`scan_script`) and marks records that an
 event drives (`LoadWork`, motion pauses, links, positioning, zombie/face/look/render ops), that the

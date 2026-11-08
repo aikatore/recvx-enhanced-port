@@ -308,6 +308,13 @@ void cast_off_write(int appear, void (*line)(const char* key, void* ud), void* u
         if (cast_off_at(appear ? cast_appear_off : cast_off, j)) line(cast_entry_key(j < nb ? b[j] : ACTOR_MODELS + j - nb, k, sizeof(k)), ud);
 }
 
+void cast_off_default(void)
+{
+    int b[BUILTIN_MAX], nb = builtins(b, 0), j;
+    memset(cast_off, 0, sizeof(cast_off));
+    for (j = 0; j < nb + listed(); j++) cast_off_put(cast_off, j, voice_model_chr(j < nb ? b[j] : ACTOR_MODELS + j - nb) < 0);
+}
+
 int cast_custom_count(int appear, const unsigned char* off, int imports, int* total)
 {
     int b[BUILTIN_MAX], n = builtins(b, appear) + imports_n(imports), j, on = 0;

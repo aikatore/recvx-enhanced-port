@@ -9,6 +9,7 @@ set(NOT_IN_TABLE
     tps_key      # CONTROLS bindings, "Third person on/off" (bindings.c, its first keyboard slot)
     biorand_appear_models    # BIORAND screen, RANDOMIZER page: Randomize Character Model's Model Selection (biorand_menu.c K_APPEAR)
     biorand_appear_imports   # ... its Include Imported Models
+    cast_custom_set    # ini only: the cutscene cast's Custom list was saved (config.c cast_default), never edited
     borderless_extra   # ini only: the Windows borderless window's overhang past the monitor (settings.c), a driver workaround
 )
 file(READ "${SRC}/src/host/config.c" config)

@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <string.h>
 
+static int cast_custom_set;   /* 1: the cutscene cast's "Custom" list is its cast_custom_off lines (0: cast_default) */
 static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "window_w", &g_config.window_w, 320, 16384 },
     { "window_h", &g_config.window_h, 240, 16384 },
@@ -110,6 +111,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "cast_models", &g_enemy_opts.cast_all, 0, 2 },     /* characters: 0 cutscene models, 1 all models, 2 custom (cast_custom_off lines) */
     { "cast_assign", &g_enemy_opts.cast_assign, 0, 1 },  /* 0 fixed per character, 1 random per cutscene */
     { "cast_imports", &g_enemy_opts.cast_imports, 0, 1 },
+    { "cast_custom_set", &cast_custom_set, 0, 1 },
     { "voice_random", &g_enemy_opts.voices, 0, 1 },              /* "Randomize Voice Lines" (cast.h) */
     { "voice_mouths", &g_voice_mouths, 0, 1 },                   /* its "Talking Mouths" (cast.h; each screen's own) */
     { "biorand_appear_models", &g_biorand_appear_pool, 0, 2 },     /* "Randomize Character Model"'s Model Selection (biorand_opts.h; appear_custom_off lines) */
@@ -150,6 +152,15 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
 
 static void default_name(void);
 static int player_id(void);
+
+/* the cutscene cast's "Custom" list as it starts (cast.h cast_off_default: the models with voice lines checked), once: in
+   a file without cast_custom_set (a first start, or a file from before it) with no cast_custom_off line (had: it has one,
+   that list is kept) and "Custom" not chosen (it was shown all checked: that is kept). Every save writes it set. */
+static void cast_default(int had)
+{
+    if (!cast_custom_set && !had && g_enemy_opts.cast_all != 2) cast_off_default();
+    cast_custom_set = 1;
+}
 
 /* hex text <-> bytes (the player id and secret) */
 static int unhex(const char* s, unsigned char* out, int n)
@@ -195,12 +206,13 @@ void config_load(void)
 {
     char p[1100], line[1100], k[64], val[128];
     int v;
-    int combined_seen = 0;
+    int combined_seen = 0, had_off = 0;
     FILE* f;
     path(p, sizeof(p));
     if (!(f = pc_fopen(p, "r"))) {   /* first start: the defaults (player_id saves them) */
         import_registry_load();
         g_biorand_appear_imports = g_enemy_opts.cast_imports;   /* (as below: absent, the cast's) */
+        cast_default(0);
         default_name();
         player_id();
         return;
@@ -233,6 +245,7 @@ void config_load(void)
     rewind(f);   /* the cutscene cast's and "Randomize Character Model"'s "Custom": a line per model not checked, by its key (cast.h; an unknown one is ignored) */
     while (fgets(line, sizeof(line), f)) {
         int appear = !strncmp(line, "appear_custom_off =", 19), at = appear ? 19 : 17;
+        had_off |= !strncmp(line, "cast_custom_off =", 17);
         if (appear || !strncmp(line, "cast_custom_off =", 17)) {
             char* v = line + at + strspn(line + at, " ");
             v[strcspn(v, "\r\n")] = 0;
@@ -240,6 +253,7 @@ void config_load(void)
         }
     }
     fclose(f);
+    cast_default(had_off);
     /* a file from before Combined (no fixed_cam_version line): Modern, the default then and always
        written, becomes Combined; Classic, never the default since Modern, stays */
     if (!combined_seen && g_modern_on == 1) g_modern_on = MODERN_COMBINED;

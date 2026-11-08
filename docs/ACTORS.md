@@ -1012,6 +1012,16 @@ BIORAND screen, as are its other rows.
   unchecked entry, by key, not position: `cast_custom_off = Tyrant` (the list's name; the zombies' entry
   `Zombies`), an import by its folder, `cast_custom_off = import:HN01` (names repeat). Read after the imports are
   listed (`config_load`); a key no entry has (an import deleted since) is ignored and dropped at the next save.
+* **As it starts**: only the models with voice lines checked (`cast_off_default`: each entry whose
+  `voice_model_chr` is a story character, i.e. every look of Claire, Chris, Steve, Wesker, Alfred, Alexia and
+  Rodrigo: 8 of the 17 built-in entries), so the cast talks with "Randomize Voice Lines"; the creatures, the
+  zombies, Alexia's first form, Monster Steve and the imports listed then start unchecked (a model imported later
+  starts checked, as always). The rule is the static mapping, not the voice catalogue (that is read from the room
+  files later; every one of the seven has lines on every disc). Applied once, by `config_load`, to a `recvx.ini`
+  without `cast_custom_set` (a first start, or a file from before it) that has no `cast_custom_off` line and not
+  *Custom* chosen; every save then writes `cast_custom_set = 1`, so a list later made all checked stays so. A file
+  with `cast_custom_off` lines keeps its list; one with *Custom* chosen and no lines keeps everything checked (what
+  it showed). With this list the scene zombies find no checked creature and stay zombies ("Scene zombies").
 * **Nothing checked**: nothing to swap; every character keeps its own look (`cast_model` returns -1; the list
   says "0/17" in amber). One checked: every character but that model's own is drawn as it (a character whose
   only choices are its own looks stays itself, e.g. Steve with only Steve's cutscene model checked).

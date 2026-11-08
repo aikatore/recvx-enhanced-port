@@ -62,6 +62,10 @@ const char* cast_entry_key(int m, char* buf, int n);
    (ignored); every unchecked one's line */
 int  cast_off_key(int appear, const char* key);
 void cast_off_write(int appear, void (*line)(const char* key, void* ud), void* ud);
+/* the cast's list as it starts (recvx.ini without cast_custom_set: config.c): only the models with voice lines checked
+   (voice_model_chr: every look of Claire, Chris, Steve, Wesker, Alfred, Alexia and Rodrigo); the zombies, the creatures,
+   the characters without lines and the imports listed now unchecked */
+void cast_off_default(void);
 /* the checked ones of list appear (imports: as cast_pool's) and its length */
 int  cast_custom_count(int appear, const unsigned char* off, int imports, int* total);
 /* the zombie look (catalogue entry) character c gets when it draws the zombie entry: from (seed, scene, c) */

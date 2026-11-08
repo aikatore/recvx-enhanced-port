@@ -8,6 +8,7 @@
   per Room counts them separately.
 - **Menus**: the enemy rates, the cutscene cast's model list, Save Now and Open Item Box are now also in the
   Enhanced Settings, and the co-op lobby and co-op window show more of the host's rules.
+- **Custom cutscene cast**: the model list now starts with only the characters that have voice lines checked.
 
 ### Fixes
 
