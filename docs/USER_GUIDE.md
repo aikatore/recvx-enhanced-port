@@ -337,7 +337,8 @@ voices (unless Randomize Voice Lines is on) and what happens stay as they are.
   DESELECT ALL): Choose Models right under Model Selection, in F1 under Model Selection, on the BIORAND
   screen (EXTRA OPTIONS, RANDOMIZER) or in the co-op lobby (GAME RULES, RANDOMIZER, CUTSCENE CAST, CHOOSE
   MODELS). It is one list everywhere, and it is saved. With nothing checked, nobody changes. At first only
-  the characters with voice lines are checked (Claire, Chris, Steve, Wesker, Alfred, Alexia, Rodrigo), so
+  the characters with voice lines are checked (Claire, Chris, Steve, Wesker, Alfred, Alexia, Rodrigo; not Claire's
+  second costume, whose mouth does not move), so
   with Randomize Voice Lines everyone in a cutscene speaks; check the monsters too if you want them (then
   the zombies in some cutscenes can become monsters as well).
 * **Model Assignment**: *Per Character*: e.g. Steve is shown as Alfred in every cutscene, and no two

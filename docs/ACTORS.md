@@ -1013,8 +1013,9 @@ BIORAND screen, as are its other rows.
   `Zombies`), an import by its folder, `cast_custom_off = import:HN01` (names repeat). Read after the imports are
   listed (`config_load`); a key no entry has (an import deleted since) is ignored and dropped at the next save.
 * **As it starts**: only the models with voice lines checked (`cast_off_default`: each entry whose
-  `voice_model_chr` is a story character, i.e. every look of Claire, Chris, Steve, Wesker, Alfred, Alexia and
-  Rodrigo: 8 of the 17 built-in entries), so the cast talks with "Randomize Voice Lines"; the creatures, the
+  `voice_model_chr` is a story character and that is not a player file, i.e. the looks of Claire, Chris, Steve,
+  Wesker, Alfred, Alexia and Rodrigo with a moving mouth: 7 of the 17 built-in entries; Claire's second costume, a
+  player file without face motion, starts unchecked), so the cast talks with "Randomize Voice Lines"; the creatures, the
   zombies, Alexia's first form, Monster Steve and the imports listed then start unchecked (a model imported later
   starts checked, as always). The rule is the static mapping, not the voice catalogue (that is read from the room
   files later; every one of the seven has lines on every disc). Applied once, by `config_load`, to a `recvx.ini`

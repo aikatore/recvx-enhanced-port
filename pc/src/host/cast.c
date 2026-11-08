@@ -312,7 +312,10 @@ void cast_off_default(void)
 {
     int b[BUILTIN_MAX], nb = builtins(b, 0), j;
     memset(cast_off, 0, sizeof(cast_off));
-    for (j = 0; j < nb + listed(); j++) cast_off_put(cast_off, j, voice_model_chr(j < nb ? b[j] : ACTOR_MODELS + j - nb) < 0);
+    for (j = 0; j < nb + listed(); j++) {   /* voiced and with a moving mouth: not a player file (Claire's second costume has no face motion) */
+        int m = j < nb ? b[j] : ACTOR_MODELS + j - nb;
+        cast_off_put(cast_off, j, voice_model_chr(m) < 0 || m >= ACTOR_PART);
+    }
 }
 
 int cast_custom_count(int appear, const unsigned char* off, int imports, int* total)
