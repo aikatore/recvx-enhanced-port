@@ -1343,6 +1343,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_TEST_EVENT="f:level:ev,..."` | start the room script's event ev at that task level at game frame f, as its `EvtOn` (a cutscene without walking to its trigger; entries of one frame start together) |
 | `RECVX_ENEMY_KILL=n[:r\|:x]` | from n game frames into each room, the room's enemies (`:r` only its records, `:x` only its extra enemies) take heavy hits until they die; logs the living ones and deaths ([ENEMIES.md](ENEMIES.md#tools)) |
 | `RECVX_HEADSHOT=n` | n game frames into each room, every walking zombie takes one head hit that bursts its head; logs its head state ([ENEMIES.md](ENEMIES.md#head-blow-offs)) |
+| `RECVX_ENEMY_FLOORS=n` | n game frames into each room, logs every enemy with its floor and the ground under it ([ENEMIES.md](ENEMIES.md#tools)) |
 | `RECVX_ENEMY_TRACE=dist` | one line per step of every enemy within dist units of a player |
 | `RECVX_KNIFE_TRACE=1`, `RECVX_KNIFE_DROP=1` | quick knife: log its state; drawing the knife empties the previous weapon's slot |
 | `RECVX_POSE_TRACE=file` | one line per game frame: the player's state (modes, weapon, motion, frame, `at_flg`, `ay`, `wax`) and every node of the body as drawn ("Character Model" included) in its base matrix's frame; twitches show as nodes moving back and forth; the co-op partner's body as drawn goes to `file.partner` (`pc/glue/pose_trace.c`) |
