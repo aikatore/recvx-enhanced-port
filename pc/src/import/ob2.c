@@ -289,8 +289,9 @@ static int eye_overlay(Rd* r, uint32_t vert, uint32_t nv, uint32_t jnt, uint32_t
 }
 
 /* append mesh `me` of the AMO to the model (weights to its joints; a mesh without weights hangs
-   on the node that names it, its points in that node's frame) */
-static int read_mesh(Rd* r, const Mesh* me, const Amo* a, int mi, const int* meshnode, ImpModel* m, float (*W)[16])
+   on the node that names it, its points in that node's frame). An add-on pair's mesh (attach >= 0):
+   placed by the add-on's own nodes (nn of them, world matrices W), weighted to the model's node attach */
+static int read_mesh(Rd* r, const Mesh* me, const Amo* a, int mi, const int* meshnode, int nn, ImpModel* m, float (*W)[16], int attach)
 {
     uint32_t cnt = u32(r, me->at + 4), p = me->at + 12;
     uint32_t vert = 0, nrm = 0, uv = 0, wgt = 0, jnt = 0, prims = 0, matref = 0, stripmat = 0, nv = 0, nmr = 0, nsm = 0, nj = 0;
@@ -308,10 +309,11 @@ static int read_mesh(Rd* r, const Mesh* me, const Amo* a, int mi, const int* mes
         p += sz;
     }
     if (!vert || !nv || !prims || nv > 65535 || m->nv > NBD_VERTS - (int)nv || r->bad) return 0;
-    if (wgt && jnt && nv < 40 && eye_overlay(r, vert, nv, jnt, nj, m)) { m->eyes_left_out++; return 1; }
+    if (attach < 0 && wgt && jnt && nv < 40 && eye_overlay(r, vert, nv, jnt, nj, m)) { m->eyes_left_out++; return 1; }
     int base = m->nv, rigid = -1;
     if (!wgt || !jnt)
-        for (int i = 0; i < m->nn; i++) if (meshnode[i] == mi) rigid = i;
+        for (int i = 0; i < nn; i++) if (meshnode[i] == mi) rigid = i;
+    if (attach >= 0 && rigid < 0) return 0;   /* (an add-on's parts are rigid) */
     void* q;
     if (!(q = realloc(m->pos, sizeof(*m->pos) * (base + nv)))) return 0;
     m->pos = q;
@@ -339,7 +341,7 @@ static int read_mesh(Rd* r, const Mesh* me, const Amo* a, int mi, const int* mes
                 P[k] = w[k] * x + w[4 + k] * y + w[8 + k] * z + w[12 + k];
                 N[k] = w[k] * nx + w[4 + k] * ny + w[8 + k] * nz;
             }
-            m->jnt[base + i][0] = (unsigned char)rigid;
+            m->jnt[base + i][0] = (unsigned char)(attach >= 0 ? attach : rigid);
             m->wgt[base + i][0] = 1;
         } else if (wgt) {   /* (joint index into the mesh's joint list, weight in percent); the 4 largest */
             uint32_t k = u32(r, wp);
@@ -386,17 +388,38 @@ static int read_mesh(Rd* r, const Mesh* me, const Amo* a, int mi, const int* mes
     return !r->bad;
 }
 
-/* model + textures of an NBD file's first AMO/AHI pair */
-int ob2_read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int en)
+/* The add-on pair (a second AMO/AHI) of most high-detail player models: rigid hair locks around the
+   head, each mesh on a node of its own that places it in model space. Read onto the model's node `attach`
+   (the head); returns the meshes read */
+static int read_addon(Rd* r, uint32_t amo, uint32_t ahi, ImpModel* m, int attach)
+{
+    ImpModel* h = calloc(1, sizeof(*h));
+    int meshnode[IMP_NODES], meshes = 0;
+    float (*W)[16] = NULL;
+    Amo a;
+    for (int i = 0; i < IMP_NODES; i++) meshnode[i] = -1;
+    if (h && read_ahi(r, ahi, h, meshnode) && read_amo(r, amo, &a) && (W = calloc(h->nn, sizeof(*W)))) {
+        imp_world(h, W);
+        for (int i = 0; i < a.nmesh; i++) meshes += read_mesh(r, &a.mesh[i], &a, i, meshnode, h->nn, m, W, attach);
+    }
+    r->bad = 0;   /* (a damaged add-on leaves the model as read) */
+    free(W);
+    free(h);
+    return meshes;
+}
+
+/* model + textures of an NBD file's first AMO/AHI pair; addon >= 0: also a second pair's rigid parts, on
+   that node (read_addon) */
+static int read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int en, int addon)
 {
     Rd r = { d, n, 0 };
     memset(m, 0, sizeof(*m));
     uint32_t hs = u32(&r, 4);   /* the table: 16 bytes per entry, ends where the textures start; all of it in the file */
     if (r.bad || u32(&r, 0) != 0x00584554u || hs < 48 || hs > 256 || hs > n) { snprintf(err, en, "Unsupported model format."); return 0; }   /* "TEX\0" */
-    uint32_t amo = 0, ahi = 0;
+    uint32_t amo = 0, ahi = 0, amo2 = 0, ahi2 = 0;
     for (uint32_t e = 16; e + 16 <= hs; e += 16) {
-        if (u32(&r, e) == 0x004F4D41u && !amo) amo = u32(&r, e + 4);   /* "AMO\0" */
-        if (u32(&r, e) == 0x00494841u && !ahi) ahi = u32(&r, e + 4);   /* "AHI\0" */
+        if (u32(&r, e) == 0x004F4D41u) { if (!amo) amo = u32(&r, e + 4); else if (!amo2) amo2 = u32(&r, e + 4); }   /* "AMO\0" */
+        if (u32(&r, e) == 0x00494841u) { if (!ahi) ahi = u32(&r, e + 4); else if (!ahi2) ahi2 = u32(&r, e + 4); }   /* "AHI\0" */
     }
     if (!amo || !ahi) { snprintf(err, en, "Model data is missing."); return 0; }
     /* textures: count entries of u32 size + SLD data */
@@ -423,12 +446,15 @@ int ob2_read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int
     if (!(W = calloc(m->nn, sizeof(*W)))) { imp_free(m); return 0; }
     imp_world(m, W);
     int meshes = 0;
-    for (int i = 0; i < a.nmesh; i++) meshes += read_mesh(&r, &a.mesh[i], &a, i, meshnode, m, W);
+    for (int i = 0; i < a.nmesh; i++) meshes += read_mesh(&r, &a.mesh[i], &a, i, meshnode, m->nn, m, W, -1);
     free(W);
     if (!meshes || !m->nv) { snprintf(err, en, "No usable model found."); imp_free(m); return 0; }
+    if (addon >= 0 && addon < m->nn && amo2 && ahi2) meshes += read_addon(&r, amo2, ahi2, m, addon);
     m->nmesh = meshes;
     return 1;
 }
+
+int ob2_read_nbd(const unsigned char* d, uint32_t n, ImpModel* m, char* err, int en) { return read_nbd(d, n, m, err, en, -1); }
 
 /* ---------------------------------------------------------------- the extraction */
 /* IMPORT_GROUP_* of a disc file name, -1: not a character model */
@@ -531,6 +557,84 @@ static int human_skeleton(const ImpModel* m)
            m->node[17].parent == 16 && m->node[21].parent == 20;
 }
 
+/* The high-detail player models (HP<c>.nbd, one per character: its first costume; docs "Round 8"): the
+   human skeleton's body (0..21), then five-jointed fingers (22..55), and a face of its own under the head:
+   56..61 (59 the jaw, 60 the lower lip, 61 the skin), 62..66 (lower lids, brows), 67..69 (the eyeballs,
+   a real mesh: their texture has the irises, the face's has none), 70..72 (71 / 72 the upper lids, at the
+   eyes' centres). */
+static int hd_rig(const ImpModel* m)
+{
+    static const signed char par[][2] = { { 56, 21 }, { 59, 56 }, { 60, 56 }, { 61, 56 }, { 67, 21 }, { 68, 67 }, { 69, 67 }, { 70, 21 }, { 71, 70 }, { 72, 70 } };
+    if (m->nn < 73 || !human_skeleton(m)) return 0;
+    for (size_t i = 0; i < sizeof(par) / sizeof(par[0]); i++)
+        if (m->node[par[i][0]].parent != par[i][1]) return 0;
+    return 1;
+}
+
+/* vertex v's weight k set to w (at most 1), its other weights scaled to share what is left as they did */
+static void set_weight(ImpModel* m, int v, int k, float w)
+{
+    float rest = 0;
+    w = fminf(w, 1.0f);
+    for (int j = 0; j < 4; j++) if (j != k) rest += m->wgt[v][j];
+    for (int j = 0; j < 4; j++) if (j != k && rest > 0) m->wgt[v][j] *= (1 - w) / rest;
+    m->wgt[v][k] = w;
+}
+
+/* Its face as the player models' (keep_body, lid_falloff; imp_face moves them): the upper lids 71 / 72
+   and the jaw 59. Outbreak's weights on both are partial (its own animations move them further than
+   they look), so moved as the player models' they barely did:
+   - The jaw holds the chin and the lower teeth half (the skin the other half) and the lower lip with the
+     lip bone 60: turned alone it opened the lips half way. It takes twice its share plus the lip's.
+   - A lid's margin over the middle of the eye is on its bone by 0.4..1 (David 0.43): the lid's weights
+     are scaled so that the margin there is on it fully. It closes from there down to the bottom of the eye's
+     opening: 0.4 of the eyeball's radius below its centre (the lower lid's margin on the eight models).
+   Their skin textures have alpha 250..254 in places: taken as see-through, the face, neck and hair were
+   drawn blended, with dark specks and the hair locks as pale patches. Below 240 counts (see_cut). */
+static void hd_face(ImpModel* m)
+{
+    for (int v = 0; v < m->nv; v++) {
+        float j = 0;
+        int s = -1;
+        for (int k = 0; k < 4; k++) {
+            int n = m->jnt[v][k];
+            if (n == 59 || n == 60) { j += m->wgt[v][k] * (n == 59 ? 2 : 1); if (s < 0 || n == 59) s = k; }
+        }
+        if (s < 0) continue;
+        for (int k = 0; k < 4; k++) if (k != s && (m->jnt[v][k] == 59 || m->jnt[v][k] == 60)) m->wgt[v][k] = 0;
+        m->jnt[v][s] = 59;
+        set_weight(m, v, s, j);
+    }
+    int left = m->node[71].t[0] > 0 ? 71 : 72;   /* (eye 0 the left: Outbreak's +x) */
+    for (int s = 0; s < 2; s++) {
+        int lid = s ? 143 - left : left;
+        float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f, wc = 0, ym = 1e9f;
+        for (int v = 0; v < m->nv; v++)
+            if ((m->jnt[v][0] == 68 || m->jnt[v][0] == 69) && m->wgt[v][0] >= 0.5f && (m->pos[v][0] > 0) == !s) {
+                const float* p = m->pos[v];
+                x0 = fminf(x0, p[0]); x1 = fmaxf(x1, p[0]); y0 = fminf(y0, p[1]); y1 = fmaxf(y1, p[1]);
+            }
+        float cx = (x0 + x1) * 0.5f, hw = (x1 - x0) * 0.5f, bottom = (y0 + y1) * 0.5f - 0.4f * (y1 - y0) * 0.5f;
+        for (int pass = 0; pass < 2 && y1 > y0; pass++)   /* the margin over the middle: the lowest of its most weighted */
+            for (int v = 0; v < m->nv; v++)
+                for (int k = 0; k < 4; k++)
+                    if (m->jnt[v][k] == lid && fabsf(m->pos[v][0] - cx) < 0.35f * hw) {
+                        if (!pass) wc = fmaxf(wc, m->wgt[v][k]);
+                        else if (m->wgt[v][k] >= 0.95f * wc) ym = fminf(ym, m->pos[v][1]);
+                    }
+        if (wc <= 0 || ym <= bottom) continue;   /* (no eyeball or no lid over it: no blink) */
+        for (int v = 0; v < m->nv; v++)
+            for (int k = 0; k < 4; k++)
+                if (m->jnt[v][k] == lid) set_weight(m, v, k, m->wgt[v][k] / wc);
+        m->lid_travel[s] = ym - bottom;
+        m->node[lid].face = s ? IMP_FACE_LID_R : IMP_FACE_LID_L;
+        m->node[lid].keep = 1;
+    }
+    m->node[59].face = IMP_FACE_JAW;
+    m->node[59].keep = 1;
+    m->see_cut = 240;
+}
+
 static void ob2_fit(const char* id, const ImpModel* m, ImpFit* fit)
 {
     float in = 0, down = 0, (*W)[16];
@@ -609,9 +713,25 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
             }
         }
         snprintf(pg->phase, sizeof(pg->phase), "%s %s (%s)", it->name, it->variant, e->name);
-        unsigned char* data = e->size > 0 && e->size < (64u << 20) ? malloc(e->size) : NULL;
-        if (!data || !imp_read_at(f, e->off, data, e->size)) snprintf(err, sizeof(err), "Cannot read %s from the disc.", e->name);
-        else if (ob2_read_nbd(data, e->size, &m, err, sizeof(err))) {
+        /* a playable character's first costume is converted from its high-detail model (HP<c>, "Round 8") when
+           there is one that reads as such (the disc has two HP03: the other, among the NPCs, is not on that rig) */
+        int hd = -1;
+        if (id[0] == 'P' && !strcmp(id + 3, "_00"))
+            for (int k = nrom - 1; k >= 0 && hd < 0; k--) {
+                char want[16];
+                snprintf(want, sizeof(want), "HP%.2s.nbd", id + 1);
+                if (SDL_strcasecmp(rom[k].name, want) || !rom[k].size || rom[k].size >= (64u << 20)) continue;
+                unsigned char* h = malloc(rom[k].size);
+                char e2[160];
+                if (h && imp_read_at(f, rom[k].off, h, rom[k].size) && read_nbd(h, rom[k].size, &m, e2, sizeof(e2), 21)) {
+                    if (hd_rig(&m)) hd = k;
+                    else imp_free(&m);
+                }
+                free(h);
+            }
+        unsigned char* data = hd < 0 && e->size > 0 && e->size < (64u << 20) ? malloc(e->size) : NULL;
+        if (hd < 0 && (!data || !imp_read_at(f, e->off, data, e->size))) snprintf(err, sizeof(err), "Cannot read %s from the disc.", e->name);
+        else if (hd >= 0 || ob2_read_nbd(data, e->size, &m, err, sizeof(err))) {
             it->nodes = m.nn; it->verts = m.nv; it->tris = imp_tris(&m); it->textures = m.ntex;
             it->meshes = m.nmesh;
             snprintf(dir, sizeof(dir), "%s/%s", outdir, id);
@@ -634,13 +754,15 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
                 char e2[160] = "";
                 ImpFit fit;
                 keep_body(&m);
-                lid_falloff(&m);
+                if (hd >= 0) hd_face(&m);
+                else lid_falloff(&m);
                 ob2_fit(id, &m, &fit);
                 snprintf(path, sizeof(path), "%s/%s.cvxm", dir, id);
                 if (imp_write_cvxm(&m, path, 0.1f, 0x00F00000u + 16u * (unsigned)list[li], &fit, e2, sizeof(e2))) it->player = 1;
                 else snprintf(err, sizeof(err), "Not playable: %s", e2);
             }
             if (m.eyes_left_out && !err[0]) snprintf(err, sizeof(err), "Eye overlay removed to keep the eyes visible.");
+            if (hd >= 0 && !err[0]) snprintf(err, sizeof(err), "High-detail model (%s).", rom[hd].name);
             imp_free(&m);
         }
         free(data);

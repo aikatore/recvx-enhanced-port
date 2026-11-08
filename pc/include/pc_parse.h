@@ -54,6 +54,8 @@ typedef struct PcCvxm {
     uint32_t vtx;       /* file offset of the vertex chunk's first vertex (imp_skin writes nv x 32 bytes there) */
     uint32_t skin;      /* of the skin array (nv entries) */
     uint32_t nv;
+    uint32_t end;       /* where what the game reads ends (the texture block's end mark); the skin, read by imp_skin
+                           only, lies after it in the files of impmodel.c */
 } PcCvxm;
 #define PC_CVXM_NODES 64          /* objects (impmodel.c CV_MAX; the rig's NODES) */
 #define PC_CVXM_TEX 16            /* textures (IMP_TEX) */

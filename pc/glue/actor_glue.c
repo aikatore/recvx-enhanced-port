@@ -88,7 +88,8 @@ typedef struct Disguise {
     NJS_TEXLIST* tex[16];               /* texlists we uploaded */
     int tex_n;
     Rig rig;                            /* rig.ok: posed from the source's skeleton */
-    const CvxmSkin* skin;               /* an imported model (.cvxm): its vertices skinned every pose (imp_skin) */
+    const CvxmSkin* skin;               /* an imported model (.cvxm): its vertices skinned every pose (imp_skin; in file) */
+    unsigned char* file;                /* the .cvxm as read (host memory, outside the address window; load_import_model) */
     float* vtx;                         /* its vertex chunk's data (position, normal per vertex) */
     int nv;
     float hand_dir[3];                  /* its left hand: wrist to fingertips at rest (the two-handed grip) */
@@ -120,7 +121,7 @@ static struct {
    one buffer, each taking what its model needs (no motions: a cast model is always posed from its source), given back
    when all of them are unloaded (the room's end). All of it inside the PS2 address window (ps2/memory.c). */
 static unsigned char keep_big[ACTOR_CAST][KEEP_SIZE] __attribute__((aligned(64)));
-#define CAST_MEM (3 << 20)              /* the largest models: imported ones (1.1..1.35 MB); the cast's own 0.1..0.2 MB */
+#define CAST_MEM (3 << 20)              /* the largest models: imported ones (0.35..1.07 MB without their skin); the cast's own 0.1..0.2 MB */
 static unsigned char cast_mem[CAST_MEM] __attribute__((aligned(64)));
 static int cast_used;
 
@@ -735,6 +736,8 @@ static void unload(Disguise* d)
     d->rig.ok = 0;
     d->skin = NULL;
     d->vtx = NULL;
+    free(d->file);
+    d->file = NULL;
 }
 
 static int free_entries(void)
@@ -1176,27 +1179,38 @@ _Static_assert(sizeof(CvxmSkin) == 44, "pc_cvxm_check's skin entry");
 static int load_import_model(Disguise* d, int k)
 {
     const char* path = actor_import_file[k];
-    unsigned char own[16] = { 0 };
+    unsigned char own[16] = { 0 }, *file = NULL;
     FILE* f = pc_fopen(path, "rb");
-    int size = 0, texn;
+    int size = 0, texn, keep;
     PcCvxm cv;
     char why[96];
     if (f && !fseek(f, 0, SEEK_END)) size = (int)ftell(f);
-    if (!f || size < 64 || size > KEEP_SIZE || !keep_fit(d, size) || fseek(f, 0, SEEK_SET)) {
+    if (!f || size < 64 || size > 4 * KEEP_SIZE || fseek(f, 0, SEEK_SET) || !(file = malloc(size)) || fread(file, 1, size, f) != (size_t)size) {
         if (f) fclose(f);
+        free(file);
         host_log("actor: %s cannot be read (%d bytes)\n", path, size);
         return 0;
     }
-    unload(d);   /* (the buffer is the shown model's until here) */
-    if (fread(d->keep, 1, size, f) != (size_t)size) size = 0;
     fclose(f);
-    if (!size) { host_log("actor: %s cannot be read\n", path); return 0; }
     /* everything realize, the texture upload, the draw and imp_skin use (pc_parse.h); imp_skin writes
        the checked vertex range only */
-    if (!pc_cvxm_check(d->keep, (uint32_t)size, &cv, why, sizeof(why))) {
+    if (!pc_cvxm_check(file, (uint32_t)size, &cv, why, sizeof(why))) {
         host_log("actor: %s is not usable: %s\n", path, why);
+        free(file);
         return 0;
     }
+    /* What the game reads (the model, its textures) goes into the model buffer, inside the PS2 address window;
+       the skin, which only imp_skin reads, stays in the file's copy outside it (44 bytes a vertex: 0.25..0.3 MB of
+       a high-detail model's 1..1.13, so that three fit the cast's buffer) */
+    keep = cv.skin >= cv.end && cv.vtx < cv.end ? (int)cv.end : size;
+    if (keep > KEEP_SIZE || !keep_fit(d, keep)) {
+        host_log("actor: %s does not fit (%d bytes)\n", path, keep);
+        free(file);
+        return 0;
+    }
+    unload(d);   /* (the buffer is the shown model's until here) */
+    memcpy(d->keep, file, keep);
+    d->file = file;
     if (rd32(d->keep + 4) < 4)   /* (before version 4: Outbreak's CLUT alpha, 0xFF opaque; here 0x80 is: hair blended at up to twice its colour) */
         for (uint32_t q = rd32(d->keep + 12); rd32(d->keep + q) == 0x324D4954u; q += 32 + rd32(d->keep + q + 4))
             imp_tim2_alpha_255(d->keep + q + 32, (int)rd32(d->keep + q + 4));
@@ -1207,7 +1221,7 @@ static int load_import_model(Disguise* d, int k)
         d->w.mdl[0].flg |= 0x200;
         d->tex[d->tex_n++] = d->w.mdl[0].texP;
     }
-    d->skin = (const CvxmSkin*)(d->keep + cv.skin);
+    d->skin = (const CvxmSkin*)(d->file + cv.skin);
     d->vtx = (float*)(d->keep + cv.vtx);
     d->nv = (int)cv.nv;
     for (int k = 0; k < IMP_FACES - 1; k++)   /* (version 1: no face bones) */

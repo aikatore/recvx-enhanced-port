@@ -33,6 +33,7 @@ other games can be added as further sources.
 | 18. Left arm in idle and holds (round 6) | fixed: men's left arm pulled in across the thigh in idle, and the support hand pulled under the gun hand in long-gun holds ("Posture") |
 | 19. IMPORT screen | the in-game version of F9: title menu EXTRA > IMPORT > CHARACTERS > the game; the groups, the disc image, START IMPORT with progress, the counts, DELETE IMPORTED MODELS ("IMPORT screen") |
 | 20. Blink, hair (round 7) | fixed: only the brows moved (the crease bone was taken for the lid); hair see-through, too bright in streaks, with holes (Outbreak's alpha is 0..255, read as the PS2's 0..128); some NPCs lost hair pieces, visors and lenses (taken for the eyeball overlay). `.cvxm` version 4; older files get the alpha fixed when loaded, blink after importing again ("Round 7") |
+| 21. High-detail models (round 8) | each character's first costume is converted from its high-detail model (`HP<c>`: 512x512 textures, 5400..6900 vertices, real eyeballs, its hair locks) instead of the in-game one, in gameplay, cutscenes and co-op alike; blink and jaw on its own face rig; the other 22 costumes have no such model and stay. Same `.cvxm` version; importing again brings them ("Round 8") |
 
 Resume notes: build with `cmake --build build`; headless run:
 `RECVX_MODS=<out> RECVX_IMPORT=outbreak2 RECVX_IMPORT_ISO=<image> build/pc/recvx --save-dir <tmp>`
@@ -56,8 +57,9 @@ previews were rendered offline from such dumps (exploration scripts outside the 
    player model that acts itself (only a double's lip sync and the player's voice sounds do).
 2. Fingers are merged into the hands (OB's fist / open-hand poses are lost); the weapon grip
    could close them.
-3. The high-detail models (`HP*.nbd`: 512x512 textures) convert with the body model only; their
-   separate head model (the second AMO/AHI pair, more face bones) is not used yet.
+3. The high-detail models (`HP*.nbd`) serve the first costumes ("Round 8"); their fingers (five
+   jointed ones) and the rest of their face rig (brows, lower lids, lip corners, the eyeballs' turn)
+   still follow the hand and the head.
 4. Co-op: the partner sees the played character instead of an imported model (the pose's `chr`
    has no room for it and the partner may not have the file); a "model hash" in the pose and a
    fallback would allow it.
@@ -86,7 +88,7 @@ ISO 9660, 4.7 GB. Root files:
 |---|---|
 | `P<cc>_<vv>.nbd` | the 8 playable characters (cc 00..07: Kevin Ryman, Mark Wilkins, Jim Chapman, George Hamilton, David King, Alyssa Ashcroft, Yoko Suzuki, Cindy Lennox), costumes vv 00..02 (Alyssa, Yoko, Cindy also 03, 04): 30 files |
 | `EP<cc>_<vv>.nbd` | the same characters' event (cutscene) models |
-| `HP<cc>.nbd` | high-detail player models (512x512 textures, a second model pair: the head) |
+| `HP<cc>.nbd` | high-detail player models, one per character: its first costume (512x512 textures, a face rig of its own, most with a second model pair: hair locks; "Round 8"). A second `HP03.NBD` among the NPCs' files is another model (one texture, 56 nodes) |
 | `N*.NBD`, `HN*.NBD` | NPCs (normal / high detail); `*_N.NBD` parts |
 | `E<tt>_<vv>.NBD`, `HE*.NBD` | enemies; `EF01.NBD` effects |
 | `pl<cc>_pc_000.bin`, `pc_<nnn>.bin` | motion data (see "Animations") |
@@ -222,8 +224,9 @@ can map ([ACTORS.md](ACTORS.md#retargeting)). `imp_write_cvxm` (impmodel.c) buil
   extended file header with `Gindex` = `0xF00000 + 16 * disc index + k`, picture format 3: loaded
   without a palette list); the chunks follow each other without padding. The CLUTs' alpha is in the
   PS2 range (0x80 opaque) since version 4 ("Round 7").
-* **In game** (`actor_glue.c load_import_model`): the file is read into the display slot's buffer,
-  realized like a room model, its textures uploaded (refused with too little texture memory, as
+* **In game** (`actor_glue.c load_import_model`): the file is read and checked in host memory; what the
+  game reads (up to the texture block's end mark, `PcCvxm.end`) is copied into the display slot's buffer
+  (inside the PS2 address window), the skin stays in the host copy ("Round 8"); realized like a room model, its textures uploaded (refused with too little texture memory, as
   the catalogue's). Actor index `ACTOR_MODELS + k`, chr `COOP_CHR_IMPORT + k`; listed after the
   cutscene models; women move with Claire's motions, men with Chris's (gender-matched animations),
   and speak with Claire's / Chris's voice.
@@ -422,6 +425,73 @@ sometimes holes in their head or some textures are broken".
 Checked (headless, `RECVX_TELEPORT` to a lit room, third person close-ups `RECVX_TPS_ORBIT` front
 and back): all 30 playable models before and after, the 13 NPCs whose meshes changed, Alyssa's old
 files with the new build. Screenshots stay in the job directory (game content, not committed).
+
+### Round 8: the high-detail models
+
+Report: "there seem to be proper HD models of the playable characters like Cindy etc. Can we only import
+those instead of the low-res ones? They look weird in cutscenes otherwise".
+
+What the disc has, measured on all 68 files (`romdata_usa.afs`):
+
+| | in-game `P<c>_<v>` | event `EP<c>_<v>` | high detail `HP<c>` |
+|---|---|---|---|
+| models | 30 (8 characters, 3..5 costumes) | 30, the same costumes | 8: each character's first costume only (the textures match `P<c>_00`'s, at twice the size) |
+| textures | 2 x 256x256 | 2 x 256x256 (the same pictures) | 2 x 512x512 |
+| vertices / triangles | 1700..3600 / 2000..4000 | 1600..2300 / 1600..2400: no more detail (some less) | 5400..6700 / 6000..7400 (with the hair locks up to 6900 / 7600) |
+| skeleton | the human one, 36 nodes (Cindy's first costume 43) | the same | 73 (Cindy 80): the body 0..21 as the human one, five three-jointed fingers per hand (22..55), a face rig (56..72), Cindy's hair chain and coat flaps (73..79) |
+| face | 2 lid bones per eye, the jaw; the eyes painted on the face texture, an eyeball overlay | the same | upper lids 71 / 72 (at the eyes' centres), lower lids 63 / 64, brows 65 / 66, lip corners 57 / 58, the jaw 59, the lower lip 60, the skin 61; real eyeballs on 68 / 69 (the irises on their texture, none on the face's); teeth |
+| file | 0.25..0.39 MB | 0.25..0.30 MB | 0.87..1.02 MB |
+
+Most `HP` files (not Mark's and Jim's) have a second AMO/AHI pair: 12..28 small rigid meshes, each on a node of
+its own that places it around the head: hair locks (without them the hair is a smooth cap with blocky edges). The
+`HN*` NPCs are the NPCs' own high-detail versions and stay as they are; a second `HP03.NBD` in the NPCs' part of
+the archive is another model (one texture, 56 nodes) and is not used.
+
+**The import** (`ob2.c ob2_extract`): `P<c>_00` is converted from `HP<c>` when it reads as the high-detail rig
+(`hd_rig`: the human skeleton plus the face nodes' parents; tried from the last `HP<c>` of the archive, so the
+NPCs' `HP03` is not taken; otherwise the in-game model as before). The id, name, folder and place in the lists
+stay `P<c>_00` ("Costume 1"), so a choice saved in `recvx.ini`, the cast's Custom list and co-op keep it; the
+manifest notes "High-detail model (HP<c>.nbd)." The same model serves gameplay, the cutscene double, the cast
+and co-op: no costume needs the in-game model anywhere (the fit to Code: Veronica's shoulders, `ob2_fit`, is
+measured on the model and takes its overrides by the `P<c>` id). The other 22 costumes have no
+high-detail model and are converted as before, byte for byte the same; so are all NPCs.
+
+* **Hair locks**: the second pair read onto the head (`read_addon`, the meshes into model space by their own
+  nodes, weighted to node 21).
+* **Face** (`hd_face`, instead of `lid_falloff`): the upper lids 71 / 72 are the blink's lids, 59 the jaw. Both
+  carry only part of their vertices' weight in Outbreak (its own animations move them further): turned as the
+  in-game models' jaw, the lips parted half way; moved by the margin's height, the lids stopped half way (David's
+  margin is on its bone by 0.43). So the jaw takes twice its share plus the lower lip's (the chin and lower lip
+  then wholly on it, the teeth with them), and a lid's weights are scaled so that its margin over the middle
+  of the eye is wholly on it (`set_weight`: the vertex's other weights share the rest). It closes from that
+  margin down to 0.4 of the eyeball's radius below its centre, where the lower lid's margin lies on the eight
+  models (measured against the skin's rim: within 0.1 cm on five, Mark's rim not found). The brows, lower lids
+  and lip corners follow the head. The eyeballs stay (no overlay to leave out). Lid travel 0.36..1.1 cm.
+* **See-through strips**: the skin textures of the high-detail models have alpha 250..254 in places (Alyssa's
+  face, neck, the locks' roots). Every texel under 255 made a strip see-through, drawn blended after the opaque
+  ones: Alyssa showed dark specks on cheek, neck and lips and the locks as pale patches. For these models a strip
+  counts as see-through only with texels below 240 (`ImpModel.see_cut`); the hair's strand edges are far below.
+* **Size**: 1.0..1.13 MB a `.cvxm` (in-game models 0.41..0.44 MB): textures 0.5 MB, the skin (44 bytes a vertex)
+  0.24..0.3 MB. A player, partner, double or variant slot has 1.5 MB (`KEEP_SIZE`): fits. The cast's slots share
+  3 MB (`CAST_MEM`), where two high-detail models fitted. The skin is read only by `imp_skin` (host code), so the
+  loader now keeps it in host memory outside the address window and copies only the game's part into the slot
+  (0.76..0.82 MB for the high-detail ones; `PcCvxm.end`): three fit, and the window's use is unchanged (no buffer
+  grew; ~2.3 MB of the window stay free on Linux). No texture is scaled down. The texture heap takes 0.5 MB more
+  per model (64 MB on the PC). One vertex chunk holds them (at most 8189 vertices; 6923 for Cindy) and the vertex
+  work buffer (8192) too.
+* **Old files**: the format is the same (version 4), so no new version: files of versions 1..4 load as before
+  (checked with a version 3 import of the user's and a version 4 one of main's). The high-detail models come with
+  a new import.
+
+Checked (Linux, headless; screenshots in the job directory, game content, not committed): all 30 playable models
+(8 high-detail, 0 failed) and with the NPCs 306 models, 268 playable, 0 failed; every file but the 8 first
+costumes identical to main's import. In game, all 8 next to main's in-game model: face close-ups open, lids held
+closed (`RECVX_IMPORT_BLINK=1`, all 8 close fully), jaw held open (`RECVX_IMPORT_JAW=12`: lips part, teeth
+show); head orbits; the opening scene (`RECVX_TEST_SCENE=400:RM_0000:0:0`) with Kevin, George, Alyssa and Cindy
+as Claire's double: the lips move with the lines. The cast with only the 8 high-detail models in its Custom list
+(two of them in one room, RM_2050 / RM_9320). Co-op: both sides on high-detail models, and the host on one and
+the guest on a version 3 file of the same id: no resynchronisation, each side shows its own. `layout_check.sh`:
+156 vanilla and 311 enhanced frames identical to main's.
 
 ## F9 window
 
