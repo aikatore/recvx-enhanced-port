@@ -213,6 +213,7 @@ void* pc_mod_open(const char* name)
     return hf ? open_host(hf, size) : NULL;
 }
 
+void ADXF_Close(void* h);
 void* ADXF_OpenAfs(int ptid, int flid)
 {
     uint32_t lsn, size, n;
@@ -226,9 +227,13 @@ void* ADXF_OpenAfs(int ptid, int flid)
             f = open_host(hf, size);
             if (f && src == LF_LANG && adx_afs_locate(ptid, flid, &lsn, &n) && (f->parts = malloc(PC_PARTS_MAX * sizeof(PcPart)))) {
                 f->lsn = lsn;   /* a language's file: parts of it the disc's */
-                if (!(f->nparts = pc_lang_disc_parts(name, hf, size, lsn, n, f->parts, PC_PARTS_MAX))) { free(f->parts); f->parts = NULL; }
+                if ((f->nparts = pc_lang_disc_parts(name, hf, size, lsn, n, f->parts, PC_PARTS_MAX)) < 0) {   /* the disc's whole */
+                    ADXF_Close(f);
+                    pc_lang_file_opened(name, LF_DISC);
+                    f = NULL;
+                } else if (!f->nparts) { free(f->parts); f->parts = NULL; }
             }
-            return f;
+            if (f) return f;
         }
     }
     if (!adx_afs_locate(ptid, flid, &lsn, &size)) { host_log("adxf: no file %d in partition %d\n", flid, ptid); return NULL; }

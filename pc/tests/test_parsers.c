@@ -407,16 +407,24 @@ static void test_lang_parts(void)
     nl += lp_tex(l + nl, 1, 0, 1); nd += lp_tex(d + nd, 1, 0, 2);
     at[1] = nl + 76; nl += lp_tex(l + nl, 2, 1, 0); nd += lp_tex(d + nd, 2, 0, 0);
     at[2] = nl + 76; nl += lp_tex(l + nl, 3, 0, 5); nd += lp_tex(d + nd, 3, 0, 6);
-    CHECK(pc_lang_parts(l, nl, d, nd, 1, 0, p, 8) == 1 && p[0].off == at[1] && p[0].disc == at[1] && p[0].len == 16 + 48 + 16 + 1024);
-    CHECK(pc_lang_parts(l, nl, d, nd, 1, 1, p, 8) == 2 && p[0].off == at[1] && p[1].off == at[2]);   /* all but the font */
-    CHECK(pc_lang_parts(l, nl, l, nl, 0, 1, p, 8) == 0);   /* the same bytes: nothing to read */
-    CHECK(pc_lang_parts(l, nl, d, nd - 200, 1, 0, p, 8) == 0);   /* the disc's last texture cut off: no pairs */
+    CHECK(pc_lang_parts(l, nl, d, nd, 1, 0, NULL, p, 8) == 1 && p[0].off == at[1] && p[0].disc == at[1] && p[0].len == 16 + 48 + 16 + 1024);
+    CHECK(pc_lang_parts(l, nl, d, nd, 1, 1, NULL, p, 8) == 2 && p[0].off == at[1] && p[1].off == at[2]);   /* all but the font */
+    CHECK(pc_lang_parts(l, nl, l, nl, 0, 1, NULL, p, 8) == 0);   /* the same bytes: nothing to read */
+    CHECK(pc_lang_parts(l, nl, d, nd - 200, 1, 0, NULL, p, 8) == 0);   /* the disc's last texture cut off: no pairs */
+    {   /* another file's texture staying the language's (the font) draws with bank 2: the re-encode there stays */
+        uint64_t b[2];
+        pc_lang_banks(l, nl, 1, b);
+        CHECK(b[0] == 1u << 1 && b[1] == 0);
+        b[0] = 1u << 2;
+        CHECK(pc_lang_parts(l, nl, d, nd, 1, 1, b, p, 8) == 2 && p[0].off == at[1] && p[0].len == 16 + 48 + 16 && p[1].off == at[2]);   /* its picture, not its colours */
+        CHECK(pc_lang_parts(l, nl, d, nd, 1, 0, b, p, 8) == 0);   /* (without all: the language's whole) */
+    }
     /* the re-encode on the bank of the texture with writing: its colours would change that one's: stays */
     nl = nd = 0;
     nl += lp_tex(l + nl, 3, 1, 0); nd += lp_tex(d + nd, 3, 0, 0);
     nl += lp_tex(l + nl, 3, 0, 5); nd += lp_tex(d + nd, 3, 0, 6);
-    CHECK(pc_lang_parts(l, nl, d, nd, 0, 0, p, 8) == 0);
-    CHECK(pc_lang_parts(l, nl, d, nd, 0, 1, p, 8) == 2);   /* both the disc's: the bank too */
+    CHECK(pc_lang_parts(l, nl, d, nd, 0, 0, NULL, p, 8) == 0);
+    CHECK(pc_lang_parts(l, nl, d, nd, 0, 1, NULL, p, 8) == 2);   /* both the disc's: the bank too */
 }
 
 int main(void)
