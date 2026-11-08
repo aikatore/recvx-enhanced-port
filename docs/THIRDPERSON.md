@@ -187,7 +187,7 @@ unit (the character is about 17 units tall).
 | Crosshair | `tps_crosshair` | 1 |
 | HUD ([HUD](#hud); 0 = Auto, 1 = On, 2 = Off) | `hud` | 0 |
 | HUD Position (0 = Follow Shoulder, 1 = Left, 2 = Right) | `hud_position` | 0 |
-| HUD Style (0 = Circle, 1 = Minimal) | `hud_style` | 0 |
+| HUD Style (0 = Weapon Circle, 1 = Minimal) | `hud_style` | 0 |
 | Aim Assist (0 = free aim) | `tps_auto_aim` | 0 |
 | Precise Shots ([Precise Shots](#precise-hits)) | `tps_precise_hits` | 1 |
 | Locational Hit Reactions ([Locational hit reactions](#locational-hit-reactions)) | `tps_hit_react` | 1 |
@@ -218,7 +218,7 @@ unit (the character is about 17 units tall).
 ## HUD
 
 A small display in a bottom corner of the picture, our own drawing (no other game's art), in one of two styles
-("HUD Style"). Circle (default): a dark semi-transparent disc with the equipped weapon's inventory icon and the
+("HUD Style"). Weapon Circle (default): a dark semi-transparent disc with the equipped weapon's inventory icon and the
 rounds loaded under it, the health gauge as an arc round the disc's outer side, and the reload ammo in the bag
 beside the disc on the inner side. Minimal: a plain health bar along the bottom, and above its outer end a small
 icon with the rounds loaded and the reload ammo as "loaded/spare" (the spare smaller, on the same baseline).

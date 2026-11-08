@@ -876,7 +876,7 @@ static void name_tag(void)
 }
 
 /* The HUD (pc/glue/hud_glue.c, docs/THIRDPERSON.md "HUD"): in a bottom corner of the picture, by "HUD Style":
-   Circle, a dark disc with the equipped weapon's inventory icon and its loaded rounds, the health gauge an arc of
+   Weapon Circle, a dark disc with the equipped weapon's inventory icon and its loaded rounds, the health gauge an arc of
    HUD_SWEEP round its outer side from the bottom up, the reload ammo beside it on the inner side; Minimal, a health bar
    with "loaded/spare" and a small icon above it. The gauge is coloured by the condition (pulsing in Danger), its whole
    length outlined. On the left mirrored. It fades in and out (moving to the other corner too) and with the screen.
