@@ -945,8 +945,8 @@ static void hud_draw(void)
     };
     const ImU32 red = A(IM_COL32(240, 90, 80, 255));
     /* the counts in the colour of the rounds loaded (g_hud.round_kind), as their inventory icons: plain grenade rounds
-       and arrows white (a grey icon), acid rounds gold, flame rounds red, gas rounds green, gunpowder arrows orange */
-    static const ImU32 round_col[] = { IM_COL32(255, 255, 255, 240), IM_COL32(255, 210, 60, 240), IM_COL32(255, 80, 50, 240),
+       and arrows white (a grey icon), acid rounds gold, flame rounds orange (their icon is red, but red is the empty count's), gas rounds green, gunpowder arrows orange */
+    static const ImU32 round_col[] = { IM_COL32(255, 255, 255, 240), IM_COL32(255, 210, 60, 240), IM_COL32(255, 140, 30, 240),
                                        IM_COL32(70, 230, 150, 240), IM_COL32(255, 150, 40, 240) };
     int rk = g_hud.round_kind >= 0 && g_hud.round_kind <= 4 ? g_hud.round_kind : 0;
     const ImU32 tint = A(round_col[rk]);

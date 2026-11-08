@@ -263,7 +263,7 @@ F-windows: sharp, untouched by anti-aliasing and dithering). Nothing in the game
   shows those stacks (percent for the percent weapons). Hidden for weapons nothing reloads (Gold Lugers, rocket and
   linear launchers) and with unlimited ammo; 0 shown in red.
 * **Round colours**: with the grenade launcher and the bow gun, both counts (loaded and spare, in both styles) take
-  the colour of the rounds loaded, as their inventory icons show them: acid rounds gold, flame rounds red, gas
+  the colour of the rounds loaded, as their inventory icons show them: acid rounds gold, flame rounds orange (not their icon's red: an empty count is red), gas
   rounds green, gunpowder arrows orange; plain grenade rounds and arrows (grey icons) stay white. A count of 0 is
   red all the same. No other weapon has a choice of rounds (`bhSearchBullet` only tells these two apart).
 * **The icon**: the inventory's (ITEM AFS file 145, textures 3 and 4, cells as `sub1.c ItemSet` and the trade
