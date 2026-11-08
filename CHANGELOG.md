@@ -5,7 +5,7 @@
 ### New
 
 - **HUD**: a new HUD shows health and ammo, with two styles to choose from. On by default in the over-the-shoulder
-  camera, off with the fixed cameras.
+  camera, off with fixed camera.
 
 ### Changes
 
