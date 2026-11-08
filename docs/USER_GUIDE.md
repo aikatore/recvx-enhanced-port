@@ -328,7 +328,8 @@ voices (unless Randomize Voice Lines is on) and what happens stay as they are.
   in cutscenes; a character who stays in the room afterwards keeps the new look. Claire and Chris are never
   swapped: in every cutscene, also while you play the other one, they show your look for them ("Character
   Model", Claire's or Chris's Model with Per Character, or BioRand's random look for that character).
-* **Model Selection**: *Cutscene Models* picks among the characters' cutscene models: their mouths
+* **Model Selection**: *Cutscene Models* picks among the characters' cutscene models, Claire's and Chris's
+  included (they are never replaced themselves, but others can look like them): their mouths
   move with the lines and their eyes look where the original character's do (the voice stays the
   original character's). *All Models* also uses the creatures and the zombies
   (all zombie looks count as one choice, so zombies do not crowd out the rest); most of those keep a

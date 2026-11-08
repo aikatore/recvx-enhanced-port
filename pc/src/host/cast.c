@@ -89,10 +89,10 @@ int cast_zombie_look(unsigned seed, unsigned scene, int c)
     return -1;
 }
 
-/* Claire's and Chris's looks (their cutscene models, their player files, Claire's second costume) are not in the pools (only "Custom" lists them, the files with a twin as that twin, twin_of): they
-   are the characters the story is played as, whose look "You appear as" decides. Picked for someone else they read as
-   the player character: Steve at the end of Claire's part (6100, just before the switch to Chris) shown as Chris's
-   cutscene model looked like Chris's part starting with a random Chris instead of the chosen model. */
+/* Claire's and Chris's looks (their cutscene models, their player files, Claire's second costume): they are never cast
+   themselves (their look is "You appear as"'s), but every pool has them for the others (the user's choice, 2026-11-08;
+   before, only "Custom" listed them: Steve at the end of Claire's part shown as Chris's cutscene model can read as
+   Chris's part starting). builtins_of lists them after the rest (custom > 0), the files with a twin as that twin. */
 static int protagonist(int m) { return m == cine[0] || m == cine[1] || m == ACTOR_PART + 0 || m == ACTOR_PART + 1 || m == ACTOR_PART + 4; }
 
 /* the talking twin of a look whose face stays still (-1 none): Claire's, Chris's, Steve's and Wesker's player files have no
@@ -139,9 +139,10 @@ int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
 {
     int b[BUILTIN_MAX], n = 0, i, k;
     if (!all) {
-        for (i = 0; i < CAST_CHARACTERS && n < max; i++) if (!protagonist(cine[i])) out[n++] = cine[i];
+        for (i = 0; i < CAST_CHARACTERS && n < max; i++) out[n++] = cine[i];   /* (Claire's and Chris's cutscene models too: others may be shown as them) */
     } else
-        for (i = 0, k = builtins_of(b, all == 2); i < k && n < max; i++) out[n++] = b[i];
+        for (i = 0, k = builtins_of(b, 1); i < k && n < max; i++)   /* ("Custom"'s whole list: Claire's and Chris's looks too, not Claire's second costume */
+            if (all == 2 || b[i] != ACTOR_PART + 4) out[n++] = b[i];   /* (its face does not move) but where "Custom" checks it) */
     for (i = 0; i < imports_n(imports) && n < max; i++) out[n++] = ACTOR_MODELS + i;
     if (all == 2) {   /* "Custom": the checked ones (the positions are "All models"'s) */
         for (i = k = 0; i < n; i++) if (!cast_off_at(off, i)) out[k++] = out[i];
@@ -249,6 +250,7 @@ static int chr_of(int m)
 static int appear_pool(int all, int imports, int* out, const unsigned char* off)
 {
     int n = all ? builtins_of(out, -1) : cast_pool(0, 0, out, POOL_MAX, NULL), i, k;
+    if (!all) { for (i = k = 0; i < n; i++) if (!protagonist(out[i])) out[k++] = out[i]; n = k; }   /* (the played look: not Claire's or Chris's) */
     for (i = 0; i < imports_n(imports); i++) out[n++] = ACTOR_MODELS + i;
     if (all == 2) {
         for (i = k = 0; i < n; i++) if (!cast_off_at(off, i)) out[k++] = out[i];
