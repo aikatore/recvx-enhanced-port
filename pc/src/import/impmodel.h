@@ -23,6 +23,8 @@ typedef struct ImpModel {
     int eyes_left_out;      /* eyeball overlay meshes not converted (ob2.c read_mesh) */
     float eye[2][4];        /* per eye (left, right) the overlay's x min, x max, y min, y max: the opening; y max <= y min: not known */
     float lid_travel[2];    /* the blink: how far the upper lid (left, right) goes down to close (model units; ob2.c lid_falloff) */
+    int see_cut;            /* a strip is see-through (drawn last, blended) where a texel under it has alpha (0..255) below
+                               this; 0: 255. The high-detail models' skin has 250..254 in places (ob2.c hd_face) */
     int nn;
     ImpNode node[IMP_NODES];
     int nv;                 /* vertices in model space (the bind pose), weights per node */

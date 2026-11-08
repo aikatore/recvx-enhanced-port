@@ -1066,7 +1066,7 @@ the same in Claire's part and in Chris's.
 
 * **Slots**: one display slot per model the room shows (`ACTOR_CAST + k`, 6), shared by every record drawn
   as it; a seventh model leaves its records as themselves. Their model data share one 3 MB buffer
-  (`cast_mem`; the cast's own models 0.1..0.2 MB, imported ones up to 1.35 MB), given back once all the
+  (`cast_mem`; the cast's own models 0.1..0.2 MB, imported ones up to 1.07 MB, their skin kept outside it), given back once all the
   cast's slots are unloaded: with the room's textures (`spawn_glue.c spawn_release`, the door) and at
   `njReleaseTextureAll`. Each slot also has 128 KB for a face mask (`face_mem`).
 * **As the cutscene double** ("Cutscene doubles"): every tick of a cutscene before the objects follow

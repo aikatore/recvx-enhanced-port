@@ -46,26 +46,35 @@ static NJS_TEXNAME icon_names[2];
 static NJS_TEXLIST icons = { icon_names, 2 };
 static int icon_state;                  /* 0 not loaded, 1 loaded, -1 failed (names only) */
 
-static int icon_load(void)
+/* ITEM AFS file 145 read into buf (cap bytes): 1 with its five TIM2 chunks found (chunk[3], [4]: the icon textures, each
+   a 32-byte chunk head and the TIM2); also the HUD's icons (hud_glue.c). Game thread. */
+int pc_item_icon_file(unsigned char* buf, int cap, unsigned char** chunk)
 {
     ADXF h;
-    unsigned char *p = raw, *end, *out = raw, *chunk[5];
+    unsigned char *p = buf, *end;
     int n = 0, ok, sz;
     h = ADXF_OpenAfs(sys->itm_partid, 145);
     if (!h) return 0;
-    ok = ADXF_GetFsizeSct(h) * 2048 <= (int)sizeof(raw);
-    if (ok) { ADXF_ReadNw32(h, ADXF_GetFsizeSct(h), raw); ok = ADXF_GetStat(h) == 3; }   /* synchronous on the PC */
+    ok = ADXF_GetFsizeSct(h) * 2048 <= cap;
+    if (ok) { ADXF_ReadNw32(h, ADXF_GetFsizeSct(h), buf); ok = ADXF_GetStat(h) == 3; }   /* synchronous on the PC */
     sz = ADXF_GetFsizeByte(h);
     ADXF_Close(h);
     if (!ok) return 0;
-    end = raw + sz;
+    end = buf + sz;
     while (p + 32 <= end && *(int*)p != -1 && n < 5) {   /* chunks: code, size, 24 bytes, data (PLI palettes, TIM2 pictures) */
         int csz = ((int*)p)[1];
         if (csz < 0 || p + 32 + csz > end) return 0;
         if (!memcmp(p, "TIM2", 4)) chunk[n++] = p;
         p += 32 + csz;
     }
-    if (n != 5) return 0;
+    return n == 5;
+}
+
+static int icon_load(void)
+{
+    unsigned char *out = raw, *chunk[5];
+    int n;
+    if (!pc_item_icon_file(raw, (int)sizeof(raw), chunk)) return 0;
     for (n = 3; n < 5; n++) {   /* textures 3 (items 64..) and 4 (items 0..63), as the status screen numbers them */
         int csz = 32 + ((int*)chunk[n])[1];
         TIM2_PICTUREHEADER_EX* t;
@@ -103,17 +112,13 @@ int pc_item_icons(int user, int on)
     return icon_state == 1;
 }
 
-/* the icon of item word w (sub1.c ItemSet), drawn at x, y, scaled by sc, its colour times argb (white: as it is), at
-   2D depth z (as njDrawPolygon's; 1 and more: in front of all) */
-void pc_item_icon(unsigned int w, float x, float y, float sc, unsigned int argb, float z)
+/* item id's icon cell (sub1.c ItemSet): its texture (0 items 64.., 1 items 0..63: the texture list's order) and top left
+   in the textures' 0..255 units (a cell 34x24, a two-slot item two cells wide); also the HUD's (hud_glue.c) */
+void pc_item_icon_cell(int id, int* tex, int* u, int* v)
 {
     static const struct { unsigned char from, to; } remap[] = { { 30, 13 }, { 63, 41 }, { 128, 41 }, { 129, 41 }, { 130, 35 }, { 136, 47 },
                                                                 { 138, 48 }, { 142, 128 }, { 143, 49 }, { 144, 102 }, { 145, 133 } };
-    int id = (w >> 16) & 0xFF, no = id, item, two = (itemdata[id].type & 0x100) != 0, i;
-    NJS_TEXANIM a;
-    NJS_SPRITE s;
-    NJS_ARGB c = { (argb >> 24) / 255.0f, (argb >> 16 & 0xFF) / 255.0f, (argb >> 8 & 0xFF) / 255.0f, (argb & 0xFF) / 255.0f };
-    if (icon_state != 1 || !id) return;
+    int no = id, item, i;
     for (i = 0; i < (int)(sizeof(remap) / sizeof(remap[0])); i++) if (remap[i].from == id) no = remap[i].to;
     item = no;
     if (item > 63) no -= 64;
@@ -121,11 +126,25 @@ void pc_item_icon(unsigned int w, float x, float y, float sc, unsigned int argb,
     else if (no < 33) { if (no) no += 4; }
     else if (no == 33 || no == 34) no += no - 33 + 4;
     else no += 6;
+    *u = (no % 7) * 34; *v = (no / 7) * 24;
+    *tex = item < 64 ? 1 : 0;
+}
+
+/* the icon of item word w (sub1.c ItemSet), drawn at x, y, scaled by sc, its colour times argb (white: as it is), at
+   2D depth z (as njDrawPolygon's; 1 and more: in front of all) */
+void pc_item_icon(unsigned int w, float x, float y, float sc, unsigned int argb, float z)
+{
+    int id = (w >> 16) & 0xFF, two = (itemdata[id].type & 0x100) != 0, tex, u, v;
+    NJS_TEXANIM a;
+    NJS_SPRITE s;
+    NJS_ARGB c = { (argb >> 24) / 255.0f, (argb >> 16 & 0xFF) / 255.0f, (argb >> 8 & 0xFF) / 255.0f, (argb & 0xFF) / 255.0f };
+    if (icon_state != 1 || !id) return;
+    pc_item_icon_cell(id, &tex, &u, &v);
     memset(&a, 0, sizeof(a));
     a.sx = two ? 136 : 68; a.sy = 48;
-    a.u1 = (no % 7) * 34; a.v1 = (no / 7) * 24;
+    a.u1 = u; a.v1 = v;
     a.u2 = a.u1 + (two ? 68 : 34); a.v2 = a.v1 + 24;
-    a.texid = item < 64 ? 1 : 0;
+    a.texid = tex;
     memset(&s, 0, sizeof(s));
     s.p.x = x; s.p.y = y; s.p.z = -1.0f;
     s.sx = s.sy = sc;

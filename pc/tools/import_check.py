@@ -147,7 +147,7 @@ def check_glb(path, out):
 def check_cvxm(path, out, clamp_u=True):
     d = open(path, 'rb').read()
     magic, ver, moff, toff, soff, nv, nn = struct.unpack_from('<4sIIIIII', d, 0)
-    assert magic == b'RXIM' and ver in (1, 2) and moff == 60
+    assert magic == b'RXIM' and 1 <= ver <= 4 and moff == 60
     face = list(d[28:33]) if ver >= 2 else []   # the face bones' objects (lids, jaw), 255 none
     mlb = 64
     hs, on = struct.unpack_from('<HH', d, mlb + 4); to, oo = struct.unpack_from('<ii', d, mlb + 8)

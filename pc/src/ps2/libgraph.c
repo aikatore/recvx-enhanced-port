@@ -94,6 +94,7 @@ int sceGsSwapDBuffDc(sceGsDBuffDc* db, int id)
     lobby_frame();
     biorand_frame();
     tps_frame();
+    hud_frame();
     stream_submit();
     /* then the draw environment for the next frame (+ optional clear) */
     if (id & 1) { send_ad((const uint64_t*)&db->draw11, 8); send_ad((const uint64_t*)&db->draw12, 8); send_ad((const uint64_t*)&db->clear1, 6); }

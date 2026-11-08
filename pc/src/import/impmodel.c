@@ -532,7 +532,7 @@ int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gi
             if (x1 - x0 > w) x1 = x0 + w;
             if (y1 - y0 > h) y1 = y0 + h;
             for (int y = y0; y < y1 && !see[s]; y++)
-                for (int x = x0; x < x1 && !see[s]; x++) see[s] = px[4 * (((y % h + h) % h) * w + (x % w + w) % w) + 3] < 255;
+                for (int x = x0; x < x1 && !see[s]; x++) see[s] = px[4 * (((y % h + h) % h) * w + (x % w + w) % w) + 3] < (m->see_cut ? m->see_cut : 255);
         }
         free(px);
     }

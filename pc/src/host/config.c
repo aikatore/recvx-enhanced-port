@@ -133,6 +133,8 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "tps_aim_sens", &g_tps.aim_sens, 1, 300 },
     { "tps_invert_y", &g_tps.invert_y, 0, 1 },
     { "tps_crosshair", &g_tps.crosshair, 0, 1 },
+    { "hud", &g_tps.hud, 0, 2 },                          /* the HUD (hud_glue.c): 0 Auto (third person), 1 On, 2 Off */
+    { "hud_position", &g_tps.hud_side, 0, 2 },            /* 0 the shoulder's side, 1 left, 2 right */
     { "tps_auto_aim", &g_tps.auto_aim, 0, 1 },
     { "tps_precise_hits", &g_tps.precise, 0, 1 },
     { "tps_aim_walk", &g_tps.aim_walk, 0, 1 },
