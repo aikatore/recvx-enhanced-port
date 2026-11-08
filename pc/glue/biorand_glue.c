@@ -3,7 +3,8 @@
    `type` is the item the pickup gives (its `id` stays the model), `wrk_no` its amount (decomp hitchk.c, sub1.c
    GetItem); the start inventory is a block of room 0/0's entry script under "ev_flg 1 clear" (C7 145 -> X,
    C7 0 -> X, C7 0xFF X n for the STANDARD slot, C9 counts; event.c). Here: rifle ammo stacking, the save words,
-   the load screen's question, a co-op guest's start inventory and the sound of a scene's cast shot. Game thread. */
+   the load screen's question, a co-op guest's start inventory, the sound of a scene's cast shot and a weapon the
+   scripts put in the hand. Game thread. */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
 #include "../../decomp/include/ps2/veronica/prog/item.h"
@@ -263,6 +264,28 @@ int pc_cast_shot_se(int w)
 {
     if (shot_bank && shot_w >= 0 && w >= 0 && w < 23 && arms_bank(w) == arms_bank(shot_w)) return WpnTab[w].seno0;
     return WpnTab[plp->wpnr_no].seno0;
+}
+
+/* ---------------------------------------------------------------- a weapon the script puts in the hand
+   ArmsItemChange w (event.c bhArmsItemChange) sets the weapon number whatever the bag holds. Retail does it where the
+   player has the weapon by then: RM_6060, picking up the sniper rifle before Nosferatu (it_flg 276: then ArmsItemSet
+   3 puts its bag slot in the hand); Steve's sub machine gun in 3180 (his own bag's); the lighter in 0000 (its
+   PlItemCheck). BioRand puts another item on the sniper rifle's spot, the pickup still sets it_flg 276, and the
+   player held a sniper rifle not in the bag (the bag slot in the hand stays the old weapon's, so its rounds). With
+   BioRand a weapon the player's bag (words 1..11) does not hold is not put in the hand: the weapon held stays (its
+   files and sounds unchanged). 1: skip. */
+int pc_biorand_arms_skip(int w)
+{
+    /* the item of each weapon number (sub1.c WeaponSet, the other way round; 3 also 131, its other handgun) */
+    static const unsigned char item[23] = { 0, 55, 8, 5, 9, 10, 32, 33, 34, 142, 7, 4, 2, 3, 6, 6, 6, 6, 11, 7, 1, 0, 0 };
+    const unsigned int* bag;
+    int i, id;
+    if (w <= 0 || w >= 23 || !item[w] || !sys || !biorand_active()) return 0;
+    bag = &sys->itm[sys->ply_id * 16];
+    for (i = 1; i < 12; i++)
+        if ((id = (bag[i] >> 16) & 0xFF) == item[w] || (w == 3 && id == 131)) return 0;
+    host_log("biorand: the script's weapon %d is not in the bag: the hand keeps weapon %d\n", w, plp ? plp->wpnr_no : -1);
+    return 1;
 }
 
 /* every frame: the scene's arms bank while its event runs, the player's after it; one sound bank request at a time
