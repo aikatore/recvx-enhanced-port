@@ -45,6 +45,7 @@ void cast_list_open(int appear, float x0, float x1, float y0, float h, float sc,
 int  cast_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
 void cast_list_draw(void);
 const char* cast_list_help(void);
+int  cast_list_kind(void);              /* the list open: 0 the characters', 2 the enemies' */
 const char* cast_list_summary(int appear, const unsigned char* off, int imports, char* buf, int n);
 void rate_list_open(int ro, float x0, float x1, float y0, float h, float sc, int rows);
 int  rate_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
@@ -384,7 +385,7 @@ void pc_options_mouse_back(int port, int level)
 
 /* ---------------------------------------------------------------- the pages */
 enum { K_PAGE, K_SET, K_DEVICE, K_BIND, K_HEAD, K_GROUP, K_RESET, K_BACK, K_RATES, K_CUSTOM };   /* K_HEAD, K_GROUP: headings; K_RATES,
-    K_CUSTOM: the enemy rates' and the cast's "Custom" list (st.list 2, 1) */
+    K_CUSTOM: the enemy rates' and the cast's "Custom" list (st.list 2, 1; K_CUSTOM idx: cast_list.c's list, 0 the characters', 2 the enemies') */
 typedef struct Row { int kind, idx; } Row;
 
 #define MAX_ROWS 80
@@ -435,6 +436,7 @@ static void page_rows(void)
         /* "Custom": its list's row under it (as the lobby's and the BIORAND screen's) */
         if (g_settings[i].val == &g_enemy_opts.variety && g_enemy_opts.variety == 2) rows[nrows++] = (Row){ K_RATES, 0 };
         if (g_settings[i].val == &g_enemy_opts.cast_all && g_enemy_opts.cast_all == 2) rows[nrows++] = (Row){ K_CUSTOM, 0 };
+        if (g_settings[i].val == &g_enemy_opts.cast_enemy && g_enemy_opts.cast_enemy == CAST_ENEMY_CUSTOM) rows[nrows++] = (Row){ K_CUSTOM, 2 };
     }
 }
 
@@ -531,8 +533,8 @@ static int activate(const Row* r)
     case K_RATES: case K_CUSTOM:   /* where the rows are, BACK above the help line */
         st.list = r->kind == K_RATES ? 2 : 1;
         if (st.list == 2) rate_list_open(0, X_LABEL, 600, Y_ROW0, ROW_H, SC_ROW, 7);
-        else cast_list_open(0, X_LABEL, 600, Y_ROW0, ROW_H, SC_ROW, 6);
-        host_log("options: the %s\n", st.list == 2 ? "enemy rates" : "cutscene cast's custom models");
+        else cast_list_open(r->idx, X_LABEL, 600, Y_ROW0, ROW_H, SC_ROW, 6);
+        host_log("options: the %s\n", st.list == 2 ? "enemy rates" : r->idx ? "cutscene cast's custom enemies" : "cutscene cast's custom models");
         return 0;
     case K_SET:
         if (settings_locked(s)) { CallSystemSe(0, 1); say(settings_locked(s)); return 0; }
@@ -637,8 +639,9 @@ static void draw_row(int i, int sel)
     case K_RESET: text_m(X_LABEL, y, "RESET TO DEFAULTS", SC_ROW, col); return;
     case K_BACK: text_m(X_LABEL, y, "BACK", SC_ROW, col); return;
     case K_RATES: case K_CUSTOM:   /* how many can appear; confirm opens the list (an arrow after it) */
-        text_m(X_LABEL, y, r->kind == K_RATES ? "Enemy Rates" : "Choose Models", SC_ROW, col);
+        text_m(X_LABEL, y, r->kind == K_RATES ? "Enemy Rates" : r->idx ? "Choose Enemies" : "Choose Models", SC_ROW, col);
         if (r->kind == K_RATES) rate_list_summary(g_enemy_opts.rate, val, sizeof(val));
+        else if (r->idx) cast_list_summary(2, g_enemy_opts.cast_enemy_off, 0, val, sizeof(val));
         else cast_list_summary(0, cast_off, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, sizeof(val));
         text_m(X_VALUE + 6, y, val, SC_ROW, col);
         pc_ui_arrow(mx(X_VALUE + 6 + pc_ui_text_w(val, SC_ROW) + 16, 0), y + 9, rtl ? -1 : 1, col);
@@ -707,7 +710,7 @@ static void draw_help(void)
     case K_RESET: snprintf(t, sizeof(t), tr("Restore default %s bindings."), tr(st.dev ? "gamepad" : "keyboard and mouse")); break;
     case K_BACK: snprintf(t, sizeof(t), tr("Return to OPTION. Cancel or right-click also goes back.")); break;
     case K_RATES: snprintf(t, sizeof(t), "%s", tr("Set how often each enemy type is chosen.")); break;
-    case K_CUSTOM: snprintf(t, sizeof(t), "%s", tr("Choose the models the characters can appear as.")); break;
+    case K_CUSTOM: snprintf(t, sizeof(t), "%s", tr(r->idx ? "Choose the enemies the monsters can appear as." : "Choose the models the characters can appear as.")); break;
     case K_BIND: {
         int c = bind_conflict(r->idx, st.dev);
         if (c) { snprintf(t, sizeof(t), tr("Also assigned to %s. Change either binding to avoid a conflict."), tr(bind_rows[c - 1].name)); col = 0xFFFF8080; }
@@ -743,7 +746,7 @@ static void draw(void)
     pc_ui_rect(36, 176, 604, 177, 0x60FFFFFF, Z_PANEL + 0.001f);
     pc_ui_rect(36, Y_HELP - 4, 604, Y_HELP - 3, 0x60FFFFFF, Z_PANEL + 0.001f);
     if (st.list) {   /* the list where the rows are, its name in the page row's place */
-        const char* h = st.list == 2 ? "ENEMY RATES" : "CHOOSE MODELS";
+        const char* h = st.list == 2 ? "ENEMY RATES" : cast_list_kind() == 2 ? "CHOOSE ENEMIES" : "CHOOSE MODELS";
         pc_ui_text(320 - pc_ui_text_w(h, 0.72f) / 2, 150, h, 0.72f, 0xFFE8E0C0);
         if (st.list == 2) rate_list_draw(); else cast_list_draw();
         draw_help();

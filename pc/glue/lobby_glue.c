@@ -914,7 +914,7 @@ static void title_version(void)
 /* In steps (docs/COOP.md "Lobby"): 1 how to connect (Direct / Via server) and Host or Join,
    2 only that choice's rows plus the player and game rows, 3 the game rules (host: edits them,
    guest: the host's, read-only), with their pages 4 enemies and 5 extra events, step 4's page 7 the
-   cutscene cast (its page 8 the "Custom" models, cast_list.c) and page 9 the enemy randomizer's "Custom" rates (rate_list.c), and step 2's
+   cutscene cast (its page 8 the "Custom" models or enemies, cast_list.c) and page 9 the enemy randomizer's "Custom" rates (rate_list.c), and step 2's
    page 6 the model list. BACK goes one step back (from a page: to its entry); from step 1 it leaves the lobby.
    The rows in display order; a gap where the group changes. */
 enum { R_MODE, R_HOSTSTEP, R_JOINSTEP,
@@ -922,11 +922,11 @@ enum { R_MODE, R_HOSTSTEP, R_JOINSTEP,
        R_NAME, R_CHARMODE, R_CHAR, R_CHAR2,
        R_START, R_ITEMS, R_FOLLOW, R_RULES,
        R_BIORAND, R_LOOT, R_IMP, R_TFREEZE, R_SKIPS, R_RIBBON, R_GOVER, R_HEADSHOT, R_ENEMYPG, R_EVENTPG,
-       R_RAND, R_VARIETY, R_RATES, R_TYPES, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTASSIGN, R_CASTIMP,
+       R_RAND, R_VARIETY, R_RATES, R_TYPES, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTENEMY, R_CASTECUSTOM, R_CASTASSIGN, R_CASTIMP,
        R_VOICES, R_MOUTHS, R_QUICK, R_DETECTOR, R_EXTRAOBJ,
        R_HOST, R_GO, R_COPY, R_RCOPY, R_KICK, R_STOP, R_JOIN,
        R_BACK, R_N };
-static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
                                               5, 5, 5, 5, 5, 5, 5, 6 };
 _Static_assert(sizeof(row_group) == R_N, "row_group");
 enum { F_NONE, F_NAME, F_ADDR, F_PORT, F_SEED, F_SERVER, F_PW };
@@ -934,7 +934,8 @@ enum { F_NONE, F_NAME, F_ADDR, F_PORT, F_SEED, F_SERVER, F_PW };
 static struct {
     int open, row, role;                /* role 0 host, 1 join */
     int step;                           /* 1 connection and role, 2 its options, 3 game rules, 4 / 5 its pages, 6 the models, 7 the cutscene cast (from 4),
-                                           8 its "Custom" models (from 7), 9 the enemy rates (from 4) */
+                                           8 its "Custom" models (from 7; list 2: its enemies'), 9 the enemy rates (from 4) */
+    int list;
     int pick, top;                      /* the model page: the cursor's and the first shown list position (appear_at) */
     int pick_c;                         /* ... whose model it chooses: 0 "Character Model" (Same for Both) or Claire's, 1 Chris's (R_CHAR2) */
     int mode;                           /* 0 direct (P2P), 1 via a co-op server (g_coop.conn Automatic or Via server) */
@@ -975,8 +976,10 @@ static int row_visible(int r)
                              (r == R_IMP && host && !g_coop.loot);   /* only shared loot has it */
     if (lb.step == 4) return (r >= R_RAND && r <= R_PLACE && (r != R_RSEED || host)) || r == R_CASTPG;
     if (lb.step == 7)   /* the cutscene cast: its model and assignment rows while it is on; the imported models' while we have some */
-        return r == R_CAST || r == R_VOICES || (r == R_MOUTHS && shown_eo()->voices) || ((r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP || r == R_CASTCUSTOM) && shown_eo()->cast &&
-                               (r != R_CASTIMP || __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0) && (r != R_CASTCUSTOM || shown_eo()->cast_all == 2));
+        return r == R_CAST || r == R_VOICES || (r == R_MOUTHS && shown_eo()->voices) ||
+               ((r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP || r == R_CASTCUSTOM || r == R_CASTENEMY || r == R_CASTECUSTOM) && shown_eo()->cast &&
+                (r != R_CASTIMP || __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0) && (r != R_CASTCUSTOM || shown_eo()->cast_all == 2) &&
+                (r != R_CASTECUSTOM || shown_eo()->cast_enemy == CAST_ENEMY_CUSTOM));
     if (lb.step == 5) return (r == R_QUICK && !biorand_next()) || r == R_DETECTOR || r == R_EXTRAOBJ;   /* BioRand has its own start inventory */
     switch (r) {
     case R_PORT: return host && !srv;
@@ -1003,7 +1006,7 @@ static int row_locked(int r)
     case R_HOSTSTEP: return joining();
     case R_JOINSTEP: return hosting();
     case R_GOVER: case R_HEADSHOT: case R_QUICK: case R_DETECTOR: case R_EXTRAOBJ: case R_EXTRA: case R_PLACE: case R_RAND: case R_VARIETY: case R_TYPES: case R_EVENTS: case R_SEED: case R_BIORAND:
-    case R_CAST: case R_CASTPOOL: case R_CASTCUSTOM: case R_CASTASSIGN: case R_CASTIMP: case R_VOICES: return lb.role != 0;   /* the host's choice */
+    case R_CAST: case R_CASTPOOL: case R_CASTCUSTOM: case R_CASTENEMY: case R_CASTECUSTOM: case R_CASTASSIGN: case R_CASTIMP: case R_VOICES: return lb.role != 0;   /* the host's choice */
     case R_RCOPY: return !g_coop.room[0];
     default: return 0;
     }
@@ -1156,6 +1159,7 @@ static void change(int r, int dir)
     case R_EVENTS: settings_step(eset(&g_enemy_opts.events), dir); break;
     case R_CAST: settings_step(eset(&g_enemy_opts.cast), dir); break;
     case R_CASTPOOL: settings_step(eset(&g_enemy_opts.cast_all), dir); break;
+    case R_CASTENEMY: settings_step(eset(&g_enemy_opts.cast_enemy), dir); break;
     case R_CASTASSIGN: settings_step(eset(&g_enemy_opts.cast_assign), dir); break;
     case R_CASTIMP: settings_step(eset(&g_enemy_opts.cast_imports), dir); break;
     case R_VOICES: settings_step(eset(&g_enemy_opts.voices), dir); break;
@@ -1169,7 +1173,7 @@ static void change(int r, int dir)
 static int has_value(int r)
 {
     return r == R_MODE || r == R_RELAY || r == R_BIORAND || r == R_LOOT || r == R_IMP || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON || r == R_GOVER || r == R_HEADSHOT || r == R_QUICK || r == R_DETECTOR || r == R_EXTRAOBJ || r == R_START || r == R_ITEMS || r == R_FOLLOW || r == R_CHARMODE ||
-           r == R_EXTRA || r == R_PLACE || r == R_RAND || r == R_VARIETY || r == R_TYPES || r == R_EVENTS || r == R_CAST || r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP ||
+           r == R_EXTRA || r == R_PLACE || r == R_RAND || r == R_VARIETY || r == R_TYPES || r == R_EVENTS || r == R_CAST || r == R_CASTPOOL || r == R_CASTENEMY || r == R_CASTASSIGN || r == R_CASTIMP ||
            r == R_VOICES || r == R_MOUTHS;
 }
 
@@ -1207,7 +1211,7 @@ static int back(void)
     if (mp_set) { mp_end = 1; return 0; }   /* (BACK on the BioRand screen's model page: unchanged) */
     if (lb.step <= 1) return 1;
     if (lb.step == 6) { lb.step = 2; lb.row = lb.pick_c ? R_CHAR2 : R_CHAR; }
-    else if (lb.step == 8) { lb.step = 7; lb.row = R_CASTCUSTOM; }
+    else if (lb.step == 8) { lb.step = 7; lb.row = lb.list ? R_CASTECUSTOM : R_CASTCUSTOM; }
     else if (lb.step == 9) { lb.step = 4; lb.row = R_RATES; }
     else if (lb.step == 7) { lb.step = 4; lb.row = R_CASTPG; }
     else if (lb.step > 3) { lb.row = lb.step == 4 ? R_ENEMYPG : R_EVENTPG; lb.step = 3; }
@@ -1228,7 +1232,7 @@ static int need_server(void)
 }
 
 static void pick_open(int c);   /* the model page (below) */
-static void custom_open(void);
+static void custom_open(int list);
 static void rates_open(void);
 
 /* 0 stay, 1 back to the menu, 2 new game, 3 the chosen save */
@@ -1240,7 +1244,8 @@ static int activate(int r)
     case R_RULES: step_to(3); return 0;
     case R_ENEMYPG: step_to(4); return 0;
     case R_CASTPG: step_to(7); return 0;
-    case R_CASTCUSTOM: custom_open(); return 0;
+    case R_CASTCUSTOM: custom_open(0); return 0;
+    case R_CASTECUSTOM: custom_open(2); return 0;
     case R_RATES: rates_open(); return 0;
     case R_EVENTPG: step_to(5); return 0;
     case R_CHAR: pick_open(0); return 0;
@@ -1378,7 +1383,7 @@ static const char* heading(void)
     if (lb.step == 3) return lb.role ? "THE HOST'S GAME RULES" : "GAME RULES";
     if (lb.step == 6) return !g_appear_per ? "CHARACTER MODEL" : lb.pick_c ? "CHRIS'S MODEL" : "CLAIRE'S MODEL";
     if (lb.step == 7) return lb.role ? "HOST RULES - CUTSCENE CAST" : "GAME RULES - CUTSCENE CAST";
-    if (lb.step == 8) return "GAME RULES - CUSTOM MODELS";
+    if (lb.step == 8) return lb.list ? "GAME RULES - CUSTOM ENEMIES" : "GAME RULES - CUSTOM MODELS";
     if (lb.step == 9) return lb.role ? "HOST RULES - ENEMY RATES" : "GAME RULES - ENEMY RATES";
     if (lb.step > 3) return lb.step == 4 ? (lb.role ? "HOST RULES - RANDOMIZER" : "GAME RULES - RANDOMIZER")
                                          : (lb.role ? "HOST RULES - EXTRA EVENTS" : "GAME RULES - EXTRA EVENTS");
@@ -1449,6 +1454,8 @@ static void row_text(int r, char* label, char* val, int n)
         strcpy(label, "CHOOSE MODELS");
         cast_list_summary(0, lb.role ? enemy_cast_off() : cast_off, eo->cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, n);
         break;
+    case R_CASTENEMY: strcpy(label, "ENEMY MODELS"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_enemy)->names[eo->cast_enemy & 3]); break;
+    case R_CASTECUSTOM: strcpy(label, "CHOOSE ENEMIES"); cast_list_summary(2, eo->cast_enemy_off, 0, val, n); break;   /* a page (joining: the host's) */
     case R_CASTASSIGN: strcpy(label, "ASSIGN"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_assign)->names[eo->cast_assign & 1]); break;
     case R_CASTIMP: strcpy(label, "IMPORTED MODELS"); snprintf(val, n, "%s", eo->cast_imports ? "On" : "Off"); break;
     case R_VOICES: strcpy(label, "RANDOMIZE VOICES"); snprintf(val, n, "%s", eo->voices ? "On" : "Off"); break;
@@ -1519,6 +1526,8 @@ static const char* row_help(int r)
     case R_CAST: return eset(&g_enemy_opts.cast)->help;
     case R_CASTPOOL: return eset(&g_enemy_opts.cast_all)->help;
     case R_CASTCUSTOM: return host ? "Choose the models the characters can appear as." : "The models the host chose. Only the host can change them.";
+    case R_CASTENEMY: return eset(&g_enemy_opts.cast_enemy)->help;
+    case R_CASTECUSTOM: return host ? "Choose the enemies the monsters can appear as." : "The enemies the host chose. Only the host can change them.";
     case R_CASTASSIGN: return eset(&g_enemy_opts.cast_assign)->help;
     case R_CASTIMP: return eset(&g_enemy_opts.cast_imports)->help;
     case R_VOICES: return eset(&g_enemy_opts.voices)->help;
@@ -1578,12 +1587,13 @@ static void pick_to(int i, int wrap)
     pick_scroll(0);
 }
 
-/* the cutscene cast's "Custom" models (step 8): cast_list.c's list where the model page's is */
-static void custom_open(void)
+/* the cutscene cast's "Custom" models or enemies (step 8; list: cast_list.c's 0, 2): its list where the model page's is */
+static void custom_open(int list)
 {
     lb.step = 8;
-    cast_list_open(0, ROW_X, 634, ROW_Y0, PICK_H, ROW_SC, 10);
-    host_log("lobby: the cutscene cast's custom models\n");
+    lb.list = list;
+    cast_list_open(list, ROW_X, 634, ROW_Y0, PICK_H, ROW_SC, 10);
+    host_log("lobby: the cutscene cast's custom %s\n", list ? "enemies" : "models");
 }
 
 /* the enemy randomizer's "Custom" rates (step 9), there too; joining: the host's, read-only */
@@ -1716,7 +1726,7 @@ static int lobby_input(void)
         return 0;
     }
     if (lb.step == 6) { pick_input(press, rept, ok, cancel); return 0; }
-    if (lb.step == 8) { if (cast_list_input(&mt, press, rept, ok, cancel)) { lb.step = 7; lb.row = R_CASTCUSTOM; } return 0; }
+    if (lb.step == 8) { if (cast_list_input(&mt, press, rept, ok, cancel)) { lb.step = 7; lb.row = lb.list ? R_CASTECUSTOM : R_CASTCUSTOM; } return 0; }
     if (lb.step == 9) { if (rate_list_input(&mt, press, rept, ok, cancel)) { lb.step = 4; lb.row = R_RATES; } return 0; }
     g_lobby_io.tail = g_lobby_io.head;
     if (!row_selectable(lb.row)) {   /* the row went (hosting started or stopped): its successor */
@@ -1769,7 +1779,7 @@ static void draw_rows(void)
             if (!locked) { arrow(VAL_X, y + 9, -1, col); arrow(VAL_X + 14 + w + 12, y + 9, 1, col); }
             text(VAL_X + 12, y + (ROW_SC - sc) * 14, val, sc, col);
         } else if (val[0] || lb.edit) {
-            int page = r == R_ENEMYPG || r == R_EVENTPG || r == R_CASTPG || r == R_CHAR || r == R_CHAR2 || r == R_CASTCUSTOM || r == R_RATES;   /* opens a page: an arrow after it */
+            int page = r == R_ENEMYPG || r == R_EVENTPG || r == R_CASTPG || r == R_CHAR || r == R_CHAR2 || r == R_CASTCUSTOM || r == R_CASTECUSTOM || r == R_RATES;   /* opens a page: an arrow after it */
             float lim = page ? 196.0f : 220.0f, w = text_w(val, ROW_SC), sc = w > lim ? ROW_SC * lim / w : ROW_SC;   /* a long address: narrower */
             text(VAL_X, y + (ROW_SC - sc) * 14, val, sc, col);
             if (page) arrow(VAL_X + (sc < ROW_SC ? lim : w) + 16, y + 9, 1, col);

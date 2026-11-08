@@ -39,7 +39,8 @@ void bhCheckEneWorkNum(void);   /* eneset.h */
 void bhStFlg(unsigned int* flg, unsigned int bit);   /* flag.h */
 int bhCkFlg(unsigned int* flg, unsigned int bit);
 
-EnemyOpts g_enemy_opts = { .variety = 1, .events = 1 };   /* settings (F1, recvx.ini) */
+EnemyOpts g_enemy_opts = { .variety = 1, .events = 1, .cast_enemy = CAST_ENEMY_ALL };   /* settings (F1, recvx.ini) */
+_Static_assert(sizeof(g_enemy_opts.cast_enemy_off) == CAST_ENEMY_BYTES, "EnemyOpts.cast_enemy_off");
 static EnemyOpts host_opts;             /* a co-op guest's: the host's */
 static int have_host_opts;
 static unsigned char host_off[CAST_OFF_BYTES];   /* and its "Custom" list's unchecked models (EV_CASTOFF) */
@@ -61,6 +62,7 @@ __attribute__((constructor)) static void opts_env(void)
     if (e && strstr(e, "custom")) g_enemy_opts.cast_all = 2;   /* (the models: recvx.ini cast_custom_off) */
     if (e && strstr(e, "random")) g_enemy_opts.cast_assign = 1;
     if (e && strstr(e, "imports")) g_enemy_opts.cast_imports = 1;
+    if ((e = getenv("RECVX_CAST_ENEMY"))) g_enemy_opts.cast_enemy = atoi(e) & 3;   /* "Enemy Models": 0 Same as Cast, 1 All Enemies, 2 Custom, 3 Off */
     if ((e = getenv("RECVX_VOICES"))) g_enemy_opts.voices = atoi(e) != 0;   /* "Randomize Voice Lines" */
 }
 
@@ -82,10 +84,11 @@ void enemy_opts_from_host(const EnemyOpts* o)
     if (o) {
         char rl[sizeof(rates_ini)];
         host_opts = *o;
-        host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s, types per room %d%s, rates %s), seed %d, cutscene cast %d (%s, %s%s), voice lines %d\n",
+        host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s, types per room %d%s, rates %s), seed %d, cutscene cast %d (%s, %s%s, enemy models %d, "
+                 "unchecked %02x%02x), voice lines %d\n",
                  o->extra, o->place, o->rand, variety_name(o->variety), o->types, o->events ? ", event enemies" : "", rates_line(o->rate, rl), o->seed, o->cast,
                  o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models", o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "",
-                 o->voices);
+                 o->cast_enemy, o->cast_enemy_off[1], o->cast_enemy_off[0], o->voices);
     }
 }
 

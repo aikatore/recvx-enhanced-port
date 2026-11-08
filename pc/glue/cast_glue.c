@@ -88,7 +88,7 @@ void cast_release(void)
 void cast_room(const EnemyOpts* o)
 {
     int want[RECS], k, j, n = 0, room = room_file_now(), imports;
-    char custom[40];
+    char custom[40], enemies[48];
     unsigned scene;
     if (getenv("RECVX_CAST_TRACE")) {   /* test aid: the game's state at each room load (the same with the cast on and off) */
         const unsigned char* b = (const unsigned char*)sys->ev_flg;
@@ -110,8 +110,8 @@ void cast_room(const EnemyOpts* o)
         if (!(ep->flg & 0x1) || !ep->mlwP || c < 0 || (c >= 2 && !o->cast)) continue;   /* (the character played's doubles too: played()) */
         for (j = 0; j < (int)(sizeof(kept) / sizeof(kept[0])) && !(kept[j].room == room && kept[j].rec == k); j++);
         if (j < (int)(sizeof(kept) / sizeof(kept[0]))) { host_log("cast: room %04d record %d (type %d) stays: %s\n", room, k, ep->id, kept[j].why); continue; }
-        want[k] = c < 2 ? coop_look_model(c) : c == CAST_CROWD ? cast_crowd_model((unsigned)o->seed, scene, ep->id, ep->mdlver, o->cast_all, enemy_cast_off())
-                : cast_model((unsigned)o->seed, scene, c, o->cast_all, imports, enemy_cast_off());   /* (Claire's, Chris's: never cast) */
+        want[k] = c < 2 ? coop_look_model(c) : c == CAST_CROWD ? cast_crowd_model((unsigned)o->seed, scene, ep->id, ep->mdlver, o->cast_all, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off)
+                : cast_model((unsigned)o->seed, scene, c, o->cast_all, imports, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off);   /* (Claire's, Chris's: never cast) */
         rec_chr[k] = (unsigned char)c;
     }
     cast_release();   /* (normally all went with the last room's textures; their buffer is free again) */
@@ -136,15 +136,17 @@ void cast_room(const EnemyOpts* o)
         rec_slot[k] = (signed char)s;
         rec_id[k] = (unsigned char)ene[k].id;
         rec_ver[k] = ene[k].mdlver;
-        if (rec_chr[k] >= CAST_CHARACTERS) actor_cast_hands(ACTOR_CAST + s);   /* (a creature: no hand pieces of the script's) */
+        actor_cast_hands(ACTOR_CAST + s);   /* (a model without hands: a character's unarmed pieces, hands_hide) */
         cast_n++;
         n++;
         host_log("cast: room %04d record %d (type %d model %d) -> %s (slot %d)\n", room, k, ene[k].id, ene[k].mdlver, name, s);
     }
     if (o->cast_all == 2) snprintf(custom, sizeof(custom), "custom models: %d checked", cast_custom_count(0, enemy_cast_off(), imports, NULL));
+    snprintf(enemies, sizeof(enemies), "enemy models: %s", o->cast_enemy == CAST_ENEMY_SAME ? "same as cast" : o->cast_enemy == CAST_ENEMY_ALL ? "all enemies" : o->cast_enemy == CAST_ENEMY_OFF ? "off" : "");
+    if (o->cast_enemy == CAST_ENEMY_CUSTOM) snprintf(enemies, sizeof(enemies), "enemy models: %d checked", cast_custom_count(2, o->cast_enemy_off, 0, NULL));
     if (!o->cast) { host_log("cast: room %04d: %d records of Claire or Chris drawn as your look for them (Per Character)\n", room, n); return; }
-    host_log("cast: room %04d: %d records drawn as other models in cutscenes (seed %d, %s, %s%s)\n", room, n, o->seed,
-             o->cast_assign ? "random per cutscene" : "fixed", o->cast_all == 2 ? custom : o->cast_all ? "all models" : "cutscene models", imports ? ", imported models" : "");
+    host_log("cast: room %04d: %d records drawn as other models in cutscenes (seed %d, %s, %s%s, %s)\n", room, n, o->seed,
+             o->cast_assign ? "random per cutscene" : "fixed", o->cast_all == 2 ? custom : o->cast_all ? "all models" : "cutscene models", imports ? ", imported models" : "", enemies);
 }
 
 /* how record k is drawn now (cast.c cast_role), read when it is drawn: the character played now (a story switch changes
@@ -164,12 +166,16 @@ static int as_model(const BH_PWORK* ep, int k) { return k >= 0 && k < RECS && re
 /* The record's hand pieces. The cast's cutscene models have no hands: the room script links a hand piece (the
    character's own gloved fist, open hand or hand holding something) to the record's hand node and swaps it per
    gesture, and actor_act puts those nodes where the model's hands are, turned as them. A model with hands of its own
-   (a player model, a creature, a zombie, an imported model) showed the record's piece over or beside its own hand;
-   one without that hand at all (the Bandersnatch's left) showed it floating at the wrist. There the record's pieces are
+   (a creature, a zombie, an imported model) showed the record's piece over or beside its own hand; one without that
+   hand at all (the Bandersnatch's left) showed it floating at the wrist; one without hands (a cutscene model, a player
+   file) showed the record's character's hands (Wesker's big gloved ones on Steve). There the record's pieces are
    hidden while it is drawn as the model (each piece's mesh, NJD_EVAL_HIDE, as actor_weapon_hands does for the weapons'
-   hand pieces), and shown again at the next tick. Only one-node pieces are hands alone: a piece of more nodes holds a
-   prop in the same mesh (Claire's hand with the lighter, Rodrigo's with what he hands over) and stays, so the prop does
-   not go with it; items the script links to the hand are other objects and stay too. */
+   hand pieces), and shown again at the next tick; a model without hands has the unarmed pieces of the character it is
+   instead (actor_glue.c actor_cast_hands, cast_hands_draw). They stay where the model is the record's own character
+   (Claire's costume for Claire: the same hands) or its hands did not load. Only one-node pieces are hands alone: a piece
+   of more nodes holds a prop in the same mesh (Claire's hand with the lighter, Rodrigo's with what he hands over) and
+   stays, so the prop does not go with it; items the script links to the hand are other objects and stay too. The same
+   for the double of the character played drawn as the player's look (cast_double_parts). */
 
 /* actor_double_tick, every tick before cast_tick: the pieces and head parts hidden last tick shown again */
 void cast_show(void)
@@ -178,12 +184,13 @@ void cast_show(void)
 }
 
 extern int cast_hands;                  /* actor_glue.c: 0 (test aid RECVX_CAST_HANDS=0): the record's pieces kept */
-static void hands_hide(BH_PWORK* ep, int who)
+static void hands_hide(BH_PWORK* ep, int who, int chr)
 {
-    int side, node, o;
+    int side, node, o, own, h = actor_cast_hands_chr(who);
     if (!cast_hands) return;
     for (side = 0; side < 2; side++) {
-        if (!actor_own_hand(who, side, &node)) continue;   /* (no hand of its own: the record's piece is the model's hand) */
+        if (!(own = actor_own_hand(who, side, &node)) && (h < 0 || h == chr)) continue;   /* (no hand of its own, none of ours or the
+            record's character's: the record's piece is the model's hand) */
         for (o = 4; o < 32; o++) {   /* (0..3: the player's weapons and head part) */
             O_WRK* op = &sys->obwp[o];
             NJS_CNK_OBJECT* m = op->mlwP && op->mlwP->objP ? &op->mlwP->objP[0] : NULL;
@@ -194,7 +201,8 @@ static void hands_hide(BH_PWORK* ep, int who)
             if (getenv("RECVX_CAST_TRACE") && !(hid_logged[o >> 3] & (1 << (o & 7)))) {   /* test aid: once per object and room */
                 hid_logged[o >> 3] |= (unsigned char)(1 << (o & 7));
                 host_log("cast: room %04d record %d (type %d): its hand piece (object %d, id %d) on node %d hidden: the model has %s\n", room_file_now(),
-                         (int)(ep - ene), ep->id, o, op->id, node, actor_own_hand(who, side, &node) == 2 ? "no such hand" : "a hand of its own");
+                         (int)(ep - ene), ep->id, o, op->id, node, own == 2 ? "no such hand" : own ? "a hand of its own" : h == 0 ? "Claire's hands" : h == 1 ? "Chris's hands"
+                         : h == 2 ? "Steve's hands" : "Wesker's hands");
             }
         }
     }
@@ -252,14 +260,18 @@ void cast_tick(void)
         }
         if (!as_model(ep, k) || (ep->stflg & 0x41000000) || !ep->mlwP) continue;
         actor_act(ACTOR_CAST + rec_slot[k], ep);
-        hands_hide(ep, ACTOR_CAST + rec_slot[k]);
+        hands_hide(ep, ACTOR_CAST + rec_slot[k], rec_chr[k]);
         parts_hide(ep, ACTOR_CAST + rec_slot[k], rec_chr[k], 2);
     }
 }
 
-/* actor_double_tick: the head parts of the double ep of character pid posed as the player's look hidden (Claire's
-   ponytail on her record in 9150, 9320, 3210) */
-void cast_double_parts(BH_PWORK* ep, int pid) { parts_hide(ep, ACTOR_DOUBLE, pid, 3); }
+/* actor_double_tick: the head parts and hand pieces of the double ep of character pid posed as the player's look hidden
+   (Claire's ponytail on her record in 9150, 9320, 3210; her gloved hands) */
+void cast_double_parts(BH_PWORK* ep, int pid)
+{
+    parts_hide(ep, ACTOR_DOUBLE, pid, 3);
+    hands_hide(ep, ACTOR_DOUBLE, pid);
+}
 
 /* A part of a creature's body is a record of its own linked to it (flg 0x80, lkwkp, lkono): Nosferatu's heart in 6040
    (type 53, record 5, on his chest node 3, beating, a morphing record) showed on the chest of the model in his place.

@@ -39,7 +39,7 @@ int main(void)
         CHECK(kinds > 20);
         for (s = 0; s < 400; s++)   /* a character that draws the zombie entry shows that look */
             for (c = 2; c < CAST_CHARACTERS; c++) {
-                int a = cast_model((unsigned)s, 0, c, 1, 0, NULL);
+                int a = cast_model((unsigned)s, 0, c, 1, 0, NULL, CAST_ENEMY_SAME, NULL);
                 if (a < ACTOR_MODELS && actor_models[a].id == 1) { CHECK(a == cast_zombie_look((unsigned)s, 0, c)); got++; }
             }
         CHECK(got > 20 && got < 400 * (CAST_CHARACTERS - 2) / 4);   /* zombies now and then, not most of the time */
@@ -105,7 +105,7 @@ int main(void)
             char k[128];
             memset(cast_off, 0, sizeof(cast_off));
             memset(cast_appear_off, 0, sizeof(cast_appear_off));
-            CHECK(cast_off_key(1, "Steve") && cast_off_key(1, "Tyrant") && !cast_off_key(1, "Claire") && !cast_off_key(1, "Claire (Cutscene Model)") && !cast_off_key(1, "No Such Model"));
+            CHECK(cast_off_key(1, cast_appear_off, "Steve") && cast_off_key(1, cast_appear_off, "Tyrant") && !cast_off_key(1, cast_appear_off, "Claire") && !cast_off_key(1, cast_appear_off, "Claire (Cutscene Model)") && !cast_off_key(1, cast_appear_off, "No Such Model"));
             CHECK(cast_off_at(cast_appear_off, steve) && cast_off_at(cast_appear_off, tyrant) && cast_custom_count(1, cast_appear_off, 0, NULL) == nl - 2);
             CHECK(cast_custom_count(0, cast_off, 0, NULL) == na + 3 && !strcmp(cast_entry_key(ACTOR_PART + 2, k, sizeof(k)), "Steve"));
             memset(cast_appear_off, 0, sizeof(cast_appear_off));
@@ -130,27 +130,27 @@ int main(void)
     CHECK(cast_character(16, 0) < 0 && cast_character(12, 0) < 0 && cast_character(1, 0) < 0 && cast_character(68, 0) < 0);
     for (s = 0; s < 50; s++) {
         int got[CAST_CHARACTERS];
-        for (c = 0; c < 2; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL) < 0 && cast_model((unsigned)s, 0, c, 1, 0, NULL) < 0 && cast_model((unsigned)s, 9, c, 2, 0, NULL) < 0);   /* Claire, Chris: no pick */
+        for (c = 0; c < 2; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL) < 0 && cast_model((unsigned)s, 0, c, 1, 0, NULL, CAST_ENEMY_SAME, NULL) < 0 && cast_model((unsigned)s, 9, c, 2, 0, NULL, CAST_ENEMY_SAME, NULL) < 0);   /* Claire, Chris: no pick */
         for (c = 2; c < CAST_CHARACTERS; c++) {   /* fixed: the cutscene models, nobody as itself, each model for one character (five of each) */
             int same = 0;
-            got[c] = cast_model((unsigned)s, 0, c, 0, 0, NULL);
-            CHECK(in(cine, nc, got[c]) && got[c] != own[c] && got[c] == cast_model((unsigned)s, 0, c, 0, 0, NULL));
+            got[c] = cast_model((unsigned)s, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL);
+            CHECK(in(cine, nc, got[c]) && got[c] != own[c] && got[c] == cast_model((unsigned)s, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL));
             for (int d = 2; d < c; d++) same += got[d] == got[c];
             CHECK(same == 0);
-            int a = cast_model((unsigned)s, 0, c, 1, 0, NULL);   /* all models: none of the character's own looks */
+            int a = cast_model((unsigned)s, 0, c, 1, 0, NULL, CAST_ENEMY_SAME, NULL);   /* all models: none of the character's own looks */
             CHECK((in(all, na, a) || a == cast_zombie_look((unsigned)s, 0, c)) && a != own[c] && (a < ACTOR_PART || a >= ACTOR_PART + 4));
         }
         for (scene = 1; scene < 20; scene++) {   /* random per cutscene: again in each room, the same for the same room */
-            int m = cast_model((unsigned)s, (unsigned)scene * 10 + 1, 2, 0, 0, NULL);
-            CHECK(m == cast_model((unsigned)s, (unsigned)scene * 10 + 1, 2, 0, 0, NULL) && m != own[2]);
+            int m = cast_model((unsigned)s, (unsigned)scene * 10 + 1, 2, 0, 0, NULL, CAST_ENEMY_SAME, NULL);
+            CHECK(m == cast_model((unsigned)s, (unsigned)scene * 10 + 1, 2, 0, 0, NULL, CAST_ENEMY_SAME, NULL) && m != own[2]);
             differ += m != got[2];
         }
     }
     CHECK(differ > 50 * 19 / 2);
     /* Fixed: a character's model does not depend on who is played or where (cast_model takes neither): the same in Claire's
        part (room 0000) and in Chris's (7220), scene 0 in both */
-    for (s = 0; s < 50; s++) for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL) == cast_model((unsigned)s, 0, c, 0, 0, NULL) && cast_model((unsigned)s, 0, c, 1, 0, NULL) == cast_model((unsigned)s, 0, c, 1, 0, NULL));   /* most rooms pick another model than the fixed one */
-    CHECK(cast_model(1, 0, CAST_ALL, 0, 0, NULL) < 0 && cast_model(1, 0, -1, 0, 0, NULL) < 0);   /* not a character */
+    for (s = 0; s < 50; s++) for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL) == cast_model((unsigned)s, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL) && cast_model((unsigned)s, 0, c, 1, 0, NULL, CAST_ENEMY_SAME, NULL) == cast_model((unsigned)s, 0, c, 1, 0, NULL, CAST_ENEMY_SAME, NULL));   /* most rooms pick another model than the fixed one */
+    CHECK(cast_model(1, 0, CAST_ALL, 0, 0, NULL, CAST_ENEMY_SAME, NULL) < 0 && cast_model(1, 0, -1, 0, 0, NULL, CAST_ENEMY_SAME, NULL) < 0);   /* not a character */
     {   /* the creatures only cutscenes show: by room file, record and type, nothing else (the fought ones: never) */
         static const int got[][4] = { { 3000, 2, 51, 10 }, { 3230, 1, 19, 8 }, { 6040, 4, 52, 7 }, { 8030, 2, 5, 9 },
                                       { 6100, 2, 15, -1 }, { 1122, 1, 19, -1 }, { 5010, 0, 19, -1 }, { 9280, 0, 17, -1 }, { 9321, 1, 12, -1 },
@@ -160,12 +160,12 @@ int main(void)
         CHECK(!strcmp(cast_name(7), "Nosferatu") && !strcmp(cast_name(CAST_ALL - 1), "Steve's father") && !strcmp(cast_name(6), "Rodrigo"));
         for (s = 0; s < 200; s++)
             for (c = CAST_CHARACTERS; c < CAST_ALL; c++) {
-                int f = cast_model((unsigned)s, 0, c, 1, 0, NULL), r = cast_model((unsigned)s, 77, c, 1, 0, NULL), z = actor_models[f < ACTOR_MODELS ? f : 0].id;
-                CHECK(cast_role(c, 0, -1, -1) == CAST_PICK && f >= 0 && f == cast_model((unsigned)s, 0, c, 1, 0, NULL) && r >= 0);   /* fixed: one model in every scene */
+                int f = cast_model((unsigned)s, 0, c, 1, 0, NULL, CAST_ENEMY_SAME, NULL), r = cast_model((unsigned)s, 77, c, 1, 0, NULL, CAST_ENEMY_SAME, NULL), z = actor_models[f < ACTOR_MODELS ? f : 0].id;
+                CHECK(cast_role(c, 0, -1, -1) == CAST_PICK && f >= 0 && f == cast_model((unsigned)s, 0, c, 1, 0, NULL, CAST_ENEMY_SAME, NULL) && r >= 0);   /* fixed: one model in every scene */
                 CHECK(f != own[c - CAST_CHARACTERS] && (c != 8 || f != 18) && (c != 9 || f != 21) && (c != CAST_ALL - 1 || f >= ACTOR_MODELS || (z != 1 && z != 51 && z != 52)));   /* never itself (the Tyrant's twin, the Sweeper) */
                 CHECK(in(all, na, f) || f == cast_zombie_look((unsigned)s, 0, c));
-                CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL) >= 0);   /* "Cutscene Models": the five used up, a new round */
-                for (int d = 2; d < c; d++) CHECK(cast_model((unsigned)s, 0, d, 1, 0, NULL) != f);   /* "All Models" has enough: each its own */
+                CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL) >= 0);   /* "Cutscene Models": the five used up, a new round */
+                for (int d = 2; d < c; d++) CHECK(cast_model((unsigned)s, 0, d, 1, 0, NULL, CAST_ENEMY_SAME, NULL) != f);   /* "All Models" has enough: each its own */
             }
     }
     {   /* the zombies only cutscenes show: 9340's three and 0050's, nothing else; a creature or another zombie look, one per look and
@@ -176,14 +176,14 @@ int main(void)
         CHECK(cast_scene_zombie(9340, 1, 1) && cast_scene_zombie(9340, 3, 1) && cast_scene_zombie(50, 2, 1) && !cast_scene_zombie(50, 0, 4) && !cast_scene_zombie(9340, 0, 92) && !cast_scene_zombie(9340, 4, 1));
         CHECK(!cast_scene_zombie(9341, 1, 1) && !cast_scene_zombie(70, 3, 1) && !cast_scene_zombie(9290, 3, 1) && !cast_scene_zombie(9340, 1, 52));
         CHECK(cast_role(CAST_CROWD, 1, -1, -1) == CAST_PICK && !strcmp(cast_name(CAST_CROWD), "Zombie"));
-        CHECK(cast_crowd_model(1, 0, 1, 99, 1, NULL) < 0 && cast_crowd_model(1, 0, 15, 0, 1, NULL) < 0);   /* not a zombie look */
+        CHECK(cast_crowd_model(1, 0, 1, 99, 1, NULL, CAST_ENEMY_SAME, NULL) < 0 && cast_crowd_model(1, 0, 15, 0, 1, NULL, CAST_ENEMY_SAME, NULL) < 0);   /* not a zombie look */
         for (s = 0; s < 300; s++) {
             int m[3];
             for (int i = 0; i < 3; i++) {
-                int a = cast_crowd_model((unsigned)s, 0, 1, vers[i], 0, NULL), z = a >= 0 && a < ACTOR_MODELS ? actor_models[a].id : -1;
+                int a = cast_crowd_model((unsigned)s, 0, 1, vers[i], 0, NULL, CAST_ENEMY_SAME, NULL), z = a >= 0 && a < ACTOR_MODELS ? actor_models[a].id : -1;
                 m[i] = a;
-                CHECK(a >= 0 && a < ACTOR_MODELS && a == cast_crowd_model((unsigned)s, 0, 1, vers[i], 0, NULL));   /* deterministic */
-                CHECK(a == cast_crowd_model((unsigned)s, 0, 1, vers[i], 1, NULL) && a == cast_crowd_model((unsigned)s, 0, 1, vers[i], 2, NULL));   /* any Model Selection */
+                CHECK(a >= 0 && a < ACTOR_MODELS && a == cast_crowd_model((unsigned)s, 0, 1, vers[i], 0, NULL, CAST_ENEMY_SAME, NULL));   /* deterministic */
+                CHECK(a == cast_crowd_model((unsigned)s, 0, 1, vers[i], 1, NULL, CAST_ENEMY_SAME, NULL) && a == cast_crowd_model((unsigned)s, 0, 1, vers[i], 2, NULL, CAST_ENEMY_SAME, NULL));   /* any Model Selection */
                 CHECK(cast_character(z, 0) < 0 && actor_models[a].anim != ANIM_IDLE && !(z == 1 && actor_models[a].mdlver == vers[i]));   /* a creature or another look */
                 nk += !kinds[a]; kinds[a] = 1;
             }
@@ -192,11 +192,64 @@ int main(void)
         CHECK(nk > 12 && kinds[17] && kinds[22] && kinds[16] && kinds[25]);   /* the Tyrant, the Bandersnatch, Nosferatu, the anatomist among them */
         CHECK(same < 300 / 4);   /* the looks of a scene mostly differ */
         memset(none, 0xFF, sizeof(none));
-        CHECK(cast_crowd_model(5, 0, 1, 35, 2, none) < 0);
+        CHECK(cast_crowd_model(5, 0, 1, 35, 2, none, CAST_ENEMY_SAME, NULL) < 0);
+    }
+    {   /* "Enemy Models": its list is the monsters of "All models" and the zombies (no character, no import); All Enemies and Custom
+           give the creatures and the scene zombies only those, each creature still never itself, fixed per seed; the characters'
+           picks are Same as Cast's; Off: they stay themselves */
+        static const int mons[] = { 15, 16, 17, 19, 20, 21, 22, 25, CAST_ZOMBIES };   /* Alexia's first form, Nosferatu, Tyrant, Monster Steve, Hunter, Sweeper, Bandersnatch, anatomist */
+        static const signed char own[CAST_CREATURES] = { 16, 17, 20, -1 };
+        unsigned char eoff[CAST_ENEMY_BYTES] = { 0 };
+        short pos[64];
+        int mdl[64], ne = cast_custom_list(2, 3, pos, mdl, 64), total, seen = 0, tyr = -1, k;
+        char key[64];
+        CHECK(ne == (int)(sizeof(mons) / sizeof(mons[0])) && ne <= CAST_ENEMY_BYTES * 8 && cast_custom_count(2, NULL, 3, &total) == ne && total == ne);
+        for (k = 0; k < ne; k++) {
+            CHECK(in(mons, ne, mdl[k]) && pos[k] >= 0 && pos[k] < ne && !(seen & (1 << pos[k])));
+            seen |= 1 << pos[k];
+            if (mdl[k] == 17) tyr = pos[k];
+        }
+        CHECK(cast_off_key(2, eoff, "Tyrant") && cast_off_at(eoff, tyr) && !cast_off_key(2, eoff, "Steve") && !cast_off_key(2, eoff, "Rodrigo Juan Raval") && !cast_off_key(2, eoff, "import:x"));
+        CHECK(cast_custom_count(2, eoff, 0, NULL) == ne - 1 && !strcmp(cast_entry_key(CAST_ZOMBIES, key, sizeof key), "Zombies"));
+        for (s = 0; s < 300; s++) {
+            int got[CAST_ALL];
+            for (c = 2; c < CAST_ALL; c++) {
+                int a = cast_model((unsigned)s, 0, c, s & 1, 0, NULL, CAST_ENEMY_ALL, NULL);
+                if (c < CAST_CHARACTERS) {   /* the characters as before */
+                    CHECK(a == cast_model((unsigned)s, 0, c, s & 1, 0, NULL, CAST_ENEMY_SAME, NULL) && a == cast_model((unsigned)s, 0, c, s & 1, 0, NULL, CAST_ENEMY_OFF, NULL));
+                    continue;
+                }
+                CHECK(a >= 0 && a == cast_model((unsigned)s, 0, c, 0, 0, NULL, CAST_ENEMY_ALL, NULL) && a != own[c - CAST_CHARACTERS]);   /* any Model Selection, never itself */
+                CHECK(in(mons, ne, a) || (a < ACTOR_MODELS && (actor_models[a].id == 1 || actor_models[a].id == 51 || actor_models[a].id == 52) && c != CAST_ALL - 1));
+                CHECK((c != 8 || a != 18) && (c != 9 || a != 21) && cast_model((unsigned)s, 0, c, 1, 0, NULL, CAST_ENEMY_OFF, NULL) == -1);
+                for (int d = CAST_CHARACTERS; d < c; d++) CHECK(got[d] != a || in(mons, ne, a) == 0);   /* the creatures differ (the zombies' entry: a look each) */
+                got[c] = a;
+            }
+            for (int i = 0; i < 3; i++) {   /* the scene zombies: All Enemies is All Models' monsters, Off none */
+                static const int vers[3] = { 35, 4, 38 };
+                CHECK(cast_crowd_model((unsigned)s, 0, 1, vers[i], 0, NULL, CAST_ENEMY_ALL, NULL) == cast_crowd_model((unsigned)s, 0, 1, vers[i], 1, NULL, CAST_ENEMY_SAME, NULL));
+                CHECK(cast_crowd_model((unsigned)s, 0, 1, vers[i], 1, NULL, CAST_ENEMY_OFF, NULL) == -1);
+            }
+        }
+        for (k = 0; k < ne; k++) cast_off_put(eoff, k, k != tyr);   /* Custom: only the Tyrant: he stays himself, the others become him */
+        for (s = 0; s < 50; s++) {
+            for (c = CAST_CHARACTERS; c < CAST_ALL; c++) CHECK(cast_model((unsigned)s, (unsigned)s, c, 1, 0, NULL, CAST_ENEMY_CUSTOM, eoff) == (c == 8 ? -1 : 17));
+            CHECK(cast_crowd_model((unsigned)s, 0, 1, 35, 2, NULL, CAST_ENEMY_CUSTOM, eoff) == 17);
+        }
+        memset(eoff, 0xFF, sizeof eoff);   /* none checked: nobody changes */
+        for (c = CAST_CHARACTERS; c < CAST_ALL; c++) CHECK(cast_model(3, 0, c, 1, 0, NULL, CAST_ENEMY_CUSTOM, eoff) == -1);
+        CHECK(cast_crowd_model(3, 0, 1, 35, 1, NULL, CAST_ENEMY_CUSTOM, eoff) == -1);
+    }
+    {   /* the "Custom" lists start with the four cutscene models (Claire, Chris, Steve, Wesker; "Randomize Character Model"'s has
+           Steve's and Wesker's), then the rest in the "You appear as" list's order */
+        short pos[128];
+        int mdl[128];
+        CHECK(cast_custom_list(0, 0, pos, mdl, 128) > 4 && mdl[0] == 0 && mdl[1] == 1 && mdl[2] == 3 && mdl[3] == 5);
+        CHECK(cast_custom_list(1, 0, pos, mdl, 128) > 2 && mdl[0] == 3 && mdl[1] == 5);
     }
     {   /* the seed decides: two seeds differ somewhere */
         int d = 0;
-        for (c = 2; c < CAST_CHARACTERS; c++) d += cast_model(1, 0, c, 0, 0, NULL) != cast_model(2, 0, c, 0, 0, NULL);
+        for (c = 2; c < CAST_CHARACTERS; c++) d += cast_model(1, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL) != cast_model(2, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL);
         CHECK(d > 0);
     }
     {   /* "Custom": the list is "All models" then Claire's and Chris's looks (each position once, in the menus' order);
@@ -223,24 +276,24 @@ int main(void)
         }
         CHECK(tyrant >= 0 && steve >= 0 && zomb >= 0 && claire == 1 && cast_custom_count(0, off, 0, &total) == nf && total == nf);
         for (int j = na; j < nf; j++) cast_off_put(off, j, 1);
-        for (s = 0; s < 50; s++) for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 2, 0, off) == cast_model((unsigned)s, 0, c, 1, 0, NULL));
+        for (s = 0; s < 50; s++) for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 2, 0, off, CAST_ENEMY_SAME, NULL) == cast_model((unsigned)s, 0, c, 1, 0, NULL, CAST_ENEMY_SAME, NULL));
         for (int j = 0; j < nf; j++) cast_off_put(off, j, j != tyrant && j != steve && j != zomb);   /* Tyrant, Steve's cutscene model, the zombies */
         CHECK(cast_custom_count(0, off, 0, NULL) == 3 && cast_pool(2, 0, all + 64, 64, off) == 3);
         for (s = 0; s < 200; s++)
             for (c = 2; c < CAST_CHARACTERS; c++) {
-                int a = cast_model((unsigned)s, (unsigned)s % 3, c, 2, 0, off);
+                int a = cast_model((unsigned)s, (unsigned)s % 3, c, 2, 0, off, CAST_ENEMY_SAME, NULL);
                 CHECK(a == 17 || (a == 3 && c != 2) || a == cast_zombie_look((unsigned)s, (unsigned)s % 3, c));
             }
         for (int j = 0; j < nf; j++) cast_off_put(off, j, j != steve);   /* only Steve's look: Steve stays himself */
-        for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model(7, 0, c, 2, 0, off) == (c <= 2 ? -1 : 3));
+        for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model(7, 0, c, 2, 0, off, CAST_ENEMY_SAME, NULL) == (c <= 2 ? -1 : 3));
         cast_off_put(off, steve, 1);   /* none */
-        for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model(7, 0, c, 2, 0, off) == -1);
+        for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model(7, 0, c, 2, 0, off, CAST_ENEMY_SAME, NULL) == -1);
         /* recvx.ini: by key; unknown keys ignored, so are the player files' with a talking twin (an older list's) */
         {
             char k[128];
             memset(cast_off, 0, sizeof(cast_off));
-            CHECK(cast_off_key(0, "Tyrant") && cast_off_key(0, "Zombies") && cast_off_key(0, cast_entry_key(5, k, sizeof(k))) && !cast_off_key(0, "No Such Model") && !cast_off_key(0, "import:gone"));
-            CHECK(!cast_off_key(0, "Claire") && !cast_off_key(0, "Chris") && !cast_off_key(0, "Steve") && !cast_off_key(0, "Wesker") && cast_off_key(0, "Claire (Alternate Costume)"));
+            CHECK(cast_off_key(0, cast_off, "Tyrant") && cast_off_key(0, cast_off, "Zombies") && cast_off_key(0, cast_off, cast_entry_key(5, k, sizeof(k))) && !cast_off_key(0, cast_off, "No Such Model") && !cast_off_key(0, cast_off, "import:gone"));
+            CHECK(!cast_off_key(0, cast_off, "Claire") && !cast_off_key(0, cast_off, "Chris") && !cast_off_key(0, cast_off, "Steve") && !cast_off_key(0, cast_off, "Wesker") && cast_off_key(0, cast_off, "Claire (Alternate Costume)"));
             for (int j = 0; j < nf; j++) if (cust[j] == ACTOR_PART + 4) cast_off_put(cast_off, j, 0);   /* (Claire's costume: checked again) */
             CHECK(cast_off_at(cast_off, tyrant) && cast_off_at(cast_off, zomb) && !cast_off_at(cast_off, steve) && cast_custom_count(0, cast_off, 0, NULL) == nf - 3);
             memset(cast_off, 0, sizeof(cast_off));
@@ -256,10 +309,10 @@ int main(void)
         int p[16], n = cast_pool(0, 2, p, 16, NULL), seen = 0;
         CHECK(id != 0 && n == nc + 2 && p[n - 1] == ACTOR_MODELS + 1);
         for (s = 0; s < 40; s++)
-            for (c = 0; c < CAST_CHARACTERS; c++) seen |= cast_model((unsigned)s, 0, c, 0, 2, NULL) >= ACTOR_MODELS;
+            for (c = 0; c < CAST_CHARACTERS; c++) seen |= cast_model((unsigned)s, 0, c, 0, 2, NULL, CAST_ENEMY_SAME, NULL) >= ACTOR_MODELS;
         CHECK(seen);
         for (s = 0; s < 40; s++)
-            for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL) < ACTOR_MODELS);
+            for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL) < ACTOR_MODELS);
         actor_imports[2] = (ActorModel){ .name = "Jim", .anim = ANIM_MALE };
         actor_import_n = 3;
         CHECK(cast_import_id() != id);
@@ -272,10 +325,10 @@ int main(void)
             actor_import_file[2] = "mods/import/outbreak2/jim01/jim01.cvxm";
             CHECK(nl == nb + 3 && pos[nb] == nb && mdl[nb + 2] == ACTOR_MODELS + 2 && cast_custom_list(0, 0, pos, mdl, 128) == nb);
             CHECK(!strcmp(cast_entry_key(ACTOR_MODELS + 1, k, sizeof(k)), "import:cindy01") && !strcmp(cast_entry_name(ACTOR_MODELS + 1), "Cindy"));
-            CHECK(cast_off_key(0, "import:cindy01") && cast_off_at(cast_off, nb + 1) && !cast_off_at(cast_off, nb) && cast_custom_count(0, cast_off, 3, NULL) == nb + 2);
+            CHECK(cast_off_key(0, cast_off, "import:cindy01") && cast_off_at(cast_off, nb + 1) && !cast_off_at(cast_off, nb) && cast_custom_count(0, cast_off, 3, NULL) == nb + 2);
             for (s = 0; s < 200; s++)
                 for (c = 0; c < CAST_CHARACTERS; c++) {
-                    int a = cast_model((unsigned)s, 0, c, 2, 3, cast_off);
+                    int a = cast_model((unsigned)s, 0, c, 2, 3, cast_off, CAST_ENEMY_SAME, NULL);
                     CHECK(a != ACTOR_MODELS + 1);
                     nimp += a == ACTOR_MODELS || a == ACTOR_MODELS + 2;
                 }
@@ -348,7 +401,7 @@ int main(void)
             CHECK(seen == 0x7F && on == cast_custom_count(0, cast_off, 0, NULL) && on < n);   /* (all seven) */
             for (s = 0; s < 64; s++)
                 for (int c = 2; c < CAST_ALL; c++) {
-                    int m = cast_model((unsigned)s, (unsigned)s, c, 2, 0, cast_off);
+                    int m = cast_model((unsigned)s, (unsigned)s, c, 2, 0, cast_off, CAST_ENEMY_SAME, NULL);
                     CHECK(m < 0 || (voice_model_chr(m) >= 0 && m < ACTOR_PART));
                 }
             memset(cast_off, 0, sizeof(cast_off));

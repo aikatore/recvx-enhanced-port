@@ -374,6 +374,8 @@ static void build_rows(void)
         add_set(&g_enemy_opts.cast);
         add_set(&g_enemy_opts.cast_all);
         if (g_enemy_opts.cast && g_enemy_opts.cast_all == 2) add(K_CUSTOM, 0);   /* (after Model Selection) */
+        add_set(&g_enemy_opts.cast_enemy);
+        if (g_enemy_opts.cast && g_enemy_opts.cast_enemy == CAST_ENEMY_CUSTOM) add(K_CUSTOM, 2);   /* (its list: cast_list.c list 2) */
         add_set(&g_enemy_opts.cast_assign);
         add_set(&g_enemy_opts.cast_imports);
         add(K_HEAD, H_RANDCHAR);
@@ -665,7 +667,7 @@ static int activate(const Row* r)
     case K_CUSTOM:
         bm.list = 1;
         cast_list_open(r->idx, ROW_X, 600, ROW_Y0, ROW_H, ROW_SC, 10);
-        host_log("biorand menu: the %s's custom models\n", r->idx ? "character model" : "cutscene cast");
+        host_log("biorand menu: the %s's custom models\n", r->idx == 2 ? "cutscene cast enemies" : r->idx ? "character model" : "cutscene cast");
         return 0;
     case K_RATES:
         bm.list = 2;
@@ -931,9 +933,9 @@ static void draw_row(int i)
         return;
     }
     case K_CUSTOM: {   /* how many are checked; confirm opens the list */
-        int imp = (r->idx ? g_biorand_appear_imports > 0 : g_enemy_opts.cast_imports) ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0;
-        text_fit(ROW_X, y, names[r->kind], ROW_SC, VAL_X - 16 - ROW_X, col);
-        text_fit(VAL_X + 12, y, cast_list_summary(r->idx, r->idx ? cast_appear_off : cast_off, imp, v, sizeof(v)), ROW_SC, 196, col);
+        int imp = r->idx != 2 && (r->idx ? g_biorand_appear_imports > 0 : g_enemy_opts.cast_imports) ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0;
+        text_fit(ROW_X, y, r->idx == 2 ? "Choose Enemies" : names[r->kind], ROW_SC, VAL_X - 16 - ROW_X, col);
+        text_fit(VAL_X + 12, y, cast_list_summary(r->idx, r->idx == 2 ? g_enemy_opts.cast_enemy_off : r->idx ? cast_appear_off : cast_off, imp, v, sizeof(v)), ROW_SC, 196, col);
         return;
     }
     case K_RATES:   /* how many types can appear; confirm opens the list */
@@ -1056,7 +1058,7 @@ static void help_text(char* t, int n, unsigned int* col)
                  : r->idx == 2 ? tr("Include imported characters. In co-op, both players need the same models.")
                  : tr("Choose a character model for each generated seed: the same one for Claire and Chris, or one for each character. Saved separately from the seed string."));
         return;
-    case K_CUSTOM: snprintf(t, n, "Choose the models the characters can appear as."); return;
+    case K_CUSTOM: snprintf(t, n, "%s", r->idx == 2 ? "Choose the enemies the monsters can appear as." : "Choose the models the characters can appear as."); return;
     case K_RATES: snprintf(t, n, "Set how often each enemy type is chosen."); return;
     case K_RANDPG: snprintf(t, n, "%s", tr("Set the enemy randomizer, extra enemies, the cutscene cast and random character models.")); return;
     case K_RSEED: snprintf(t, n, "%s", tr("Picks a new random seed.")); return;

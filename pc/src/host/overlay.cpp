@@ -123,35 +123,39 @@ static void calib_pattern(void)
     ImGui::Dummy(ImVec2(2 * w + gap, sq + 2 * gap));
 }
 
-/* the cutscene cast's "Custom" models under Model Selection (cast.h; the lobby and the BIORAND screen list the same) */
-static bool cast_custom_imgui()
+/* the cutscene cast's "Custom" models under Model Selection, or (list 2) its enemies under Enemy Models (cast.h; the lobby
+   and the BIORAND screen list the same) */
+static bool cast_custom_imgui(int list)
 {
     static short pos[CAST_CUSTOM_MAX];
     static int mdl[CAST_CUSTOM_MAX];
-    int n = cast_custom_list(0, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, pos, mdl, CAST_CUSTOM_MAX), on = 0, set = -1;
+    unsigned char* off = list ? g_enemy_opts.cast_enemy_off : cast_off;
+    int n = cast_custom_list(list, !list && g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, pos, mdl, CAST_CUSTOM_MAX), on = 0, set = -1;
     bool changed = false;
-    char head[80];
-    for (int k = 0; k < n; k++) on += !cast_off_at(cast_off, pos[k]);
-    SDL_snprintf(head, sizeof head, tr("Custom Models (%d of %d checked)###castcustom"), on, n);
+    char head[96];
+    for (int k = 0; k < n; k++) on += !cast_off_at(off, pos[k]);
+    SDL_snprintf(head, sizeof head, list ? tr("Custom Enemies (%d of %d checked)###castenemies") : tr("Custom Models (%d of %d checked)###castcustom"), on, n);
     if (!ImGui::TreeNodeEx(head, ImGuiTreeNodeFlags_DefaultOpen)) return false;
+    ImGui::PushID(list);
     if (ImGui::Button(tr("Select All"))) set = 0;
     ImGui::SameLine();
     if (ImGui::Button(tr("Deselect All"))) set = 1;
-    if (set >= 0) { for (int k = 0; k < n; k++) cast_off_put(cast_off, pos[k], set); changed = true; }
-    if (!on) { ImGui::SameLine(); ImGui::TextDisabled(tr("None checked: the characters keep their own looks.")); }
+    if (set >= 0) { for (int k = 0; k < n; k++) cast_off_put(off, pos[k], set); changed = true; }
+    if (!on) { ImGui::SameLine(); ImGui::TextDisabled("%s", list ? tr("None checked: the monsters keep their own looks.") : tr("None checked: the characters keep their own looks.")); }
     if (ImGui::BeginChild("##castcustom", ImVec2(0, ImGui::GetFrameHeightWithSpacing() * (n < 12 ? n + 1 : 12)), ImGuiChildFlags_Borders)) {
         const char* grp = nullptr;
         for (int k = 0; k < n; k++) {
             const char* g = cast_entry_group(mdl[k]);
             char label[128];
-            bool b = !cast_off_at(cast_off, pos[k]);
+            bool b = !cast_off_at(off, pos[k]);
             if (!grp || strcmp(g, grp)) ImGui::SeparatorText(g);
             grp = g;
             SDL_snprintf(label, sizeof label, "%s##cc%d", cast_entry_name(mdl[k]), k);
-            if (ImGui::Checkbox(label, &b)) { cast_off_put(cast_off, pos[k], !b); changed = true; }
+            if (ImGui::Checkbox(label, &b)) { cast_off_put(off, pos[k], !b); changed = true; }
         }
     }
     ImGui::EndChild();
+    ImGui::PopID();
     ImGui::TreePop();
     if (changed) settings_save_later();
     return changed;
@@ -207,7 +211,13 @@ static bool setting_row(const Setting* s)
             bool hover = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
             if (hover && s->help) ImGui::SetTooltip("%s", tr(s->help));
             ImGui::EndDisabled();
-            return cast_custom_imgui() | changed;
+            return cast_custom_imgui(0) | changed;
+        }
+        if (s->val == &g_enemy_opts.cast_enemy && v == CAST_ENEMY_CUSTOM) {   /* ... and "Enemy Models"' */
+            bool hover = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+            if (hover && s->help) ImGui::SetTooltip("%s", tr(s->help));
+            ImGui::EndDisabled();
+            return cast_custom_imgui(2) | changed;
         }
         if (s->val == &g_enemy_opts.variety && v == 2) {   /* "Custom": the rates below */
             bool hover = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);

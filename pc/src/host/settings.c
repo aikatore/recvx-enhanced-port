@@ -368,6 +368,7 @@ static void variety_set(int v)
 }
 static const char* const cast_pools[] = { "Cutscene Models", "All Models", "Custom" };
 static const char* const cast_assigns[] = { "Per Character", "Per Cutscene" };
+static const char* const cast_enemies[] = { "Same as Cast", "All Enemies", "Custom", "Off" };   /* cast.h CAST_ENEMY_* */
 static const char* const model_modes[] = { "Same for Both", "Per Character" };
 static int cast_on(void) { return g_enemy_opts.cast != 0; }
 static int voices_on(void) { return g_enemy_opts.voices != 0; }
@@ -457,6 +458,8 @@ const Setting g_settings[] = {
       .help = "Change story characters' appearance in cutscenes using the enemy seed. Applies next room." },
     { SP_GAMEPLAY, "Model Selection", V(g_enemy_opts.cast_all), 0, 2, 1, cast_pools, .shown = cast_on,
       .help = "Cutscene Models have animated faces. All Models includes creatures and others with still faces. Custom uses only the models you check." },
+    { SP_GAMEPLAY, "Enemy Models", V(g_enemy_opts.cast_enemy), 0, 3, 1, cast_enemies, .shown = cast_on,
+      .help = "What monsters seen only in cutscenes become. All Enemies and Custom use only enemies, Same as Cast uses the Model Selection, Off keeps them as they are." },
     { SP_GAMEPLAY, "Model Assignment", V(g_enemy_opts.cast_assign), 0, 1, 1, cast_assigns, .shown = cast_on,
       .help = "Keep one model for each character, or choose again for each cutscene room. The seed fixes the choices." },
     { SP_GAMEPLAY, "Include Imported Models", V(g_enemy_opts.cast_imports), 0, 1, 1, .shown = cast_imports_shown,

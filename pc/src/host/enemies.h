@@ -11,7 +11,7 @@ extern "C" {
 #define ENEMY_TYPES_MAX 8       /* "Types per Room": 1..8, 0 no limit */
 #define ENEMY_RATE_MAX 10       /* a kind's rate under "Custom": 0 (Off) .. 10 */
 #define ENEMY_RATE_N 32         /* EnemyOpts.rate: the base kinds (enemy_rate_*), then the enemy variants by variant_at index
-                                   (EnemyOpts fills Event's union, coop_proto.h: 80 bytes) */
+                                   (EnemyOpts fills Event's union, coop_proto.h: 88 bytes) */
 typedef struct EnemyOpts {
     int extra;                  /* 0 off, 1..ENEMY_EXTRA_MAX: up to that many extra enemies per room (types the room has) */
     int place;                  /* 1: rearranged placements */
@@ -29,6 +29,8 @@ typedef struct EnemyOpts {
     int types;                  /* randomizer: at most this many different kinds in a room (0: no limit) */
     unsigned char rate[ENEMY_RATE_N];   /* "Custom": each kind's weight, 0..ENEMY_RATE_MAX (recvx.ini enemy_rates); picking Wild or
                                            Mild presets them (enemy_rate_preset) */
+    int cast_enemy;             /* the cutscene cast's "Enemy Models" (cast.h CAST_ENEMY_*): what its creatures and scene zombies become */
+    unsigned char cast_enemy_off[4];    /* ... its "Custom" list's unchecked entries (cast.h CAST_ENEMY_BYTES; recvx.ini enemy_custom_off) */
 } EnemyOpts;
 extern EnemyOpts g_enemy_opts;  /* our settings (F1, recvx.ini) */
 

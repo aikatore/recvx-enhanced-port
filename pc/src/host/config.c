@@ -112,6 +112,8 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "cast_assign", &g_enemy_opts.cast_assign, 0, 1 },  /* 0 fixed per character, 1 random per cutscene */
     { "cast_imports", &g_enemy_opts.cast_imports, 0, 1 },
     { "cast_custom_set", &cast_custom_set, 0, 1 },
+    { "cast_enemy_models", &g_enemy_opts.cast_enemy, 0, 3 },   /* its creatures and scene zombies (cast.h CAST_ENEMY_*: 0 same as cast, 1 all enemies,
+                                                                  2 custom (enemy_custom_off lines), 3 off; absent: config_load) */
     { "voice_random", &g_enemy_opts.voices, 0, 1 },              /* "Randomize Voice Lines" (cast.h) */
     { "voice_mouths", &g_voice_mouths, 0, 1 },                   /* its "Talking Mouths" (cast.h; each screen's own) */
     { "biorand_appear_models", &g_biorand_appear_pool, 0, 2 },     /* "Randomize Character Model"'s Model Selection (biorand_opts.h; appear_custom_off lines) */
@@ -206,7 +208,7 @@ void config_load(void)
 {
     char p[1100], line[1100], k[64], val[128];
     int v;
-    int combined_seen = 0, had_off = 0;
+    int combined_seen = 0, had_off = 0, migrate, enemy = g_enemy_opts.cast_enemy;
     FILE* f;
     path(p, sizeof(p));
     if (!(f = pc_fopen(p, "r"))) {   /* first start: the defaults (player_id saves them) */
@@ -217,6 +219,7 @@ void config_load(void)
         player_id();
         return;
     }
+    g_enemy_opts.cast_enemy = -1;   /* (absent: a file from before "Enemy Models", below; else the default, or RECVX_CAST_ENEMY's) */
     while (fgets(line, sizeof(line), f))
         if (sscanf(line, " coop_join = %127s", g_coop.join) == 1) continue;
         else if (sscanf(line, " fixed_cam_version = %d", &v) == 1) { combined_seen = 1; continue; }
@@ -235,22 +238,28 @@ void config_load(void)
         else if (!strncmp(line, "enemy_rates =", 13)) { line[strcspn(line, "\r\n")] = 0; enemy_rates_ini(line + 13 + strspn(line + 13, " ")); continue; }   /* "Custom"'s rates (enemies.h), applied once the variants are known */
         else if (sscanf(line, " biorand_appear = %d", &g_biorand_appear) == 1) { g_biorand_appear = g_biorand_appear == 2 ? 2 : g_biorand_appear != 0; continue; }   /* "Randomize Played as" (biorand_opts.h) */
         else if (sscanf(line, " dev_cutscene_overlay = %d", &g_devcine_show) == 1) { g_devcine_show = g_devcine_show != 0; continue; }   /* --dev cutscene log (devcine.h) */
-        else if (!strncmp(line, "cast_custom_off =", 17) || !strncmp(line, "appear_custom_off =", 19)) continue;   /* (below, once the imports are listed) */
+        else if (!strncmp(line, "cast_custom_off =", 17) || !strncmp(line, "appear_custom_off =", 19) || !strncmp(line, "enemy_custom_off =", 18)) continue;   /* (below, once the imports are listed) */
         else if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, val) == 2 && bind_ini_line(k, trim(val))) continue;
         else if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, val) == 2 && wpn_ini_line(k, val)) continue;   /* weapon shortcuts (weapons.h) */
         else if (sscanf(line, " %63[a-z_0-9] = %d", k, &v) == 2)
             for (size_t i = 0; i < SDL_arraysize(keys); i++)
                 if (!strcmp(k, keys[i].key) && v >= keys[i].lo && v <= keys[i].hi) *keys[i].val = v;
     import_registry_load();   /* the imported player models: their chr values exist from here */
-    rewind(f);   /* the cutscene cast's and "Randomize Character Model"'s "Custom": a line per model not checked, by its key (cast.h; an unknown one is ignored) */
+    /* a file from before "Enemy Models": the cast's "Custom" keeps its monsters' checks in the enemies' list (the same names)
+       and its creatures and scene zombies on them; else they become enemies (the scene zombies did with every pool) */
+    migrate = g_enemy_opts.cast_enemy < 0 && g_enemy_opts.cast_all == 2;
+    if (g_enemy_opts.cast_enemy < 0) g_enemy_opts.cast_enemy = migrate ? CAST_ENEMY_CUSTOM : enemy;
+    rewind(f);   /* the cutscene cast's, "Randomize Character Model"'s and "Enemy Models"' "Custom": a line per model not checked, by its key
+                    (cast.h; an unknown one is ignored) */
     while (fgets(line, sizeof(line), f)) {
-        int appear = !strncmp(line, "appear_custom_off =", 19), at = appear ? 19 : 17;
-        had_off |= !strncmp(line, "cast_custom_off =", 17);
-        if (appear || !strncmp(line, "cast_custom_off =", 17)) {
-            char* v = line + at + strspn(line + at, " ");
-            v[strcspn(v, "\r\n")] = 0;
-            cast_off_key(appear, trim(v));
-        }
+        int list = !strncmp(line, "appear_custom_off =", 19) ? 1 : !strncmp(line, "enemy_custom_off =", 18) ? 2 : !strncmp(line, "cast_custom_off =", 17) ? 0 : -1;
+        char* v = line + (list == 1 ? 19 : list == 2 ? 18 : 17);
+        if (list < 0) continue;
+        had_off |= !list;
+        v += strspn(v, " ");
+        v[strcspn(v, "\r\n")] = 0;
+        cast_off_key(list, list == 2 ? g_enemy_opts.cast_enemy_off : list ? cast_appear_off : cast_off, trim(v));
+        if (!list && migrate) cast_off_key(2, g_enemy_opts.cast_enemy_off, v);
     }
     fclose(f);
     cast_default(had_off);
@@ -289,6 +298,7 @@ static void default_name(void)
 
 static void off_line(const char* key, void* f) { fprintf((FILE*)f, "cast_custom_off = %s\n", key); }
 static void appear_off_line(const char* key, void* f) { fprintf((FILE*)f, "appear_custom_off = %s\n", key); }
+static void enemy_off_line(const char* key, void* f) { fprintf((FILE*)f, "enemy_custom_off = %s\n", key); }
 
 static int write_ini(FILE* f, void* ud)
 {
@@ -314,8 +324,9 @@ static int write_ini(FILE* f, void* ud)
     fprintf(f, "enemy_rates = %s\n", enemy_rates_text());   /* "Custom"'s rates (enemies.h) */
     if (g_biorand_appear) fprintf(f, "biorand_appear = %d\n", g_biorand_appear);   /* (like biorand_seed: only once set, in the BIORAND menu) */
     if (!g_devcine_show) fprintf(f, "dev_cutscene_overlay = 0\n");   /* (only once turned off, in the --dev F6 window) */
-    cast_off_write(0, off_line, f);
-    cast_off_write(1, appear_off_line, f);
+    cast_off_write(0, cast_off, off_line, f);
+    cast_off_write(1, cast_appear_off, appear_off_line, f);
+    cast_off_write(2, g_enemy_opts.cast_enemy_off, enemy_off_line, f);
     bind_ini_write(f);
     wpn_ini_write(f);
     return 0;

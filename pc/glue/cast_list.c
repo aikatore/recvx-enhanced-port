@@ -3,8 +3,10 @@
  * and DESELECT ALL above them, BACK below. Drawn as the lobby's model page (lobby_glue.c pick_*), with its helpers
  * (pc_ui_*), by the lobby's CUTSCENE CAST page and the BIORAND screen's RANDOMIZER page, each at its own place.
  * It edits cast_off (ours: recvx.ini cast_custom_off; a co-op host's go to the guest, coop_glue.c), or, opened for
- * "Randomize Character Model" (the RANDOMIZER page's CHARACTER MODEL, appear 1), its own list cast_appear_off (recvx.ini
- * appear_custom_off; its "All models" entries, its "Include Imported Models"). Game thread. */
+ * "Randomize Character Model" (the RANDOMIZER page's CHARACTER MODEL, list 1), its own list cast_appear_off (recvx.ini
+ * appear_custom_off; its "All models" entries, its "Include Imported Models"), or for the cast's "Enemy Models" (list 2)
+ * its list g_enemy_opts.cast_enemy_off (recvx.ini enemy_custom_off; the monsters and the zombies, sent with the host's
+ * enemy options). Game thread. */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
 #include "../../decomp/include/ps2/veronica/prog/sdfunc.h"
@@ -33,20 +35,21 @@ enum { C_ALL, C_NONE, C_LIST };
 
 static short pos[CAST_CUSTOM_MAX];
 static int model[CAST_CUSTOM_MAX];
-static struct { int n, cur, top, rows, appear; float x0, x1, y0, h, sc; } cl;   /* appear: "Randomize Character Model"'s list */
+static struct { int n, cur, top, rows, list; float x0, x1, y0, h, sc; } cl;   /* list: 0 the cast's, 1 "Randomize Character Model"'s, 2 "Enemy Models"' */
 
-static int imports(void) { return (cl.appear ? g_biorand_appear_imports > 0 : g_enemy_opts.cast_imports) ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0; }
-static unsigned char* off(void) { return cl.appear ? cast_appear_off : cast_off; }
-static void refresh(void) { cl.n = cast_custom_list(cl.appear, imports(), pos, model, CAST_CUSTOM_MAX); }
+static int imports(void) { return cl.list != 2 && (cl.list ? g_biorand_appear_imports > 0 : g_enemy_opts.cast_imports) ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0; }
+static unsigned char* off(void) { return cl.list == 2 ? g_enemy_opts.cast_enemy_off : cl.list ? cast_appear_off : cast_off; }
+int cast_list_kind(void) { return cl.list; }
+static void refresh(void) { cl.n = cast_custom_list(cl.list, imports(), pos, model, CAST_CUSTOM_MAX); }
 static float list_y(void) { return cl.y0 + cl.h + GAP; }
 static float back_y(void) { return list_y() + cl.rows * cl.h + GAP; }
 static int max_top(void) { return cl.n > cl.rows ? cl.n - cl.rows : 0; }
 
 static void scroll(int d);
-void cast_list_open(int appear, float x0, float x1, float y0, float h, float sc, int rows)
+void cast_list_open(int list, float x0, float x1, float y0, float h, float sc, int rows)
 {
     memset(&cl, 0, sizeof(cl));
-    cl.appear = appear;
+    cl.list = list;
     cl.x0 = x0; cl.x1 = x1; cl.y0 = y0; cl.h = h; cl.sc = sc; cl.rows = rows;
     refresh();
     cl.cur = cl.n ? C_LIST : C_ALL;
@@ -151,7 +154,7 @@ static void box(float x, float y, int on, unsigned int col)
 
 void cast_list_draw(void)
 {
-    int k, on = cast_custom_count(cl.appear, off(), imports(), NULL);
+    int k, on = cast_custom_count(cl.list, off(), imports(), NULL);
     float right = cl.n > cl.rows ? cl.x1 - BAR - 6 : cl.x1, y;
     char t[48];
     refresh();
@@ -197,15 +200,17 @@ void cast_list_draw(void)
 const char* cast_list_help(void)
 {
     if (cl.cur == C_ALL) return "Check every model in the list.";
-    if (cl.cur == C_NONE) return "Uncheck every model. With none checked, the characters keep their own looks.";
+    if (cl.cur == C_NONE) return cl.list == 2 ? "Uncheck every enemy. With none checked, the monsters keep their own looks."
+                                              : "Uncheck every model. With none checked, the characters keep their own looks.";
     if (cl.cur >= C_LIST + cl.n) return "Back. Your choices are saved.";
+    if (cl.list == 2) return "Monsters seen only in cutscenes appear only as the enemies you check. Confirm or click: check or uncheck.";
     return "Characters appear only as the models you check. Confirm or click: check or uncheck. Scroll with L1/R1 or the wheel.";
 }
 
-/* "12 of 25": the checked ones of off (list appear) */
-const char* cast_list_summary(int appear, const unsigned char* off, int imports_n, char* buf, int n)
+/* "12 of 25": the checked ones of off (list 0, 1, 2 as cast_list_open's) */
+const char* cast_list_summary(int list, const unsigned char* off, int imports_n, char* buf, int n)
 {
-    int total, on = cast_custom_count(appear, off, imports_n, &total);
+    int total, on = cast_custom_count(list, off, imports_n, &total);
     snprintf(buf, (size_t)n, tr("%d of %d"), on, total);
     return buf;
 }
