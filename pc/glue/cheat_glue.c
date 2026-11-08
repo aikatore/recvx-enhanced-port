@@ -9,6 +9,8 @@
 #include "../../decomp/include/ps2/veronica/prog/pwksub.h"
 #include "../../decomp/include/ps2/veronica/prog/item.h"
 #include "../../decomp/include/ps2/veronica/prog/hitchk.h"
+#include "../../decomp/include/ps2/veronica/prog/system.h"
+#include "../../decomp/include/ps2/veronica/prog/sdfunc.h"
 void bhSetMessage(int mes_typ, int mes_idx);   /* message.h (its macros.h clashes with this file's headers) */
 #include "../src/host/cheat.h"
 #include "../src/host/placer.h"
@@ -16,6 +18,7 @@ void bhSetMessage(int mes_typ, int mes_idx);   /* message.h (its macros.h clashe
 #include "../src/host/coop.h"
 #include "../src/net/coop_proto.h"
 #include "pc_rules.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -632,11 +635,13 @@ static void scripted(unsigned int* inv)
             tw = strchr(tw, ',') ? strchr(tw, ',') + 1 : NULL;
         }
     }
-    {   /* RECVX_CHEAT_SAVE / RECVX_CHEAT_BOX="frame,...": the F2 Save Now / Open Item Box (CHEAT_SAVE, CHEAT_BOX) at that game frame */
-        static const char *cs = (const char*)-1, *cb;
-        if (cs == (const char*)-1) { cs = getenv("RECVX_CHEAT_SAVE"); cb = getenv("RECVX_CHEAT_BOX"); }
+    {   /* RECVX_CHEAT_SAVE / RECVX_CHEAT_BOX / RECVX_CHEAT_LOAD="frame,...": the F2 Save Now / Open Item Box / Load Game
+           (CHEAT_SAVE, CHEAT_BOX, CHEAT_LOAD) at that game frame */
+        static const char *cs = (const char*)-1, *cb, *cl;
+        if (cs == (const char*)-1) { cs = getenv("RECVX_CHEAT_SAVE"); cb = getenv("RECVX_CHEAT_BOX"); cl = getenv("RECVX_CHEAT_LOAD"); }
         if (cs && *cs && clock >= atoi(cs)) { __atomic_or_fetch(&g_cheat.request, CHEAT_SAVE, __ATOMIC_ACQ_REL); cs = strchr(cs, ',') ? strchr(cs, ',') + 1 : NULL; }
         if (cb && *cb && clock >= atoi(cb)) { __atomic_or_fetch(&g_cheat.request, CHEAT_BOX, __ATOMIC_ACQ_REL); cb = strchr(cb, ',') ? strchr(cb, ',') + 1 : NULL; }
+        if (cl && *cl && clock >= atoi(cl)) { __atomic_or_fetch(&g_cheat.request, CHEAT_LOAD, __ATOMIC_ACQ_REL); cl = strchr(cl, ',') ? strchr(cl, ',') + 1 : NULL; }
     }
     {   /* RECVX_TEST_COMPUTER="frame:n,...": computer terminal n at that game frame (as the room scripts' EvtComSet n) */
         static const char* ct = (const char*)-1;
@@ -788,14 +793,54 @@ extern unsigned char PauseBtn;   /* system.c */
 void snd_sysbank_load(void);     /* audio/snd_iop.c: the typewriter keys outside save rooms */
 static int cheat_saving;         /* the open save screen is ours: ps2_McSaveFile.c mcWriteStartSaveFile uses no ink ribbon */
 int pc_cheat_save(void) { return cheat_saving; }
-static const char* anywhere_refused(int save)
+enum { ANY_BOX, ANY_SAVE, ANY_LOAD };
+static const char* anywhere_refused(int kind)
 {
+    static const char* const busy[] = { "Cannot open the item box now. Finish the current action first.",
+                                        "Cannot save now. Finish the current action first.",
+                                        "Cannot load now. Finish the current action first." };
     if (sys->gm_mode == 3) return "Not in the Battle Game.";
+    if (kind == ANY_LOAD && g_coop.state != COOP_OFF) return "Not during a co-op session.";   /* the partner's game would not follow */
     if (!pc_in_play(plp, 0) || plp->mnwP != plp->mnwPb || (plp->flg & 0x6) || plp->hp < 0 || !(sys->ts_flg & 0x1000) ||
         (sys->ss_flg & 0x80000000) || (sys->st_flg & 0x1C04200C) || (sys->cb_flg & 0x27F4037) || PauseBtn)
-        return save ? "Cannot save now. Finish the current action first." : "Cannot open the item box now. Finish the current action first.";
-    if (!save && coop_box_busy()) return "Your partner is using the item box.";
+        return busy[kind];
+    if (kind == ANY_BOX && coop_box_busy()) return "Your partner is using the item box.";
     return NULL;
+}
+
+/* Load Game (CHEAT_LOAD): the typewriter's screen opened as for Save Now, with the load screen in place of the save
+   screen (bup_00.c TypewriterInit/Main): the save system and rows of the title's LOAD GAME. A save picked: this game
+   ends as the title's does (bhExitGame, as bhPopGameData's continue) and the save's starts as LOAD GAME starts it
+   (TypewriterExit: tk_flg 0x300010 with ss_flg 0x200). Back: out as the save screen leaves, the save region as it
+   was (a read fills it before the BioRand question, whose NO goes back: ps2_McSaveFile.c mcCheckReadStartSaveFile). */
+static int cheat_loading;
+static unsigned char load_keep[0x834];   /* the save region (coop_glue.c EV_BLOB: 0x834 bytes) */
+#define SAVE_REGION ((int)((char*)&sys->save_end - (char*)&sys->version))
+_Static_assert(offsetof(SYS_WORK, save_end) - offsetof(SYS_WORK, version) == sizeof(load_keep), "the save region");
+int pc_cheat_load(void) { return cheat_loading; }
+int pc_cheat_load_exit(void)
+{
+    if (!cheat_loading) return 0;
+    cheat_loading = 0;
+    if (!(sys->typ_flg & 0x10)) {   /* back: TypewriterExit as after the save screen (typ_flg 0x8) */
+        memcpy(&sys->version, load_keep, SAVE_REGION);
+        sys->typ_md0 = 2;
+        sys->typ_md1 = 0;
+        sys->typ_flg |= 0x8;
+        host_log("cheat: load anywhere: back to the game in %d/%d\n", sys->stg_no, sys->rom_no);
+        return 1;
+    }
+    memcpy(load_keep, &sys->version, SAVE_REGION);   /* the loaded save (bhInitSystem clears it) */
+    RequestAllStopSoundEx(1, 1, 0);
+    sys->ss_flg |= 0x20000;
+    bhExitGame();
+    memcpy(&sys->version, load_keep, SAVE_REGION);
+    sys->ss_flg |= 0x200;
+    sys->tk_flg = 0x300010;
+    sys->ts_flg = 0;
+    sys->ss_flg &= ~0x20000;
+    host_log("cheat: load anywhere: the save's game starts in %d/%d\n", sys->stg_no, sys->rom_no);
+    return 1;
 }
 
 void devcine_frame(void);   /* --dev cutscene log (devcine_glue.c) */
@@ -814,7 +859,7 @@ void cheat_frame(void)
     item_trace(inv);
     if (sys->tk_flg && (sys->sp_flg & 0x2)) scripted(inv);   /* in game */
     unlock_switch();
-    if (!(sys->cb_flg & 0x200000)) cheat_saving = 0;   /* (bup_00.c TypewriterExit: the save screen closed) */
+    if (!(sys->cb_flg & 0x200000)) cheat_saving = cheat_loading = 0;   /* (bup_00.c TypewriterExit: the screen closed) */
 
     g_cheat.hp = plp->hp;
     g_cheat.stg = sys->stg_no; g_cheat.rom = sys->rom_no; g_cheat.pos = sys->pos_no;
@@ -825,13 +870,14 @@ void cheat_frame(void)
     if (g_cheat.inf_health && plp->hp < max_hp) plp->hp = max_hp;
 
     req = __atomic_exchange_n(&g_cheat.request, 0, __ATOMIC_ACQ_REL);
-    if (req & (CHEAT_SAVE | CHEAT_BOX)) {   /* during a screen fade (ENHANCED SETTINGS' rows run as OPTION fades the game back
-                                               in): kept until it ends, at most 60 frames, then decided as below */
+#define ANYWHERE (CHEAT_SAVE | CHEAT_BOX | CHEAT_LOAD)
+    if (req & ANYWHERE) {   /* during a screen fade (ENHANCED SETTINGS' rows run as OPTION fades the game back
+                               in): kept until it ends, at most 60 frames, then decided as below */
         static int fade_wait;
         if ((sys->cb_flg & 0x2) && fade_wait < 60) {
             fade_wait++;
-            __atomic_or_fetch(&g_cheat.request, req & (CHEAT_SAVE | CHEAT_BOX), __ATOMIC_ACQ_REL);
-            req &= ~(CHEAT_SAVE | CHEAT_BOX);
+            __atomic_or_fetch(&g_cheat.request, req & ANYWHERE, __ATOMIC_ACQ_REL);
+            req &= ~ANYWHERE;
         } else fade_wait = 0;
     }
     if (!req) return;
@@ -858,13 +904,19 @@ void cheat_frame(void)
         }
         if (getenv("RECVX_DROP")) printf("test: drop slot %d: %s (equipped %u, weapon %d; mn_mode0 %d play %d mot %d mode1 %d)\n", s, g_cheat.result, inv[0], plp->wpnr_no, sys->mn_mode0, pc_in_play(plp, 0), plp->mnwP == plp->mnwPb, plp->mode1);
     }
-    if (req & (CHEAT_SAVE | CHEAT_BOX)) {   /* Save Now / Open Item Box: the requests a typewriter's "Yes" and a box trigger make */
-        int save = (req & CHEAT_SAVE) != 0;
-        const char* why = anywhere_refused(save);
+    if (req & ANYWHERE) {   /* Save Now / Open Item Box / Load Game: the requests a typewriter's "Yes" and a box trigger make */
+        static const char* const what[] = { "item box anywhere", "save anywhere", "load anywhere" };
+        int kind = (req & CHEAT_LOAD) ? ANY_LOAD : (req & CHEAT_SAVE) ? ANY_SAVE : ANY_BOX;
+        const char* why = anywhere_refused(kind);
         if (why) g_cheat.result = why;
-        else if (save) { sys->cb_flg |= 0x200000; cheat_saving = 1; g_cheat.result = "Opening the save screen."; snd_sysbank_load(); }
-        else { sys->cb_flg |= 0x40000; g_cheat.result = "Opening the item box."; }
-        host_log("cheat: %s in %d/%d at (%.1f %.1f %.1f): %s (play %d st %08x cb %08x gm %08x ts %08x flg %x mode0 %d)\n", save ? "save anywhere" : "item box anywhere",
+        else if (kind == ANY_BOX) { sys->cb_flg |= 0x40000; g_cheat.result = "Opening the item box."; }
+        else {
+            sys->cb_flg |= 0x200000;
+            if (kind == ANY_SAVE) { cheat_saving = 1; g_cheat.result = "Opening the save screen."; }
+            else { cheat_loading = 1; memcpy(load_keep, &sys->version, SAVE_REGION); g_cheat.result = "Opening the load screen."; }
+            snd_sysbank_load();
+        }
+        host_log("cheat: %s in %d/%d at (%.1f %.1f %.1f): %s (play %d st %08x cb %08x gm %08x ts %08x flg %x mode0 %d)\n", what[kind],
                  sys->stg_no, sys->rom_no, plp->px, plp->py, plp->pz, g_cheat.result, pc_in_play(plp, 0), sys->st_flg, sys->cb_flg, sys->gm_flg, sys->ts_flg, plp->flg, plp->mode0);
     }
     if (req & CHEAT_SPAWN) g_cheat.result = spawn_enemy(g_cheat.spawn_idx);
