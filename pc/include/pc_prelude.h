@@ -190,6 +190,8 @@ void  coop_scd0(int after);                   /* event.c bhInitEvent: before (0)
 void  coop_retry_point(void);                 /* room.c bhPushGameData: our continue point moved (the host keeps the guest's items with it) */
 int   pc_no_ink_ribbon(void);                 /* typewriters save without an ink ribbon (setting; in co-op the host's rule) */
 int   pc_cheat_save(void);                    /* the open save screen is the F2 cheat's (pc/glue/cheat_glue.c): saving uses no ink ribbon */
+int   pc_cheat_load(void);                    /* bup_00.c TypewriterInit/Main: the F2 Load Game's load screen is open in the game */
+int   pc_cheat_load_exit(void);               /* bup_00.c TypewriterMain: its screen closed; 1 when it took the exit (loaded or back) */
 int   pc_detector_skipped(void);              /* co-op rule "Metal detector: Skipped" (pc/glue/detector_glue.c): event.c bhPlItemCheck in 0/9 finds no metal */
 void  pc_dev_event_start(int level, unsigned int id);   /* --dev cutscene log (pc/glue/devcine_glue.c): event.c Event_init, task level runs event id */
 void  pc_dev_event_op(int movie);             /* ... event.c bhCamSet, bhCineSet (0), bhMovieStart (1): the running task's event shows a scene */

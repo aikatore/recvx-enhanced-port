@@ -31,6 +31,7 @@ enum {
     /* port hotkeys (keyboard) */
     B_TPS_TOGGLE, B_SETTINGS, B_CHEATS, B_COOP, B_IMPORT, B_FULLSCREEN, B_NOCLIP_UP, B_NOCLIP_DOWN,
     B_CHEAT_SAVE, B_CHEAT_BOX,         /* the F2 cheats Save Now / Open Item Box (CHEAT_SAVE, CHEAT_BOX); no default key */
+    B_CHEAT_LOAD,                      /* the F2 Load Game (CHEAT_LOAD); no default key */
     B_DEVCINE,                         /* --dev only: the cutscene log's window (overlay.cpp, docs/DEV_TOOLS.md); F6 */
     B_COUNT
 };

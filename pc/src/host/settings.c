@@ -275,6 +275,7 @@ static const char* in_session(void) { return g_coop.state != COOP_OFF ? "Not dur
 static void heal(void) { __atomic_or_fetch(&g_cheat.request, CHEAT_HEAL, __ATOMIC_ACQ_REL); }
 static void save_now(void) { __atomic_or_fetch(&g_cheat.request, CHEAT_SAVE, __ATOMIC_ACQ_REL); }   /* (cheat_glue.c refuses it where it cannot open) */
 static void open_box(void) { __atomic_or_fetch(&g_cheat.request, CHEAT_BOX, __ATOMIC_ACQ_REL); }
+static void load_now(void) { __atomic_or_fetch(&g_cheat.request, CHEAT_LOAD, __ATOMIC_ACQ_REL); }   /* (not in co-op: in_session) */
 static void give(void) { if (g_cheat.give_id) __atomic_or_fetch(&g_cheat.request, CHEAT_GIVE, __ATOMIC_ACQ_REL); }
 static void spawn(void) { __atomic_or_fetch(&g_cheat.request, CHEAT_SPAWN, __ATOMIC_ACQ_REL); }
 static void teleport(void) { __atomic_or_fetch(&g_cheat.request, CHEAT_TELEPORT, __ATOMIC_ACQ_REL); }
@@ -572,6 +573,8 @@ const Setting g_settings[] = {
       .help = "Open key locks without carrying the key. Story locks stay. No items are added." },
     { SP_EXTRAS, "Heal Now", NULL, .flags = SET_ACTION | SET_GAME_ONLY, .apply = heal },
     { SP_EXTRAS, "Save Now", NULL, .flags = SET_ACTION | SET_GAME_ONLY, .apply = save_now, .help = "Open the typewriter's save screen here. No ink ribbon needed." },
+    { SP_EXTRAS, "Load Game", NULL, .flags = SET_ACTION | SET_GAME_ONLY, .apply = load_now, .locked = in_session,
+      .help = "Open the load screen here. Back returns to the game as it was." },
     { SP_EXTRAS, "Open Item Box", NULL, .flags = SET_ACTION | SET_GAME_ONLY, .apply = open_box, .help = "Open the item box here, the same box as at any item box." },
     { SP_EXTRAS, "Item", NULL, 1, CHEAT_ITEMS - 1, 1, .get = item_get, .set = item_set, .name = item_name, .group = "ITEMS" },
     { SP_EXTRAS, "Quantity", V(g_cheat.give_count), 1, 999, 1, .fmt = "%d" },

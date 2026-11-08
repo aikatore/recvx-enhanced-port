@@ -17,6 +17,8 @@
 - **Custom cutscene cast**: the model list now starts with only the characters that have voice lines checked.
 - **Mods**: files in the mods folder are found whatever the case of their names, such as sysmes.ald for
   SYSMES.ALD.
+- **Load Game anywhere**: F2 and the Enhanced Settings' EXTRAS page can now open the load screen during play,
+  like Save Now. Backing out returns to the game as it was. Not available in co-op.
 
 ### Fixes
 
@@ -24,6 +26,7 @@
 - Bow gun bolts now hit a zombie the same whether or not it is flinching from Locational Hit Reactions.
 - On the very first start, BIORAND's Include Imported Models now shows its real setting and changes on the first
   press.
+- In Russian, the text of the memory card, save and load screens and of the inventory is no longer red.
 
 ## 0.7.5 (2026-11-07)
 
