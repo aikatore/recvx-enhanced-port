@@ -198,6 +198,7 @@ void  pc_dev_event_op(int movie);             /* ... event.c bhCamSet, bhCineSet
 /* a scene's cast shot (pc/glue/biorand_glue.c): its weapon's arms bank when the room sets no weapon (BioRand's RM_0030) */
 void  pc_cast_shot_event(int level, const unsigned char* p);   /* event.c Event_init: task level runs the event at p */
 int   pc_cast_shot_se(int w);                 /* event.c bhWeaponSeCall 1: the SE of the cast's shot with weapon w */
+int   pc_biorand_arms_skip(int w);            /* event.c bhArmsItemChange: 1 = with BioRand, weapon w is not in the bag: not put in the hand */
 /* "Randomize Voice Lines" (pc/glue/cast_glue.c, docs/ACTORS.md "Voice lines") */
 int   pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid);   /* event.c bhVoiceOn: the file to play (*ptid its partition), -1 none (an enemy's sounds instead); next: the script after it */
 void  pc_voice_lip(struct BH_PWORK* pp, int rec);   /* event.c bhLipSet, after bhSetLip: the inserted line's lips */

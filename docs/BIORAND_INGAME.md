@@ -1237,6 +1237,44 @@ then Custom: the ini has Wild's rates), `ui/t_lobby.sh` (the lobby: the gamepad 
 click on Mutated Steve's track, a right click back, Types per Room), `pc/tools/enemy_rates_check.sh`,
 `pc/tools/enemy_revisit_check.sh` (also with `EXTRA=8` and Custom), and a co-op run (host and guest the same records).
 
+### Weapons the scripts put in the hand (2026-11-08)
+
+The user's report: before the fight with Nosferatu a BioRand game force-equips the sniper rifle though it is not in the
+inventory. Cause: RM_6060 (Antarctic base, vehicle bay; the fight is Claire's, in 6100) runs `ArmsItemChange 13` (the
+sniper rifle's weapon number) once the item on the sniper rifle's spot is picked up (scd1: `it_flg` 276 set, `rm_flg` 8
+clear), then event 34 (`ArmsItemSet 3`: the bag slot holding item 3 into the hand) and event 21 into 6100. BioRand puts
+another item on that spot (the pack copy in the job dir: 47 rifle rounds) and keeps both ops. `ArmsItemChange`
+(`event.c bhArmsItemChange`) sets `wpnr_no` whatever the bag holds and `ArmsItemSet` finds no sniper rifle, so the
+player held a sniper rifle shooting the rounds of the slot in the hand (or none). 6100 itself only checks the weapon
+(`ArmsItemCheck` 2 / 13 picks the end scene with the knife, the sniper rifle or any other weapon); the fight takes any
+weapon.
+
+With BioRand `bhArmsItemChange` now leaves out a weapon the player's bag (words 1..11: the lighter's slot and the
+cells) does not hold (`biorand_glue.c pc_biorand_arms_skip`, the item of each weapon number as `sub1.c WeaponSet`
+maps them): the weapon held stays, with its files and sounds (nothing is loaded), and no sniper rifle is added. With
+the sniper rifle in the bag, and without BioRand, unchanged. Co-op does not replay `ArmsItemChange`
+(`coop_op_replay`); each player's own bag counts, and the partner sees the weapon with the pose as always.
+
+The other weapons the scripts set (all 205 rooms, retail and the pack; `ArmsItemChange` and `Sv 18`, the weapon
+number, or `Sv 22`, the slot in the hand), none changed in effect:
+
+| Room | Op | What |
+|---|---|---|
+| 0000 | `ArmsItemChange 1`, `Sv 22 1` in 0010 | the lighter, after `PlItemCheck` 55 (carried) |
+| 0070, 1130, 3060 | `Sv 18 1` | the lighter back in the hand after a scene, only if it was (`ArmsItemCheck 1`) |
+| 0030 | `ArmsItemChange 4`, 0 | Steve's scene at the main gate; BioRand takes both out (the cast shot's sound above) |
+| 3180 | `Sv 18 8`, `ArmsItemChange 8` | the sub machine gun at the start of Steve's section: his own bag's (game start: item 34, 400 rounds), so it stays |
+| 6060 | `ArmsItemChange 13` | the sniper rifle before Nosferatu: the fix |
+| 0000, 1050, 1080, 3100, 6100, 7040, 7060, 9260 | `ArmsItemChange 0` | the hand emptied (scenes, Steve's swap, the switch to Chris): always kept |
+
+**Tests (2026-11-08, Linux; job dir `nosfsniper/`, not committed):** `run.sh` (BioRand START with an older pack copy
+whose 6060 spot gives rifle rounds, `RECVX_FLAGS=7:276` so 6060's block runs at entry, `RECVX_DROP` on an empty slot
+logs the weapon): before the fix weapon 13 with the handgun's slot in the hand (and 13 with nothing in the hand),
+in 6100 a sniper rifle on screen; after it the handgun (weapon 3) or nothing, kept into 6100, where the fight started
+(`RECVX_TEST_EXAMINE` on trigger 0) and handgun shots hit Nosferatu (`RECVX_TPS_TRACE`: hp 600 down to 573). With a
+sniper rifle in the bag (`RECVX_EQUIP` 3:10): weapon 13, its slot in the hand. NEW GAME (no BioRand): weapon 13 as
+retail.
+
 ## Risks and open questions
 
 1. **Memory: the CLI peaked at 6.0 GB RSS** for one CVX pack. With the game running, 8 GB
