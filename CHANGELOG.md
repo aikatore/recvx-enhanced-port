@@ -30,6 +30,8 @@
 - On the very first start, BIORAND's Include Imported Models now shows its real setting and changes on the first
   press.
 - In Russian, the text of the memory card, save and load screens and of the inventory is no longer red.
+- In the final fight's cutscene and Wesker's other fast attacks, his trail of afterimages now shows the model he is
+  replaced with by the cutscene cast or the Character Model.
 
 ## 0.7.5 (2026-11-07)
 
