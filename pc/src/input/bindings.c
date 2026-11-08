@@ -57,6 +57,7 @@ const BindRow bind_rows[B_COUNT] = {
     [B_NOCLIP_DOWN] = { "noclip_down", "Fly Down", BG_HOTKEY, 0 },
     [B_CHEAT_SAVE] = { "cheat_save", "Save Anywhere", BG_HOTKEY, 0 },
     [B_CHEAT_BOX] = { "cheat_box", "Item Box Anywhere", BG_HOTKEY, 0 },
+    [B_CHEAT_LOAD] = { "cheat_load", "Load Anywhere", BG_HOTKEY, 0 },
     [B_DEVCINE] = { "dev_cutscenes", "Cutscene Log (Dev)", BG_HOTKEY, 0 },
 };
 
@@ -66,7 +67,7 @@ const int bind_order[B_COUNT] = {
     B_WPN_HOLD, B_WPN_PAGE, B_WPN1, B_WPN2, B_WPN3, B_WPN4, B_WPN5, B_WPN6, B_WPN7, B_WPN8,
     B_TPS_FWD, B_TPS_BACK, B_TPS_LEFT, B_TPS_RIGHT, B_TPS_RUN, B_TPS_ACTION, B_TPS_CANCEL, B_TPS_STATUS,
     B_TPS_MAP, B_TPS_AIM, B_TPS_FIRE, B_TPS_RELOAD, B_TPS_QUICKTURN, B_TPS_KNIFE, B_TPS_OPTIONS, B_TPS_RECENTER,
-    B_TPS_TOGGLE, B_SETTINGS, B_CHEATS, B_COOP, B_IMPORT, B_FULLSCREEN, B_NOCLIP_UP, B_NOCLIP_DOWN, B_CHEAT_SAVE, B_CHEAT_BOX, B_DEVCINE,
+    B_TPS_TOGGLE, B_SETTINGS, B_CHEATS, B_COOP, B_IMPORT, B_FULLSCREEN, B_NOCLIP_UP, B_NOCLIP_DOWN, B_CHEAT_SAVE, B_CHEAT_BOX, B_CHEAT_LOAD, B_DEVCINE,
 };
 
 static const int defaults[2][B_COUNT][BIND_SLOTS] = {
