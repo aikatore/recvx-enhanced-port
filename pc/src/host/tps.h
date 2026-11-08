@@ -35,6 +35,7 @@ typedef struct TpsConfig {
     int pad_dead_move, pad_dead_look;   /* dead zones of the left / right stick, percent */
     int hud;                  /* "HUD": 0 Auto (with this camera only), 1 On (also the fixed cameras), 2 Off (hud_glue.c) */
     int hud_side;             /* "HUD Position": 0 the shoulder's side (fixed cameras: right), 1 left, 2 right */
+    int hud_style;            /* "HUD Style": 0 Circle (a disc, a health arc), 1 Minimal (a health bar, the counts) */
     /* published by the game thread */
     volatile int cam_active;  /* the third-person camera drew the last frame */
     volatile int aiming;      /* weapon raised (crosshair) */

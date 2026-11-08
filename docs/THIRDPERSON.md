@@ -187,6 +187,7 @@ unit (the character is about 17 units tall).
 | Crosshair | `tps_crosshair` | 1 |
 | HUD ([HUD](#hud); 0 = Auto, 1 = On, 2 = Off) | `hud` | 0 |
 | HUD Position (0 = Follow Shoulder, 1 = Left, 2 = Right) | `hud_position` | 0 |
+| HUD Style (0 = Circle, 1 = Minimal) | `hud_style` | 0 |
 | Aim Assist (0 = free aim) | `tps_auto_aim` | 0 |
 | Precise Shots ([Precise Shots](#precise-hits)) | `tps_precise_hits` | 1 |
 | Locational Hit Reactions ([Locational hit reactions](#locational-hit-reactions)) | `tps_hit_react` | 1 |
@@ -216,9 +217,11 @@ unit (the character is about 17 units tall).
 
 ## HUD
 
-A small display in a bottom corner of the picture, our own drawing (no other game's art): a dark
-semi-transparent disc with the equipped weapon's inventory icon and the rounds loaded under it, the health
-gauge as an arc round the disc's outer side, and the reload ammo in the bag beside the disc on the inner side.
+A small display in a bottom corner of the picture, our own drawing (no other game's art), in one of two styles
+("HUD Style"). Circle (default): a dark semi-transparent disc with the equipped weapon's inventory icon and the
+rounds loaded under it, the health gauge as an arc round the disc's outer side, and the reload ammo in the bag
+beside the disc on the inner side. Minimal: a plain health bar along the bottom, and above its outer end a small
+icon with the rounds loaded and the reload ammo as "loaded/spare" (the spare smaller, on the same baseline).
 Code: `pc/glue/hud_glue.c` (game thread, at the frame hand-off: what to show, into `g_hud`, `tps.h`) and
 `overlay.cpp hud_draw` (the overlay, drawn in the window's resolution after the game's picture and behind the
 F-windows: sharp, untouched by anti-aliasing and dithering). Nothing in the game changes.
@@ -233,18 +236,25 @@ F-windows: sharp, untouched by anti-aliasing and dithering). Nothing in the game
 * **Where**: 5% of the picture's height in from its bottom and side edge, in the picture as presented (4:3: inside
   the 4:3 picture; widescreen: at the window's edge). "HUD Position": Follow Shoulder takes the camera's side
   ("Left Shoulder": left), right with the fixed cameras; Left or Right fix it. On the left everything is mirrored.
-  Changing side fades it out and in at the other corner. Size: the disc's radius is 7% of the picture's height.
+  Changing side fades it out and in at the other corner. Size: the disc's radius is 7% of the picture's height;
+  Minimal's bar is 26% of it long and 1.6% high, its rounds 4.2% high (the icon as high as the rounds), the
+  counts 1.2% above the bar. Minimal is not mirrored in its reading order: the icon stays before the counts, the
+  group only aligns to the corner's side, and the bar fills from the outer end.
 * **Health**: the arc runs 200 degrees from the bottom of the disc up its outer side and over the top, filled by
   health over the most a heal gives (`sys->gm_mode` 2: 320, else 160; sub1.c, system.c). Its colour is the status
   screen's condition (sub1.c, the ECG's panel colours, brighter): Fine from 120 health (green), Caution from 60
   (yellow), Caution from 30 (orange), Danger below (red, pulsing), Poison over all of them (`plp->stflg 0x280000`,
-  purple). The thresholds are the game's, not a share of the bar.
+  purple). The thresholds are the game's, not a share of the bar. The gauge's whole length (arc or bar) has a
+  thin light outline (1 pixel at 720 lines, more with the window's height) round a dark grey track, so the
+  missing part still shows.
 * **Rounds**: the equipped slot's count (`sys->itm[ply_id * 16]`, word 0 the equipped index) as the inventory
   shows it (sub1.c `BulletSet`): a count, a percent of the item's most for the assault rifle, sub machine gun and
   M-100P (`itemdata` type 0x1000), an infinity for an unlimited weapon (word bit 0x08000000, `at_flg 0x40000000`, the
   F2 Infinite Ammo cheat: `bhCheckBullet`'s test). Weapons the inventory shows no number for (the knife; also the
   lighter, nothing equipped): only the icon or the empty disc. The dual Gold Lugers and sub machine guns have one
   slot and one count; the grenade launcher's and the bow gun's count is that of the rounds loaded. A count of 0 is red.
+  Minimal shows the same counts: "15/85", "100%/50%", only the infinity when unlimited, only the loaded count
+  when nothing reloads the weapon, and no text (only the icon) for the knife, lighter or nothing equipped.
 * **Spare ammo**: the bag's stacks (8 cells, 10 with the side pack; the item box does not count) that reload the
   equipped weapon as `bhSearchBullet` would: an ammo item (`itemdata` type 0x2) with a combination with the weapon
   that loads it (`combidata` flags 1 or 5; 4, a change of the launcher's rounds, and 7, making arrows, do not). The
@@ -255,7 +265,7 @@ F-windows: sharp, untouched by anti-aliasing and dithering). Nothing in the game
 * **The icon**: the inventory's (ITEM AFS file 145, textures 3 and 4, cells as `sub1.c ItemSet` and the trade
   screen pick them, `trade_glue.c pc_item_icon_cell`), read once when the HUD first shows, its dark blue cell
   background left out, and made into the overlay's own texture: the game's texture memory is not touched. If the
-  file cannot be read, the disc shows the counts without a picture.
+  file cannot be read, the disc (or Minimal's counts) shows without a picture.
 * **Co-op**: each player's own character (`ply`); no partner display.
 * Per frame: a few table lookups and a scan of the bag; the overlay draws a handful of shapes. No allocations
   after the icons' one read.

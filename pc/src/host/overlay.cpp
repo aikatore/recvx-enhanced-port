@@ -875,10 +875,12 @@ static void name_tag(void)
     dl->AddText(font, bs, ImVec2(tx, ty), IM_COL32(255, 255, 255, 230), name);
 }
 
-/* The HUD (pc/glue/hud_glue.c, docs/THIRDPERSON.md "HUD"): in a bottom corner of the picture a dark disc with the
-   equipped weapon's inventory icon and its loaded rounds, the health gauge an arc of HUD_SWEEP round its outer side
-   from the bottom up (coloured by the condition, pulsing in Danger), the reload ammo beside it on the inner side; on
-   the left mirrored. It fades in and out (moving to the other corner too) and with the screen. Behind the windows. */
+/* The HUD (pc/glue/hud_glue.c, docs/THIRDPERSON.md "HUD"): in a bottom corner of the picture, by "HUD Style":
+   Circle, a dark disc with the equipped weapon's inventory icon and its loaded rounds, the health gauge an arc of
+   HUD_SWEEP round its outer side from the bottom up, the reload ammo beside it on the inner side; Minimal, a health bar
+   with "loaded/spare" and a small icon above it. The gauge is coloured by the condition (pulsing in Danger), its whole
+   length outlined. On the left mirrored. It fades in and out (moving to the other corner too) and with the screen.
+   Behind the windows. */
 #define HUD_SWEEP (200.0f * 3.14159265f / 180.0f)
 static float hud_a;              /* shown, 0..1 (eased) */
 static int hud_left;             /* the side drawn */
@@ -929,32 +931,64 @@ static void hud_draw(void)
     float x0, y0, vw, vh;
     picture(&x0, &y0, &vw, &vh);
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
-    float al = hud_a, R = vh * 0.07f, th = R * 0.17f, ra = R + th * 1.1f, m = vh * 0.05f + ra + th * 0.5f, dir = hud_left ? -1.0f : 1.0f;
-    ImVec2 c(hud_left ? x0 + m : x0 + vw - m, y0 + vh - m);
+    float al = hud_a, dir = hud_left ? -1.0f : 1.0f, o = vh / 720.0f > 1.0f ? vh / 720.0f : 1.0f;   /* o: the outline's width */
     auto A = [al](ImU32 col, float k = 1.0f) { return (col & 0xFFFFFF) | (ImU32)((col >> 24) * al * k) << 24; };
+    float f = g_hud.hp_max > 0 ? (float)g_hud.hp / g_hud.hp_max : 0.0f;
+    f = f < 0 ? 0 : f > 1 ? 1 : f;
+    ImU32 hp_col = A(cond_col[g_hud.cond < 0 || g_hud.cond > HUD_POISON ? 0 : g_hud.cond],
+                     g_hud.cond == HUD_DANGER ? 0.7f + 0.3f * cosf((float)ImGui::GetTime() * 6.0f) : 1.0f);   /* Danger: a pulse */
+    const ImU32 outline = A(IM_COL32(220, 225, 235, 110)), track = A(IM_COL32(28, 32, 40, 190));
+    auto icon = [&](float x, float y, float k) {   /* the weapon's icon, top left at x, y, scaled by k */
+        float iw = (float)g_hud.icon_w, ih = (float)g_hud.icon_h;
+        float u0 = (g_hud.icon_x + 0.5f) / hud_tw, v0 = (g_hud.icon_y + 0.5f) / hud_th, u1 = (g_hud.icon_x + iw - 0.5f) / hud_tw, v1 = (g_hud.icon_y + ih - 0.5f) / hud_th;
+        dl->AddImage((ImTextureID)(intptr_t)hud_tex, ImVec2(x, y), ImVec2(x + iw * k, y + ih * k), ImVec2(u0, v0), ImVec2(u1, v1), A(IM_COL32(255, 255, 255, 255)));
+    };
+    const ImU32 white = A(IM_COL32(255, 255, 255, 240)), red = A(IM_COL32(240, 90, 80, 255));
+    if (g_tps.hud_style == 1) {
+        /* Minimal: the bar in the corner, filled from the outer end; above it at the outer end the icon, then the rounds
+           loaded and "/spare" smaller, on one baseline */
+        float m = vh * 0.05f, bw = vh * 0.26f, bh = vh * 0.016f, fs = vh * 0.042f, ss = fs * 0.72f, ox = hud_left ? x0 + m : x0 + vw - m;
+        float bx = hud_left ? ox : ox - bw, by = y0 + vh - m - bh, rr = bh * 0.5f;
+        dl->AddRectFilled(ImVec2(bx - o, by - o), ImVec2(bx + bw + o, by + bh + o), outline, rr + o);
+        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + bw, by + bh), track, rr);
+        if (f > 0) dl->AddRectFilled(ImVec2(hud_left ? bx : bx + bw * (1 - f), by), ImVec2(hud_left ? bx + bw * f : bx + bw, by + bh), hp_col, rr);
+        ImFont* font = ImGui::GetFont();
+        char ls[16] = "", sp[16] = "";
+        if (g_hud.rounds >= 0) snprintf(ls, sizeof ls, g_hud.rounds_pct ? "%d%%" : "%d", g_hud.rounds);
+        if (g_hud.rounds != HUD_NONE && g_hud.spare != HUD_NONE) snprintf(sp, sizeof sp, g_hud.spare_pct ? "/%d%%" : "/%d", g_hud.spare);
+        float wl = g_hud.rounds == HUD_INF ? fs * 0.75f : g_hud.rounds == HUD_NONE ? 0.0f : font->CalcTextSizeA(fs, FLT_MAX, 0, ls).x;
+        float wsp = *sp ? font->CalcTextSizeA(ss, FLT_MAX, 0, sp).x : 0.0f, gap = fs * 0.25f;
+        float ik = hud_tex && g_hud.icon_w > 0 ? fs * 1.1f / g_hud.icon_h : 0.0f, wi = g_hud.icon_w * ik;
+        float tw = wi + (wi > 0 && wl > 0 ? gap : 0.0f) + wl + wsp, x = hud_left ? ox : ox - tw, base = by - vh * 0.012f;
+        float asc = font->GetFontBaked(fs)->Ascent, sasc = font->GetFontBaked(ss)->Ascent;
+        if (wi > 0) { icon(x, base - asc * 0.5f - g_hud.icon_h * ik * 0.5f, ik); x += wi + gap; }
+        if (g_hud.rounds != HUD_NONE) hud_count(dl, fs, x + wl * 0.5f, base - asc, g_hud.rounds, g_hud.rounds_pct, g_hud.rounds == 0 ? red : white);
+        if (*sp) hud_text(dl, ss, x + wl, base - sasc, g_hud.spare ? A(IM_COL32(215, 215, 220, 230)) : red, sp);
+        return;
+    }
+    float R = vh * 0.07f, th = R * 0.17f, ra = R + th * 1.1f, m = vh * 0.05f + ra + th * 0.5f;
+    ImVec2 c(hud_left ? x0 + m : x0 + vw - m, y0 + vh - m);
     /* the disc */
     dl->AddCircleFilled(c, R, A(IM_COL32(8, 12, 18, 150)), 48);
     dl->AddCircle(c, R, A(IM_COL32(255, 255, 255, 45)), 48, 1.5f);
-    /* the health: from the bottom (pi/2, y down) up the outer side */
-    float a0 = 3.14159265f * 0.5f, a1 = a0 - dir * HUD_SWEEP, f = g_hud.hp_max > 0 ? (float)g_hud.hp / g_hud.hp_max : 0.0f;
-    f = f < 0 ? 0 : f > 1 ? 1 : f;
+    /* the health: from the bottom (pi/2, y down) up the outer side; the outline o wider all round, the track inside it */
+    float a0 = 3.14159265f * 0.5f, a1 = a0 - dir * HUD_SWEEP, e = o / ra;
+    dl->PathArcTo(c, ra, a0 + dir * e, a1 - dir * e, 40);
+    dl->PathStroke(outline, 0, th + 2.0f * o);
     dl->PathArcTo(c, ra, a0, a1, 40);
-    dl->PathStroke(A(IM_COL32(0, 0, 0, 130)), 0, th + 2.0f);
+    dl->PathStroke(track, 0, th);
     if (f > 0) {
-        float k = g_hud.cond == HUD_DANGER ? 0.7f + 0.3f * cosf((float)ImGui::GetTime() * 6.0f) : 1.0f;   /* a pulse */
         dl->PathArcTo(c, ra, a0, a0 + (a1 - a0) * f, 2 + (int)(38 * f));
-        dl->PathStroke(A(cond_col[g_hud.cond < 0 || g_hud.cond > HUD_POISON ? 0 : g_hud.cond], k), 0, th);
+        dl->PathStroke(hp_col, 0, th);
     }
     /* the weapon and its rounds */
     float fs = R * 0.5f, iy = g_hud.rounds != HUD_NONE ? c.y - R * 0.2f : c.y;
     if (hud_tex && g_hud.icon_w > 0) {
         float iw = (float)g_hud.icon_w, ih = (float)g_hud.icon_h, k = 1.5f * R / iw < 0.75f * R / ih ? 1.5f * R / iw : 0.75f * R / ih;
-        float u0 = (g_hud.icon_x + 0.5f) / hud_tw, v0 = (g_hud.icon_y + 0.5f) / hud_th, u1 = (g_hud.icon_x + iw - 0.5f) / hud_tw, v1 = (g_hud.icon_y + ih - 0.5f) / hud_th;
-        dl->AddImage((ImTextureID)(intptr_t)hud_tex, ImVec2(c.x - iw * k * 0.5f, iy - ih * k * 0.5f), ImVec2(c.x + iw * k * 0.5f, iy + ih * k * 0.5f),
-                     ImVec2(u0, v0), ImVec2(u1, v1), A(IM_COL32(255, 255, 255, 255)));
+        icon(c.x - iw * k * 0.5f, iy - ih * k * 0.5f, k);
     }
     if (g_hud.rounds != HUD_NONE)
-        hud_count(dl, fs, c.x, c.y + R * 0.2f, g_hud.rounds, g_hud.rounds_pct, A(g_hud.rounds == 0 ? IM_COL32(240, 90, 80, 255) : IM_COL32(255, 255, 255, 240)));
+        hud_count(dl, fs, c.x, c.y + R * 0.2f, g_hud.rounds, g_hud.rounds_pct, g_hud.rounds == 0 ? red : white);
     /* the reload ammo, on the inner side */
     if (g_hud.spare != HUD_NONE) {
         char b[16];
