@@ -38,7 +38,7 @@ native paths replace the expensive parts. The game reads your own disc image in 
   spawner.
 - **BioRand**: randomized items, start inventories and doors from
   [BioRand](https://github.com/biorand/classic) seeds, switched on at the title, in co-op too (see
-  [USER_GUIDE.md](docs/USER_GUIDE.md#randomizer-biorand)).
+  [modding/README.md](docs/modding/README.md#randomizer-biorand)).
 - **Save files**: every save its own file, as many as you like, in the game's own save screens
   without the memory card screens (the emulated memory card stays available).
 - **Enhanced settings** in the game's own OPTION menu and an F1 overlay; full rebinding of keyboard,

@@ -531,6 +531,7 @@
 { "HD Font", { "Police HD", "HD-Schrift", "Fuente HD", "HD フォント", "HD-шрифт", "HD yazı tipi", "Fonte HD", "خط HD", "HD 글자", "Font HD" } },
 { "HD Menus", { "Menus HD", "HD-Menüs", "Menús HD", "HD メニュー", "HD-меню", "HD menüler", "Menus HD", "قوائم HD", "HD 메뉴", "Menu HD" } },
 { "HD Textures", { "Textures HD", "HD-Texturen", "Texturas HD", "HD テクスチャ", "HD-текстуры", "HD dokular", "Texturas HD", "خامات HD", "HD 그래픽", "Texture HD" } },
+{ "HEADSHOTS", { "TIRS A LA TETE", "KOPFSCHÜSSE", "DISPAROS A LA CABEZA", "ヘッドショット", "ВЫСТРЕЛЫ В ГОЛОВУ", "KAFA ATIŞLARI", "TIROS NA CABECA", "طلقات الرأس", "헤드샷", "COLPI ALLA TESTA" } },
 { "HOST A GAME", { "HEBERGER UNE PARTIE", "SPIEL HOSTEN", "CREAR PARTIDA", "ゲームをホスト", "СОЗДАТЬ ИГРУ", "OYUN KUR", "CRIAR PARTIDA", "استضافة لعبة", "게임 열기", "OSPITA UNA PARTITA" } },
 { "HOST A GAME (OPEN)", { "HEBERGER (SALON OUVERT)", "SPIEL HOSTEN (OFFEN)", "CREAR PARTIDA (ABIERTA)", "ゲームをホスト（受付中）", "СОЗДАТЬ ИГРУ (ОТКРЫТА)", "OYUN KUR (AÇIK)", "CRIAR PARTIDA (ABERTA)", "استضافة لعبة (مفتوحة)", "게임 열기 (모집 중)", "OSPITA UNA PARTITA (APERTA)" } },
 { "HOST RULES", { "REGLES DE L'HOTE", "HOST-REGELN", "REGLAS DEL ANFITRIÓN", "ホストのルール", "ПРАВИЛА ХОСТА", "KURUCU KURALLARI", "REGRAS DO ANFITRIAO", "قواعد المضيف", "호스트 설정", "REGOLE DELL'HOST" } },

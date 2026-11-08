@@ -79,16 +79,17 @@ drawn in the game's own style; your model turns in a 3D preview on the left. It 
 see "BioRand"), **LOOT** (Shared / Individual),
 **GEAR** (For both / Shared; only with shared loot, see "Loot modes"), **TRADING**, **CUTSCENE SKIP** (Together /
 Separately, see "Cutscenes"), **INK RIBBONS** (Needed / Not needed, see "Saving without ink
-ribbons"), **GAME OVER** (Each player / Both, see "Game over"), and two entries that open a page
+ribbons"), **GAME OVER** (Each player / Both, see "Game over"), **HEADSHOTS** (On / Off: third person's "Headshots &
+Piercing", [THIRDPERSON.md](THIRDPERSON.md)), and two entries that open a page
 of their own (an arrow after them; RANDOMIZER also shows On or Off):
 
 | Entry | Its page |
 |---|---|
-| **RANDOMIZER** | The enemy options: **RANDOMIZER**, **VARIETY** (Mild / Wild / Custom; with Custom, **ENEMY RATES** opens the list of every kind with its rate, Off or 1..10, and its share; a joining player sees the host's, read-only), **TYPES PER ROOM** (No Limit / 1..8) and **EVENT ENEMIES** (all shown only with the randomizer on), **SEED**, **RANDOM SEED**, then **EXTRA ENEMIES**, **LAYOUT**, and **CUTSCENE CAST** (it shows On or Off), which opens a page of its own: **RANDOMIZE CAST** (On / Off), **MODELS** (Cutscene Models / All Models / Custom; with Custom, **CHOOSE MODELS** opens the list of models to check, with SELECT ALL and DESELECT ALL; a joining player sees how many the host checked) and **ASSIGN** (Per Character / Per Cutscene; both while on), and **IMPORTED MODELS** (On / Off; while on, shown only to a player who has imported models), and **RANDOMIZE VOICES** (On / Off, always shown: [ACTORS.md](ACTORS.md) "Voice lines"). BACK returns to the RANDOMIZER page. See [ACTORS.md](ACTORS.md) "Cutscene cast". |
+| **RANDOMIZER** | The enemy options: **RANDOMIZER**, **VARIETY** (Mild / Wild / Custom; with Custom, **ENEMY RATES** opens the list of every kind with its rate, Off or 1..10, and its share; a joining player sees the host's, read-only), **TYPES PER ROOM** (No Limit / 1..8) and **EVENT ENEMIES** (all shown only with the randomizer on), **SEED**, **RANDOM SEED**, then **EXTRA ENEMIES**, **LAYOUT**, and **CUTSCENE CAST** (it shows On or Off), which opens a page of its own: **RANDOMIZE CAST** (On / Off), **MODELS** (Cutscene Models / All Models / Custom; with Custom, **CHOOSE MODELS** opens the list of models to check, with SELECT ALL and DESELECT ALL; a joining player sees how many the host checked) and **ASSIGN** (Per Character / Per Cutscene; both while on), and **IMPORTED MODELS** (On / Off; while on, shown only to a player who has imported models), and **RANDOMIZE VOICES** (On / Off, always shown: [ACTORS.md](ACTORS.md) "Voice lines"), with **TALKING MOUTHS** (On / Off) under it while it is on; that one is each player's own, for their screen. BACK returns to the RANDOMIZER page. See [ACTORS.md](ACTORS.md) "Cutscene cast". |
 | **EXTRA EVENTS** | Rules for single events: **QUICK START** (On / Off, see "Quick start"; hidden and off while BioRand is on), **METAL DETECTOR** (Skipped / Original, see "Metal detector"), **BOXES/HERBS** (On / Off, see "Extra item boxes and herbs"). |
 
 Confirm or a click opens a page; BACK (or cancel, or a right click) returns to GAME RULES on its
-entry. The joiner sees the host's GAME OVER rule and both pages read-only (HOST RULES) once
+entry. The joiner sees the host's GAME OVER and HEADSHOTS rules and both pages read-only (HOST RULES) once
 connected; they follow the host's changes as it makes them.
 
 Both players then see each other in the lobby, with model, name and what the other chose. The
@@ -758,7 +759,9 @@ More on input sources: [USER_GUIDE.md](USER_GUIDE.md).
 ## Settings
 
 CO-OP page of OPTION > ENHANCED SETTINGS and F1 (plus F3 and the lobby). Settings marked "host"
-(under HOST RULES) count only on the host; "locked" ones cannot change during a session.
+(under HOST RULES) count only on the host; "locked" ones cannot change during a session. F3 has every
+host rule of this table but the enemy options (those are in the lobby's RANDOMIZER page), Headshots & Piercing
+and the APPEARANCE page's Character Models (Same for Both / Per Character) with the model rows.
 
 | Label | ini key | Values (default) |
 |---|---|---|
@@ -781,6 +784,8 @@ CO-OP page of OPTION > ENHANCED SETTINGS and F1 (plus F3 and the lobby). Setting
 | Free Typewriter Saves (GAMEPLAY page; co-op: host) | `no_ink_ribbon` | 0/1 (0) |
 | Extra Item Boxes and Herbs (GAMEPLAY page; co-op: host) | `extra_objects` | 0/1 (0); see "Extra item boxes and herbs" |
 | Extra Enemies (GAMEPLAY page; co-op: host) | `enemy_extra` | 0..8 (0); see [ENEMIES.md](ENEMIES.md) |
+| Randomize Voice Lines (GAMEPLAY page; co-op: host) | `voice_random` | 0/1 (0); see [ACTORS.md](ACTORS.md) "Voice lines" |
+| Headshots & Piercing (THIRD PERSON page; co-op: host) | `tps_headshots` | 0/1 (1); see [THIRDPERSON.md](THIRDPERSON.md#headshots-and-piercing) |
 
 Kept in `recvx.ini` without a menu row of their own: `coop_join` (last address or room code),
 `coop_server`, `coop_name`, `coop_items` (-3.., a save as in the ITEMS table), `coop_start` (0..2

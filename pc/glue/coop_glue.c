@@ -3206,6 +3206,7 @@ int pc_headshots(void)
     if (coop_on && !is_host && !echo_delay && peer_opts >= 0) return (peer_opts & (OPT2_HEADSHOTS << 8)) != 0;
     return g_tps.headshots;
 }
+int coop_headshots(void) { return is_host ? g_tps.headshots : rule(OPT2_HEADSHOTS << 8); }   /* the guest's lobby: the host's */
 
 /* Shared loot, "important items for both" (OPT_IMPORTANT, docs/COOP.md "Loot modes"): the item kinds each player
    takes for itself, as individual loot does for every item - one taking it leaves the partner's copy lying. Without

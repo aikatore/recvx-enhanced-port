@@ -83,6 +83,8 @@ int coop_skip_detector(void);
 int coop_quick_start(void);
 /* the session's "Extra Item Boxes and Herbs" rule (OPT2_EXTRA_OBJECTS): hosting our setting, joining the host's (coop_glue.c) */
 int coop_extra_objects(void);
+/* the session's "Headshots & Piercing" rule (OPT2_HEADSHOTS): hosting our setting, joining the host's (coop_glue.c) */
+int coop_headshots(void);
 /* Hide IP addresses: every address shown on screen goes through here. With hide_ip on, the
    text with its IPv4 addresses and the join and co-op server host names masked (net_mask_addrs),
    else text itself. A ring of 4 buffers per thread (lobby_io.c). Input fields mask as passwords. */

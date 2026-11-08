@@ -176,6 +176,69 @@ static bool enemy_rates_imgui()
     return changed;
 }
 
+/* one settings table row (F1's pages; F3's host rules) */
+extern "C" void pc_biorand_appear_drop(void);   /* biorand.h: the user chose a look in game, this game's BioRand picks go */
+static bool setting_row(const Setting* s)
+{
+    bool changed = false;
+    int i = (int)(s - g_settings);
+    const char* lock = settings_locked(s);
+    char label[256], val[96];   /* (Arabic: 3 bytes a letter) */
+    int v = settings_get(s), hi = settings_hi(s), st = s->step > 0 ? s->step : 1;
+    if (ov_rtl())   /* (right to left: the note on the label's left) */
+        SDL_snprintf(label, sizeof label, "%s%s##set%d", (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", tr(s->label), i);
+    else SDL_snprintf(label, sizeof label, "%s%s##set%d", tr(s->label), (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", i);
+    ImGui::BeginDisabled(lock != nullptr);
+    if (s->flags & SET_ACTION) {
+        if (ImGui::Button(label)) settings_act(s);
+    } else if (settings_is_bool(s)) {
+        bool b = v != 0;
+        if (ImGui::Checkbox(label, &b)) { settings_set(s, b); changed = true; }
+    } else if (s->names || (s->name && (s->count || (hi - s->lo) / st <= 10))) {   /* a list (tenths: a slider) */
+        if (ImGui::BeginCombo(label, settings_value(s, val, sizeof val), ImGuiComboFlags_HeightLarge)) {
+            for (int k = s->lo; k <= hi; k += st) {
+                char nm[96];
+                if (ImGui::Selectable(s->name ? s->name(k, nm, sizeof nm) : tr(s->names[k - s->lo]), k == v)) { settings_set(s, k); changed = true; }
+                if (k == v) ImGui::SetItemDefaultFocus();   /* the list opens at the current value (a long one: "You appear as") */
+            }
+            ImGui::EndCombo();
+        }
+        if (s->val == &g_enemy_opts.cast_all && v == 2) {   /* "Custom": its list below (its tooltip stays the row's) */
+            bool hover = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+            if (hover && s->help) ImGui::SetTooltip("%s", tr(s->help));
+            ImGui::EndDisabled();
+            return cast_custom_imgui() | changed;
+        }
+        if (s->val == &g_enemy_opts.variety && v == 2) {   /* "Custom": the rates below */
+            bool hover = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+            if (hover && s->help) ImGui::SetTooltip("%s", tr(s->help));
+            ImGui::EndDisabled();
+            return enemy_rates_imgui() | changed;
+        }
+    } else {   /* a number; a value name (tenths) is shown as the slider's text */
+        char fmt[96];
+        const char* f = s->fmt ? tr(s->fmt) : "%d";
+        if (s->name) {
+            char* o = fmt;
+            for (const char* c = s->name(v, val, sizeof val); *c && o < fmt + sizeof fmt - 2; c++) { if (*c == '%') *o++ = '%'; *o++ = *c; }
+            *o = 0;
+            f = fmt;
+        }
+        if (ImGui::SliderInt(label, &v, s->lo, hi, f)) {
+            settings_set(s, st > 1 ? (v + st / 2) / st * st : v);
+            changed = true;
+        }
+    }
+    ImGui::EndDisabled();
+    if ((ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) || ((s->flags & SET_CALIB) && ImGui::IsItemActive())) && (s->help || lock)) {
+        ImGui::BeginTooltip();
+        ImGui::Text("%s%s%s", lock ? lock : "", lock && s->help ? "\n" : "", s->help ? tr(s->help) : "");
+        if (s->flags & SET_CALIB) calib_pattern();
+        ImGui::EndTooltip();
+    }
+    return changed;
+}
+
 static bool settings_imgui(int page, bool all = true)
 {
     bool changed = false;
@@ -187,62 +250,7 @@ static bool settings_imgui(int page, bool all = true)
         if (s->shown && !s->shown()) continue;
         if (group && all) ImGui::SeparatorText(tr(group));
         group = nullptr;
-        const char* lock = settings_locked(s);
-        char label[256], val[96];   /* (Arabic: 3 bytes a letter) */
-        int v = settings_get(s), hi = settings_hi(s), st = s->step > 0 ? s->step : 1;
-        if (ov_rtl())   /* (right to left: the note on the label's left) */
-            SDL_snprintf(label, sizeof label, "%s%s##set%d", (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", tr(s->label), i);
-        else SDL_snprintf(label, sizeof label, "%s%s##set%d", tr(s->label), (s->flags & SET_RESTART) ? tr(" (restart needed)") : "", i);
-        ImGui::BeginDisabled(lock != nullptr);
-        if (s->flags & SET_ACTION) {
-            if (ImGui::Button(label)) settings_act(s);
-        } else if (settings_is_bool(s)) {
-            bool b = v != 0;
-            if (ImGui::Checkbox(label, &b)) { settings_set(s, b); changed = true; }
-        } else if (s->names || (s->name && (s->count || (hi - s->lo) / st <= 10))) {   /* a list (tenths: a slider) */
-            if (ImGui::BeginCombo(label, settings_value(s, val, sizeof val), ImGuiComboFlags_HeightLarge)) {
-                for (int k = s->lo; k <= hi; k += st) {
-                    char nm[96];
-                    if (ImGui::Selectable(s->name ? s->name(k, nm, sizeof nm) : tr(s->names[k - s->lo]), k == v)) { settings_set(s, k); changed = true; }
-                    if (k == v) ImGui::SetItemDefaultFocus();   /* the list opens at the current value (a long one: "You appear as") */
-                }
-                ImGui::EndCombo();
-            }
-            if (s->val == &g_enemy_opts.cast_all && v == 2) {   /* "Custom": its list below (its tooltip stays the row's) */
-                bool hover = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
-                if (hover && s->help) ImGui::SetTooltip("%s", tr(s->help));
-                ImGui::EndDisabled();
-                changed |= cast_custom_imgui();
-                continue;
-            }
-            if (s->val == &g_enemy_opts.variety && v == 2) {   /* "Custom": the rates below */
-                bool hover = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
-                if (hover && s->help) ImGui::SetTooltip("%s", tr(s->help));
-                ImGui::EndDisabled();
-                changed |= enemy_rates_imgui();
-                continue;
-            }
-        } else {   /* a number; a value name (tenths) is shown as the slider's text */
-            char fmt[96];
-            const char* f = s->fmt ? tr(s->fmt) : "%d";
-            if (s->name) {
-                char* o = fmt;
-                for (const char* c = s->name(v, val, sizeof val); *c && o < fmt + sizeof fmt - 2; c++) { if (*c == '%') *o++ = '%'; *o++ = *c; }
-                *o = 0;
-                f = fmt;
-            }
-            if (ImGui::SliderInt(label, &v, s->lo, hi, f)) {
-                settings_set(s, st > 1 ? (v + st / 2) / st * st : v);
-                changed = true;
-            }
-        }
-        ImGui::EndDisabled();
-        if ((ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) || ((s->flags & SET_CALIB) && ImGui::IsItemActive())) && (s->help || lock)) {
-            ImGui::BeginTooltip();
-            ImGui::Text("%s%s%s", lock ? lock : "", lock && s->help ? "\n" : "", s->help ? tr(s->help) : "");
-            if (s->flags & SET_CALIB) calib_pattern();
-            ImGui::EndTooltip();
-        }
+        changed |= setting_row(s);
     }
     return changed;
 }
@@ -717,6 +725,8 @@ static void coop_window(void)
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip(tr("Save at typewriters without using ink ribbons.\n"
                           "The host decides in co-op."));
+    const int* rules[] = { &c->gameover_both, &c->skip_detector, &c->quick_start, &g_config.extra_objects, &g_tps.headshots };   /* more host rules: their table rows */
+    for (const int* v : rules) changed |= setting_row(settings_of(v));
     if (ImGui::InputText(tr("Your Name"), c->name, sizeof(c->name), ImGuiInputTextFlags_CallbackCharFilter,
                          [](ImGuiInputTextCallbackData* d) -> int { return !(d->EventChar >= 32 && d->EventChar < 127 && (isalnum(d->EventChar) || strchr(" -_.!?'()+", d->EventChar))); }))
         changed = true;
@@ -736,11 +746,13 @@ static void coop_window(void)
                           "as can long story cutscenes."));
     if (cs.state == COOP_CONNECTED) ImGui::TextDisabled(tr("Session: %s"), tr(loots[cs.loot_now ? 1 : 0]));
     auto appear = [](void*, int i) -> const char* { return tr(appear_name(appear_at(i))); };
+    changed |= setting_row(settings_of(&g_appear_per));   /* "Character Models": Same for Both / Per Character */
     for (int k = 0; k < (g_appear_per ? 2 : 1); k++) {   /* "Per Character": Claire's and Chris's */
         static const char* const lbl[3] = { "Character Model", "Claire's Model", "Chris's Model" };
         int pos = appear_pos(appear_choice(c->chr, k));   /* the list leaves out event doubles (actors.c) */
         if (ImGui::Combo(tr(lbl[g_appear_per ? 1 + k : 0]), &pos, appear, nullptr, appear_count(), 20)) {
             (g_appear_per ? g_appear_own[k] : c->chr) = appear_at(pos);
+            pc_biorand_appear_drop();   /* (as the table's model rows: this game's BioRand picks go) */
             changed = true;
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Choose your appearance; your partner sees it too.\nModels can change movement and voice;\nAppearance settings control animations and cutscene models."));

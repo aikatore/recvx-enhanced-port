@@ -1000,10 +1000,12 @@ still picks from the files too (and its own *Custom* list lists them): it sets t
 *Custom* is the *All Models* pool (with Include Imported Models on, the imported models too) cut down to the
 entries the player checks in a list: SELECT ALL / DESELECT ALL, then a check box per entry, in the order and
 groups of the lobby's model page (`cast_custom_list`: the "You appear as" list's order, the zombies' one entry
-where their looks start, the imports last). Shared code `pc/glue/cast_list.c`, shown at two places: the lobby's
-CUTSCENE CAST page (CHOOSE MODELS, "12 of 17", opens it as step 8) and the BIORAND screen's EXTRA OPTIONS page
-(Choose Models); F1 shows the same list as check boxes under Model Selection
-(`overlay.cpp cast_custom_imgui`). OPTION > ENHANCED SETTINGS shows only the value.
+where their looks start, the imports last). Shared code `pc/glue/cast_list.c`, shown at three places: the lobby's
+CUTSCENE CAST page (CHOOSE MODELS, "12 of 17", opens it as step 8), the BIORAND screen's EXTRA OPTIONS page
+(Choose Models) and OPTION > ENHANCED SETTINGS, GAMEPLAY (Choose Models right under Model Selection: the list in
+place of the page's rows, `options_glue.c` `st.list`); F1 shows the same list as check boxes under Model Selection
+(`overlay.cpp cast_custom_imgui`). "Randomize Character Model"'s own Custom list (`cast_appear_off`) is only on the
+BIORAND screen, as are its other rows.
 
 * Stored as the entries **not** checked (so a model imported later starts checked): `cast_off`, a bit per
   position in `cast_pool(1, every import)` (the built-in entries, then import k). In `recvx.ini` one line per

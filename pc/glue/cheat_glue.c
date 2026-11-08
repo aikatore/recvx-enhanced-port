@@ -825,6 +825,15 @@ void cheat_frame(void)
     if (g_cheat.inf_health && plp->hp < max_hp) plp->hp = max_hp;
 
     req = __atomic_exchange_n(&g_cheat.request, 0, __ATOMIC_ACQ_REL);
+    if (req & (CHEAT_SAVE | CHEAT_BOX)) {   /* during a screen fade (ENHANCED SETTINGS' rows run as OPTION fades the game back
+                                               in): kept until it ends, at most 60 frames, then decided as below */
+        static int fade_wait;
+        if ((sys->cb_flg & 0x2) && fade_wait < 60) {
+            fade_wait++;
+            __atomic_or_fetch(&g_cheat.request, req & (CHEAT_SAVE | CHEAT_BOX), __ATOMIC_ACQ_REL);
+            req &= ~(CHEAT_SAVE | CHEAT_BOX);
+        } else fade_wait = 0;
+    }
     if (!req) return;
     if (req & CHEAT_HEAL) { plp->hp = max_hp; g_cheat.result = "Health restored."; }
     if (req & CHEAT_GIVE) {

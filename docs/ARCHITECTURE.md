@@ -862,6 +862,11 @@ EXTRAS pages (their own windows are F3 and F2), where only `SET_F1` rows appear.
 unless the key is listed there with where it is set instead (the lobby's per-session choices, the
 third-person key binding).
 
+With Enemy Selection or the cutscene cast's Model Selection at Custom, ENHANCED SETTINGS adds a row under it (Enemy
+Rates, Choose Models) that opens the shared list (`rate_list.c`, `cast_list.c`, as the lobby and the BIORAND screen do)
+in place of the page's rows; F1 draws both inline. F3 draws some table rows itself (`overlay.cpp setting_row`: the
+host rules it has no widget of its own for, Character Models).
+
 | Flag | Meaning |
 |---|---|
 | `SET_F1` | a CO-OP or EXTRAS entry that F1 shows too (those pages otherwise live in F3/F2) |

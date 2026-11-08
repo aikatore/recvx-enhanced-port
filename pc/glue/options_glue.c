@@ -19,6 +19,10 @@
 #include "../src/host/menu_mouse.h"
 #include "../src/host/tps.h"
 #include "../src/host/lang.h"
+#include "../src/host/lobby.h"
+#include "../src/host/enemies.h"
+#include "../src/host/cast.h"
+#include "../src/host/actors.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -35,6 +39,18 @@ int pc_ui_text_wrap_r(float x, float y, float w, const char* s, float sc, unsign
 void pc_ui_rect(float x0, float y0, float x1, float y1, unsigned int argb, float z);
 void pc_ui_arrow(float x, float y, int dir, unsigned int argb);
 int bind_any_down(void);
+/* cast_list.c, rate_list.c: the cutscene cast's "Custom" models and the enemy randomizer's "Custom" rates (the lobby's and
+   the BIORAND screen's too); 1 back */
+void cast_list_open(int appear, float x0, float x1, float y0, float h, float sc, int rows);
+int  cast_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
+void cast_list_draw(void);
+const char* cast_list_help(void);
+const char* cast_list_summary(int appear, const unsigned char* off, int imports, char* buf, int n);
+void rate_list_open(int ro, float x0, float x1, float y0, float h, float sc, int rows);
+int  rate_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
+void rate_list_draw(void);
+const char* rate_list_help(void);
+const char* rate_list_summary(const unsigned char* rate, char* buf, int n);
 
 enum { P_UP = 0x1000, P_RIGHT = 0x2000, P_DOWN = 0x4000, P_LEFT = 0x8000, P_START = 0x800, P_SELECT = 0x100, P_L1 = 0x4, P_R1 = 0x8 };   /* Pad[] bits */
 
@@ -367,7 +383,8 @@ void pc_options_mouse_back(int port, int level)
 }
 
 /* ---------------------------------------------------------------- the pages */
-enum { K_PAGE, K_SET, K_DEVICE, K_BIND, K_HEAD, K_GROUP, K_RESET, K_BACK };   /* K_HEAD, K_GROUP: headings */
+enum { K_PAGE, K_SET, K_DEVICE, K_BIND, K_HEAD, K_GROUP, K_RESET, K_BACK, K_RATES, K_CUSTOM };   /* K_HEAD, K_GROUP: headings; K_RATES,
+    K_CUSTOM: the enemy rates' and the cast's "Custom" list (st.list 2, 1) */
 typedef struct Row { int kind, idx; } Row;
 
 #define MAX_ROWS 80
@@ -391,6 +408,7 @@ static struct {
     int msg_t;
     unsigned char pending[256];  /* actions to run when the menu closes */
     int any_pending;
+    int list;                    /* a list is up instead of the rows: 1 the cast's "Custom" models, 2 the enemy rates */
 } st;
 
 static Row rows[MAX_ROWS];
@@ -414,6 +432,9 @@ static void page_rows(void)
         if (g_settings[i].shown && !g_settings[i].shown()) continue;
         if (g >= 0) rows[nrows++] = (Row){ K_GROUP, g }, g = -1;
         rows[nrows++] = (Row){ K_SET, i };
+        /* "Custom": its list's row under it (as the lobby's and the BIORAND screen's) */
+        if (g_settings[i].val == &g_enemy_opts.variety && g_enemy_opts.variety == 2) rows[nrows++] = (Row){ K_RATES, 0 };
+        if (g_settings[i].val == &g_enemy_opts.cast_all && g_enemy_opts.cast_all == 2) rows[nrows++] = (Row){ K_CUSTOM, 0 };
     }
 }
 
@@ -507,6 +528,12 @@ static int activate(const Row* r)
         CallSystemSe(0, 3);
         return 0;
     case K_BACK: CallSystemSe(0, 0); return 1;
+    case K_RATES: case K_CUSTOM:   /* where the rows are, BACK above the help line */
+        st.list = r->kind == K_RATES ? 2 : 1;
+        if (st.list == 2) rate_list_open(0, X_LABEL, 600, Y_ROW0, ROW_H, SC_ROW, 7);
+        else cast_list_open(0, X_LABEL, 600, Y_ROW0, ROW_H, SC_ROW, 6);
+        host_log("options: the %s\n", st.list == 2 ? "enemy rates" : "cutscene cast's custom models");
+        return 0;
     case K_SET:
         if (settings_locked(s)) { CallSystemSe(0, 1); say(settings_locked(s)); return 0; }
         if (s->flags & SET_ACTION) {
@@ -609,6 +636,13 @@ static void draw_row(int i, int sel)
         break;
     case K_RESET: text_m(X_LABEL, y, "RESET TO DEFAULTS", SC_ROW, col); return;
     case K_BACK: text_m(X_LABEL, y, "BACK", SC_ROW, col); return;
+    case K_RATES: case K_CUSTOM:   /* how many can appear; confirm opens the list (an arrow after it) */
+        text_m(X_LABEL, y, r->kind == K_RATES ? "Enemy Rates" : "Choose Models", SC_ROW, col);
+        if (r->kind == K_RATES) rate_list_summary(g_enemy_opts.rate, val, sizeof(val));
+        else cast_list_summary(0, cast_off, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, sizeof(val));
+        text_m(X_VALUE + 6, y, val, SC_ROW, col);
+        pc_ui_arrow(mx(X_VALUE + 6 + pc_ui_text_w(val, SC_ROW) + 16, 0), y + 9, rtl ? -1 : 1, col);
+        return;
     case K_BIND: {
         int conflict = bind_conflict(r->idx, st.dev);
         text_fit(X_LABEL, y, bind_row_label(r->idx, label, sizeof(label)), SC_ROW, 300, col);
@@ -665,12 +699,15 @@ static void draw_help(void)
                  tr(bind_rows[st.capture - 1].name), (bind_capture_left_ms() + 999) / 1000);
         col = 0xFFFFE080;
     } else if (st.msg_t > 0) { st.msg_t--; snprintf(t, sizeof(t), "%s", st.msg); col = 0xFFFFE080; }
+    else if (st.list) snprintf(t, sizeof(t), "%s", tr(st.list == 2 ? rate_list_help() : cast_list_help()));
     else switch (r->kind) {
     case K_PAGE: snprintf(t, sizeof(t), tr("Left/right or %s: change page; up/down: choose a setting. Changes save automatically."),
                           page_keys(nm, sizeof(nm))); break;
     case K_DEVICE: snprintf(t, sizeof(t), "%s", st.dev ? bind_pad_desc(nm, sizeof(nm)) : tr("Choose bindings for game actions, third person and hotkeys. Mouse buttons can be assigned too.")); break;
     case K_RESET: snprintf(t, sizeof(t), tr("Restore default %s bindings."), tr(st.dev ? "gamepad" : "keyboard and mouse")); break;
     case K_BACK: snprintf(t, sizeof(t), tr("Return to OPTION. Cancel or right-click also goes back.")); break;
+    case K_RATES: snprintf(t, sizeof(t), "%s", tr("Set how often each enemy type is chosen.")); break;
+    case K_CUSTOM: snprintf(t, sizeof(t), "%s", tr("Choose the models the characters can appear as.")); break;
     case K_BIND: {
         int c = bind_conflict(r->idx, st.dev);
         if (c) { snprintf(t, sizeof(t), tr("Also assigned to %s. Change either binding to avoid a conflict."), tr(bind_rows[c - 1].name)); col = 0xFFFF8080; }
@@ -705,6 +742,14 @@ static void draw(void)
     pc_ui_rect(28, 146, 612, Y_BOTTOM, 0xA0000000, Z_PANEL);
     pc_ui_rect(36, 176, 604, 177, 0x60FFFFFF, Z_PANEL + 0.001f);
     pc_ui_rect(36, Y_HELP - 4, 604, Y_HELP - 3, 0x60FFFFFF, Z_PANEL + 0.001f);
+    if (st.list) {   /* the list where the rows are, its name in the page row's place */
+        const char* h = st.list == 2 ? "ENEMY RATES" : "CHOOSE MODELS";
+        pc_ui_text(320 - pc_ui_text_w(h, 0.72f) / 2, 150, h, 0.72f, 0xFFE8E0C0);
+        if (st.list == 2) rate_list_draw(); else cast_list_draw();
+        draw_help();
+        AdvEasySetTextureList(0);
+        return;
+    }
     draw_row(0, st.sel == 0);
     for (int i = st.top; i < nrows && i < st.top + VISIBLE; i++) draw_row(i, i == st.sel);
     if (st.top > 1) {   /* more above / below */
@@ -738,6 +783,10 @@ static int input(int port)
         if (bind_any_down() || pad_report_bits() || g_menu_mouse.held) return 0;
         st.wait_release = 0;
     }
+    if (st.list) {   /* its BACK, cancel or a right click: the rows again, on its row */
+        if ((st.list == 2 ? rate_list_input : cast_list_input)(&mt, press, rept, ok, cancel)) st.list = 0;
+        return 0;
+    }
     hit = row_at(mt.x, mt.y);
     if (hit >= 0 && (mt.moved || mt.left) && hit != st.sel) { st.sel = hit; CallSystemSe(0, 2); }
     if (rows[st.sel].kind == K_BIND && hit == st.sel && (mt.moved || mt.left)) st.slot = x >= 360 + 120;
@@ -768,12 +817,14 @@ int pc_options_pc(int port, int flag)
 {
     int back = 0;
     rtl = lang_rtl_text();
+    g_lobby_io.list_on = st.list;   /* (Page Up / Down, Home, End) */
     build_rows();
     if (flag) back = input(port);
     build_rows();
     scroll_to_sel();
     draw();
     if (back) { st.capture = 0; st.wait_release = 0; }
+    if (!st.list) g_lobby_io.list_on = 0;
     return back ? 0 : 4;
 }
 
@@ -788,5 +839,6 @@ void pc_options_close(void)
             if (st.pending[i]) { st.pending[i] = 0; settings_act(&g_settings[i]); }
     st.any_pending = 0;
     st.capture = 0;
+    st.list = g_lobby_io.list_on = 0;
     g_menu_mouse.active = 0;
 }

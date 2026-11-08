@@ -56,8 +56,9 @@ They override the saved settings for that run. All options: ARCHITECTURE.md, "Co
 The title menu has **LOAD GAME**, **NEW GAME**, **OPTION**, **EXTRA**, **MULTIPLAYER**
 ([Co-op quick start](#co-op-quick-start)) and **EXIT**, which closes the game after asking.
 
-- **EXTRA** holds **BATTLE GAME**. It appears once Battle Game is unlocked (a cleared game, or
-  **Battle Game Unlocked** in Gameplay); without it there is no EXTRA row.
+- **EXTRA** holds **BIORAND** (the randomizer, modding/README.md, "Randomizer (BioRand)"),
+  **BATTLE GAME** and **IMPORT** (models and languages from other discs). BATTLE GAME appears once
+  it is unlocked (a cleared game, or **Battle Game Unlocked** in Gameplay).
 - Choose with up/down and confirm, or point and click. Cancel or a right click goes back to the
   title menu. Leaving Battle Game returns to EXTRA.
 
@@ -299,13 +300,16 @@ until the right square on the white strip is.
 | Extra Enemies | Off | up to 1..8 more per room, of kinds the room has (one copy per enemy at most) |
 | Rearranged Enemies | Off | free-roaming enemies start elsewhere in their room |
 | Enemy Randomizer | Off | enemies become other kinds; bosses stay |
-| Enemy Selection | Wild | Wild: any kind that fits. Mild: two common kinds per room. Custom: your rate (Off, 1..10) for each kind, set on the BIORAND screen's RANDOMIZER page, in the co-op lobby or in F1; picking Wild or Mild presets them |
+| Enemy Selection | Wild | Wild: any kind that fits. Mild: two common kinds per room. Custom: your rate (Off, 1..10) for each kind, set in Enemy Rates (below); picking Wild or Mild presets them |
+| Enemy Rates | | with Custom, right under Enemy Selection: opens the list of rates. The same list is on the BIORAND screen's RANDOMIZER page, in the co-op lobby and in F1 |
 | Types per Room | No Limit | at most that many different kinds of enemies in a room (1..8) |
 | Randomize Event Enemies | On | event enemies change too |
 | Enemy Seed | 0 | the same seed gives the same enemies (and the same cutscene cast) |
 | Randomize Cutscene Cast | Off | see [Cutscene cast](#cutscene-cast): the story characters as other models in cutscenes |
 | Model Selection | Cutscene Models | where the characters' new looks come from |
+| Choose Models | | with Custom, right under Model Selection: opens the list of models to check (below) |
 | Model Assignment | Per Character | Per Character: the same model in every cutscene. Per Cutscene: each cutscene room picks again |
+| Include Imported Models | Off | shown once you have imported models: they can be picked too. In co-op both players need the same ones |
 | Randomize Voice Lines | Off | a character shown as another story character says that character's lines; shown as an enemy, it makes that enemy's sounds (below) |
 | Talking Mouths | On | with Randomize Voice Lines: the mouth also moves for new lines in place of lines without mouth movement, when it is clear who speaks (below) |
 
@@ -330,8 +334,9 @@ voices (unless Randomize Voice Lines is on) and what happens stay as they are.
   Claire's second costume has none and keeps a still face. A model with hands of its own shows them instead of the character's gloves. Claire's
   and Chris's looks are never given to someone else: how they look is up to "Character Model" (or Claire's and Chris's Model).
   *Custom* uses only the models you check in a list of the *All Models* ones (with SELECT ALL and
-  DESELECT ALL): in F1 under Model Selection, or in the co-op lobby (GAME RULES, RANDOMIZER, CUTSCENE
-  CAST, CHOOSE MODELS). Your choice is saved. With nothing checked, nobody changes.
+  DESELECT ALL): Choose Models right under Model Selection, in F1 under Model Selection, on the BIORAND
+  screen (EXTRA OPTIONS, RANDOMIZER) or in the co-op lobby (GAME RULES, RANDOMIZER, CUTSCENE CAST, CHOOSE
+  MODELS). It is one list everywhere, and it is saved. With nothing checked, nobody changes.
 * **Model Assignment**: *Per Character*: e.g. Steve is shown as Alfred in every cutscene, and no two
   characters share a model. *Per Cutscene*: each cutscene room picks again. Both come from
   the enemy seed: the same seed gives the same cast.
@@ -378,7 +383,7 @@ Weapon Shortcuts (on, [Weapon shortcuts](#weapon-shortcuts)), then the bindings.
 | Aim Assist | Off | Off: free aim. On: the game's lock-on (gamepad: aim assist) |
 | Precise Shots | On | free-aim shots hit only where the crosshair meets the body; head hits do more damage, and the blood comes from where the shot hit (the head, an arm, a leg) |
 | Locational Hit Reactions | On | a zombie shot in the head, an arm or a leg flinches there; damage and timing stay the same |
-| Headshots & Piercing | On | sniper and assault rifle headshots do more damage; a killing headshot from the magnum, shotgun, Gold Lugers, sniper or assault rifle bursts a zombie's head; sniper rifle shots go through enemies (not walls). In co-op, the host's choice counts |
+| Headshots & Piercing | On | sniper and assault rifle headshots do more damage; a killing headshot from the magnum, shotgun, Gold Lugers, sniper or assault rifle bursts a zombie's head; sniper rifle shots go through enemies (not walls). In co-op, the host's choice counts (the lobby's GAME RULES show it as HEADSHOTS) |
 | Move While Aiming | Off | walk slowly with the weapon raised, firing, slashing or reloading: W/A/S/D or the left stick move you (forward, back, sideways), the arms keep aiming; not with Aim Assist's lock-on (mouse, Classic gamepad) |
 | Gamepad Controls | Modern | see [Third person with a gamepad](#third-person-with-a-gamepad) |
 
@@ -402,7 +407,9 @@ Music And Voice, Sound Effects: 0-100%, default 100%.
 
 ### Co-op
 
-On the CO-OP page and in F3. HOST RULES settings count only on the host. Details: COOP.md, "Settings".
+On the CO-OP page and in F3. HOST RULES settings count only on the host. F3 also has the other host rules
+(Free Typewriter Saves, Extra Item Boxes and Herbs, Headshots & Piercing) and Character Models. Details:
+COOP.md, "Settings".
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -517,6 +524,9 @@ F2 (or the EXTRAS page) is for testing and fun:
 - **Save Now**: the typewriter's save screen where you stand; no ink ribbon needed or used. Loading the
   save puts you back on that spot.
 - **Open Item Box**: your item box wherever you are, the same box as at every item box.
+
+On the EXTRAS page, Heal Now, Save Now and Open Item Box run when you leave the menu; they need a game in
+progress.
 
 Save Now and Open Item Box work while you control your character: not in a cutscene, door, menu,
 message, grab, first-person view, with the weapon raised or in the Battle Game. F2 says why when

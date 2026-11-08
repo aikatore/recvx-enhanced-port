@@ -6,6 +6,8 @@
 
 - **Hunter and Sweeper**: the enemy randomizer now treats the Sweeper as its own enemy type in every mode, so Types
   per Room counts them separately.
+- **Menus**: the enemy rates, the cutscene cast's model list, Save Now and Open Item Box are now also in the
+  Enhanced Settings, and the co-op lobby and co-op window show more of the host's rules.
 
 ### Fixes
 
