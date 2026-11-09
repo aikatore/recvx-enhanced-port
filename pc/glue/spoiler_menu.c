@@ -40,7 +40,7 @@ void pc_overlay_end(void);
 int pc_item_icons(int user, int on);
 void pc_item_icon(unsigned int w, float x, float y, float sc, unsigned int argb, float z);
 unsigned int AdvGetCancelButton(void);
-extern int g_dev_tools, coop_on;
+extern int coop_on;
 
 enum { BTN_L2 = 0x1, BTN_R2 = 0x2, BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_TRI = 0x10, BTN_SQUARE = 0x80, BTN_SELECT = 0x100,
        BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };   /* Pad[] bits */
@@ -254,7 +254,7 @@ int pc_spoiler_want(void)
     if (!(__atomic_load_n(&keys_req, __ATOMIC_ACQUIRE) & K_F8)) return 0;
     __atomic_and_fetch(&keys_req, ~K_F8, __ATOMIC_ACQ_REL);
     if (coop_on) host_log("spoiler: not in co-op (the partner's game runs on)\n");
-    if (!g_dev_tools || coop_on || sm.open || sm.closing) return 0;
+    if (coop_on || sm.open || sm.closing) return 0;
     open();
     return 1;
 }

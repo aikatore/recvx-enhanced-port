@@ -6,6 +6,8 @@
 
 - **HUD**: a new HUD shows health and ammo, with two styles to choose from. On by default in the over-the-shoulder
   camera, off with fixed camera.
+- **BioRand spoiler log**: F8 opens a list of where BioRand put every item, room by room with the item icons, and
+  with door randomization which part of the game holds which key items. The game pauses while it is open.
 
 ### Changes
 

@@ -59,7 +59,7 @@ const BindRow bind_rows[B_COUNT] = {
     [B_CHEAT_BOX] = { "cheat_box", "Item Box Anywhere", BG_HOTKEY, 0 },
     [B_CHEAT_LOAD] = { "cheat_load", "Load Anywhere", BG_HOTKEY, 0 },
     [B_DEVCINE] = { "dev_cutscenes", "Cutscene Log (Dev)", BG_HOTKEY, 0 },
-    [B_SPOILER] = { "dev_spoiler", "Spoiler Log (Dev)", BG_HOTKEY, 0 },
+    [B_SPOILER] = { "dev_spoiler", "Spoiler Log", BG_HOTKEY, 0 },
 };
 
 const int bind_order[B_COUNT] = {
@@ -202,7 +202,7 @@ int g_dev_tools;      /* --dev (host.c): developer tools, the F2 object placer, 
 int bind_row_shown(int row, int dev)
 {
     if (row == B_IMPORT && !g_dev_mode) return 0;
-    if ((row == B_DEVCINE || row == B_SPOILER) && !g_dev_tools) return 0;
+    if (row == B_DEVCINE && !g_dev_tools) return 0;
     return dev == BIND_KB ? bind_rows[row].pad_ok != 2 : bind_rows[row].pad_ok != 0;
 }
 

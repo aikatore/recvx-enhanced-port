@@ -1237,7 +1237,7 @@ then Custom: the ini has Wild's rates), `ui/t_lobby.sh` (the lobby: the gamepad 
 click on Mutated Steve's track, a right click back, Types per Room), `pc/tools/enemy_rates_check.sh`,
 `pc/tools/enemy_revisit_check.sh` (also with `EXTRA=8` and Custom), and a co-op run (host and guest the same records).
 
-### S13: the spoiler log screen (`--dev`, F8; 2026-11-08)
+### S13: the spoiler log screen (F8; 2026-11-08, `--dev` only until 2026-11-09)
 
 The user's request: an in-game screen of BioRand's `log_pl0.txt`, each room in order with each item spot's original
 item and what replaced it, with the item icons, the door randomizer's segments if they can be read, opened with F8
@@ -1284,7 +1284,7 @@ Input: up/down a row, left/right (L2/R2, Page Up/Down) a page, Home/End, L1/R1 t
 view, Square the key items, Select the player's room; the mouse wheel (three rows), a click on a view, the toggle, the
 scroll bar or CLOSE; F8, Escape, the cancel button, START or a right click close it. Its texts are in the ten languages.
 
-**The pause.** F8 (hotkey row "Spoiler Log (Dev)", `B_SPOILER`, shown only with `--dev`; the main thread's
+**The pause.** F8 (hotkey row "Spoiler Log", `B_SPOILER`, ini `key_dev_spoiler`; for everyone since 2026-11-09, was `--dev` only; the main thread's
 `spoiler_key`) asks for the game's own PAUSE (`system.c bhSysCallEvent`, under its own conditions: in play, no event,
 door, menu or movie): `ss_flg 0x80000000`, `sp_flg` 0 (no player, enemy, effect or event step), the pad state kept. The
 screen is drawn in PAUSE's place (`bhSysCallScreenSaver` mode 10), over the frozen world dimmed, and when it closes the
@@ -1299,7 +1299,7 @@ a static array (6 KB) rebuilt in place. Nothing else is allocated per open.
 
 **Tests (2026-11-08, Linux and mingw build; job dir `biorandlog/`, not committed):** `t.sh` (BIORAND > START, a teleport
 to 0/11, F8: the list, a scroll, L1/R1, the views, the toggle, Page Down, the mouse on the views, the wheel; Escape,
-the cancel button and F8 close; `--dev` off: F8 does nothing; a game without BioRand, a pack without the log, a junk
+the cancel button and F8 close; a game without BioRand, a pack without the log, a junk
 log: their messages; the play time and the player's pose and motion frame the same at the open and the close, then
 counting on), ctest `spoiler`, `lang`. `stress.sh` (`RECVX_SPOILER_STRESS=2000:500`: 500 opens and closes with
 scrolls, views and the toggle): RSS 186.2 MB after the 1st, 50th and 200th close, then between 186.2 and 187.5 MB

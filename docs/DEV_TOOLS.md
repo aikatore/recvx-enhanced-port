@@ -2,8 +2,8 @@
 
 A developer tool that names the cutscene playing and keeps the last ones, so a report of where a scene's models
 need a change ("Cutscene cast", [ACTORS.md](ACTORS.md#cutscene-cast)) can say exactly which scene it is. English only. The other
-`--dev` tools are the object placer ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md)) and the BioRand spoiler log screen (F8,
-[BIORAND_INGAME.md](BIORAND_INGAME.md) "S13").
+`--dev` tools are the object placer ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md)). The BioRand spoiler log screen (F8,
+[BIORAND_INGAME.md](BIORAND_INGAME.md) "S13") was one until 2026-11-09; it is open to everyone now.
 
 Code: `pc/src/host/devcine.c` (the list, its text, the export; the scene list's reading of a room file; ctest
 `devcine`), `pc/glue/devcine_glue.c` (the game's side, game thread; the scene list's PLAY), `teleport.c` (reads the room
