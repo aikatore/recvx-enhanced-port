@@ -1995,6 +1995,10 @@ static void p3_frame(void)
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
         if (own_grab[i] && !we_run(i) && (!(ene[i].flg & 0x1) || (frame_no - own_t[i] > 90 && !ply_busy(&ply2)))) own_grab[i] = 0;   /* (no word of its end) */
         if (is_host && owned[i] && !own_grab[i] && (ene[i].flg & 0x1) && event_driven(&ene[i])) { p3_takeback(i, 0, "an event of ours drives it"); continue; }
+        /* a slot gone free (a dead enemy cleared) is nobody's any more: a later enemy in it is the host's. The host's copy
+           goes free with the guest's snapshot; the guest sends that free slot a few times first (build_snapshots) */
+        if (owned[i] && !own_grab[i] && !(ene[i].flg & 0x1) && (is_host || ++own_wait[i] > 60)) { owned[i] = 0; own_wait[i] = 0; }
+        else if (!is_host && (ene[i].flg & 0x1)) own_wait[i] = 0;
         if (!we_run(i) || !p3_movable(i)) { p3_want[i] = 0; continue; }
         if (leaving) {
             if (budget-- <= 0) continue;
