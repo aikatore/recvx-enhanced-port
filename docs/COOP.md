@@ -1024,7 +1024,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   slot i); either game runs the target rule with the partner's stand-in, sends `EV_PLY_HIT`, and hands a zombie
   grab of the stand-in to the victim's game (`EV_GRAB` either way; `EV_UNGRAB` state 2: the grab is over, the runner
   keeps the zombie).
-  * **Who**: the only player that shot it in the last 60 frames, unless it is within 1.5 m of the other player it
+  * **Who**: the only player that shot it in the last 5 s (150 frames), unless it is within 1.5 m of the other player it
     goes for; else its target. Only the runner hands it over, after 8 frames of that preference and at most once per
     45 frames, between attacks: in its Move, alive, awake (hittable, not the waiting type 8), not driven by an event,
     not the holder of the runner's busy flag, its upper half linked. Bosses, other types, event and script enemies

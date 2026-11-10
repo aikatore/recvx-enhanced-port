@@ -944,7 +944,7 @@ void pc_enemy_holds(BH_PWORK* pl, BH_PWORK* by);   /* eneset.c */
 static int peer_opts;                   /* (defined with the game rules below) */
 #define P3_GIVE 8                       /* frames in a row the runner prefers the partner before it hands the enemy over */
 #define P3_HOLD 45                      /* frames after a change of hands before the next one (no flapping) */
-#define P3_HIT 60                       /* frames a player's hit counts as being engaged with the enemy */
+#define P3_HIT 150                      /* frames (5 s) a player's hit counts as being engaged with the enemy */
 static unsigned char own_grab[PC_ENE_SLOTS];     /* the slot changed hands for a grab, still running in the runner's game */
 static unsigned char p3_want[PC_ENE_SLOTS];      /* frames in a row we would hand it to the partner */
 static unsigned int own_t[PC_ENE_SLOTS];         /* our frame of its last change of hands */
