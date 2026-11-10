@@ -183,8 +183,10 @@ static int zero_or(const char* b, int n, const char* set)
 }
 
 /* events only the host sends (it runs the session and the enemies), and those only a guest sends */
-static int host_only(int t) { return t == EV_PLY_HIT || t == EV_BLOB || t == EV_GRAB || t == EV_BOXFIX || t == EV_SPAWN || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED || t == EV_CASTOFF; }
-static int guest_only(int t) { return t == EV_UNGRAB || t == EV_GONE || t == EV_OWN; }
+/* (protocol 46: EV_PLY_HIT, EV_GRAB and EV_UNGRAB go either way - with OPT2_OWNERSHIP the guest runs enemies too;
+   coop_glue.c takes them from the guest only under that rule) */
+static int host_only(int t) { return t == EV_BLOB || t == EV_BOXFIX || t == EV_SPAWN || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED || t == EV_CASTOFF; }
+static int guest_only(int t) { return t == EV_GONE || t == EV_OWN; }
 
 int coop_check_event(const Event* e, int from_host)
 {
@@ -221,7 +223,9 @@ int coop_check_event(const Event* e, int from_host)
         return e->u.lost.item > 0 && e->u.lost.item < 156 ? COOP_OK : COOP_BAD_FIELD;
     case EV_GRAB:
     case EV_UNGRAB:
-        if (e->idx >= COOP_ENE_SLOTS || e->u.gr.state > 1 || e->u.gr.pset > 1) return COOP_BAD_FIELD;
+    case EV_ENEOWN:   /* state: 1 with its state, 0 without (EV_ENEOWN: refused, run it on), 2 EV_UNGRAB: the grab is over and
+                         the runner keeps it / EV_ENEOWN: taken back */
+        if (e->idx >= COOP_ENE_SLOTS || e->u.gr.state > (e->type == EV_GRAB ? 1 : 2) || e->u.gr.pset > 1) return COOP_BAD_FIELD;
         if (e->u.gr.mdl < -1 || e->u.gr.mdl >= 16 || e->u.gr.cmdl < -1 || e->u.gr.cmdl >= 16) return COOP_BAD_FIELD;
         for (k = 0; k < 2; k++) {
             int m = k ? e->u.gr.cmnw : e->u.gr.mnw;

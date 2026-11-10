@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 43                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 46                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -49,9 +49,13 @@ extern "C" {
                                            42: the randomizer's Hunter and Sweeper two kinds in Wild and Mild too (other
                                                enemies from the same seed; nothing on the wire changed);
                                            43: EV_EOPTS cast_enemy, cast_enemy_off (the cutscene cast's "Enemy Models" and its
-                                               "Custom" list; Event 96 bytes) */
+                                               "Custom" list; Event 96 bytes);
+                                           46 (netexp-phase3 prototype): OPT2_OWNERSHIP, EV_ENEOWN (an enemy changes hands:
+                                               the player it is engaged with runs it), EV_PLY_HIT / EV_GRAB / EV_UNGRAB
+                                               either way, EV_UNGRAB state 2 (the grab is over, the runner keeps it) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
+#define COOP_EV_BURST 96                /* (protocol 46) events per frame while a burst is due: an enemy's state in one frame */
 #define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */
 #define COOP_GONE_MAX 26                /* EV_GONE: enemy slots per event */
 #define COOP_ENE_SLOTS 255              /* enemy slots 0..254 (pc_prelude.h PC_ENE_SLOTS); 255 in a slot byte: none */
@@ -75,7 +79,9 @@ enum { OPT_INDIVIDUAL = 1, OPT_TRADE_FREEZE = 2,   /* Pose.opts: the host's sess
        OPT_ALL = 255 };
 enum { OPT2_EXTRA_OBJECTS = 1,          /* Pose.opts2 (protocol 33): extra item boxes and blue herb planters (pc/glue/extras_glue.c) */
        OPT2_HEADSHOTS = 2,              /* (protocol 41) third person "Headshots & Piercing": rifle head damage, head bursts, piercing (tps_glue.c) */
-       OPT2_ALL = 3 };
+       OPT2_OWNERSHIP = 4,              /* (protocol 46, prototype) engaged-player enemy ownership: common enemies run in
+                                           the game of the player they are engaged with (coop_glue.c "Phase 3") */
+       OPT2_ALL = 7 };
 enum { BUSY_NONE, BUSY_EVENT, BUSY_MENU, BUSY_BOX, BUSY_TRADE };
 enum { MSET_OWN = -1, MSET_ROOM = -2, MSET_NONE = -3 };
 #define MNW_ROOM 0x7FFE
@@ -167,7 +173,7 @@ enum { REC_UNKNOWN, REC_NONE, REC_HAVE, REC_OFF };   /* PoseExt.rec: not known y
 enum { EV_ENE_HIT = 1, EV_PLY_HIT = 2, EV_BLOB = 3, EV_FLAGS = 4, EV_PICKUP = 5, EV_LOST = 6,
        EV_ESTATE = 7, EV_GRAB = 8, EV_UNGRAB = 9, EV_TRIG = 10, EV_TRADE = 11, EV_BOX = 12, EV_BOXFIX = 13,
        EV_SPAWN = 14, EV_EOPTS = 15, EV_ATR = 16, EV_FX = 17, EV_GRANT = 18, EV_TSCREEN = 19, EV_GONE = 20, EV_OWN = 21,
-       EV_SKIP = 22, EV_BRSEED = 23, EV_CASTOFF = 24, EV_TYPES };
+       EV_SKIP = 22, EV_BRSEED = 23, EV_CASTOFF = 24, EV_ENEOWN = 25, EV_TYPES };
 #define COOP_BR_STR 68                  /* EV_BRSEED: BioRand's seed string (biorand_opts.h BIORAND_SEED_LEN), no NUL */
 #define COOP_BR_DIG 12                  /*   and the first hex digits of the host's CLI archive's SHA-256 */
 #define COOP_CASTOFF_CHUNK 64           /* EV_CASTOFF: bytes per event */

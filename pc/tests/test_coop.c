@@ -27,7 +27,7 @@ static Event ev(int type)
     case EV_FLAGS: e.u.fl.n = 2; e.u.fl.word[0] = 3; e.u.fl.word[1] = 119; e.u.fl.set[0] = 1; break;
     case EV_PICKUP: e.u.pk.item = 12; e.u.pk.bit = 146; break;
     case EV_LOST: e.u.lost.item = 82; break;
-    case EV_GRAB: case EV_UNGRAB: e.idx = 1; e.u.gr.child = 255; e.u.gr.state = 1; e.u.gr.mdl = 0; e.u.gr.cmdl = -1; e.u.gr.mnw = 400; e.u.gr.cmnw = MNW_KEEP; e.u.gr.tid = 3; break;
+    case EV_GRAB: case EV_UNGRAB: case EV_ENEOWN: e.idx = 1; e.u.gr.child = 255; e.u.gr.state = 1; e.u.gr.mdl = 0; e.u.gr.cmdl = -1; e.u.gr.mnw = 400; e.u.gr.cmnw = MNW_KEEP; e.u.gr.tid = 3; break;
     case EV_TRIG: e.u.tr.set = 1; e.u.tr.bit = 110; e.u.tr.n = 20; e.u.tr.last = 1; e.u.tr.start = 0x290; break;
     case EV_TRADE: e.u.td.op = TD_OFFER; e.u.td.tid = 7; e.u.td.entry = 12 << 16 | 15; break;
     case EV_BOX: case EV_BOXFIX: e.u.bx.nrm = 1; e.u.bx.nadd = 1; e.u.bx.w[0] = 5 << 16 | 30; e.u.bx.w[1] = 0x1006 << 16 | 6; break;
@@ -48,8 +48,8 @@ static Event ev(int type)
     }
     return e;
 }
-static int host_sends(int t) { return t != EV_UNGRAB && t != EV_GONE && t != EV_OWN; }
-static int guest_sends(int t) { return t != EV_PLY_HIT && t != EV_BLOB && t != EV_GRAB && t != EV_BOXFIX && t != EV_SPAWN && t != EV_EOPTS && t != EV_SKIP && t != EV_BRSEED && t != EV_CASTOFF; }
+static int host_sends(int t) { return t != EV_GONE && t != EV_OWN; }
+static int guest_sends(int t) { return t != EV_BLOB && t != EV_BOXFIX && t != EV_SPAWN && t != EV_EOPTS && t != EV_SKIP && t != EV_BRSEED && t != EV_CASTOFF; }
 
 /* a generic EV_FX of effect `id` as its FxRule allows it (any rule's for an id without one) */
 static Event fx_sample(int id)
@@ -147,6 +147,10 @@ static void test_events(void)
     BAD(EV_GRAB, 1, e->u.gr.mnw = 512);
     BAD(EV_GRAB, 1, e->u.gr.mnw = -100);
     BAD(EV_GRAB, 1, e->u.gr.state = 2);
+    BAD(EV_UNGRAB, 0, e->u.gr.state = 3);
+    BAD(EV_ENEOWN, 1, e->u.gr.state = 3);
+    BAD(EV_ENEOWN, 0, e->idx = 255);
+    { Event e = ev(EV_UNGRAB); e.u.gr.state = 2; CHECK(coop_check_event(&e, 1) == COOP_OK); }   /* (46) the grab is over, kept */
     BAD(EV_UNGRAB, 0, e->u.gr.cmnw = 0x7000);
     /* B5: world events */
     BAD(EV_TRIG, 0, e->u.tr.set = 4);                 /* rm_flg: no world flag */
