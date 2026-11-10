@@ -698,11 +698,12 @@ void gs_notify_mem_write(uint32_t bp, uint32_t bw, int psm, uint32_t x, uint32_t
 
 void gs_notify_pages(const uint64_t* pages, int changed)
 {
-    for (uint32_t p = 0; p < 512; p++) {
-        if (!((pages[p >> 6] >> (p & 63)) & 1)) continue;
-        if (changed) page_dirty[p] = 1;
-        rt_invalidate_pages(p, p);   /* render targets do not mirror GS memory: always reload */
-    }
+    for (uint32_t wi = 0; wi < 8; wi++)   /* the set bits only, in order */
+        for (uint64_t m = pages[wi]; m; m &= m - 1) {
+            uint32_t p = wi * 64 + (uint32_t)__builtin_ctzll(m);
+            if (changed) page_dirty[p] = 1;
+            rt_invalidate_pages(p, p);   /* render targets do not mirror GS memory: always reload */
+        }
 }
 
 static uint32_t clut_hash(uint64_t tex0)

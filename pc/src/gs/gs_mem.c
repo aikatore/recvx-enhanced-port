@@ -383,6 +383,21 @@ static void clut_pos(int entries, uint32_t i, uint32_t* x, uint32_t* y)
     *y = ((i & 0x08) >> 3) | ((i & 0xE0) >> 4);
 }
 
+/* CLUT entry i's byte address at CBP 0 (CT32, CT16, CT16S; 16 or 256 entries): every format's
+   address is bp * 256 + its offset at bp 0 (gs_mem_selftest checks it against gs_pixel_addr) */
+static uint16_t clut_off[3][2][256];
+static void clut_off_init(void)
+{
+    static const int fmt[3] = { PSMCT32, PSMCT16, PSMCT16S };
+    for (int f = 0; f < 3; f++)
+        for (int k = 0; k < 2; k++)
+            for (uint32_t i = 0; i < (k ? 256u : 16u); i++) {
+                uint32_t x, y;
+                clut_pos(k ? 256 : 16, i, &x, &y);
+                clut_off[f][k][i] = (uint16_t)gs_pixel_addr(fmt[f], 0, 1, x, y);
+            }
+}
+
 /* Handle the CLD field of a TEX0 write. */
 void gs_clut_load(uint64_t tex0)
 {
@@ -402,15 +417,19 @@ void gs_clut_load(uint64_t tex0)
     if (!load) return;
     gs_flush();
     ntex_before_access(cbp / 32, cbp / 32 + 1);
-    for (uint32_t i = 0; i < (uint32_t)entries; i++) {
-        uint32_t x, y;
-        clut_pos(entries, i, &x, &y);
-        if (cpsm == 0) {
-            uint32_t c = gs_read_pixel(PSMCT32, cbp, 1, x, y), e = (csa * 16 + i) & 255;
-            clut_buf[e] = (uint16_t)c; clut_buf[256 + e] = (uint16_t)(c >> 16);
-        } else {
-            clut_buf[(csa * 16 + i) & 511] = (uint16_t)gs_read_pixel(cpsm == 2 ? PSMCT16 : PSMCT16S, cbp, 1, x, y);
-        }
+    {   /* gs_read_pixel(fmt, cbp, 1, clut_pos(i)) through the offset table: the address is cbp * 256 + clut_off */
+        const uint16_t* off = clut_off[cpsm == 0 ? 0 : cpsm == 2 ? 1 : 2][entries == 256];
+        uint32_t base = cbp * 256;
+        if (!clut_off[0][1][1]) clut_off_init();   /* (entry 1 is 4 bytes in) */
+        if (cpsm == 0)
+            for (uint32_t i = 0; i < (uint32_t)entries; i++) {
+                uint32_t c, e = (csa * 16 + i) & 255;
+                memcpy(&c, gs_memp + ((base + off[i]) & (GS_MEM_SIZE - 1)), 4);
+                clut_buf[e] = (uint16_t)c; clut_buf[256 + e] = (uint16_t)(c >> 16);
+            }
+        else
+            for (uint32_t i = 0; i < (uint32_t)entries; i++)
+                memcpy(&clut_buf[(csa * 16 + i) & 511], gs_memp + ((base + off[i]) & (GS_MEM_SIZE - 1)), 2);
     }
 }
 
@@ -458,5 +477,18 @@ int gs_mem_selftest(void)
     for (int y = 0; y < 8; y++) for (int x = 0; x < 16; x++) { if (seen[columnTable16[y][x]]++) return 0; }
     memset(seen, 0, sizeof(seen));
     for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) { if (seen[columnTable32[y][x]]++) return 0; }
+    clut_off_init();   /* and the CLUT offsets are gs_pixel_addr's, at any CBP */
+    {
+        static const int fmt[3] = { PSMCT32, PSMCT16, PSMCT16S };
+        static const uint32_t cbps[] = { 0, 1, 31, 32, 8191, 16380, 16383 };
+        for (int f = 0; f < 3; f++)
+            for (int k = 0; k < 2; k++)
+                for (uint32_t i = 0; i < (k ? 256u : 16u); i++)
+                    for (size_t b = 0; b < sizeof(cbps) / sizeof(cbps[0]); b++) {
+                        uint32_t x, y;
+                        clut_pos(k ? 256 : 16, i, &x, &y);
+                        if (((cbps[b] * 256 + clut_off[f][k][i]) & (GS_MEM_SIZE - 1)) != gs_pixel_addr(fmt[f], cbps[b], 1, x, y)) return 0;
+                    }
+    }
     return 1;
 }
