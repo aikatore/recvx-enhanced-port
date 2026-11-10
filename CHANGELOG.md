@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- In the over-the-shoulder camera with Free Camera, mashing the movement keys breaks free of a grab as quickly as
+  with the fixed cameras.
+
 ## 0.7.6 (2026-11-09)
 
 ### New

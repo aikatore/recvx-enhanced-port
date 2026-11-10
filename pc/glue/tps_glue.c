@@ -1021,8 +1021,9 @@ unsigned int tps_pad(unsigned int pad)
         was = now;
     }
     move_keys = 0;
-    if (g_tps.free_cam && tps_cam_active && !menu && plp && plp->mode1 == 0 && !(k & TPS_K_QUICKTURN)) {
-        /* camera A: any direction walks forward, tps_player turns the character towards it */
+    if (g_tps.free_cam && tps_cam_active && !menu && plp && plp->mode0 == 1 && plp->mode1 == 0 && !(k & TPS_K_QUICKTURN)) {
+        /* camera A: any direction walks forward, tps_player turns the character towards it. Not in a grab or hit
+           (mode0 4, 2): there each key is its own direction, so the struggle (bhEne_LeverCheck) counts every new one */
         move_keys = k & (TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT);
         k &= ~move_keys;
         if (!!(move_keys & TPS_K_FWD) != !!(move_keys & TPS_K_BACK) || !!(move_keys & TPS_K_LEFT) != !!(move_keys & TPS_K_RIGHT))

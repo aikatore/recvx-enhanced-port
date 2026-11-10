@@ -379,7 +379,9 @@ camera (`tps_glue.c view`) also tests the room model:
 * Hooks: `bhSetPad` (third-person keys and mouse buttons as virtual bits); `bhControlPlayer` after
   the mode handler (mouse yaw into `plp->ay`; while aiming `ay`/`wax` towards the crosshair target,
   auto-aim turn cancelled); its `bhCalcModel(plp)` replaced by `tps_calc_model` (free-aim pose).
-* Camera A (`g_tps.free_cam`): `tps_pad` turns W/A/S/D into "forward" in move mode; `tps_player`
+* Camera A (`g_tps.free_cam`): `tps_pad` turns W/A/S/D into "forward" in move mode (`mode0` 1; in a
+  grab, `mode0` 4, they stay the game's four directions: the struggle, `zonzon.c bhEne_LeverCheck`, counts
+  each new direction press 4 and each new run/fire/action/map press 3 off the hold, from `pad_ps`); `tps_player`
   turns `ay` towards camera yaw minus the keys' angle (not in the game's own turns or special
   moves, `mode2 > 13`); `tps_camera` adds the mouse X to the camera yaw. Pose, aim and co-op read
   `ay`/`wax`, never the camera.
