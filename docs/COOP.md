@@ -1435,9 +1435,13 @@ alone:
 Pose (112) | Event x nev (88 each, nev <= 16) | EneSnap x nene (100 each, nene <= 48) | PoseExt (108, if PF_EXT)
 ```
 
-The size must be exactly that sum. The first datagram of a frame carries the `PoseExt`. Up to 16
-unacknowledged events and 48 snapshots per frame; the receiver gathers the newest frame's snapshots
-over its datagrams.
+The size must be exactly that sum. The first datagram of a frame carries the `PoseExt`. Events: every new one
+goes in the frame it was queued (up to 96 a frame, so a grab's 72 `EV_ESTATE` chunks and its `EV_GRAB` go at once,
+in about 7 datagrams) and once more in the next frame (the receiver takes events only in order: a lost datagram of a
+burst then costs a frame, not a round trip); one not acknowledged goes again once its answer is overdue (the round trip
++ 80 ms, at most 600), at most 64 sent again a frame. Before, every unacknowledged event went again in every frame, at
+most 16: a grab's handover took 5 round trips (190 ms on a LAN, 400-860 ms over the internet). Up to 48 snapshots per
+frame; the receiver keeps each slot's under its frame ("Enemy playout").
 
 | Packet type (`Pose.type`) | Meaning |
 |---|---|

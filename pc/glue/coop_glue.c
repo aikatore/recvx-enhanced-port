@@ -1410,6 +1410,8 @@ static void grab_check(void)
    behind it: the frame's further events are not queued and the frame ends with a resync (resync():
    a new session id, both streams start again, the host's game state goes over) - deliberate and the
    same on both sides, instead of a stream that waits forever for an event that was dropped. */
+/* send_frame: when each unacknowledged event went last (net_ms, 0 not yet), by id */
+static unsigned int ev_sent[COOP_RING];
 static void queue_event(Event* e)
 {
     int was = ring.overflow;
@@ -1419,6 +1421,7 @@ static void queue_event(Event* e)
         if (!was) host_log("coop: %d events not acknowledged by the partner: resynchronising\n", COOP_RING);
         return;
     }
+    ev_sent[e->id % COOP_RING] = 0;
     if (trace) fprintf(stderr, "coop: event %u out type=%d idx=%d\n", e->id, e->type, e->idx);
 }
 
@@ -7006,10 +7009,14 @@ static int drop_now(int events)
    in datagrams of at most COOP_DGRAM_MAX bytes (above an internet path's MTU a datagram is split
    into IP fragments, and losing one loses all). Each datagram carries the pose: it is useful alone
    (acknowledgement, ping, its events in order, its snapshots); the first one also the PoseExt. */
+#define EV_BURST 96                     /* events a frame (receivers check COOP_EV_FRAME a datagram; one holds at most 11) */
+#define EV_RESEND 64                    /* of them sent again */
+#define EV_AGAIN 30                     /* ms: a new one goes once more in the next frame */
+#define EV_RTO 80                       /* ms over the round trip: the partner answers with its next frame, we read it at ours */
 static void send_frame(void)
 {
     static unsigned char buf[COOP_DGRAM_MAX];
-    static Event evs[COOP_EV_FRAME];
+    static Event evs[EV_BURST];
     static EneSnap snaps[COOP_SNAP_FRAME];
     static int stats = -1, frames, dgrams, evn, snn, bytes, maxb, peakd, peakb;
     unsigned int id;
@@ -7025,7 +7032,20 @@ static void send_frame(void)
     }
     if (need_blob && br_offer != BR_ASK && br_offer != BR_GEN) tx.flags |= PF_WANT_BLOB;
     tx.ev_ack = in_last;
-    for (id = ring.head; id != ring.next && ne < COOP_EV_FRAME && !drop_now(1); id++) evs[ne++] = *coop_ring_get(&ring, id);
+    {   /* the events: each new one now (a grab's state goes whole in its frame: EV_BURST) and once more in the next
+           frame (a lost datagram of a burst then costs a frame, not a round trip: the receiver takes events only in
+           order); one not acknowledged again once its answer is overdue (EV_RTO); at most EV_RESEND sent again a frame.
+           Before, every unacknowledged one went again in every frame, at most 16 a frame: the 72 chunks of a grab's
+           state took 5 round trips. */
+        unsigned int now = net_ms(), rto = (unsigned int)(ping_f >= 0 ? ping_f : 200) + EV_RTO, re = 0;
+        if (rto > 600) rto = 600;
+        for (id = ring.head; id != ring.next && ne < EV_BURST && !drop_now(1); id++) {
+            unsigned int* t = &ev_sent[id % COOP_RING];
+            if (*t && (now - *t < rto || re++ >= EV_RESEND)) continue;
+            *t = (*t ? now : now - rto + EV_AGAIN) | 1;
+            evs[ne++] = *coop_ring_get(&ring, id);
+        }
+    }
     ns = build_snapshots(snaps);
     {   /* ping: our clock as it goes out, and how long we held the partner's (real time, not frames) */
         uint64_t t = net_us();
