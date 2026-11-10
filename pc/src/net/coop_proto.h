@@ -540,6 +540,52 @@ typedef struct CoopAtk { unsigned int t0, until; unsigned char n; } CoopAtk;
 int coop_atk_note(CoopAtk* a, unsigned int now);
 int coop_atk_cooling(const CoopAtk* a, unsigned int now);
 
+/* Playout (docs/COOP.md "Enemy playout"): the receiver shows the sender's enemy snapshots frame by frame at a steady
+   cadence instead of the newest one at each hand-off. The sender's frame counter (Pose.seq) is its clock: its frames
+   are paced to a fixed 29.97 Hz grid, so frame k leaves at about k * COOP_TICK_US plus a constant. Each datagram's
+   arrival gives an offset arrival - seq * COOP_TICK_US; the margin is the 98th percentile of each frame's last
+   arrival offset over the last COOP_PO_WIN frames, plus COOP_PO_PAD_US, at most COOP_PO_MAX frames above the
+   fastest arrival. It rises at once and falls by COOP_PO_FALL_US a frame. At each hand-off the receiver shows frame P,
+   the newest one due (arrival grid + margin), stepping P by exactly one while the due frame stays within the dead
+   band [-COOP_PO_EARLY, 1 + COOP_PO_LATE) frames of it (so the estimate's small moves and clock drift do not make
+   the cadence uneven), at most COOP_PO_EXTRA frames past the newest frame seen. Every arrival over two frames above
+   the margin for 8 new frames in a row (the sender stalled and re-phased its grid) re-anchors at once. Pure:
+   pc/tests/test_coop.c replays synthetic jitter, loss, drift, catch-up bursts and re-phases through it. */
+#define COOP_TICK_US (1001000.0 / 30.0)  /* the sender's frame (pc/src/ps2/kernel.c: 59.94 / 2 Hz) */
+#define COOP_PO_WIN 300                  /* frames the margin is measured over (10 s) */
+#define COOP_PO_PAD_US 3000.0
+#define COOP_PO_MAX 4                    /* frames */
+#define COOP_PO_FALL_US 1000.0
+#define COOP_PO_EARLY 0.1
+#define COOP_PO_LATE 0.4
+#define COOP_PO_EXTRA 4                  /* frames a slot is extrapolated past its newest snapshot (then held) */
+typedef struct CoopPlayout {
+    struct { uint32_t seq; float lo, hi; } f[COOP_PO_WIN];   /* a frame's first and last arrival offset (us, from base; hi: exact ones only) */
+    double base;                        /* the first arrival offset */
+    double delay;                       /* the margin in use (from base) */
+    double fast;                        /* the fastest arrival offset in the window (from base) */
+    uint32_t newest, P;
+    int have, started, high;            /* high: new frames in a row arriving far above the margin */
+} CoopPlayout;
+void coop_playout_reset(CoopPlayout* po);
+/* a datagram of sender frame seq arrived at arr_us (exact: the arrival itself, not when it was read) */
+void coop_playout_arrive(CoopPlayout* po, uint32_t seq, uint64_t arr_us, int exact);
+/* at our hand-off (now_us, the same clock): the sender frame to show; 0 when nothing arrived yet */
+int coop_playout_frame(CoopPlayout* po, uint64_t now_us, uint32_t* P);
+static inline double coop_playout_margin_ms(const CoopPlayout* po) { return po->have ? (po->delay - po->fast) / 1000.0 : 0; }
+
+/* The snapshots kept of one enemy slot (by sender frame) and its state at frame P from them: the snapshot of P
+   (COOP_AT_EXACT), else between the ones before and after it (COOP_AT_INTERP: position, angles and, in one motion,
+   its frame), else carried on from the newest before it at the last two's rate for at most COOP_PO_EXTRA frames
+   (COOP_AT_EXTRAP); older than that only once, if it was not applied yet (COOP_AT_OLD; `applied`: the frame of the
+   snapshot applied last), else COOP_AT_NONE (the slot keeps what it shows). The other fields are the newest
+   snapshot's at or before P (*from: its frame). The caller checks the frame against its motion. */
+#define COOP_HIST 8
+typedef struct CoopSnapHist { uint32_t seq[COOP_HIST]; EneSnap s[COOP_HIST]; } CoopSnapHist;   /* seq 0: empty */
+enum { COOP_AT_NONE, COOP_AT_EXACT, COOP_AT_INTERP, COOP_AT_EXTRAP, COOP_AT_OLD };
+void coop_hist_put(CoopSnapHist* h, uint32_t seq, const EneSnap* s);
+int coop_hist_at(const CoopSnapHist* h, uint32_t P, uint32_t applied, EneSnap* out, uint32_t* from);
+
 /* room scripts (docs/modding/ROOM_FORMAT.md "Event scripts") */
 int coop_insn_len_raw(const uint8_t* p);    /* bytes of the instruction at p, 0 unknown */
 int coop_op_cond(int op);                   /* tests: continue or skip, nothing else */

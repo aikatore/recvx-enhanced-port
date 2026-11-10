@@ -338,6 +338,7 @@ add_executable(test_coop tests/test_coop.c src/net/coop_proto.c src/net/rdv_prot
 target_compile_options(test_coop PRIVATE -std=gnu11)
 target_link_libraries(test_coop PRIVATE monocypher m)
 add_test(NAME coop COMMAND test_coop)
+add_test(NAME coop_playout COMMAND test_coop playout)   # the enemy playout on synthetic jitter, loss, drift, stall traces
 
 # UTF-8 file paths and replace-on-rename saving (pc/src/host/fileio.c)
 add_executable(test_fileio tests/test_fileio.c src/host/fileio.c)

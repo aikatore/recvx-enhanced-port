@@ -1108,8 +1108,136 @@ static void test_target(void)
     }
 }
 
+/* ---------------------------------------------------------------- playout (ctest coop_playout)
+   Synthetic paths: the host sends frame k (m datagrams back to back) on its 29.97 Hz grid, with clock drift, stalls it
+   catches up from and a re-phase; each datagram gets delay + uniform jitter (+ spikes), never overtakes the one before
+   (as udp_proxy.py), some are lost. The guest's hand-offs run on their own grid at a phase; at each it feeds what
+   arrived and asks for P. Measured: uneven steps of P (!= +1), shown frames not complete yet (late; lost ones apart),
+   the display lag (hand-off minus the host's send of the frame shown). */
+typedef struct { const char* name; double delay, jit, loss, spike_p, spike_ms, drift_ppm, phase_ms; int frames, dg, stall_every, stall_len, rephase_at;
+                 double rephase_ms; } PoPath;
+typedef struct { double uneven, missing, lost, lag, ow98; int back, uneven_tail; } PoRes;
+static uint32_t po_rng = 12345;
+static double po_u(void) { po_rng = po_rng * 1664525u + 1013904223u; return (po_rng >> 8) / 16777216.0; }
+static int cmpd(const void* a, const void* b) { double x = *(const double*)a, y = *(const double*)b; return (x > y) - (x < y); }
+static PoRes po_run(const PoPath* p)
+{
+    static CoopPlayout po;
+    int n = p->frames, k, j, na = 0, i = 0, shown = 0, une = 0, miss = 0, nlost = 0, back = 0, tail = 0, lagn = 0;
+    double* S = calloc(n + 1, sizeof(double)), *done = calloc(n + 1, sizeof(double)), *ow = calloc(n + 1, sizeof(double));
+    char* lost = calloc(n + 1, 1);
+    struct { double t; uint32_t seq; }* A = calloc((size_t)(n + 1) * p->dg, sizeof(*A));
+    double last = 0, stall_end = 0, h, lag = 0, T = COOP_TICK_US, start;
+    uint32_t P, prev = 0;
+    PoRes r;
+    coop_playout_reset(&po);
+    for (k = 1; k <= n; k++) {
+        double g = 1e6 + k * T * (1 + p->drift_ppm * 1e-6);
+        if (p->stall_every && k % p->stall_every == 0) stall_end = g + p->stall_len * T;   /* this frame and the next ones late, then back to back */
+        if (p->rephase_at && k >= p->rephase_at) g += p->rephase_ms * 1000;
+        S[k] = g > stall_end ? g : stall_end;
+        for (j = 0; j < p->dg; j++) {
+            double d = (p->delay + (po_u() * 2 - 1) * p->jit) * 1000, t;
+            if (po_u() < p->spike_p) d += po_u() * p->spike_ms * 1000;
+            if (po_u() * 100 < p->loss) { lost[k] = 1; continue; }
+            t = S[k] + j * 50 + (d > 0 ? d : 0);
+            if (t < last) t = last;
+            last = t;
+            A[na].t = t; A[na++].seq = k;
+            if (t > done[k]) done[k] = t;
+        }
+    }
+    for (k = 1; k <= n; k++) { ow[k - 1] = lost[k] ? 0 : done[k] - S[k]; nlost += lost[k]; }
+    qsort(ow, n, sizeof(double), cmpd);
+    start = 1e6 + 100 * T + p->phase_ms * 1000;   /* after 100 frames */
+    for (h = 1e6 + p->phase_ms * 1000; h < S[n] - 5 * T; h += T) {
+        while (i < na && A[i].t <= h) { coop_playout_arrive(&po, A[i].seq, (uint64_t)A[i].t, 1); i++; }
+        if (!coop_playout_frame(&po, (uint64_t)h, &P)) continue;
+        if (h >= start && prev) {
+            shown++;
+            une += P - prev != 1;
+            back += (int32_t)(P - prev) < 0;
+            if (p->rephase_at && h > S[p->rephase_at] + 60 * T) tail += P - prev != 1;
+            if (P >= 1 && P <= (uint32_t)n) {
+                miss += lost[P] || done[P] > h;
+                lag += h - S[P]; lagn++;
+            }
+        }
+        prev = P;
+    }
+    r.uneven = 100.0 * une / (shown ? shown : 1);
+    r.missing = 100.0 * miss / (shown ? shown : 1);
+    r.lost = 100.0 * nlost / n;
+    r.lag = lag / (lagn ? lagn : 1) / 1000;
+    r.ow98 = ow[nlost + (int)(0.98 * (n - nlost - 1))] / 1000;
+    r.back = back; r.uneven_tail = tail;
+    printf("playout %-28s uneven %.3f%%  shown frames not in %.3f%% (frames lost %.2f%%)  lag %.1f ms (one way p98 %.1f)  margin %.1f ms\n",
+           p->name, r.uneven, r.missing, r.lost, r.lag, r.ow98, coop_playout_margin_ms(&po));
+    free(S); free(done); free(ow); free(lost); free(A);
+    return r;
+}
+
+static void test_playout(void)
+{
+    static const PoPath paths[] = {
+        { "LAN", 0.2, 0.1, 0, 0, 0, 0, 7, 9000, 4 },
+        { "30+-8", 30, 8, 0, 0, 0, 0, 13, 9000, 4 },
+        { "60+-25, 2% loss", 60, 25, 2, 0, 0, 0, 21, 9000, 4 },
+        { "relay 40+-12", 40, 12, 0, 0, 0, 0, 3, 9000, 5 },
+        { "30+-3, 2% spikes +60", 30, 3, 0, 0.02, 60, 0, 29, 9000, 4 },
+        { "30+-8, drift +50 ppm", 30, 8, 0, 0, 0, 50, 11, 36000, 4 },
+        { "30+-8, drift -50 ppm", 30, 8, 0, 0, 0, -50, 17, 36000, 4 },
+        { "30+-8, host clock 33 ms off", 30, 8, 0, 0, 0, 0, 32.9, 9000, 4 },
+    };
+    int k;
+    for (k = 0; k < (int)(sizeof(paths) / sizeof(paths[0])); k++) {
+        PoRes r = po_run(&paths[k]);
+        double frame_lost = 100.0 - 100.0 * pow(1 - paths[k].loss / 100, paths[k].dg);
+        CHECK(r.uneven <= (paths[k].drift_ppm ? 0.05 : 0.5));
+        CHECK(r.missing <= frame_lost + 0.5 + (paths[k].spike_p ? 2.0 : 0));   /* (a spike over the margin is late: 98th percentile) */
+        CHECK(r.lag <= r.ow98 + COOP_TICK_US / 1000 + 4);
+        CHECK(r.back == 0);
+    }
+    {   /* the host stalls 3 frames every 20 s and catches up: one hold and one catch-up step each at most */
+        PoPath p = { "30+-8, stalls", 30, 8, 0, 0, 0, 0, 5, 9000, 4, 600, 3 };
+        PoRes r = po_run(&p);
+        CHECK(r.uneven * 9000 / 100 <= 3.0 * 9000 / 600 + 0.005 * 9000);
+        CHECK(r.back == 0 && r.missing < 3.0);
+    }
+    {   /* the host stops for 1.5 s and its grid re-phases: no step back, in step again 2 s later */
+        PoPath p = { "30+-8, re-phase 1.5 s", 30, 8, 0, 0, 0, 0, 9, 9000, 4, 0, 0, 3000, 1500 };
+        PoRes r = po_run(&p);
+        CHECK(r.back == 0 && r.uneven_tail <= 1);
+        CHECK(r.lag <= r.ow98 + COOP_TICK_US / 1000 + 4 + 1500.0 * 60 / 9000);
+    }
+    {   /* a slot's state at P: exact, between two (also a turn across 0), carried on (at most COOP_PO_EXTRA), held, once when old */
+        static CoopSnapHist h;
+        EneSnap s, o;
+        uint32_t from;
+        memset(&h, 0, sizeof(h)); memset(&s, 0, sizeof(s));
+        s.mtn_no = 3; s.frm_no = 10 << 16; s.px = 100; s.ay = 0xFFF0; s.hp = 50;
+        coop_hist_put(&h, 100, &s);
+        CHECK(coop_hist_at(&h, 99, 0, &o, &from) == COOP_AT_NONE);
+        CHECK(coop_hist_at(&h, 100, 0, &o, &from) == COOP_AT_EXACT && from == 100 && o.px == 100);
+        CHECK(coop_hist_at(&h, 102, 100, &o, &from) == COOP_AT_EXTRAP && o.px == 100 && o.frm_no == 10 << 16);   /* one snapshot: held */
+        s.frm_no = 12 << 16; s.px = 104; s.ay = 0x10; s.hp = 40;
+        coop_hist_put(&h, 102, &s);
+        CHECK(coop_hist_at(&h, 101, 0, &o, &from) == COOP_AT_INTERP && from == 100 && fabsf(o.px - 102) < 1e-3f && o.frm_no == 11 << 16 && o.ay == 0 && o.hp == 50);
+        CHECK(coop_hist_at(&h, 104, 102, &o, &from) == COOP_AT_EXTRAP && fabsf(o.px - 108) < 1e-3f && o.frm_no == 14 << 16 && o.ay == 0x30 && o.hp == 40);
+        CHECK(coop_hist_at(&h, 102 + COOP_PO_EXTRA, 102, &o, &from) == COOP_AT_EXTRAP);
+        CHECK(coop_hist_at(&h, 103 + COOP_PO_EXTRA, 102, &o, &from) == COOP_AT_NONE);   /* held: nothing to apply */
+        CHECK(coop_hist_at(&h, 103 + COOP_PO_EXTRA, 100, &o, &from) == COOP_AT_OLD && from == 102 && o.px == 104);   /* not applied yet: once */
+        s.mtn_no = 4; s.frm_no = 0; s.px = 400;                                          /* another motion, and a jump */
+        coop_hist_put(&h, 103, &s);
+        CHECK(coop_hist_at(&h, 105, 103, &o, &from) == COOP_AT_EXTRAP && o.px == 400 && o.frm_no == 0);
+        coop_hist_put(&h, 95, &s);                                                       /* older than the place holds: ignored */
+        CHECK(h.seq[95 % COOP_HIST] == 103);
+    }
+}
+
 int main(int argc, char** argv)
 {
+    if (argc > 1 && !strcmp(argv[1], "playout")) { test_playout(); printf("%d checks, %d failed\n", checks, fails); return fails != 0; }
     test_target();
     int iters = argc > 1 ? atoi(argv[1]) : 200000;
     test_events();

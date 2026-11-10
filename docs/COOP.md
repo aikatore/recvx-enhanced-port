@@ -950,6 +950,21 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   driven by the joiner's own event run its local AI during it. A puppet morphs (`mdflg` 2) only with
   the two shapes its own code picks (`obj_a`, `obj_b`); Alexia's tentacles have none on the guest
   and are drawn unmorphed (before, the guest crashed in her second form's fight).
+* **Enemy playout** (both sides, for the other side's snapshots; `coop_proto.h` `CoopPlayout`, `CoopSnapHist`):
+  each datagram's snapshots are kept per slot under the sender's frame (`Pose.seq`), whenever they come. The
+  sender's frames are paced to a fixed 29.97 Hz grid, so its counter is its clock: from every arrival the receiver
+  learns the path (the 98th percentile of a frame's last arrival over the last 10 s, plus 3 ms, at most 4 frames
+  above the fastest), and at each hand-off it shows the sender's frame P that is due, every slot from that one
+  frame, P stepping by one per frame (a dead band keeps the estimate's small moves and clock drift from making the
+  cadence uneven). A slot with no snapshot of P (a lost or late datagram, one the sender left out) is shown between
+  the snapshots before and after it, or carried on from the last two (position, turn, the frame of its motion) for
+  at most 4 frames, then held; what the position and turn shown were off by is halved each frame (no snap). Before,
+  the newest frame at each hand-off was shown, and a datagram of a newer frame emptied the set: with jitter a puppet
+  stood still for a frame and jumped two (23-77 % of frames on internet paths), a zombie's upper half showed another
+  frame than its body, and a datagram of only events (a grab's state) left the set empty, so for that frame every
+  enemy ran the joiner's own AI (which grabbed the joiner itself and refused the host's handover). Puppets are on
+  while the host sent snapshots in one of its last 4 frames. The cost: the margin (LAN about 3 ms, 30 ms +-8 about
+  19 ms) on top of the path. `RECVX_COOP_STATS` logs it ("coop: playout: ...").
 * **Hits on puppets (joiner -> host)**: the weapon code's output on a puppet is taken at the
   hand-off, cleared locally and sent as `EV_ENE_HIT`; the host's enemy applies it once in its own
   damage code. A hit arriving after the host's room changed is dropped.

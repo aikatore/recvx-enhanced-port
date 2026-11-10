@@ -77,7 +77,7 @@ int appear_on;                          /* co-op off, "You appear as" in use: ou
    continuously; no separate HELLO), followed by `nev` events (reliable and in order: resent until
    acknowledged) and, from the host, `nene` enemy snapshots, spread over datagrams of at most
    COOP_DGRAM_MAX bytes. Everything received passes coop_check_* before it changes anything. */
-#define MAX_SNAP 128                    /* snapshots of a frame as received (over its datagrams) */
+
 
 /* ---------------------------------------------------------------- player 2 work */
 /* Same buffers and sizes as bhInitPlayer gives player 1, in the same order (the loaders write
@@ -874,8 +874,26 @@ void coop_draw_remote(void)
    enemy work layout matched across instances in tests, but it depends on the load history. */
 static CoopRing ring = { .head = 1, .next = 1 };   /* our events until acknowledged (coop_proto.c) */
 static unsigned int in_last;            /* the partner's last event applied here */
-static EneSnap snap[MAX_SNAP];
-static int snap_n;
+/* The other side's snapshots, kept per slot by its frame (coop_proto.h CoopSnapHist), and shown frame by frame at a
+   steady cadence (CoopPlayout, docs/COOP.md "Enemy playout"): every slot from the same frame P of the sender, each
+   datagram's snapshots whenever it came. Before, the newest frame's datagrams formed the set and a datagram of a newer
+   frame emptied it: a zombie's halves (in other datagrams) showed different frames, and a datagram with only events
+   (a grab's state) left the set empty for that frame, so every enemy ran its own AI here - the grab that refused the
+   host's handover. */
+static CoopSnapHist hist[PC_ENE_SLOTS];
+static uint32_t hist_applied[PC_ENE_SLOTS];       /* the sender frame of the snapshot applied last */
+static uint32_t shown_seq[PC_ENE_SLOTS];          /* the frame shown last, its position and turn as shown (the blend back) */
+static float shown_p[PC_ENE_SLOTS][3];
+static int32_t shown_ay[PC_ENE_SLOTS];
+static CoopPlayout playout;
+static struct { uint32_t seq; int n; } snap_cnt[8];   /* snapshots that came per sender frame (snaps_live) */
+static struct { unsigned int at[5], frames, held, skipped; int behind; uint32_t last; } play_st;   /* RECVX_COOP_STATS */
+static void snaps_reset(void)
+{
+    memset(hist, 0, sizeof(hist)); memset(hist_applied, 0, sizeof(hist_applied)); memset(shown_seq, 0, sizeof(shown_seq));
+    memset(snap_cnt, 0, sizeof(snap_cnt));
+    coop_playout_reset(&playout);
+}
 static int proxy_ok;                    /* host: the partner is in our room, its model loaded */
 static unsigned char tgt[PC_ENE_SLOTS];          /* host: the enemy targets the partner */
 static CoopAtk atk[PC_ENE_SLOTS][2];             /* host, the loop guard (coop_atk_note): attacks each enemy started on [0] our player, [1] the partner */
@@ -1423,7 +1441,14 @@ static int same_room(void) { return have_rx && (rx.flags & PF_IN_GAME) && partne
 /* not in a door transition, nor in a cutscene of ours (M8): its event drives the enemies and waits
    for their motions (FrameCheck), which a puppet only shows as snapshots let it - they run here
    then and take the host's state again afterwards */
-static int puppets(void) { return !echo_delay && !is_host && same_room() && snap_n > 0 && !(sys->cb_flg & 0x5); }
+static int snaps_live(void)   /* the host sent snapshots in one of its last 4 frames */
+{
+    int k;
+    for (k = 0; k < 8; k++)
+        if (snap_cnt[k].n && (int32_t)(rx.seq - snap_cnt[k].seq) < 4) return 1;
+    return 0;
+}
+static int puppets(void) { return !echo_delay && !is_host && same_room() && snaps_live() && !(sys->cb_flg & 0x5); }
 /* host: our examine - a trigger's message or close-up (hitchk.c: st_flg 0x2000 / 0x80) - stops the game's enemies
    (sp_flg 0x2 off until it closes): in single player the world waits for the one player reading. The partner in our room
    plays on, and our enemies stood still in its game (its puppets of ours), its shots on them taking effect only when we
@@ -2367,17 +2392,43 @@ static void gone_host_frame(void)
 }
 
 /* at the hand-off: the enemies the other side runs (client: the host's; host: the client's grabs) */
+/* At the hand-off: the enemies the other side runs (client: the host's; host: the client's grabs), as they were in
+   the sender's frame P (coop_playout_frame): each slot's snapshot of P, else its state between or after the
+   snapshots kept (coop_hist_at; a lost or late datagram, a slot the sender skipped). What the shown position and turn
+   were off by from what we now know of that frame is carried on and halved each frame (the blend back, no snap). */
 static void apply_snapshots(void)
 {
     static unsigned int logged;
-    int k, mismatch = 0;
+    static int key = -1;
+    static int stats = -1;
+    int k, mismatch = 0, n = sys->ewk_n < PC_ENE_SLOTS ? sys->ewk_n : PC_ENE_SLOTS, me = coop_room_key() | my_case() << 16;
+    uint32_t P, from, was;
+    if (me != key) { memset(hist, 0, sizeof(hist)); memset(hist_applied, 0, sizeof(hist_applied)); key = me; }   /* our room: other enemies */
     if (is_host ? !same_room() : !puppets()) return;
-    for (k = 0; k < snap_n; k++) {
-        EneSnap* s = &snap[k];
+    if (!coop_playout_frame(&playout, net_us(), &P)) return;
+    if (stats < 0) stats = getenv("RECVX_COOP_STATS") != NULL;
+    if (play_st.frames++) { play_st.held += P == play_st.last; play_st.skipped += P - play_st.last > 1 && P - play_st.last < 100; }
+    play_st.last = P;
+    play_st.behind += (int32_t)(playout.newest - P);   /* (newest-wins showed the newest) */
+    for (k = 0; k < n; k++) {
+        EneSnap cur, at_was;
+        EneSnap* s = &cur;
         BH_PWORK* ep;
-        if (s->idx >= sys->ewk_n || s->idx >= PC_ENE_SLOTS || owned[s->idx] != is_host) continue;
-        ep = &ene[s->idx];
-        own_wait[s->idx] = 0;
+        int at = coop_hist_at(&hist[k], P, hist_applied[k], &cur, &from);
+        if (at == COOP_AT_NONE || owned[k] != is_host) continue;
+        hist_applied[k] = from;
+        play_st.at[at]++;
+        if (at != COOP_AT_OLD && shown_seq[k] && (int32_t)(P - shown_seq[k]) > 0 && (int32_t)(P - shown_seq[k]) <= COOP_PO_EXTRA &&
+            coop_hist_at(&hist[k], shown_seq[k], 0, &at_was, &was) != COOP_AT_NONE) {   /* the blend back */
+            float dx = shown_p[k][0] - at_was.px, dy = shown_p[k][1] - at_was.py, dz = shown_p[k][2] - at_was.pz;
+            int16_t da = (int16_t)(uint16_t)(shown_ay[k] - at_was.ay);
+            if (fabsf(dx) + fabsf(dy) + fabsf(dz) < 20.0f) { cur.px += dx * 0.5f; cur.py += dy * 0.5f; cur.pz += dz * 0.5f; }
+            if (da && cur.ay >= 0 && cur.ay < 0x10000) cur.ay = (cur.ay + da / 2) & 0xFFFF;
+        }
+        shown_seq[k] = at == COOP_AT_OLD ? 0 : P;
+        shown_p[k][0] = cur.px; shown_p[k][1] = cur.py; shown_p[k][2] = cur.pz; shown_ay[k] = cur.ay;
+        ep = &ene[k];
+        own_wait[k] = 0;
         /* Only enemies set up in our room (bhSetEnemy clears a slot when it takes it; free
            slots keep stale or zero work). mode0 0: its own initialising step (model,
            collision) has not run yet; it must run first, so only wake it like the host's and
@@ -2389,24 +2440,25 @@ static void apply_snapshots(void)
            modes and motion would turn a hidden helper without a model into one drawn (bhCalcModel crashed on its NULL
            mlwP, moths in 5/82) or run another type's code with them (the linked flag crashed bhControlEnemy) */
         if (((s->flg & 0x1) && s->id != ep->id) || ((s->flg & 0x80) && !ep->lkwkp)) { mismatch++; continue; }
-        if (!is_host && (gone_has(s->idx) || ((ep->flg & 0x80) && gone_has(ene_slot(ep->lkwkp))))) {   /* named dead (EV_GONE) */
+        if (!is_host && (gone_has(k) || ((ep->flg & 0x80) && gone_has(ene_slot(ep->lkwkp))))) {   /* named dead (EV_GONE) */
             if (!(s->stflg & 0x1000000) && !(s->flg & 0x2)) continue;   /* the host has not hidden it yet */
-            if (s->idx < PC_ENE_SLOTS) gone_mask[s->idx >> 5] &= ~(1u << (s->idx & 31));
+            gone_mask[k >> 5] &= ~(1u << (k & 31));
         }
         if (!ep->mode0) {
             ep->stflg = (ep->stflg & ~0x41000000) | (s->stflg & 0x41000000);
             continue;
         }
         if (!s->mode[0]) continue;   /* a new enemy there whose Init has not run: ours ran, it would run again (its children twice) */
-        snap_at[s->idx] = frame_no;
-        snap_root[s->idx] = s->root;
-        pose_seq[s->idx] = rx.seq;
+        snap_at[k] = frame_no;
+        snap_root[k] = s->root;
+        pose_seq[k] = P;
         mnw_set(ep, s->mnw);
+        if (at != COOP_AT_EXACT && !mtn_ok(ep, ep->mnwP, s->mtn_no, s->frm_no)) s->frm_no = hist[k].s[from % COOP_HIST].frm_no;   /* (carried past its motion's end) */
         if (s->mdl >= 0 && ep->mdl[s->mdl].objP) ep->mlwP = &ep->mdl[s->mdl];
         if ((int)ep->mtn_no != s->mtn_no) { ep->hokan_count = s->hokan_count ? s->hokan_count + 1 : 0; ep->hokan_rate = s->hokan_rate; }
         ep->mode0 = s->mode[0]; ep->mode1 = s->mode[1]; ep->mode2 = s->mode[2]; ep->mode3 = s->mode[3];
         if (trace && (ep->flg & 0x82) == 0x2 && !(ep->stflg & 0x1000000) && !(s->flg & 0x2) && !(s->stflg & 0x1000000))
-            fprintf(stderr, "coop: enemy %d dead here, alive in the host's game: alive again\n", s->idx);
+            fprintf(stderr, "coop: enemy %d dead here, alive in the host's game: alive again\n", k);
         /* not the host's hit marker (flg & 4): it would come back as a hit of ours */
         ep->flg = s->flg & ~0x4; ep->flg2 = s->flg2 & ~0x4; ep->stflg = s->stflg; ep->mdflg = s->mdflg;
         /* morphing (mdflg 2) draws between the shapes obj_a and obj_b, which only the enemy's own code picks (Alexia's
@@ -2418,6 +2470,13 @@ static void apply_snapshots(void)
         memcpy(&ep->watr, s->watr, sizeof(s->watr));
     }
     if (mismatch && frame_no - logged > 300) { logged = frame_no; host_log("coop: %d enemy snapshots skipped: the slot holds another kind of enemy here\n", mismatch); }
+    if (stats && play_st.frames >= 300) {   /* test aid: how the frames were shown */
+        unsigned int t = play_st.at[1] + play_st.at[2] + play_st.at[3] + play_st.at[4];
+        host_log("coop: playout: margin %.1f ms, the partner's frame %u shown (its newest %u; %.2f frames behind it on average), %u frames: %u held, %u skipped; slots: exact %.2f%%, between %.2f%%, "
+                 "carried on %.2f%%, old %u\n", coop_playout_margin_ms(&playout), P, playout.newest, play_st.behind / (double)play_st.frames, play_st.frames, play_st.held, play_st.skipped,
+                 100.0 * play_st.at[1] / (t ? t : 1), 100.0 * play_st.at[2] / (t ? t : 1), 100.0 * play_st.at[3] / (t ? t : 1), play_st.at[4]);
+        memset(&play_st, 0, sizeof(play_st));
+    }
 }
 
 /* ---------------------------------------------------------------- session (M3) */
@@ -2540,7 +2599,7 @@ static void session_reset(void)
     if (is_host) owned_drop(); else memset(owned, 0, sizeof(owned));
     own_live = own_sent_ok = 0;
     own_done_ok = retry_ok = go_want = go_seen = 0; cont_tid = 0;   /* a new partner session: its items come again */
-    in_last = 0; coop_ring_reset(&ring); blob_end = 0; snap_n = 0;
+    in_last = 0; coop_ring_reset(&ring); blob_end = 0; snaps_reset();
     coop_xfer_init(&blob_x, blob_in, sizeof(blob_in));   /* half a transfer of the old session is no use */
     coop_xfer_init(&estate_x, estate, sizeof(estate));
     if (is_host) blob_due = 1; else need_blob = 1;
@@ -6341,7 +6400,7 @@ static void stop(void)
     if (p2_chr >= 0) release_textures();
     forget();
     have_peer = have_rx = 0;
-    coop_ring_reset(&ring); in_last = 0; snap_n = 0; proxy_ok = 0; ver_msg[0] = 0;
+    coop_ring_reset(&ring); in_last = 0; snaps_reset(); proxy_ok = 0; ver_msg[0] = 0;
     coop_xfer_init(&blob_x, blob_in, sizeof(blob_in));
     coop_xfer_init(&estate_x, estate, sizeof(estate));
     owned_drop();
@@ -6384,7 +6443,7 @@ static void kick(void)
     partner_gone(0);   /* its next session is a rejoin: its saved items */
     gone_sid = peer_sid;
     have_peer = have_rx = 0;
-    snap_n = 0;
+    snaps_reset();
     snprintf(left_msg, sizeof(left_msg), tr("%s removed"), who[0] ? who : tr("The partner"));
     g_coop.state = COOP_HOSTING;
 }
@@ -6571,7 +6630,7 @@ static int takeover(const NetAddr* from, const unsigned char* buf, int n)
     host_log("coop: %s joined again from %s (the same player): the stale session is replaced\n", id_name, net_addr_str(from));
     peer = *from;
     have_rx = 0;
-    snap_n = 0;
+    snaps_reset();
     return 1;
 }
 
@@ -6650,7 +6709,7 @@ static void wrong_code(const NetAddr* from)
 static void receive(void)
 {
     static unsigned char buf[COOP_DGRAM_MAX + 64];
-    static unsigned int snap_seq;
+    static int snap_room = -1;          /* the room of the snapshots kept */
     NetAddr from;
     Pose p;
     const Event* ev;
@@ -6730,7 +6789,7 @@ static void receive(void)
                          p.reject == COOP_REJ_STATE ? "%s left: unable to load this game." : "%s left"),
                          g_coop.peer_name[0] ? g_coop.peer_name : tr("The partner"));
                 have_rx = have_peer = 0;
-                snap_n = 0;
+                snaps_reset();
                 gone_sid = p.sid;
                 g_coop.state = COOP_HOSTING;
             } else if (!is_host) {   /* the session is over: coop_frame stops it */
@@ -6751,11 +6810,20 @@ static void receive(void)
                 if (!apply_event(&ev[k])) break;   /* not yet: the peer resends it */
                 in_last++;
             }
-        /* a frame comes in one or more datagrams, each with the pose: the newest frame's snapshots
-           are all those of its datagrams; an older frame changes nothing */
+        /* a frame comes in one or more datagrams, each with the pose: each datagram's snapshots are kept under its
+           frame (also a late one's), the playout learns the path from every arrival; an older frame's pose changes
+           nothing */
+        coop_playout_arrive(&playout, p.seq, arr, net_rx_exact());
+        {
+            int c = p.seq % 8, room = (p.stg * 256 + (unsigned char)p.rom) | p.rcase << 16;
+            if (snap_cnt[c].seq != p.seq) { snap_cnt[c].seq = p.seq; snap_cnt[c].n = 0; }
+            if (nene) {
+                if (room != snap_room) { memset(hist, 0, sizeof(hist)); memset(hist_applied, 0, sizeof(hist_applied)); snap_room = room; }   /* other enemies */
+                snap_cnt[c].n += nene;
+                for (k = 0; k < nene; k++) coop_hist_put(&hist[sn[k].idx], p.seq, &sn[k]);
+            }
+        }
         if (have_rx && (int)(p.seq - rx.seq) < 0) continue;
-        if (!have_rx || p.seq != snap_seq) { snap_n = 0; snap_seq = p.seq; }
-        for (k = 0; k < nene && snap_n < MAX_SNAP; k++) snap[snap_n++] = sn[k];
         if (ext) {
             memcpy(&rx_ext, buf + n - sizeof(PoseExt), sizeof(PoseExt));
             if (is_host && !id_ok) partner_identity();
@@ -7133,7 +7201,7 @@ void coop_frame(void)
             if (!is_host && rdv_error() && !bye_reason) bye_reason = rdv_error();
         }
         /* signed: receive() stamps rx_at with its own, later clock reading (a tick after `now` read as ~49 days) */
-        if (have_rx && (int)(now - rx_at) > 3000) { have_rx = 0; snap_n = 0; g_coop.state = COOP_LOST; host_log("coop: partner timed out\n"); }
+        if (have_rx && (int)(now - rx_at) > 3000) { have_rx = 0; snaps_reset(); g_coop.state = COOP_LOST; host_log("coop: partner timed out\n"); }
         else if (g_coop.state == COOP_LOST && (int)(now - rx_at) > LOST_MS) {   /* no goodbye came: crashed, or the network is gone */
             host_log("coop: partner gone (nothing for %d s)\n", LOST_MS / 1000);
             if (is_host) { partner_gone(0); have_peer = 0; snprintf(left_msg, sizeof(left_msg), tr("The partner timed out")); g_coop.state = COOP_HOSTING; }
