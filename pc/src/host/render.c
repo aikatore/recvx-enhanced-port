@@ -47,6 +47,8 @@ void render_loop(void)
     double swap_avg = 0.0;   /* how long the buffer swap blocks, smoothed */
     double period = 1001.0 / 30000.0 * 1e9;   /* game frame period, measured below */
     int interp = 0, shown = 0;   /* refreshes presented since the frame arrived */
+    unsigned skip_q = 0, skip_gpu = 0, n_inb = 0, n_exe = 0;   /* RECVX_TRACE_PRESENT: why refreshes got no image */
+    uint64_t gpu_wait = 0, executed = 0;   /* (and the trace's last column: executed frames, cur's number) */
     int check_replay = SDL_getenv("RECVX_REPLAY_CHECK") && SDL_atoi(SDL_getenv("RECVX_REPLAY_CHECK"));
     float fixed_t = SDL_getenv("RECVX_INTERP_T") ? (float)SDL_atof(SDL_getenv("RECVX_INTERP_T")) : 0.0f;   /* test aid: first refresh shows t */
     FILE* trace = SDL_getenv("RECVX_TRACE_PRESENT") ? fopen(SDL_getenv("RECVX_TRACE_PRESENT"), "w") : NULL;   /* test aid */
@@ -72,6 +74,7 @@ void render_loop(void)
             }
             arrived = now;
             shown = 0;
+            executed++;
             prof_push(PROF_INTERP);
             interp = g_config.interpolate && stream_match(cur, f);
             prof_pop();
@@ -110,14 +113,18 @@ void render_loop(void)
                0.87 s, the game at 29.9 frames a second; now 15.8, 0.15 s, 28.6. Shown every
                time, RECVX_PACE_GAP=0: 24.3 images, the game at 24.2) */
             if (t < 1.0f && fixed_t <= 0.0f && stream_queued()) {
-                if (shown || now - last_present < (uint64_t)(period * pace_gap)) continue;
+                if (shown || now - last_present < (uint64_t)(period * pace_gap)) { skip_q++; continue; }
                 t = 1.0f;
             }
             /* the GPU is still two frames or images behind most of a refresh later (a heavy
                scene at a high resolution and rate): this refresh gets no in-between image.
                Replays queued up behind each other would hold up the next game frame's execution,
                and with it the game thread (one frame in flight): the game would slow down. */
-            if (t < 1.0f && fixed_t <= 0.0f && !gs_gpu_ready(tick / 8 * 7)) {
+            uint64_t w0 = trace ? SDL_GetTicksNS() : 0;
+            int ready = t >= 1.0f || fixed_t > 0.0f || gs_gpu_ready(tick / 8 * 7);
+            if (trace) gpu_wait += SDL_GetTicksNS() - w0;
+            if (!ready) {
+                skip_gpu++;
                 shown++;
                 pace_until = pace_until && pace_until + tick > now ? pace_until + tick : now + tick;
                 continue;
@@ -129,8 +136,11 @@ void render_loop(void)
             swap = gs_present(cur, t);
             last_present = now;
             shown++;
-            if (trace) fprintf(trace, "%llu %.3f %llu %llu\n", (unsigned long long)gs_frame_count(), t, (unsigned long long)(now / 1000),
-                               (unsigned long long)(swap / 1000));
+            if (t < 1.0f) n_inb++; else n_exe++;
+            if (trace && (n_inb + n_exe) % 300 == 0)
+                fprintf(trace, "# in-between %u executed %u skipped: queued %u gpu %u, gpu wait %.1f ms\n", n_inb, n_exe, skip_q, skip_gpu, gpu_wait / 1e6);
+            if (trace) fprintf(trace, "%llu %.3f %llu %llu %llu\n", (unsigned long long)gs_frame_count(), t, (unsigned long long)(now / 1000),
+                               (unsigned long long)(swap / 1000), (unsigned long long)executed);
             /* pace to the display refresh instead of spinning: without vsync, and with vsync when
                the swap does not wait (the offscreen driver, some compositors): presenting as fast
                as the GPU allows starved the frames themselves (RM_1310 headless: 197 -> 37 ms a

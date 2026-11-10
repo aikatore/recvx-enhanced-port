@@ -2379,17 +2379,43 @@ void gs_frame_begin(void)
 
 /* fences after the GPU work last handed over (executed frames, presented images), newest last */
 static GLsync gpu_fence[2];
-static void gpu_fence_set(void)
+/* RECVX_TEST_GPU="exec_ms:replay_ms" (test aid): a model of a slow GPU for the pacing; each executed frame and each
+   in-between image takes that long on a virtual GPU that works through them in order, and gs_gpu_ready asks it
+   instead of the real fences (which are kept as they are) */
+static double vgpu_exec = -1, vgpu_replay;
+static uint64_t vgpu_done[2], vgpu_tail;
+static void vgpu_push(double ms)
 {
+    uint64_t now = SDL_GetTicksNS();
+    vgpu_tail = (vgpu_tail > now ? vgpu_tail : now) + (uint64_t)(ms * 1e6);
+    vgpu_done[0] = vgpu_done[1];
+    vgpu_done[1] = vgpu_tail;
+}
+static void gpu_fence_set_kind(int kind)   /* 0 executed frame, 1 in-between image, 2 executed image presented */
+{
+    if (vgpu_exec < 0) {
+        const char* e = SDL_getenv("RECVX_TEST_GPU");
+        vgpu_exec = 0;
+        if (e) { vgpu_exec = SDL_atof(e); vgpu_replay = SDL_strchr(e, ':') ? SDL_atof(SDL_strchr(e, ':') + 1) : vgpu_exec; }
+    }
+    if (vgpu_exec > 0) vgpu_push(kind == 0 ? vgpu_exec : kind == 1 ? vgpu_replay : 0.3);
     if (gpu_fence[0]) glDeleteSync(gpu_fence[0]);
     gpu_fence[0] = gpu_fence[1];
     gpu_fence[1] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 }
+#define gpu_fence_set() gpu_fence_set_kind(0)
 
 /* the GPU has at most the last executed frame or image left to do (waiting up to wait_ns): one
    more in-between image keeps it busy without queueing replays behind each other */
 int gs_gpu_ready(uint64_t wait_ns)
 {
+    if (vgpu_exec > 0) {   /* RECVX_TEST_GPU */
+        uint64_t now = SDL_GetTicksNS();
+        if (vgpu_done[0] > now + wait_ns) { SDL_DelayPrecise(wait_ns); return 0; }
+        if (vgpu_done[0] > now) SDL_DelayPrecise(vgpu_done[0] - now);
+        vgpu_done[0] = 0;
+        return 1;
+    }
     if (gpu_fence[0] && glClientWaitSync(gpu_fence[0], GL_SYNC_FLUSH_COMMANDS_BIT, wait_ns) == GL_TIMEOUT_EXPIRED) return 0;
     if (gpu_fence[0]) glDeleteSync(gpu_fence[0]);
     gpu_fence[0] = NULL;
@@ -2498,7 +2524,7 @@ uint64_t gs_present(const struct Frame* cur, float t)
         dump_window();
     }
     gt_present_end(inbetween);
-    gpu_fence_set();   /* before the swap: the image's own work, not the presentation queue */
+    gpu_fence_set_kind(inbetween ? 1 : 2);   /* before the swap: the image's own work, not the presentation queue */
     swap = SDL_GetTicksNS();
     SDL_GL_SwapWindow(g_window);
     swap = SDL_GetTicksNS() - swap;
