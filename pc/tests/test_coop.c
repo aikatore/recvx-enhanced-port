@@ -1090,11 +1090,15 @@ typedef struct { double bytes, recs, full; int taken, lost_dg, max_gap, frames, 
 /* frames of SIM_SLOTS moving enemies through a channel: datagrams of `dg` bytes lost at loss %, acknowledgements
    `delay` frames late and lost at ack_loss %; the receiver restarted at frame `restart` (0 never). Every snapshot
    taken must be the sender's state, quantized, exactly. */
+static int sim_reorder;                 /* % of datagrams held back until after the next frame's */
 static void snap_sim(int loss, int ack_loss, int delay, int frames, int restart, int dg, SimOut* o)
 {
+    static uint8_t held[COOP_DGRAM_MAX];
+    int held_n = 0, held_rec = 0;
+    uint32_t held_seq = 0;
     static CoopSnapTx t;
     static CoopSnapRx r;
-    static EneSnap truth[SIM_SLOTS], out[SIM_SLOTS];
+    static EneSnap truth[SIM_SLOTS], out[SIM_SLOTS], truth_at[2][SIM_SLOTS];
     static uint8_t recs[COOP_ENE_SLOTS * COOP_SNAP_REC_MAX], blk[COOP_DGRAM_MAX];
     uint32_t acks[64] = { 0 }, seq;
     int last[SIM_SLOTS], k, rl[SIM_SLOTS];
@@ -1117,7 +1121,9 @@ static void snap_sim(int loss, int ack_loss, int delay, int frames, int restart,
             blk[0] = (uint8_t)bl; blk[1] = (uint8_t)(bl >> 8); blk[2] = (uint8_t)(part++ | (i + b == SIM_SLOTS ? 0x80 : 0));
             memcpy(blk + COOP_SNAP_HDR, recs + ro, bl);
             CHECK(coop_snap_check(blk, COOP_SNAP_HDR + bl, b) == COOP_OK);
-            if ((int)(rnd() % 100) >= loss) {
+            if (sim_reorder && !held_n && (int)(rnd() % 100) < sim_reorder) {   /* this one comes late */
+                memcpy(held, blk, COOP_SNAP_HDR + bl); held_n = COOP_SNAP_HDR + bl; held_rec = b; held_seq = seq;
+            } else if ((int)(rnd() % 100) >= loss) {
                 n = coop_snaprx_take(&r, seq, blk, COOP_SNAP_HDR + bl, b, out);
                 for (k = 0; k < n; k++) {
                     EneSnap want;
@@ -1130,6 +1136,16 @@ static void snap_sim(int loss, int ack_loss, int delay, int frames, int restart,
             } else o->lost_dg++;
             i += b; ro += bl;
         }
+        if (held_n && held_seq != seq) {   /* the late one, after this frame's */
+            int n = coop_snaprx_take(&r, held_seq, held, held_n, held_rec, out);
+            for (k = 0; k < n; k++) {
+                EneSnap want;
+                snap_expect(&truth_at[held_seq % 2][out[k].idx / 4], &want);
+                CHECK(!memcmp(&want, &out[k], sizeof(want)));
+            }
+            held_n = 0;
+        }
+        memcpy(truth_at[seq % 2], truth, sizeof(truth));
         for (k = 0; k < SIM_SLOTS; k++) {
             if (got[k]) { if ((int)seq - last[k] - 1 > o->max_gap && seq > 1) o->max_gap = (int)seq - last[k] - 1; last[k] = (int)seq; }
             else got_all = 0;
@@ -1184,6 +1200,10 @@ static void test_snapcodec(void)
     CHECK(o.bad == 0 && o.taken > 0);
     snap_sim(0, 100, 2, 200, 0, 1100, &o);   /* no acknowledgement ever: full records, all taken */
     CHECK(o.bad == 0 && o.all_frames == o.frames && o.full == o.recs);
+    sim_reorder = 5;   /* 5 % of datagrams a frame late, 5 % lost: late ones are taken and exact */
+    snap_sim(5, 5, 3, 2000, 0, 400, &o);
+    CHECK(o.bad == 0 && o.max_gap <= 8);
+    sim_reorder = 0;
     snap_sim(2, 2, 3, 600, 300, 600, &o);    /* the receiver restarts: records without their base until they age out, then whole again */
     CHECK(o.bad > 0 && o.max_gap <= COOP_SNAP_HIST + 3 + 4 && o.all_frames > o.frames - COOP_SNAP_HIST - 40);
     printf("snapshots, receiver restarted: %u records dropped, longest gap %d frames\n", o.bad, o.max_gap);
@@ -1200,7 +1220,8 @@ static void test_snapcodec(void)
         CHECK(coop_snaprx_take(&r, 10, b, n + COOP_SNAP_HDR, 1, out) == 1 && r.ack == 0);
         b[2] = 0;
         CHECK(coop_snaprx_take(&r, 10, b, n + COOP_SNAP_HDR, 1, out) == 1 && r.ack == 10);
-        CHECK(coop_snaprx_take(&r, 9, b, n + COOP_SNAP_HDR, 1, out) == 0);
+        CHECK(coop_snaprx_take(&r, 9, b, n + COOP_SNAP_HDR, 1, out) == 1 && r.ack == 10);   /* a late frame (playout buffers take them) */
+        CHECK(coop_snaprx_take(&r, 10 - COOP_SNAP_HIST, b, n + COOP_SNAP_HDR, 1, out) == 0);   /* too late */
         CHECK(coop_snaptx_put(&t, 0, &s, b, 200, NULL) == 0);
         coop_snaptx_ack(&t, 10);
         CHECK(t.acked[7] == 10);

@@ -198,18 +198,19 @@ int coop_snaptx_put(CoopSnapTx* t, uint32_t seq, const EneSnap* s, uint8_t* out,
     return n;
 }
 
-void coop_snaprx_reset(CoopSnapRx* r) { memset(r, 0, sizeof(*r)); r->last = -1; }
+void coop_snaprx_reset(CoopSnapRx* r) { memset(r, 0, sizeof(*r)); }
 int coop_snaprx_take(CoopSnapRx* r, uint32_t seq, const uint8_t* blk, int n, int nrec, EneSnap* out)
 {
     uint32_t d[SQ_N];
     int at = COOP_SNAP_HDR, k, j, got = 0, idx, age, m;
+    __typeof__(&r->f[0]) fr;
     if (!seq || coop_snap_check(blk, n, nrec)) return 0;
-    if (seq != r->seq) {
-        if (r->seq && (int32_t)(seq - r->seq) < 0) return 0;   /* an older frame: the receiver takes none */
-        r->seq = seq; r->parts = 0; r->last = -1; r->bad = 0;
-    }
-    r->parts |= 1u << (blk[2] & 15);
-    if (blk[2] & 0x80) r->last = blk[2] & 15;
+    if (r->seq && (int32_t)(seq - r->seq) <= -COOP_SNAP_HIST) return 0;   /* too late: its entries hold newer frames */
+    if (!r->seq || (int32_t)(seq - r->seq) > 0) r->seq = seq;
+    fr = &r->f[seq % COOP_SNAP_HIST];
+    if (fr->seq != seq) { fr->seq = seq; fr->parts = 0; fr->last = -1; fr->bad = 0; }
+    fr->parts |= (uint16_t)(1u << (blk[2] & 15));
+    if (blk[2] & 0x80) fr->last = (int8_t)(blk[2] & 15);
     for (k = 0; k < nrec; k++, at += m) {
         CoopSnapHist* e;
         const CoopSnapQ* base;
@@ -220,12 +221,13 @@ int coop_snaprx_take(CoopSnapRx* r, uint32_t seq, const uint8_t* blk, int n, int
         e = &r->h[idx][seq % COOP_SNAP_HIST];
         if (!age) base = &zero;
         else if (b && age < COOP_SNAP_HIST && r->h[idx][b % COOP_SNAP_HIST].seq == b) base = &r->h[idx][b % COOP_SNAP_HIST].q;
-        else { r->bad = 1; r->n_bad++; continue; }   /* not the base the sender meant: nothing from it */
+        else { fr->bad = 1; r->n_bad++; continue; }   /* not the base the sender meant: nothing from it */
         for (j = 0; j < SQ_N; j++) e->q.v[j] = (int32_t)((uint32_t)base->v[j] + d[j]);
-        e->seq = seq;   /* (taken even when it fails its checks below: it is the sender's state, a base later) */
+        e->seq = seq;   /* (taken even when it fails its checks below: it is the sender's state, a base later; the entry
+                           held an older frame: a newer one in it would be COOP_SNAP_HIST past this, past the newest) */
         if (got < nrec && coop_snap_dequant(&e->q, idx, &out[got]) && coop_check_snap(&out[got]) == COOP_OK) got++;
     }
-    if (!r->bad && r->last >= 0 && r->parts == (2u << r->last) - 1 && (!r->ack || (int32_t)(seq - r->ack) > 0)) r->ack = seq;
+    if (!fr->bad && fr->last >= 0 && fr->parts == (2u << fr->last) - 1 && (!r->ack || (int32_t)(seq - r->ack) > 0)) r->ack = seq;
     return got;
 }
 

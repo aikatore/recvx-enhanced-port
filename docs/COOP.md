@@ -1254,7 +1254,7 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   every new session, before each game state and on every change. Placements and
   randomizer are computed from the room file (records, script, collision) and the seed only, so
   both make the same records in the same slots, event records included.
-* More than 48 active enemy slots are sent as a moving window of 48 per frame.
+* Every active enemy slot goes every frame (protocol 45: no count cap); past `COOP_SNAP_BUDGET` bytes the rest wait by priority.
 * **The cutscene cast** ([ACTORS.md](ACTORS.md) "Cutscene cast") is computed on each side from the
   host's options, the room file and the seed only, so both draw the same models in the same scenes;
   nothing per record is sent (it is only drawn: the records, their slots and snapshots are untouched). A side that runs
@@ -1383,7 +1383,7 @@ interpolated with the in-between frames; it snaps on camera cuts and in vanilla 
 
 ## Protocol 42
 
-`COOP_VERSION` is **43**; both players need builds with the same version (a mismatch is reported,
+`COOP_VERSION` is **45** (the prototype branch netexp-phase2; main has 43); both players need builds with the same version (a mismatch is reported,
 e.g. "The host uses co-op compatibility version 38; yours is 40. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
@@ -1401,7 +1401,7 @@ and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid
 in the first of the pose's spare bytes (`OPT2_EXTRA_OBJECTS` 1, see "Extra item boxes and herbs"; unknown bits refused; the pose stays 112
 bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. 37 `Pose.legs` and `legs_frm` in the two spare bytes (third person "Move While Aiming": the legs walking under the aim, see "Pose"). 38 `EV_EOPTS` `voices`, "Randomize Voice Lines" ([ACTORS.md](ACTORS.md) "Voice lines"; the event stays 88 bytes). 39 `EV_EOPTS` fills the union's 80 bytes with `types` (the randomizer's Types per Room) and `rate[32]` (its Custom rates), `variety` 2 (Custom) and `extra` up to 8 (the event stays 88 bytes; [ENEMIES.md](ENEMIES.md) "Randomizer"). 40 `EV_FX` of `FX_REACT` (third person "Locational Hit Reactions": the region where the sender's shot hit a zombie and the shot's direction, see "Effects and voices"; the event is unchanged in size). 41 `OPT2_HEADSHOTS` 2 in `Pose.opts2`, the host's "Headshots & Piercing" (the rifles' head damage, head bursts on killing head hits, the sniper rifle's piercing; [THIRDPERSON.md](THIRDPERSON.md#headshots-and-piercing)); the pose is unchanged in size. 42 the randomizer makes the Hunter and the Sweeper two kinds in Wild and Mild too (as in Custom; [ENEMIES.md](ENEMIES.md) "Randomizer"), so the same seed places other enemies (nothing on the wire changed); 43 `EV_EOPTS` carries the cutscene cast's
 "Enemy Models" (`cast_enemy` 0..3) and its own "Custom" list (`cast_enemy_off`, 4 bytes: a bit per entry of the enemies'
-list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96. `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 45 (prototype) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1417,12 +1417,12 @@ frame's content goes into as many datagrams as needed, each starting with the po
 alone:
 
 ```
-Pose (112) | Event x nev (88 each, nev <= 16) | EneSnap x nene (100 each, nene <= 48) | PoseExt (108, if PF_EXT)
+Pose (112) | Event x nev (96 each, nev <= 16) | [u16 len, u8 part, nene snapshot records: len bytes] (if nene) | PoseExt (108, if PF_EXT)
 ```
 
 The size must be exactly that sum. The first datagram of a frame carries the `PoseExt`. Up to 16
-unacknowledged events and 48 snapshots per frame; the receiver gathers the newest frame's snapshots
-over its datagrams.
+unacknowledged events and `COOP_SNAP_BUDGET` (2400) bytes of snapshot records per frame (protocol 45, see
+"Snapshot records"); the receiver gathers the newest frame's snapshots over its datagrams.
 
 | Packet type (`Pose.type`) | Meaning |
 |---|---|
@@ -1435,7 +1435,7 @@ over its datagrams.
 
 | Bytes | Fields |
 |---|---|
-| 0-15 | `magic` "COOP" (0x504F4F43), `version` u16, `type` u8, `flags` u8, `sid` (sender's session), `rsv` (zero; protocol 27 and before: the 32-bit join-code proof) |
+| 0-15 | `magic` "COOP" (0x504F4F43), `version` u16, `type` u8, `flags` u8, `sid` (sender's session), `snap_ack` (protocol 45: the newest frame of the peer's snapshots taken whole, 0 none; 28..43 zero; 27 and before: the 32-bit join-code proof) |
 | 16-31 | `seq` (sender's frame counter; older poses dropped), `t_ms`, `echo_ms`, `echo_age` (ping) |
 | 32-39 | `chr`, `costume`, `stg`, `rom`, `pos` (room entry point), `opts` (host's game rules: `OPT_INDIVIDUAL` 1, `OPT_TRADE_FREEZE` 2, `OPT_IMPORTANT` 4, `OPT_NO_RIBBON` 8, `OPT_SKIP_SYNC` 16, `OPT_GAMEOVER_BOTH` 32, `OPT_SKIP_DETECTOR` 64, `OPT_QUICK_START` 128), `regroup` (host counter), `mfile` (sender's own part file - 10) |
 | 40-91 | position (3 floats), angles (3 ints), `mtn_no`, `frm_no` (the frame shown, before the step's advance: `actor_frame`), `mtn_md`, `hokan_count`, `hokan_rate`, `wpnr_no`, `hp`, `mode0`, `mode1`, `nev`, `nene` |
@@ -1467,7 +1467,25 @@ and the room files' names and sizes; 0 no pack). A joiner whose `br_id` differs 
 `br` is 1 says goodbye with `COOP_REJ_BIORAND`. Then (protocol 29) `imp_id`, the sender's imported models
 (`cast_import_id`, 0 none; see "Added enemies and options"). Only printable ASCII is shown.
 
-### EneSnap (100 bytes)
+### Snapshot records (protocol 45)
+
+`EneSnap` is no longer sent as it is. The block's `part` is the datagram's index among the frame's datagrams with
+snapshots (bits 0-3) and bit 7 on the last one. A record: slot (u8), `age` (u8), a varint change mask over the 30
+fields of `CoopSnapQ` (`coop_proto.h` `SQ_*`), then per changed field a zigzag varint of the difference to the
+base, 32-bit wrapping. `age` 0: the base is zero (a full record); otherwise the slot's state of the sender's frame
+`seq - age`, always a frame the receiver acknowledged whole (`Pose.snap_ack`: every part in, every record's base
+there), the newest one within `COOP_SNAP_HIST` (16) frames, else a full record. A lost datagram or acknowledgement
+only makes later records larger; a receiver that lacks a base (restarted) drops that record and acknowledges
+nothing until the bases age out. Quantized: position and capsule to 1/64 unit (the capsule relative to the
+position), `frm_no` and `mtn_frm0` to 1/256 frame (truncated: the whole frame is exact); the rest exact. Order
+and budget: an enemy and its linked parts are a group, kept in one datagram where they fit; each group gains 4 per
+frame near a player (10 m) or targeting the partner, 1 otherwise, and the highest go first, its gain reset when sent.
+New fields: `mtn_add` (the motion's speed), the anchor `mtn_seq`/`mtn_frm0` (from that sender frame
+`frm_no = mtn_frm0 + (seq - mtn_seq) * mtn_add`, modulo the motion's length; the sender re-anchors whenever that
+would not hold, and every frame for back-and-forth motions), and `neck` with `SNAP_NECK` 2 in `root`: a zombie
+upper half's node 11 and node 8 yaw after its step (`bhEne01_SearchNeck`), which the puppet sets after posing.
+
+### EneSnap
 
 Slot (0..254), `mode[4]`, model index (`mlwP` as index into the enemy's `mdl[]`, -1..15), motion set (offset
 0..511 from the enemy's own set, `MNW_ROOM`, `MNW_KEEP`), `flg flg2 stflg mdflg`, position, angles,

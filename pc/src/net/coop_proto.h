@@ -437,13 +437,15 @@ void coop_snaptx_ack(CoopSnapTx* t, uint32_t ack);   /* the peer's Pose.snap_ack
 int coop_snaptx_put(CoopSnapTx* t, uint32_t seq, const EneSnap* s, uint8_t* out, int cap, int* full);
 typedef struct {                        /* receiver: per slot the states taken in the last COOP_SNAP_HIST frames */
     CoopSnapHist h[COOP_ENE_SLOTS][COOP_SNAP_HIST];
-    uint32_t seq, parts, ack;           /* the frame being taken, its parts in, the newest taken whole (Pose.snap_ack) */
-    int last, bad;                      /* the frame's last part (-1 not yet), a record without its base */
+    struct { uint32_t seq; uint16_t parts; int8_t last; uint8_t bad; } f[COOP_SNAP_HIST];   /* per frame: its parts in, its
+                                           last part (-1 not yet), a record of it without its base */
+    uint32_t seq, ack;                  /* the newest frame seen, the newest taken whole (Pose.snap_ack) */
     uint32_t n_bad;                     /* (stats) records dropped for a missing base */
 } CoopSnapRx;
 void coop_snaprx_reset(CoopSnapRx* r);
-/* the block (header and records, n bytes, nrec records) of a datagram of the sender's frame `seq` (none older than the
-   frame before it): the valid snapshots (coop_check_snap) decoded into out (nrec at most), their number */
+/* the block (header and records, n bytes, nrec records) of a datagram of the sender's frame `seq`, in any order within
+   COOP_SNAP_HIST frames of the newest (a playout buffer takes late ones too): the valid snapshots (coop_check_snap)
+   decoded into out (nrec at most), their number */
 int coop_snaprx_take(CoopSnapRx* r, uint32_t seq, const uint8_t* blk, int n, int nrec, EneSnap* out);
 /* the block's syntax: its header, exactly nrec records within it, every mask bit a field (coop_check_all) */
 int coop_snap_check(const uint8_t* blk, int n, int nrec);

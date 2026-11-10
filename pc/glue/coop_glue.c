@@ -2387,6 +2387,10 @@ static void gone_host_frame(void)
     if (hid) host_log("coop: %d enemies the partner killed while we were away hidden here\n", hid);
 }
 
+/* RECVX_COOP_STATS (protocol 45): the motion anchors checked against the frames that came */
+static struct anc { uint32_t seq, mseq; int frm0, add, mtn; } anc[PC_ENE_SLOTS];
+static unsigned int anc_n, anc_ok, anc_far, anc_far_ok;
+static int anc_stats;
 /* at the hand-off: the enemies the other side runs (client: the host's; host: the client's grabs) */
 static void apply_snapshots(void)
 {
@@ -2438,6 +2442,20 @@ static void apply_snapshots(void)
         ep->ax = s->ax; ep->ay = s->ay; ep->az = s->az;
         ep->mtn_no = s->mtn_no; ep->frm_no = s->frm_no; ep->mtn_md = s->mtn_md; ep->hp = s->hp;
         memcpy(&ep->watr, s->watr, sizeof(s->watr));
+        if (anc_stats) {   /* RECVX_COOP_STATS: would the slot's last anchor have given this frame (what extrapolation would show)? */
+            struct anc* a = &anc[s->idx];
+            if (a->seq && a->seq != rx.seq && a->mseq == s->mtn_seq && a->mtn == s->mtn_no && !(s->mtn_md & 0x1)) {
+                int64_t len = mtn_ok(ep, ep->mnwP, ep->mtn_no, 0) ? (int64_t)ep->mnwP[ep->mtn_no].frm_num << 16 : 0;
+                int64_t f = a->frm0 + (int64_t)(rx.seq - a->mseq) * a->add, e;
+                if (len > 0) f = (f % len + len) % len;
+                e = f - s->frm_no;
+                if (len > 0 && e > len / 2) e -= len;
+                if (len > 0 && e < -len / 2) e += len;
+                anc_n++; anc_ok += e >= -256 && e <= 256;
+                if (rx.seq - a->seq > 1) { anc_far++; anc_far_ok += e >= -256 && e <= 256; }
+            }
+            a->seq = rx.seq; a->mseq = s->mtn_seq; a->frm0 = s->mtn_frm0; a->add = s->mtn_add; a->mtn = s->mtn_no;
+        }
     }
     if (mismatch && frame_no - logged > 300) { logged = frame_no; host_log("coop: %d enemy snapshots skipped: the slot holds another kind of enemy here\n", mismatch); }
 }
@@ -7070,13 +7088,14 @@ static void send_frame(void)
     } while (ie < ne || (ir < nr && part < 16));
     if (fd > peakd) peakd = fd;
     if (fb > peakb) peakb = fb;
-    if (stats < 0) stats = getenv("RECVX_COOP_STATS") != NULL;   /* test aid: every 300 frames what we sent and the ping */
+    if (stats < 0) anc_stats = stats = getenv("RECVX_COOP_STATS") != NULL;   /* test aid: every 300 frames what we sent and the ping */
     if (stats && (frames++, evn += ne, snn += nr, frames == 300)) {
         host_log("coop: snapstats: %d snapshot bytes per frame, %.1f records per frame (%.1f bytes each), %.2f full per frame, %.2f waiting per frame, "
-                 "quantization error max %.4f units / %.5f frames; taken: %u records without their base, ack %u of seq %u\n",
+                 "quantization error max %.4f units / %.5f frames; taken: %u records without their base, ack %u of seq %u; "
+                 "anchors: %u of %u frames predicted to 1/256 (%u of %u over 2+ frames)\n",
                  snb / frames, snn / (float)frames, snn ? snb / (float)snn : 0.0f, sfull / (float)frames, sleft / (float)frames, qe_pos, qe_frm,
-                 srx.n_bad, srx.ack, srx.seq);
-        snb = sfull = sleft = 0; qe_pos = qe_frm = 0;
+                 srx.n_bad, srx.ack, srx.seq, anc_ok, anc_n, anc_far_ok, anc_far);
+        snb = sfull = sleft = 0; qe_pos = qe_frm = 0; anc_n = anc_ok = anc_far = anc_far_ok = 0;
         host_log("coop: stats: %d frames, %.2f datagrams per frame, avg %d bytes per datagram (max %d), %d bytes per frame, "
                  "%.1f events and %.1f snapshots per frame, ping %.2f ms, room %d/%d, %d enemy slots, %u bad / %u foreign datagrams, path %s (+%d bytes per datagram on the wire), "
                  "busiest frame %d datagrams / %d bytes on the wire, effects sent %u (dropped %u)\n",
