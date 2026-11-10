@@ -398,7 +398,7 @@ typedef struct EneSnap {
     int32_t hokan_rate, hp;
     float watr[7];                      /* hit capsule (NJS_CAPSULE: c1, c2, r) */
     /* protocol 45 */
-    int32_t mtn_add;                    /* the motion's speed (frames per step, 16.16) */
+    int32_t mtn_add;                    /* the motion's speed as played (frames per step, 16.16): the game's mtn_add, 0 while it stands still */
     uint32_t mtn_seq;                   /* the motion's anchor: at the sender's frame mtn_seq it was at mtn_frm0, and from there
                                            frm_no = mtn_frm0 + (seq - mtn_seq) * mtn_add (modulo the motion's length; not for
                                            mtn_md 1, back and forth): the sender re-anchors whenever that would not hold */

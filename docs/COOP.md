@@ -1480,7 +1480,7 @@ nothing until the bases age out. Quantized: position and capsule to 1/64 unit (t
 position), `frm_no` and `mtn_frm0` to 1/256 frame (truncated: the whole frame is exact); the rest exact. Order
 and budget: an enemy and its linked parts are a group, kept in one datagram where they fit; each group gains 4 per
 frame near a player (10 m) or targeting the partner, 1 otherwise, and the highest go first, its gain reset when sent.
-New fields: `mtn_add` (the motion's speed), the anchor `mtn_seq`/`mtn_frm0` (from that sender frame
+New fields: `mtn_add` (the motion's speed as played: the game's, 0 while the motion stands still), the anchor `mtn_seq`/`mtn_frm0` (from that sender frame
 `frm_no = mtn_frm0 + (seq - mtn_seq) * mtn_add`, modulo the motion's length; the sender re-anchors whenever that
 would not hold, and every frame for back-and-forth motions), and `neck` with `SNAP_NECK` 2 in `root`: a zombie
 upper half's node 11 and node 8 yaw after its step (`bhEne01_SearchNeck`), which the puppet sets after posing.

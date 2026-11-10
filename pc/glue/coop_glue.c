@@ -2222,7 +2222,8 @@ static int build_snapshots(EneSnap* out)
 {
     static int free_rr;
     static uint32_t a_seq[PC_ENE_SLOTS], a_seen[PC_ENE_SLOTS];   /* the motion anchors (EneSnap.mtn_seq): set, last checked */
-    static int a_frm[PC_ENE_SLOTS], a_mtn[PC_ENE_SLOTS], a_add[PC_ENE_SLOTS];
+    static int a_frm[PC_ENE_SLOTS], a_mtn[PC_ENE_SLOTS], a_add[PC_ENE_SLOTS], a_gadd[PC_ENE_SLOTS], a_last[PC_ENE_SLOTS];   /* (the speed as
+                                           played: 0 for a motion that does not advance - a zombie's parts; the game's; its last frame) */
     int i, k, cnt = 0, n = 0, win[PC_ENE_SLOTS], free_idx[4], free_n = 0;
     /* not during a door transition: the room number is already the next one while the
        enemy slots still hold the old room's */
@@ -2252,21 +2253,23 @@ static int build_snapshots(EneSnap* out)
         s->id = ep->id < 100 ? ep->id : 0;
         s->root = (ep->flg & 0x1) ? root_flag(ep) : 0;
         memcpy(s->watr, &ep->watr, sizeof(s->watr));
-        s->mtn_add = ep->mtn_add;
         s->neck = 0;
         if ((ep->flg & 0x1) && zombie_half(ep) && ep->mlwP->obj_num > 11) {
             s->root |= SNAP_NECK;
             s->neck = (uint32_t)(ep->mlwP->objP[11].ang[1] & 0xFFFF) | (uint32_t)(ep->mlwP->objP[8].ang[1] & 0xFFFF) << 16;
         }
-        {   /* the anchor holds while frm_no = a_frm + frames * mtn_add (modulo the motion's length) */
+        {   /* the anchor holds while frm_no = a_frm + frames * speed (modulo the motion's length); the speed sent (mtn_add)
+               is the game's, or 0 when the motion stood still since the last frame (a zombie's parts never step theirs) */
             int64_t len = mtn_ok(ep, ep->mnwP, ep->mtn_no, 0) ? (int64_t)ep->mnwP[ep->mtn_no].frm_num << 16 : 0;
-            int64_t f = a_frm[i] + (int64_t)(tx.seq - a_seq[i]) * ep->mtn_add;
+            int64_t f = a_frm[i] + (int64_t)(tx.seq - a_seq[i]) * a_add[i];
+            int cont = a_seen[i] + 1 == tx.seq && a_mtn[i] == (int)ep->mtn_no + 1;
             if (len > 0) f = (f % len + len) % len;
-            if (a_seen[i] + 1 != tx.seq || a_mtn[i] != (int)ep->mtn_no + 1 || a_add[i] != ep->mtn_add || (ep->mtn_md & 0x1) || f != ep->frm_no) {
-                a_seq[i] = tx.seq; a_frm[i] = ep->frm_no; a_mtn[i] = (int)ep->mtn_no + 1; a_add[i] = ep->mtn_add;
+            if (!cont || a_gadd[i] != ep->mtn_add || (ep->mtn_md & 0x1) || f != ep->frm_no) {
+                a_seq[i] = tx.seq; a_frm[i] = ep->frm_no; a_mtn[i] = (int)ep->mtn_no + 1; a_gadd[i] = ep->mtn_add;
+                a_add[i] = cont && ep->frm_no == a_last[i] ? 0 : ep->mtn_add;
             }
-            a_seen[i] = tx.seq;
-            s->mtn_seq = a_seq[i]; s->mtn_frm0 = a_frm[i];
+            a_seen[i] = tx.seq; a_last[i] = ep->frm_no;
+            s->mtn_seq = a_seq[i]; s->mtn_frm0 = a_frm[i]; s->mtn_add = a_add[i];
         }
     }
     return n;
