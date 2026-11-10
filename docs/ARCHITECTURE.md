@@ -1373,6 +1373,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_TRACE_PRESENT=file` | one line per present: frame, t, start time, swap duration |
 | `RECVX_MOVIE_TRACE=file` | one line per game frame of a movie: time, vblanks, frame shown, game-thread time, sound position and queue, sound minus picture (ms); at the end decode times and frames shown before they were decoded; when the movie opens, starts and ends a `#` line with its sound (open, rate, seconds queued, paused, gain, RMS at that gain) and the room's (BGM, background SE, playing MIDI ports) |
 | `RECVX_GPU_TIME=1` | every 2 s: frames and in-between images per second, render-thread CPU and GPU time; GL draws, GS-path sprites and other primitives, native triangles per frame and per in-between image |
+| `RECVX_GPU_TIME=2` | also a timestamp and a samples-passed query at every pass boundary (each GS draw, copy, filter, present), one `gpupass:` line per executed frame / in-between / frame image: GPU ms and million pixels written per kind of pass (3D opaque/blended, GS-path draws reading a render target, textured, flat, clears, the final-image copy, replay start copies, captures, reloads, AA, present, overlay). The queries cost time per draw: the totals are only roughly comparable with `=1` |
 | `RECVX_TRACE_NTEX=1` | log native texture binds, misses and render-texture captures |
 | `RECVX_TRACE_DMA=1` | log GIF DMA chain tags |
 | `RECVX_VU_CHECK=1`, `RECVX_VU_INTERP=1` | compare the static and native VU code with the interpreter on every call / use the interpreter |
