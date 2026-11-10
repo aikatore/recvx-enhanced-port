@@ -457,6 +457,37 @@ void gs_decode_texture(uint64_t tex0, uint64_t texa, uint32_t w, uint32_t h, uin
         int n = (psm == PSMT8 || psm == PSMT8H) ? 256 : 16;
         for (int i = 0; i < n; i++) pal[i] = clut_lookup(tex0, texa, (uint32_t)i);
     }
+    {   /* the common formats with their addressing hoisted out of the pixel loop (gs_read_pixel per
+           pixel below: the same reads; pc/tests/test_gsmem.c compares the two) */
+        uint32_t bw = tbw ? tbw : 1;
+        switch (psm) {
+        case PSMT8:
+            for (uint32_t y = 0; y < h; y++, out += w)
+                for (uint32_t x = 0; x < w; x++) out[x] = pal[gs_memp[addr8(tbp, bw, x, y)]];
+            return;
+        case PSMT4:
+            for (uint32_t y = 0; y < h; y++, out += w)
+                for (uint32_t x = 0; x < w; x++) {
+                    uint32_t a = addr4(tbp, bw, x, y);
+                    out[x] = pal[(gs_memp[a >> 1] >> ((a & 1) * 4)) & 15];
+                }
+            return;
+        case PSMCT32:
+            for (uint32_t y = 0; y < h; y++, out += w)
+                for (uint32_t x = 0; x < w; x++) memcpy(&out[x], gs_memp + addr32(blockTable32, tbp, bw, x, y), 4);
+            return;
+        case PSMCT16: case PSMCT16S: {
+            const uint8_t (*bt)[4] = bt16((int)psm);
+            for (uint32_t y = 0; y < h; y++, out += w)
+                for (uint32_t x = 0; x < w; x++) {
+                    uint16_t v;
+                    memcpy(&v, gs_memp + addr16(bt, tbp, bw, x, y), 2);
+                    out[x] = expand16(v, texa);
+                }
+            return;
+        }
+        }
+    }
     for (uint32_t y = 0; y < h; y++)
         for (uint32_t x = 0; x < w; x++) {
             uint32_t v = gs_read_pixel(psm, tbp, tbw, x, y);

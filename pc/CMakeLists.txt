@@ -257,6 +257,12 @@ add_executable(test_ntex tests/test_ntex.c src/gs/textures.c)
 target_compile_options(test_ntex PRIVATE -std=gnu11)
 add_test(NAME ntex COMMAND test_ntex)
 
+# GS memory (pc/src/gs/gs_mem.c): texture decodes and CLUT loads against per-pixel reads
+add_executable(test_gsmem tests/test_gsmem.c)
+target_compile_options(test_gsmem PRIVATE -std=gnu11 -fno-strict-aliasing -fwrapv)
+target_include_directories(test_gsmem PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/sdk ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME gsmem COMMAND test_gsmem)
+
 # SMAA's lookup textures computed at start (src/gs/smaa_tables.h): the bytes of SMAA's own tables
 add_executable(test_aa_tables tests/test_aa_tables.c)
 target_compile_options(test_aa_tables PRIVATE -std=gnu11 -msse2 -mfpmath=sse -ffp-contract=off)
