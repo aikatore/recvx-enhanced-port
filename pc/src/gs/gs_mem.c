@@ -460,6 +460,32 @@ void gs_decode_texture(uint64_t tex0, uint64_t texa, uint32_t w, uint32_t h, uin
     {   /* the common formats with their addressing hoisted out of the pixel loop (gs_read_pixel per
            pixel below: the same reads; pc/tests/test_gsmem.c compares the two) */
         uint32_t bw = tbw ? tbw : 1;
+        /* whole blocks (16x16 at 8 bits, 32x16 at 4): a block's texels lie at its base (the
+           address of its corner, whose column offset is 0) plus the column table, below the
+           memory's wrap (the base is a whole block) */
+        if (psm == PSMT8 && w >= 16 && h >= 16) {
+            for (uint32_t y0 = 0; y0 < h; y0 += 16)
+                for (uint32_t x0 = 0; x0 < w; x0 += 16) {
+                    const uint8_t* b = gs_memp + addr8(tbp, bw, x0, y0);
+                    uint32_t* o = out + (size_t)y0 * w + x0;
+                    for (uint32_t y = 0; y < 16; y++, o += w)
+                        for (uint32_t x = 0; x < 16; x++) o[x] = pal[b[columnTable8[y][x]]];
+                }
+            return;
+        }
+        if (psm == PSMT4 && w >= 32 && h >= 16) {
+            for (uint32_t y0 = 0; y0 < h; y0 += 16)
+                for (uint32_t x0 = 0; x0 < w; x0 += 32) {
+                    uint32_t a0 = addr4(tbp, bw, x0, y0);   /* (a nibble address) */
+                    uint32_t* o = out + (size_t)y0 * w + x0;
+                    for (uint32_t y = 0; y < 16; y++, o += w)
+                        for (uint32_t x = 0; x < 32; x++) {
+                            uint32_t a = a0 + columnTable4[y][x];
+                            o[x] = pal[(gs_memp[a >> 1] >> ((a & 1) * 4)) & 15];
+                        }
+                }
+            return;
+        }
         switch (psm) {
         case PSMT8:
             for (uint32_t y = 0; y < h; y++, out += w)
