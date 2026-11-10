@@ -60,6 +60,14 @@ static uint32_t stat_prims, stat_flushes, stat_reloads, stat_decodes, stat_decod
 enum { GP_OTHER, GP_3D_OPAQUE, GP_3D_BLEND, GP_GS_RTREAD, GP_GS_TEX, GP_GS_FLAT, GP_FINAL_COPY, GP_REPLAY_START, GP_CAPTURE,
        GP_RELOAD, GP_AA, GP_PRESENT, GP_OVERLAY, GP_CLEAR, GP_N };
 void gp_mark(int cat);
+/* RECVX_AB=mask (test aid, with RECVX_GPU_TIME): the optimizations in mask (1 fast clear) are
+   off in every other 2-second log interval ("gputime: ab 0" on, "ab 1" off), so one run compares both under the same load */
+static int ab_mask = -1, ab_phase;
+static int ab_off(int bit)
+{
+    if (ab_mask < 0) ab_mask = SDL_getenv("RECVX_AB") ? SDL_atoi(SDL_getenv("RECVX_AB")) : 0;
+    return (ab_mask & bit) && ab_phase;
+}
 uint64_t gs_frame_count(void) { extern uint64_t stream_game_frames(void); return stream_game_frames(); }
 
 /* ---------------- texture cache ---------------- */
@@ -1079,6 +1087,7 @@ static void gt_present_end(int inbetween)
     if (now - gt.last_log >= 2000000000ull) {
         double s = (now - gt.last_log) / 1e9;
 #define A(x, n) ((n) ? (x) / (n) : 0.0)
+        if (ab_mask > 0) host_log("gputime: ab %d\n", ab_phase);
         host_log("gputime: exec %.1f/s cpu %.2f gpu %.2f ms | in-between %.1f/s cpu %.2f gpu %.2f ms (start %.2f draw %.2f display %.2f restore %.2f) | frame image %.1f/s cpu %.2f gpu %.2f ms\n",
                  gt.n_cpu[0] / s, A(gt.sum_cpu[0], gt.n_cpu[0]), A(gt.sum_gpu[0], gt.n_gpu[0]),
                  gt.n_cpu[1] / s, A(gt.sum_cpu[1], gt.n_cpu[1]), A(gt.sum_gpu[1], gt.n_gpu[1]),
@@ -1088,6 +1097,7 @@ static void gt_present_end(int inbetween)
             host_log("gputime: %s draws %.0f, GS-path sprites %.0f, other GS-path primitives %.0f, native triangles %.0f\n", k ? "per in-between" : "per frame",
                      A(gt.cnt[k][0], gt.n_cpu[k]), A(gt.cnt[k][1], gt.n_cpu[k]), A(gt.cnt[k][2], gt.n_cpu[k]), A(gt.cnt[k][3], gt.n_cpu[k]));
         gp_log(gt.n_gpu);
+        ab_phase ^= 1;
 #undef A
         memset(gt.sum_cpu, 0, sizeof(gt.sum_cpu)); memset(gt.sum_gpu, 0, sizeof(gt.sum_gpu));
         memset(gt.n_cpu, 0, sizeof(gt.n_cpu)); memset(gt.n_gpu, 0, sizeof(gt.n_gpu)); memset(gt.part, 0, sizeof(gt.part));
@@ -1329,7 +1339,7 @@ static int fast_clear(const DrawState* st, int tme)
     int sx0 = sc & 0x7FF, sx1 = (sc >> 16) & 0x7FF, sy0 = (sc >> 32) & 0x7FF, sy1 = (sc >> 48) & 0x7FF;
     float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
     if (on < 0) on = !SDL_getenv("RECVX_FAST_CLEAR") || SDL_atoi(SDL_getenv("RECVX_FAST_CLEAR")) != 0;
-    if (!on || !batch_full_cover || vcount != 6 || nsruns || tme || ((st->prim >> 5) & 1) || (zte && ztst != 1)) return 0;
+    if (!on || ab_off(1) || !batch_full_cover || vcount != 6 || nsruns || tme || ((st->prim >> 5) & 1) || (zte && ztst != 1)) return 0;
     for (int k = 0; k < 6; k++) {
         const GlVertex* v = &vbuf[k];
         if (v->r != 0.0f || v->g != 0.0f || v->b != 0.0f || v->a != 0.0f || v->w != 1.0f || (!zmsk && v->z != 0.0f)) return 0;
