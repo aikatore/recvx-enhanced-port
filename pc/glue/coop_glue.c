@@ -2238,44 +2238,83 @@ static void pose_trace(void)
     }
 }
 
-/* host, at the hand-off: snapshot of every enemy slot of the room */
+static void snap_of(EneSnap* s, BH_PWORK* ep, int i)
+{
+    memset(s, 0, sizeof(*s));
+    s->idx = i;
+    s->mode[0] = ep->mode0; s->mode[1] = ep->mode1; s->mode[2] = ep->mode2; s->mode[3] = ep->mode3;
+    s->mdl = mdl_of(ep);
+    s->mnw = mnw_of(ep);
+    s->flg = ep->flg; s->flg2 = ep->flg2; s->stflg = ep->stflg; s->mdflg = ep->mdflg;
+    s->px = ep->px; s->py = ep->py; s->pz = ep->pz;
+    s->ax = ep->ax; s->ay = ep->ay; s->az = ep->az;
+    s->mtn_no = ep->mtn_no; s->frm_no = ep->frm_no; s->mtn_md = ep->mtn_md;
+    s->hokan_count = (int16_t)ep->hokan_count; s->hokan_rate = ep->hokan_rate; s->hp = ep->hp;
+    s->id = ep->id < 100 ? ep->id : 0;
+    s->root = (ep->flg & 0x1) ? root_flag(ep) : 0;
+    memcpy(s->watr, &ep->watr, sizeof(s->watr));
+}
+
+/* At the hand-off: snapshots of the enemy slots of the room (the host's; the client's grabs). Each enemy with its
+   parts (a zombie's upper half and limbs, linked to it) next to each other, so they travel in one datagram, the
+   enemies nearest a player first. A slot whose snapshot is the same as the last two sent waits, SNAP_REFRESH frames at
+   most: standing parts and still enemies leave the room to the moving ones, of which a frame holds COOP_SNAP_FRAME
+   (beyond that the farther ones take turns; those within SNAP_NEAR of a player always go). Free slots a few a frame
+   (a slot that went free there goes free here). */
+#define SNAP_REFRESH 4
+#define SNAP_NEAR (5.0f * 10.0f)        /* 5 m */
+static unsigned int snap_skipped;       /* (RECVX_COOP_STATS) */
 static int build_snapshots(EneSnap* out)
 {
+    static EneSnap last[PC_ENE_SLOTS];
+    static unsigned char same[PC_ENE_SLOTS];
+    static unsigned int sent_at[PC_ENE_SLOTS];
     static int rr, free_rr;
-    int i, k, cnt = 0, n = 0, idx[PC_ENE_SLOTS], win[COOP_SNAP_FRAME], free_idx[4], free_n = 0;
+    int i, k, cnt = 0, n = 0, nf = 0, near = 0, idx[PC_ENE_SLOTS], free_n = 0, m = sys->ewk_n < PC_ENE_SLOTS ? sys->ewk_n : PC_ENE_SLOTS;
+    float key[PC_ENE_SLOTS];
+    const BH_PWORK* other;
     /* not during a door transition: the room number is already the next one while the
        enemy slots still hold the old room's */
     if (!tx_in_game || (sys->cb_flg & 0x1) || !same_room() || echo_delay) return 0;   /* the client runs the enemies of its own room (M5) */
-    /* the host sends what it runs, the client its grabs: the active slots every frame (more than
-       a frame holds - added enemies: a moving window), free ones a few per frame (a slot that went
-       free there goes free here) */
-    for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++)
-        if (owned[i] != is_host && (ene[i].flg & 0x1)) idx[cnt++] = i;
-    rr = cnt > COOP_SNAP_FRAME ? (rr + COOP_SNAP_FRAME) % cnt : 0;
-    for (k = 0; k < cnt && k < COOP_SNAP_FRAME; k++) win[k] = idx[(rr + k) % cnt];
-    cnt = k;
-    for (k = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS && cnt < COOP_SNAP_FRAME && free_n < 4; k++) {
-        i = (free_rr + k) % (sys->ewk_n < PC_ENE_SLOTS ? sys->ewk_n : PC_ENE_SLOTS);
-        if (owned[i] != is_host && !(ene[i].flg & 0x1)) { free_idx[free_n++] = i; cnt++; }
+    other = p2_seen_room == coop_room_key() ? &ply2 : plp;
+    for (i = 0; i < m; i++) {
+        BH_PWORK* r;
+        float dx, dz, d, d2;
+        if (owned[i] == is_host || !(ene[i].flg & 0x1)) continue;
+        r = pc_root_in(&ene[i], ene, PC_ENE_SLOTS);
+        dx = r->px - plp->px; dz = r->pz - plp->pz; d = dx * dx + dz * dz;
+        dx = r->px - other->px; dz = r->pz - other->pz; d2 = dx * dx + dz * dz;
+        /* by its enemy's distance, the enemy first, then its parts */
+        key[i] = sqrtf(d < d2 ? d : d2) + (float)(r - ene) * 1e-3f + (r != &ene[i]) * 1e-4f + (float)i * 1e-7f;
+        idx[cnt++] = i;
     }
-    if (sys->ewk_n) free_rr = (free_rr + k) % (sys->ewk_n < PC_ENE_SLOTS ? sys->ewk_n : PC_ENE_SLOTS);
-    for (k = 0; k < cnt; k++) {
-        BH_PWORK* ep = &ene[i = k < cnt - free_n ? win[k] : free_idx[k - (cnt - free_n)]];
-        EneSnap* s;
-        s = &out[n++];
-        s->idx = i;
-        s->mode[0] = ep->mode0; s->mode[1] = ep->mode1; s->mode[2] = ep->mode2; s->mode[3] = ep->mode3;
-        s->mdl = mdl_of(ep);
-        s->mnw = mnw_of(ep);
-        s->flg = ep->flg; s->flg2 = ep->flg2; s->stflg = ep->stflg; s->mdflg = ep->mdflg;
-        s->px = ep->px; s->py = ep->py; s->pz = ep->pz;
-        s->ax = ep->ax; s->ay = ep->ay; s->az = ep->az;
-        s->mtn_no = ep->mtn_no; s->frm_no = ep->frm_no; s->mtn_md = ep->mtn_md;
-        s->hokan_count = (int16_t)ep->hokan_count; s->hokan_rate = ep->hokan_rate; s->hp = ep->hp;
-        s->id = ep->id < 100 ? ep->id : 0;
-        s->root = (ep->flg & 0x1) ? root_flag(ep) : 0;
-        memcpy(s->watr, &ep->watr, sizeof(s->watr));
+    for (k = 1; k < cnt; k++) {   /* (insertion sort: a few dozen slots) */
+        int v = idx[k], j = k;
+        while (j > 0 && key[idx[j - 1]] > key[v]) { idx[j] = idx[j - 1]; j--; }
+        idx[j] = v;
     }
+    for (k = 0; k < cnt; k++) {   /* the ones that changed (or are due) */
+        EneSnap s;
+        i = idx[k];
+        snap_of(&s, &ene[i], i);
+        if (!memcmp(&s, &last[i], sizeof(s)) && same[i] && frame_no - sent_at[i] < SNAP_REFRESH) { snap_skipped++; continue; }
+        idx[nf++] = i;
+        near += key[i] < SNAP_NEAR;
+    }
+    for (k = 0; k < nf && n < COOP_SNAP_FRAME; k++) {
+        EneSnap* s = &out[n++];
+        i = idx[k < near || nf <= COOP_SNAP_FRAME ? k : near + (rr + k - near) % (nf - near)];
+        snap_of(s, &ene[i], i);
+        same[i] = !memcmp(s, &last[i], sizeof(*s));
+        last[i] = *s;
+        sent_at[i] = frame_no;
+    }
+    rr = nf > COOP_SNAP_FRAME && nf > near ? (rr + (n > near ? n - near : 0)) % (nf - near) : 0;
+    for (k = 0; k < m && n < COOP_SNAP_FRAME && free_n < 4; k++) {
+        i = (free_rr + k) % m;
+        if (owned[i] != is_host && !(ene[i].flg & 0x1)) { snap_of(&out[n++], &ene[i], i); free_n++; }
+    }
+    if (m) free_rr = (free_rr + k) % m;
     return n;
 }
 
@@ -7075,11 +7114,11 @@ static void send_frame(void)
     if (stats && (frames++, evn += ne, snn += ns, frames == 300)) {
         host_log("coop: stats: %d frames, %.2f datagrams per frame, avg %d bytes per datagram (max %d), %d bytes per frame, "
                  "%.1f events and %.1f snapshots per frame, ping %.2f ms, room %d/%d, %d enemy slots, %u bad / %u foreign datagrams, path %s (+%d bytes per datagram on the wire), "
-                 "busiest frame %d datagrams / %d bytes on the wire, effects sent %u (dropped %u)\n",
+                 "busiest frame %d datagrams / %d bytes on the wire, effects sent %u (dropped %u), %.1f unchanged snapshots a frame left out\n",
                  frames, dgrams / (float)frames, bytes / dgrams, maxb, bytes / frames, evn / (float)frames, snn / (float)frames, ping_f,
                  sys ? sys->stg_no : -1, sys ? sys->rom_no : -1, sys ? (int)sys->ewk_n : 0, rx_bad, rx_strangers,
-                 via_rdv(&peer) ? rdv_path() : "direct (address)", via_rdv(&peer) ? rdv_wire_extra() : COOP_DIRECT_OVER, peakd, peakb, fx_sent, fx_dropped);
-        fx_sent = fx_dropped = 0;
+                 via_rdv(&peer) ? rdv_path() : "direct (address)", via_rdv(&peer) ? rdv_wire_extra() : COOP_DIRECT_OVER, peakd, peakb, fx_sent, fx_dropped, snap_skipped / (float)frames);
+        fx_sent = fx_dropped = snap_skipped = 0;
         frames = dgrams = evn = snn = bytes = maxb = peakd = peakb = 0;
     }
     if (trace) fprintf(stderr, "coop: tx seq=%u flags=%d chr=%d stg=%d rom=%d pos=(%.1f,%.1f,%.1f) ay=%d mtn=%d frm=%d wpn=%d\n",

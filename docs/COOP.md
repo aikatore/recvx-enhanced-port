@@ -1441,7 +1441,10 @@ in about 7 datagrams) and once more in the next frame (the receiver takes events
 burst then costs a frame, not a round trip); one not acknowledged goes again once its answer is overdue (the round trip
 + 80 ms, at most 600), at most 64 sent again a frame. Before, every unacknowledged event went again in every frame, at
 most 16: a grab's handover took 5 round trips (190 ms on a LAN, 400-860 ms over the internet). Up to 48 snapshots per
-frame; the receiver keeps each slot's under its frame ("Enemy playout").
+frame: each enemy with its parts (a zombie's upper half and limbs) next to each other, the enemies nearest a player
+first; a slot whose snapshot equals the last two sent waits up to 4 frames (standing parts, still enemies), so the
+moving ones fit (with more, those over 5 m from both players take turns). The receiver keeps each slot's under its
+frame ("Enemy playout").
 
 | Packet type (`Pose.type`) | Meaning |
 |---|---|
