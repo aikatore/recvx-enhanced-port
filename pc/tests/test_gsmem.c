@@ -47,6 +47,14 @@ int main(void)
         gs_decode_texture(tex0, texa, w, h, b);
         if (memcmp(a, b, (size_t)w * h * 4)) { printf("FAIL decode psm %d %ux%u tex0 %016llx\n", psm, w, h, (unsigned long long)tex0); return 1; }
     }
+    for (int n = 0; n < 200; n++) {   /* rectangles as gs_read_pixel reads them */
+        static const int rp[] = { PSMCT32, PSMCT24, PSMCT16, PSMCT16S, PSMZ16, PSMT8 };
+        int psm = rp[n % 6];
+        uint32_t bp = rnd() & 0x3FFF, bw = rnd() % 64, w = 1 + rnd() % 200, h = 1 + rnd() % 200;
+        gs_read_rect(psm, bp, bw, w, h, b);
+        for (uint32_t y = 0; y < h; y++)
+            for (uint32_t x = 0; x < w; x++) CHECK(b[y * w + x] == gs_read_pixel(psm, bp, bw, x, y));
+    }
     for (int n = 0; n < 2000; n++) {   /* CLD 1 loads: entries at CSA from CBP */
         static const uint32_t cpsms[] = { 0, 2, 10 };
         uint16_t want[512];

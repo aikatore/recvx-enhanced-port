@@ -496,6 +496,22 @@ void gs_decode_texture(uint64_t tex0, uint64_t texa, uint32_t w, uint32_t h, uin
         }
 }
 
+void gs_read_rect(int psm, uint32_t bp, uint32_t bw, uint32_t w, uint32_t h, uint32_t* out)
+{
+    uint32_t b = bw ? bw : 1;   /* (as gs_pixel_addr) */
+    if (psm == PSMCT32 || psm == PSMCT24) {
+        uint32_t m = psm == PSMCT24 ? 0xFFFFFF : 0xFFFFFFFF;
+        for (uint32_t y = 0; y < h; y++, out += w)
+            for (uint32_t x = 0; x < w; x++) { memcpy(&out[x], gs_memp + addr32(blockTable32, bp, b, x, y), 4); out[x] &= m; }
+    } else if (psm == PSMCT16 || psm == PSMCT16S) {
+        const uint8_t (*bt)[4] = bt16(psm);
+        for (uint32_t y = 0; y < h; y++, out += w)
+            for (uint32_t x = 0; x < w; x++) { uint16_t v; memcpy(&v, gs_memp + addr16(bt, bp, b, x, y), 2); out[x] = v; }
+    } else
+        for (uint32_t y = 0; y < h; y++, out += w)
+            for (uint32_t x = 0; x < w; x++) out[x] = gs_read_pixel(psm, bp, bw, x, y);
+}
+
 /* ---------------- self test: swizzle tables must be permutations ---------------- */
 int gs_mem_selftest(void)
 {

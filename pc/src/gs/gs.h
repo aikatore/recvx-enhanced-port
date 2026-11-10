@@ -85,6 +85,7 @@ void     gs_movie_bind(uint32_t tbp, int index);
 /* decode a texture (TEX0 + TEXA) to RGBA8, w x h */
 void     gs_clut_load(uint64_t tex0);
 void     gs_decode_texture(uint64_t tex0, uint64_t texa, uint32_t w, uint32_t h, uint32_t* out);
+void     gs_read_rect(int psm, uint32_t bp, uint32_t bw, uint32_t w, uint32_t h, uint32_t* out);   /* gs_read_pixel of (0, 0)..(w-1, h-1), row by row */
 void     gs_get_palette(uint64_t tex0, uint64_t texa, uint32_t* out, int n);
 int      gs_mem_selftest(void);
 

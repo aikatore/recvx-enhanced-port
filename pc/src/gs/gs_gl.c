@@ -443,25 +443,29 @@ static RenderTarget* rt_find(uint32_t fbp, uint32_t fbw)
 }
 
 /* initial contents from emulated GS memory (e.g. data uploaded before the first draw) */
+static const float* u8_unit(void);
 static void rt_load_from_mem(RenderTarget* rt)
 {
     rt->has_box = 0;   /* mirrors GS memory again */
     ntex_before_access(0, 511);
     int w = rt->vw - 2 * g_margin_x, h = rt->vh;
     float* fx = malloc((size_t)w * h * 16);
+    uint32_t* px = malloc((size_t)w * h * 4);
+    const float* u = u8_unit();   /* i / 255.0f, the division the pixels had */
     GLuint tmp;
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
-            float* o = &fx[((size_t)y * w + x) * 4];
-            if (psm_is16(rt->psm)) {
-                uint32_t c = gs_read_pixel(rt->psm, rt->fbp * 32, rt->fbw, (uint32_t)x, (uint32_t)y);
-                o[0] = ((c & 0x1F) << 3) / 255.0f; o[1] = (((c >> 5) & 0x1F) << 3) / 255.0f; o[2] = (((c >> 10) & 0x1F) << 3) / 255.0f;
-                o[3] = (c & 0x8000) ? 1.0f : 0.0f;
-            } else {
-                uint32_t c = gs_read_pixel(rt->psm == PSMCT24 ? PSMCT24 : PSMCT32, rt->fbp * 32, rt->fbw, (uint32_t)x, (uint32_t)y);
-                o[0] = (c & 0xFF) / 255.0f; o[1] = ((c >> 8) & 0xFF) / 255.0f; o[2] = ((c >> 16) & 0xFF) / 255.0f; o[3] = (c >> 24) / 128.0f;
-            }
+    int is16 = psm_is16(rt->psm);
+    gs_read_rect(is16 ? (int)rt->psm : rt->psm == PSMCT24 ? PSMCT24 : PSMCT32, rt->fbp * 32, rt->fbw, (uint32_t)w, (uint32_t)h, px);
+    for (size_t i = 0; i < (size_t)w * h; i++) {
+        float* o = &fx[i * 4];
+        uint32_t c = px[i];
+        if (is16) {
+            o[0] = u[(c & 0x1F) << 3]; o[1] = u[((c >> 5) & 0x1F) << 3]; o[2] = u[((c >> 10) & 0x1F) << 3];
+            o[3] = (c & 0x8000) ? 1.0f : 0.0f;
+        } else {
+            o[0] = u[c & 0xFF]; o[1] = u[(c >> 8) & 0xFF]; o[2] = u[(c >> 16) & 0xFF]; o[3] = (c >> 24) / 128.0f;
         }
+    }
+    free(px);
     glGenTextures(1, &tmp);
     glBindTexture(GL_TEXTURE_2D, tmp);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, fx);
