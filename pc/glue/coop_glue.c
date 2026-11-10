@@ -77,7 +77,7 @@ int appear_on;                          /* co-op off, "You appear as" in use: ou
    continuously; no separate HELLO), followed by `nev` events (reliable and in order: resent until
    acknowledged) and, from the host, `nene` enemy snapshots, spread over datagrams of at most
    COOP_DGRAM_MAX bytes. Everything received passes coop_check_* before it changes anything. */
-#define MAX_SNAP 128                    /* snapshots of a frame as received (over its datagrams) */
+#define MAX_SNAP COOP_ENE_SLOTS         /* snapshots of a frame as received (over its datagrams) */
 
 /* ---------------------------------------------------------------- player 2 work */
 /* Same buffers and sizes as bhInitPlayer gives player 1, in the same order (the loaders write
@@ -875,6 +875,9 @@ void coop_draw_remote(void)
 static CoopRing ring = { .head = 1, .next = 1 };   /* our events until acknowledged (coop_proto.c) */
 static unsigned int in_last;            /* the partner's last event applied here */
 static EneSnap snap[MAX_SNAP];
+static CoopSnapTx stx;                  /* protocol 45: our snapshots as coded, the partner's acknowledgements */
+static CoopSnapRx srx;                  /* ... and the partner's as taken */
+static uint32_t snap_neck[PC_ENE_SLOTS];         /* EneSnap.neck of the slot (SNAP_NECK in snap_root) */
 static int snap_n;
 static int proxy_ok;                    /* host: the partner is in our room, its model loaded */
 static unsigned char tgt[PC_ENE_SLOTS];          /* host: the enemy targets the partner */
@@ -1504,6 +1507,10 @@ static int puppet_step(BH_PWORK* ep)
             bhSetMotion(ep, 0, ep->mtn_md, ep->mtn_tp);
             m->obj_num += 8; m->owP -= 8; m->objP -= 8;
             root_still(ep);
+        }
+        if ((snap_root[ep - ene] & SNAP_NECK) && m->obj_num > 11) {   /* its head turned to its target (bhEne01_SearchNeck, protocol 45) */
+            m->objP[11].ang[1] = snap_neck[ep - ene] & 0xFFFF;
+            m->objP[8].ang[1] = snap_neck[ep - ene] >> 16;
         }
         bhCalcModel(body);
         if (!(ep->flg & 0x80)) {   /* let go of its body (bhEne01_CalcEnemy): its own nodes from its own place */
@@ -2213,20 +2220,18 @@ static void pose_trace(void)
 /* host, at the hand-off: snapshot of every enemy slot of the room */
 static int build_snapshots(EneSnap* out)
 {
-    static int rr, free_rr;
-    int i, k, cnt = 0, n = 0, idx[PC_ENE_SLOTS], win[COOP_SNAP_FRAME], free_idx[4], free_n = 0;
+    static int free_rr;
+    static uint32_t a_seq[PC_ENE_SLOTS], a_seen[PC_ENE_SLOTS];   /* the motion anchors (EneSnap.mtn_seq): set, last checked */
+    static int a_frm[PC_ENE_SLOTS], a_mtn[PC_ENE_SLOTS], a_add[PC_ENE_SLOTS];
+    int i, k, cnt = 0, n = 0, win[PC_ENE_SLOTS], free_idx[4], free_n = 0;
     /* not during a door transition: the room number is already the next one while the
        enemy slots still hold the old room's */
     if (!tx_in_game || (sys->cb_flg & 0x1) || !same_room() || echo_delay) return 0;   /* the client runs the enemies of its own room (M5) */
-    /* the host sends what it runs, the client its grabs: the active slots every frame (more than
-       a frame holds - added enemies: a moving window), free ones a few per frame (a slot that went
-       free there goes free here) */
+    /* the host sends what it runs, the client its grabs: the active slots every frame (protocol 45: all of them; the
+       byte budget decides in send_frame), free ones a few per frame (a slot that went free there goes free here) */
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++)
-        if (owned[i] != is_host && (ene[i].flg & 0x1)) idx[cnt++] = i;
-    rr = cnt > COOP_SNAP_FRAME ? (rr + COOP_SNAP_FRAME) % cnt : 0;
-    for (k = 0; k < cnt && k < COOP_SNAP_FRAME; k++) win[k] = idx[(rr + k) % cnt];
-    cnt = k;
-    for (k = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS && cnt < COOP_SNAP_FRAME && free_n < 4; k++) {
+        if (owned[i] != is_host && (ene[i].flg & 0x1)) win[cnt++] = i;
+    for (k = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS && free_n < 4; k++) {
         i = (free_rr + k) % (sys->ewk_n < PC_ENE_SLOTS ? sys->ewk_n : PC_ENE_SLOTS);
         if (owned[i] != is_host && !(ene[i].flg & 0x1)) { free_idx[free_n++] = i; cnt++; }
     }
@@ -2247,6 +2252,22 @@ static int build_snapshots(EneSnap* out)
         s->id = ep->id < 100 ? ep->id : 0;
         s->root = (ep->flg & 0x1) ? root_flag(ep) : 0;
         memcpy(s->watr, &ep->watr, sizeof(s->watr));
+        s->mtn_add = ep->mtn_add;
+        s->neck = 0;
+        if ((ep->flg & 0x1) && zombie_half(ep) && ep->mlwP->obj_num > 11) {
+            s->root |= SNAP_NECK;
+            s->neck = (uint32_t)(ep->mlwP->objP[11].ang[1] & 0xFFFF) | (uint32_t)(ep->mlwP->objP[8].ang[1] & 0xFFFF) << 16;
+        }
+        {   /* the anchor holds while frm_no = a_frm + frames * mtn_add (modulo the motion's length) */
+            int64_t len = mtn_ok(ep, ep->mnwP, ep->mtn_no, 0) ? (int64_t)ep->mnwP[ep->mtn_no].frm_num << 16 : 0;
+            int64_t f = a_frm[i] + (int64_t)(tx.seq - a_seq[i]) * ep->mtn_add;
+            if (len > 0) f = (f % len + len) % len;
+            if (a_seen[i] + 1 != tx.seq || a_mtn[i] != (int)ep->mtn_no + 1 || a_add[i] != ep->mtn_add || (ep->mtn_md & 0x1) || f != ep->frm_no) {
+                a_seq[i] = tx.seq; a_frm[i] = ep->frm_no; a_mtn[i] = (int)ep->mtn_no + 1; a_add[i] = ep->mtn_add;
+            }
+            a_seen[i] = tx.seq;
+            s->mtn_seq = a_seq[i]; s->mtn_frm0 = a_frm[i];
+        }
     }
     return n;
 }
@@ -2400,6 +2421,7 @@ static void apply_snapshots(void)
         if (!s->mode[0]) continue;   /* a new enemy there whose Init has not run: ours ran, it would run again (its children twice) */
         snap_at[s->idx] = frame_no;
         snap_root[s->idx] = s->root;
+        snap_neck[s->idx] = s->neck;
         pose_seq[s->idx] = rx.seq;
         mnw_set(ep, s->mnw);
         if (s->mdl >= 0 && ep->mdl[s->mdl].objP) ep->mlwP = &ep->mdl[s->mdl];
@@ -2541,6 +2563,7 @@ static void session_reset(void)
     own_live = own_sent_ok = 0;
     own_done_ok = retry_ok = go_want = go_seen = 0; cont_tid = 0;   /* a new partner session: its items come again */
     in_last = 0; coop_ring_reset(&ring); blob_end = 0; snap_n = 0;
+    coop_snaptx_reset(&stx); coop_snaprx_reset(&srx);   /* (protocol 45) the bases were the old session's */
     coop_xfer_init(&blob_x, blob_in, sizeof(blob_in));   /* half a transfer of the old session is no use */
     coop_xfer_init(&estate_x, estate, sizeof(estate));
     if (is_host) blob_due = 1; else need_blob = 1;
@@ -6654,7 +6677,7 @@ static void receive(void)
     NetAddr from;
     Pose p;
     const Event* ev;
-    const EneSnap* sn;
+    const unsigned char* sb;
     int n, k, nev, nene, ext, count = 0, bytes = 0, r, took = 0;
     unsigned int now = net_ms();
     /* the time budget is checked before a read: a datagram read (and decrypted, which uses up its
@@ -6704,7 +6727,7 @@ static void receive(void)
         }
         if (!sealed) continue;   /* (coop_direct_in passes nothing else in plain text) */
         ev = (const Event*)(buf + sizeof(Pose));
-        sn = (const EneSnap*)(buf + sizeof(Pose) + nev * sizeof(Event));
+        sb = buf + sizeof(Pose) + nev * sizeof(Event);
         /* the whole datagram is fine: from here it may change things */
         if (p.sid == gone_sid) continue;   /* a partner that said goodbye: its last poses may still come */
         /* ponytail: one partner; the host takes the first one with the code (another one once that
@@ -6746,6 +6769,7 @@ static void receive(void)
         }
         /* events: in order, each once (the sender repeats unacknowledged ones) */
         coop_ring_ack(&ring, p.ev_ack);
+        coop_snaptx_ack(&stx, p.snap_ack);
         for (k = 0; k < nev; k++)
             if (ev[k].id == in_last + 1) {
                 if (!apply_event(&ev[k])) break;   /* not yet: the peer resends it */
@@ -6755,7 +6779,8 @@ static void receive(void)
            are all those of its datagrams; an older frame changes nothing */
         if (have_rx && (int)(p.seq - rx.seq) < 0) continue;
         if (!have_rx || p.seq != snap_seq) { snap_n = 0; snap_seq = p.seq; }
-        for (k = 0; k < nene && snap_n < MAX_SNAP; k++) snap[snap_n++] = sn[k];
+        if (nene && snap_n + nene <= MAX_SNAP)   /* (protocol 45: decoded against the bases we hold; MAX_SNAP: every slot once) */
+            snap_n += coop_snaprx_take(&srx, p.seq, sb, n - (int)(sb - buf) - ext * (int)sizeof(PoseExt), nene, snap + snap_n);
         if (ext) {
             memcpy(&rx_ext, buf + n - sizeof(PoseExt), sizeof(PoseExt));
             if (is_host && !id_ok) partner_identity();
@@ -6938,14 +6963,49 @@ static int drop_now(int events)
    in datagrams of at most COOP_DGRAM_MAX bytes (above an internet path's MTU a datagram is split
    into IP fragments, and losing one loses all). Each datagram carries the pose: it is useful alone
    (acknowledgement, ping, its events in order, its snapshots); the first one also the PoseExt. */
+/* protocol 45: the order snapshots are coded in. A group (an enemy and its linked parts, kept together in one datagram)
+   gains its weight each frame until sent: 4 near a player (10 m) or targeting the partner, 1 otherwise. Under the
+   byte budget every slot goes every frame; over it the stalest near groups go first. */
+static float snap_prio[PC_ENE_SLOTS];
+static unsigned char snap_grp[PC_ENE_SLOTS];
+static int snap_order(const void* a, const void* b)
+{
+    const EneSnap* x = a;
+    const EneSnap* y = b;
+    int gx = snap_grp[x->idx], gy = snap_grp[y->idx];
+    if (snap_prio[gx] != snap_prio[gy]) return snap_prio[gx] < snap_prio[gy] ? 1 : -1;
+    return gx != gy ? gx - gy : x->idx - y->idx;
+}
+static void snap_prioritise(EneSnap* s, int ns)
+{
+    int k;
+    for (k = 0; k < ns; k++) {
+        BH_PWORK* ep = &ene[s[k].idx];
+        int g = (ep->flg & 0x80) && ene_slot(ep->lkwkp) < PC_ENE_SLOTS ? ene_slot(ep->lkwkp) : s[k].idx;
+        snap_grp[s[k].idx] = (unsigned char)g;
+    }
+    for (k = 0; k < ns; k++) {
+        BH_PWORK* ep = &ene[s[k].idx];
+        float d0, d1;
+        if (snap_grp[s[k].idx] != s[k].idx) continue;   /* (the group's weight once, by its leader) */
+        d0 = plp ? (ep->px - plp->px) * (ep->px - plp->px) + (ep->pz - plp->pz) * (ep->pz - plp->pz) : 1e12f;
+        d1 = (ep->px - ply2.px) * (ep->px - ply2.px) + (ep->pz - ply2.pz) * (ep->pz - ply2.pz);
+        snap_prio[s[k].idx] += (ep->flg & 0x1) && (d0 < 1e4f || d1 < 1e4f || (is_host && tgt[s[k].idx])) ? 4.0f : 1.0f;
+    }
+    qsort(s, ns, sizeof(*s), snap_order);
+}
+
 static void send_frame(void)
 {
     static unsigned char buf[COOP_DGRAM_MAX];
     static Event evs[COOP_EV_FRAME];
-    static EneSnap snaps[COOP_SNAP_FRAME];
-    static int stats = -1, frames, dgrams, evn, snn, bytes, maxb, peakd, peakb;
+    static EneSnap snaps[PC_ENE_SLOTS];
+    static unsigned char recs[COOP_SNAP_BUDGET + COOP_SNAP_REC_MAX];
+    static short rlen[PC_ENE_SLOTS];
+    static int stats = -1, frames, dgrams, evn, snn, bytes, maxb, peakd, peakb, snb, sfull, sleft;
+    static float qe_pos, qe_frm;
     unsigned int id;
-    int ne = 0, ns, ie = 0, is = 0, first = 1, fd = 0, fb = 0;
+    int ne = 0, ns, nr = 0, used = 0, ie = 0, ir = 0, ro = 0, part = 0, first = 1, fd = 0, fb = 0;
     if (!is_host && !via_rdv(&peer) && !coop_direct_ready(&direct, peer.ip, peer.port)) {   /* direct, no keys yet: the handshake */
         static unsigned int hello_at;
         CoopHello h;
@@ -6957,8 +7017,30 @@ static void send_frame(void)
     }
     if (need_blob && br_offer != BR_ASK && br_offer != BR_GEN) tx.flags |= PF_WANT_BLOB;
     tx.ev_ack = in_last;
+    tx.snap_ack = srx.ack;
     for (id = ring.head; id != ring.next && ne < COOP_EV_FRAME && !drop_now(1); id++) evs[ne++] = *coop_ring_get(&ring, id);
     ns = build_snapshots(snaps);
+    snap_prioritise(snaps, ns);
+    while (nr < ns && used < COOP_SNAP_BUDGET) {   /* coded = sent (coop_snaptx_put notes it as this frame's) */
+        int full = 0, r = coop_snaptx_put(&stx, tx.seq, &snaps[nr], recs + used, (int)sizeof(recs) - used, &full);
+        if (!r) break;
+        if (stats > 0) {   /* RECVX_COOP_STATS: the quantization's error, of what was coded */
+            CoopSnapQ q;
+            EneSnap d;
+            int k;
+            coop_snap_quant(&snaps[nr], &q);
+            if (coop_snap_dequant(&q, snaps[nr].idx, &d)) {
+                float e = fmaxf(fabsf(d.px - snaps[nr].px), fmaxf(fabsf(d.py - snaps[nr].py), fabsf(d.pz - snaps[nr].pz)));
+                for (k = 0; k < 7; k++) e = fmaxf(e, fabsf(d.watr[k] - snaps[nr].watr[k]));
+                qe_pos = fmaxf(qe_pos, e);
+                qe_frm = fmaxf(qe_frm, (snaps[nr].frm_no - d.frm_no) / 65536.0f);
+            }
+        }
+        snap_prio[snap_grp[snaps[nr].idx]] = 0;
+        rlen[nr++] = (short)r; used += r; sfull += full;
+    }
+    sleft += ns - nr;   /* (they wait for the next frame, by priority) */
+    snb += used;
     {   /* ping: our clock as it goes out, and how long we held the partner's (real time, not frames) */
         uint64_t t = net_us();
         tx.t_ms = (uint32_t)(t / 1000) ? (uint32_t)(t / 1000) : 1;
@@ -6966,25 +7048,35 @@ static void send_frame(void)
         tx.echo_age = have_rx && t > echo_arr ? (uint32_t)((t - echo_arr + 500) / 1000) : 0;
     }
     do {
-        int room = COOP_DGRAM_MAX - (via_rdv(&peer) ? rdv_overhead() : COOP_DIRECT_OVER) - (int)sizeof(Pose) - (first ? (int)sizeof(PoseExt) : 0), a = 0, b = 0, off = sizeof(Pose);
+        int room = COOP_DGRAM_MAX - (via_rdv(&peer) ? rdv_overhead() : COOP_DIRECT_OVER) - (int)sizeof(Pose) - (first ? (int)sizeof(PoseExt) : 0), a = 0, b = 0, bl = 0, off = sizeof(Pose);
         while (ie + a < ne && room >= (int)sizeof(Event)) { a++; room -= sizeof(Event); }
-        while (is + b < ns && room >= (int)sizeof(EneSnap)) { b++; room -= sizeof(EneSnap); }
+        room -= COOP_SNAP_HDR;   /* records whole, at most 255 (nene), the frame's parts 0..15 (the budget keeps them to 5) */
+        while (ir + b < nr && b < 255 && part < 16 && room >= rlen[ir + b]) { room -= rlen[ir + b]; bl += rlen[ir + b]; b++; }
         tx.nev = a;
         tx.nene = b;
         tx.flags = (tx.flags & ~PF_EXT) | (first ? PF_EXT : 0);
         memcpy(buf, &tx, sizeof(tx));
         memcpy(buf + off, &evs[ie], a * sizeof(Event)); off += a * sizeof(Event);
-        memcpy(buf + off, &snaps[is], b * sizeof(EneSnap)); off += b * sizeof(EneSnap);
+        if (b) {
+            buf[off] = (unsigned char)bl; buf[off + 1] = (unsigned char)(bl >> 8);
+            buf[off + 2] = (unsigned char)(part++ | (ir + b == nr ? 0x80 : 0));
+            memcpy(buf + off + COOP_SNAP_HDR, recs + ro, bl); off += COOP_SNAP_HDR + bl;
+        }
         if (first) { memcpy(buf + off, &tx_ext, sizeof(tx_ext)); off += sizeof(tx_ext); }
         if (!drop_now(0)) xsend(&peer, buf, off);
-        ie += a; is += b; first = 0;
+        ie += a; ir += b; ro += bl; first = 0;
         dgrams++; bytes += off; if (off > maxb) maxb = off;
         fd++; fb += off + (via_rdv(&peer) ? rdv_wire_extra() : COOP_DIRECT_OVER);
-    } while (ie < ne || is < ns);
+    } while (ie < ne || (ir < nr && part < 16));
     if (fd > peakd) peakd = fd;
     if (fb > peakb) peakb = fb;
     if (stats < 0) stats = getenv("RECVX_COOP_STATS") != NULL;   /* test aid: every 300 frames what we sent and the ping */
-    if (stats && (frames++, evn += ne, snn += ns, frames == 300)) {
+    if (stats && (frames++, evn += ne, snn += nr, frames == 300)) {
+        host_log("coop: snapstats: %d snapshot bytes per frame, %.1f records per frame (%.1f bytes each), %.2f full per frame, %.2f waiting per frame, "
+                 "quantization error max %.4f units / %.5f frames; taken: %u records without their base, ack %u of seq %u\n",
+                 snb / frames, snn / (float)frames, snn ? snb / (float)snn : 0.0f, sfull / (float)frames, sleft / (float)frames, qe_pos, qe_frm,
+                 srx.n_bad, srx.ack, srx.seq);
+        snb = sfull = sleft = 0; qe_pos = qe_frm = 0;
         host_log("coop: stats: %d frames, %.2f datagrams per frame, avg %d bytes per datagram (max %d), %d bytes per frame, "
                  "%.1f events and %.1f snapshots per frame, ping %.2f ms, room %d/%d, %d enemy slots, %u bad / %u foreign datagrams, path %s (+%d bytes per datagram on the wire), "
                  "busiest frame %d datagrams / %d bytes on the wire, effects sent %u (dropped %u)\n",
