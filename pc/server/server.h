@@ -31,6 +31,7 @@ typedef struct SrvConfig {
     int grace_s;            /* a closed room's code is not handed out again for this long */
     int verbose;            /* log level: 0 normal, 1 verbose (per-request and per-room events) */
     int stats_s;            /* the metrics summary line every this many seconds (0 = off) */
+    char control[108];      /* the control socket (handover, drain; main.c), an absolute path; empty = none */
 } SrvConfig;
 void srv_defaults(SrvConfig* c);
 
@@ -60,7 +61,15 @@ typedef struct SrvStats {
 } SrvStats;
 
 /* filled by main.c once a second (the core has no clock and no OS calls) */
-typedef struct SrvProc { double uptime_s, cpu_user_s, cpu_sys_s; long rss_kb; unsigned long long send_failed; } SrvProc;
+typedef struct SrvProc {
+    double uptime_s, cpu_user_s, cpu_sys_s; long rss_kb; unsigned long long send_failed;
+    const char* version;    /* status-json: the release version */
+    double started_at;      /* the service's start (unix seconds; kept across --take-over, like uptime_s) */
+    uint64_t start_ms;      /* ... on the monotonic clock: uptime_s counts from it */
+    double process_started_at;  /* this process's start (unix seconds) */
+    unsigned handovers;     /* --take-overs since started_at */
+    int handover_capable;   /* a control socket is open (--take-over can replace this process) */
+} SrvProc;
 extern SrvProc srv_proc;
 
 typedef void (*SrvSend)(const RdvAddr* to, const uint8_t* buf, int n);
@@ -72,6 +81,27 @@ void srv_tick(uint64_t now_ms);                   /* at least once a second: tim
 const SrvStats* srv_stats(void);
 int srv_status_text(char* out, int cap);          /* the metrics, "name value" lines (Prometheus text format) */
 int srv_summary(char* out, int cap);              /* the metrics in one log line */
+/* the metrics and the rooms as one JSON object on one line (STATUS "json"; docs/SERVER.md "Metrics").
+   No room codes, tokens, keys or addresses. */
+int srv_status_json(char* out, int cap, uint64_t now_ms);
+
+/* drain: new rooms are refused (RDV_E_SERVER_FULL, "full or busy"), open rooms go on; main.c
+   stops when the last one closed */
+void srv_drain(int on);
+int srv_draining(void);
+
+/* the handover to a new process (main.c --take-over; docs/SERVER.md "Updating without dropping
+   sessions"): every room, code, token, key, the code grace table, the limit tables and the
+   counters. Fixed-width fields in this machine's byte order, versioned by SRV_STATE_FORMAT.
+   export: a malloc'ed blob (secrets: the caller wipes and frees it), 0 when out of memory.
+   import, into a fresh srv_init: 0 taken, 1 a format this build cannot read (nothing changed),
+   -1 invalid. *c gets the running max_rooms when the blob's is larger. nsocks: the sockets
+   received (an address's `via` must be below it). */
+#define SRV_STATE_FORMAT 1
+extern int srv_state_format;   /* the format written and read: SRV_STATE_FORMAT (a test sets another: a build that cannot read this state) */
+#define SRV_STATE_MAX (64u << 20)
+int srv_state_export(uint8_t** out, uint32_t* n);
+int srv_state_import(const uint8_t* b, uint32_t n, SrvConfig* c, int nsocks);
 
 /* test hook (the fuzz target): the cookie this server gives address `a` now, so mutated CREATE /
    JOIN requests get past the cookie check into the room logic */

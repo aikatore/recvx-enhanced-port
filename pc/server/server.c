@@ -9,6 +9,7 @@
 void (*srv_code_rng)(uint8_t out[RDV_CODE_LEN]);
 FILE* srv_log;
 SrvProc srv_proc;
+int srv_state_format = SRV_STATE_FORMAT;
 
 typedef struct Member {
     int on;
@@ -83,6 +84,8 @@ static uint64_t total_fill, total_dfill;
 static uint64_t rate_ms, rate_req, rate_in, rate_out;   /* the rates: counters at the last 10-s mark */
 static double log_tokens;
 static uint64_t log_fill, log_held, total_log_ms, full_log_ms;
+static int draining;            /* srv_drain: no new rooms */
+static uint64_t drain_log_ms;
 
 /* the defaults, and why: docs/SERVER.md "Configuration" */
 void srv_defaults(SrvConfig* c)
@@ -129,6 +132,8 @@ int srv_init(const SrvConfig* c, SrvSend send)
     rate_ms = rate_req = rate_in = rate_out = 0;
     log_tokens = 200;
     log_fill = log_held = 0;
+    draining = 0;
+    drain_log_ms = 0;
     all_req = cfg.req_total_per_sec;
     all_req_fill = all_fail_start = all_log_ms = 0;
     all_fails = 0;
@@ -415,6 +420,11 @@ static void on_create(const RdvAddr* from, const RdvMsg* q, uint64_t now)
         else if (same_ip(&rooms[i].m[0].pub, from)) n++;
     }
     if (r && r->req_id == q->req_id) { V("room %s: CREATE retried", rname(r)); goto reply; }   /* a retry: the same room */
+    if (draining) {   /* the game says "The co-op server is full or busy": the player tries again in a moment */
+        if (now - drain_log_ms >= 10000) { drain_log_ms = now; LOG("draining: a new room refused (%u still open)", st.rooms); }
+        send_err(from, RDV_E_SERVER_FULL, NULL);
+        return;
+    }
     if (now - e->create_start >= 60000) { e->create_start = now; e->creates = 0; }
     if (e->creates >= cfg.creates_per_min) {
         st.drop_rate++;
@@ -688,32 +698,110 @@ static int top_rooms(int* top)
     return n;
 }
 
+/* every metric once: STATUS (Prometheus text) and status-json print this list */
+typedef struct Metric { const char* name; const char* key; const char* label; double v; int dec; } Metric;
+#define METRICS_MAX 48
+static int metrics(Metric* m)
+{
+    int n = 0;
+#define M(nm, k, l, val, d) (m[n].name = nm, m[n].key = k, m[n].label = l, m[n].v = (double)(val), m[n].dec = d, n++)
+    M("recvx_uptime_seconds", NULL, NULL, srv_proc.uptime_s, 0);
+    M("recvx_cpu_seconds_total", "mode", "user", srv_proc.cpu_user_s, 3);
+    M("recvx_cpu_seconds_total", "mode", "system", srv_proc.cpu_sys_s, 3);
+    M("recvx_resident_memory_bytes", NULL, NULL, srv_proc.rss_kb * 1024.0, 0);
+    M("recvx_rooms", NULL, NULL, st.rooms, 0);
+    M("recvx_players", NULL, NULL, st.rooms + st.members, 0);
+    M("recvx_rooms_opened_total", NULL, NULL, st.created, 0);
+    M("recvx_rooms_closed_total", "why", "host", st.closed, 0);
+    M("recvx_rooms_closed_total", "why", "timeout", st.expired, 0);
+    M("recvx_joins_total", "result", "ok", st.joined, 0);
+    M("recvx_joins_total", "result", "failed", st.join_failed, 0);
+    M("recvx_partners_left_total", "why", "rejoined", st.rejoined, 0);
+    M("recvx_partners_left_total", "why", "removed", st.kicked, 0);
+    M("recvx_partners_left_total", "why", "timeout", st.member_expired, 0);
+    M("recvx_sessions_total", "path", "direct", st.sessions_direct, 0);
+    M("recvx_sessions_total", "path", "relay", st.sessions_relayed, 0);
+    M("recvx_requests_total", NULL, NULL, st.requests, 0);
+    M("recvx_requests_per_second", NULL, NULL, st.req_rate, 1);
+    M("recvx_relay_datagrams_total", "dir", "in", st.relay_in_dgrams, 0);
+    M("recvx_relay_datagrams_total", "dir", "out", st.relay_out_dgrams, 0);
+    M("recvx_relay_bytes_total", "dir", "in", st.relay_in_bytes, 0);
+    M("recvx_relay_bytes_total", "dir", "out", st.relay_out_bytes, 0);
+    M("recvx_relay_bytes_per_second", "dir", "in", st.relay_in_rate, 0);
+    M("recvx_relay_bytes_per_second", "dir", "out", st.relay_out_rate, 0);
+    M("recvx_drops_total", "reason", "request_rate", st.drop_rate, 0);
+    M("recvx_drops_total", "reason", "relay_datagram_rate", st.drop_pps, 0);
+    M("recvx_drops_total", "reason", "relay_bandwidth", st.drop_bw, 0);
+    M("recvx_drops_total", "reason", "relay_address", st.drop_ip, 0);
+    M("recvx_drops_total", "reason", "relay_total", st.drop_total, 0);
+    M("recvx_drops_total", "reason", "invalid", st.drop_invalid, 0);
+    M("recvx_drops_total", "reason", "unknown_room", st.drop_unknown_room, 0);
+    M("recvx_drops_total", "reason", "foreign", st.drop_foreign, 0);
+    M("recvx_drops_total", "reason", "relay_auth", st.drop_relay_auth, 0);
+    M("recvx_drops_total", "reason", "relay_replay", st.drop_replay, 0);
+    M("recvx_drops_total", "reason", "busy", st.drop_busy, 0);
+    M("recvx_code_retries_total", NULL, NULL, st.code_retries, 0);
+    M("recvx_log_lines_held_back_total", NULL, NULL, st.log_suppressed, 0);
+    M("recvx_send_failures_total", NULL, NULL, srv_proc.send_failed, 0);
+#undef M
+    return n;
+}
+
 #define P(...) (k += snprintf(o + k, k < cap ? cap - k : 0, __VA_ARGS__))
 int srv_status_text(char* o, int cap)
 {
-    int k = 0, top[TOP_N], n = top_rooms(top), i;
-    P("recvx_uptime_seconds %.0f\n", srv_proc.uptime_s);
-    P("recvx_cpu_seconds_total{mode=\"user\"} %.3f\nrecvx_cpu_seconds_total{mode=\"system\"} %.3f\n", srv_proc.cpu_user_s, srv_proc.cpu_sys_s);
-    P("recvx_resident_memory_bytes %ld\n", srv_proc.rss_kb * 1024);
-    P("recvx_rooms %u\nrecvx_players %u\n", st.rooms, st.rooms + st.members);
-    P("recvx_rooms_opened_total %u\nrecvx_rooms_closed_total{why=\"host\"} %u\nrecvx_rooms_closed_total{why=\"timeout\"} %u\n", st.created, st.closed, st.expired);
-    P("recvx_joins_total{result=\"ok\"} %u\nrecvx_joins_total{result=\"failed\"} %u\n", st.joined, st.join_failed);
-    P("recvx_partners_left_total{why=\"rejoined\"} %u\nrecvx_partners_left_total{why=\"removed\"} %u\nrecvx_partners_left_total{why=\"timeout\"} %u\n",
-      st.rejoined, st.kicked, st.member_expired);
-    P("recvx_sessions_total{path=\"direct\"} %u\nrecvx_sessions_total{path=\"relay\"} %u\n", st.sessions_direct, st.sessions_relayed);
-    P("recvx_requests_total %llu\nrecvx_requests_per_second %.1f\n", st.requests, st.req_rate);
-    P("recvx_relay_datagrams_total{dir=\"in\"} %llu\nrecvx_relay_datagrams_total{dir=\"out\"} %llu\n", st.relay_in_dgrams, st.relay_out_dgrams);
-    P("recvx_relay_bytes_total{dir=\"in\"} %llu\nrecvx_relay_bytes_total{dir=\"out\"} %llu\n", st.relay_in_bytes, st.relay_out_bytes);
-    P("recvx_relay_bytes_per_second{dir=\"in\"} %.0f\nrecvx_relay_bytes_per_second{dir=\"out\"} %.0f\n", st.relay_in_rate, st.relay_out_rate);
-    P("recvx_drops_total{reason=\"request_rate\"} %llu\nrecvx_drops_total{reason=\"relay_datagram_rate\"} %llu\n", st.drop_rate, st.drop_pps);
-    P("recvx_drops_total{reason=\"relay_bandwidth\"} %llu\nrecvx_drops_total{reason=\"relay_address\"} %llu\n", st.drop_bw, st.drop_ip);
-    P("recvx_drops_total{reason=\"relay_total\"} %llu\nrecvx_drops_total{reason=\"invalid\"} %llu\n", st.drop_total, st.drop_invalid);
-    P("recvx_drops_total{reason=\"unknown_room\"} %llu\nrecvx_drops_total{reason=\"foreign\"} %llu\n", st.drop_unknown_room, st.drop_foreign);
-    P("recvx_drops_total{reason=\"relay_auth\"} %llu\nrecvx_drops_total{reason=\"relay_replay\"} %llu\nrecvx_drops_total{reason=\"busy\"} %llu\n",
-      st.drop_relay_auth, st.drop_replay, st.drop_busy);
-    P("recvx_code_retries_total %u\nrecvx_log_lines_held_back_total %llu\nrecvx_send_failures_total %llu\n", st.code_retries, st.log_suppressed, srv_proc.send_failed);
+    Metric m[METRICS_MAX];
+    int k = 0, top[TOP_N], n = top_rooms(top), i, nm = metrics(m);
+    for (i = 0; i < nm; i++)
+        if (m[i].key) P("%s{%s=\"%s\"} %.*f\n", m[i].name, m[i].key, m[i].label, m[i].dec, m[i].v);
+        else P("%s %.*f\n", m[i].name, m[i].dec, m[i].v);
     for (i = 0; i < n; i++) P("recvx_room_relay_bytes_per_second{room=\"%s\"} %.0f\n", rname(&rooms[top[i]]), rooms[top[i]].relay_rate);
     return k < cap ? k : cap - 1;
+}
+
+/* a room's id in status-json: a keyed hash of its internal id, nothing of its code */
+static void room_hash(const Room* r, char out[13])
+{
+    uint8_t h[6];
+    int i;
+    crypto_blake2b_keyed(h, 6, secret, 32, (const uint8_t*)&r->id, 4);
+    for (i = 0; i < 6; i++) snprintf(out + 2 * i, 3, "%02x", h[i]);
+}
+
+int srv_status_json(char* o, int cap, uint64_t now)
+{
+    Metric m[METRICS_MAX];
+    int k = 0, i, nm = metrics(m), listed = 0, truncated = 0, k2;
+    unsigned direct = 0, relay = 0;
+    P("{\"version\":\"%s\",\"state_format\":%d,\"started_at\":%.0f,\"uptime_s\":%.0f,\"process_started_at\":%.0f,\"handovers\":%u,\"draining\":%s,"
+      "\"handover_capable\":%s,\"rooms\":%u,\"room_list\":[",
+      srv_proc.version ? srv_proc.version : "", srv_state_format, srv_proc.started_at, srv_proc.uptime_s, srv_proc.process_started_at,
+      srv_proc.handovers, draining ? "true" : "false", srv_proc.handover_capable ? "true" : "false", st.rooms);
+    for (i = 0; i < cfg.max_rooms; i++) {
+        const Room* r = &rooms[i];
+        char id[13];
+        if (!r->id) continue;
+        if (r->m[1].on) { if (r->relaying) relay++; else direct++; }
+        if (k > cap - 4096) { truncated = 1; continue; }   /* keeps room for the rest */
+        room_hash(r, id);
+        P("%s{\"id\":\"%s\",\"age_s\":%llu,\"players\":%d,\"path\":\"%s\",\"relay_bps\":%.0f}", listed++ ? "," : "", id,
+          (unsigned long long)(now - r->opened_ms) / 1000, 1 + (r->m[1].on != 0), !r->m[1].on ? "waiting" : r->relaying ? "relay" : "direct", r->relay_rate);
+    }
+    P("],\"room_list_truncated\":%s,\"players\":%u,\"sessions\":{\"direct\":%u,\"relay\":%u},\"counters\":{", truncated ? "true" : "false",
+      st.rooms + st.members, direct, relay);
+    for (i = 0; i < nm; i++) {   /* a labelled metric: an object by label value */
+        int first = !i || strcmp(m[i].name, m[i - 1].name), last = i == nm - 1 || strcmp(m[i].name, m[i + 1].name);
+        if (first) P("%s\"%s\":%s", i ? "," : "", m[i].name, m[i].key ? "{" : "");
+        if (m[i].key) P("%s\"%s\":%.*f%s", first ? "" : ",", m[i].label, m[i].dec, m[i].v, last ? "}" : "");
+        else P("%.*f", m[i].dec, m[i].v);
+    }
+    for (k2 = 0; k2 < 2; k2++) {   /* "drops" by reason: inside counters, and at the top */
+        P(k2 ? "}},\"drops\":{" : ",\"drops\":{");
+        for (i = 0, listed = 0; i < nm; i++)
+            if (!strcmp(m[i].name, "recvx_drops_total")) P("%s\"%s\":%.0f", listed++ ? "," : "", m[i].label, m[i].v);
+    }
+    P("}}");
+    return k < cap ? k : 0;   /* 0: it did not fit (cap is far above everything but the room list) */
 }
 
 int srv_summary(char* o, int cap)
@@ -767,8 +855,25 @@ void srv_input(const RdvAddr* from, const uint8_t* buf, int n, uint64_t now)
         if (from->fam == 4 && from->ip[0] == 127) {   /* the text in datagrams of whole lines (localhost only: no amplification) */
             uint8_t b[RDV_DGRAM_MAX];
             char t2[4096];
-            int len = srv_status_text(t2, sizeof(t2)), at = 0;
+            int len, at = 0;
             V("STATUS from this machine");
+            if (q.payload_len == 4 && !memcmp(q.payload, "json", 4)) {   /* status-json: parts "J", index, count (u16 LE) */
+                static char js[65536];
+                uint8_t part[RDV_DGRAM_MAX - RDV_HDR];
+                int jn = srv_status_json(js, sizeof(js), now), per = (int)sizeof(part) - 5, cnt = (jn + per - 1) / per, i;
+                for (i = 0; i < cnt; i++) {
+                    int len2 = jn - i * per < per ? jn - i * per : per;
+                    part[0] = 'J'; part[1] = (uint8_t)i; part[2] = (uint8_t)(i >> 8); part[3] = (uint8_t)cnt; part[4] = (uint8_t)(cnt >> 8);
+                    memcpy(part + 5, js + i * per, len2);
+                    memset(&m, 0, sizeof(m));
+                    m.type = RDV_STATUS;
+                    m.payload = part;
+                    m.payload_len = 5 + len2;
+                    if ((n = rdv_build(b, sizeof(b), &m))) out(from, b, n);
+                }
+                return;
+            }
+            len = srv_status_text(t2, sizeof(t2));
             while (at < len) {
                 int part = len - at;
                 if (part > RDV_DGRAM_MAX - RDV_HDR) {
@@ -812,3 +917,169 @@ void srv_tick(uint64_t now)
         rate_ms = now;
     }
 }
+
+void srv_drain(int on) { draining = on != 0; }
+int srv_draining(void) { return draining; }
+
+/* ---------------------------------------------------------------- the handover state
+   One set of functions writes and reads it (Io.wr): the order below is the format. Changing what
+   is written means a new SRV_STATE_FORMAT; an import of an older format branches on it. Times are
+   CLOCK_MONOTONIC milliseconds, the same for every process on the machine. */
+typedef struct Io { uint8_t* b; uint32_t n, cap; int wr, bad; } Io;
+static void io(Io* s, void* p, uint32_t n)
+{
+    if (s->bad || n > s->cap - s->n) { s->bad = 1; if (!s->wr) memset(p, 0, n); return; }
+    if (s->wr) memcpy(s->b + s->n, p, n);
+    else memcpy(p, s->b + s->n, n);
+    s->n += n;
+}
+#define IO(x) io(s, &(x), sizeof(x))
+static int fin(double v) { return v > -1e300 && v < 1e300; }   /* no NaN or infinity: a NaN budget would never run out */
+
+static void io_addr(Io* s, RdvAddr* a) { IO(a->fam); IO(a->port); IO(a->ip); IO(a->via); }
+static void io_member(Io* s, Member* m)
+{
+    IO(m->on); io_addr(s, &m->pub); io_addr(s, &m->lan); IO(m->pk); IO(m->token); IO(m->rejoin);
+    IO(m->last_ms); IO(m->bytes); IO(m->dgrams); IO(m->fill_ms); IO(m->rx_top); IO(m->rx_win);
+}
+static void io_room(Io* s, Room* r)
+{
+    IO(r->id); IO(r->code); IO(r->req_id); IO(r->flags); IO(r->salt); IO(r->verifier); IO(r->member_seq);
+    IO(r->throttle_log_ms); IO(r->opened_ms); IO(r->last_relay_ms); IO(r->relay_bytes); IO(r->relay_mark); IO(r->relay_rate);
+    IO(r->relayed); IO(r->relaying); IO(r->pw_fail_start); IO(r->pw_last_ms); IO(r->pw_fails);
+    io_member(s, &r->m[0]);
+    io_member(s, &r->m[1]);
+}
+static void io_globals(Io* s)
+{
+    IO(secret); IO(gen); IO(draining); IO(drain_log_ms);
+    IO(st.requests); IO(st.relay_in_dgrams); IO(st.relay_in_bytes); IO(st.relay_out_dgrams); IO(st.relay_out_bytes);
+    IO(st.drop_rate); IO(st.drop_pps); IO(st.drop_bw); IO(st.drop_ip); IO(st.drop_total); IO(st.drop_invalid);
+    IO(st.drop_unknown_room); IO(st.drop_foreign); IO(st.drop_relay_auth); IO(st.drop_replay); IO(st.drop_busy); IO(st.log_suppressed);
+    IO(st.created); IO(st.closed); IO(st.expired); IO(st.joined); IO(st.join_failed); IO(st.code_retries);
+    IO(st.rejoined); IO(st.kicked); IO(st.member_expired); IO(st.sessions_direct); IO(st.sessions_relayed);
+    IO(st.req_rate); IO(st.relay_in_rate); IO(st.relay_out_rate); IO(srv_proc.send_failed); IO(srv_proc.cpu_user_s); IO(srv_proc.cpu_sys_s);
+    IO(srv_proc.started_at); IO(srv_proc.start_ms); IO(srv_proc.handovers);
+    IO(all_req); IO(all_req_fill); IO(all_fail_start); IO(all_log_ms); IO(all_fails);
+    IO(total_bytes); IO(total_dgrams); IO(total_fill); IO(total_dfill);
+    IO(rate_ms); IO(rate_req); IO(rate_in); IO(rate_out);
+    IO(log_tokens); IO(log_fill); IO(log_held); IO(total_log_ms); IO(full_log_ms);
+}
+static void io_pre(Io* s, Pre* e) { IO(e->ip); IO(e->tokens); IO(e->last_ms); IO(e->log_ms); }
+static void io_ad(Io* s, Addr* e)
+{
+    IO(e->ip); IO(e->fails); IO(e->creates); IO(e->seen_ms); IO(e->fail_start); IO(e->log_ms); IO(e->create_start);
+    IO(e->rbytes); IO(e->rdgrams); IO(e->rfill);
+}
+
+int srv_state_export(uint8_t** out_b, uint32_t* out_n)
+{
+    Io s0, *s = &s0;
+    uint32_t fmt = (uint32_t)srv_state_format, mr = cfg.max_rooms, nr = 0, nre = nrecent, np = 0, na = 0, i;
+    for (i = 0; i < mr; i++) nr += rooms[i].id != 0;
+    for (i = 0; i < PRE_N; i++) np += pres[i].used != 0;
+    for (i = 0; i < ADDR_N; i++) na += addrs[i].used != 0;
+    memset(&s0, 0, sizeof(s0));
+    s->wr = 1;
+    s->cap = 512 + sizeof(SrvStats) + nr * (sizeof(Room) + 8) + nre * (sizeof(Recent) + 8) + np * (sizeof(Pre) + 8) + na * (sizeof(Addr) + 8);
+    if (!(s->b = malloc(s->cap))) return 0;
+    io(s, (void*)"RXST", 4); IO(fmt); IO(mr);
+    io_globals(s);
+    IO(nr);
+    for (i = 0; i < mr; i++) if (rooms[i].id) { IO(i); io_room(s, &rooms[i]); }
+    IO(nre);
+    for (i = 0; i < nre; i++) { IO(recent[i].code); IO(recent[i].until); }
+    IO(np);
+    for (i = 0; i < PRE_N; i++) if (pres[i].used) { IO(i); io_pre(s, &pres[i]); }
+    IO(na);
+    for (i = 0; i < ADDR_N; i++) if (addrs[i].used) { IO(i); io_ad(s, &addrs[i]); }
+    io(s, (void*)"RXEN", 4);
+    if (s->bad) { crypto_wipe(s->b, s->cap); free(s->b); return 0; }
+    *out_b = s->b;
+    *out_n = s->n;
+    return 1;
+}
+
+/* everything an imported room must be (it only ever came from a server, but is checked anyway) */
+static int room_ok(Room* r, uint32_t slot, int nsocks)
+{
+    int k;
+    r->code[RDV_CODE_LEN] = 0;
+    if (!r->id || (r->id & 0xFFFF) != slot || strlen(r->code) != RDV_CODE_LEN || strspn(r->code, RDV_CODE_CHARS) != RDV_CODE_LEN) return 0;
+    if (r->m[0].on != 1 || (r->m[1].on != 0 && r->m[1].on != 1) || r->relayed > 1 || r->relaying > 1 || r->pw_fails < 0 || !fin(r->relay_rate)) return 0;
+    for (k = 0; k < 2; k++) {
+        Member* m = &r->m[k];
+        if (!m->on) { memset(m, 0, sizeof(*m)); continue; }
+        if (m->pub.fam != 4 || m->pub.via >= nsocks || (m->lan.fam != 0 && m->lan.fam != 4 && m->lan.fam != 6) || !fin(m->bytes) || !fin(m->dgrams)) return 0;
+        m->lan.via = 0;
+        m->ax = 0;
+    }
+    return 1;
+}
+
+int srv_state_import(const uint8_t* b, uint32_t n, SrvConfig* c, int nsocks)
+{
+    Io s0, *s = &s0;
+    char magic[4];
+    uint32_t fmt, mr, cnt, i, at;
+    memset(&s0, 0, sizeof(s0));
+    s->b = (uint8_t*)b;
+    s->cap = n;
+    io(s, magic, 4); IO(fmt);
+    if (s->bad || memcmp(magic, "RXST", 4)) return -1;
+    if (fmt != (uint32_t)srv_state_format) return 1;   /* (an older format, once there is one, is read here) */
+    IO(mr);
+    if (s->bad || mr < 1 || mr > 65535) return -1;
+    if ((int)mr > cfg.max_rooms) {   /* the running server's rooms keep their slots */
+        Room* nr = calloc(mr, sizeof(Room));
+        Recent* nre = calloc(mr * 4, sizeof(Recent));
+        if (!nr || !nre) { free(nr); free(nre); return -1; }
+        free(rooms); free(recent);
+        rooms = nr; recent = nre;
+        cfg.max_rooms = c->max_rooms = (int)mr;
+    }
+    io_globals(s);
+    if (s->bad || !fin(all_req) || !fin(total_bytes) || !fin(total_dgrams) || !fin(log_tokens) || all_fails < 0 || !(srv_proc.cpu_user_s >= 0) || !(srv_proc.cpu_sys_s >= 0) ||
+        !fin(srv_proc.cpu_user_s + srv_proc.cpu_sys_s) || !fin(srv_proc.started_at)) return -1;
+    draining = draining != 0;
+    IO(cnt);
+    if (s->bad || cnt > mr) return -1;
+    st.rooms = st.members = 0;   /* the gauges: counted again */
+    for (i = 0; i < cnt; i++) {
+        Room r;
+        memset(&r, 0, sizeof(r));
+        IO(at); io_room(s, &r);
+        if (s->bad || at >= mr || rooms[at].id || !room_ok(&r, at, nsocks)) { crypto_wipe(&r, sizeof(r)); return -1; }
+        rooms[at] = r;
+        crypto_wipe(&r, sizeof(r));
+        st.rooms++;
+        st.members += rooms[at].m[1].on;
+    }
+    IO(cnt);
+    if (s->bad || cnt > mr * 4) return -1;
+    for (i = 0; i < cnt; i++) { IO(recent[i].code); IO(recent[i].until); recent[i].code[RDV_CODE_LEN] = 0; }
+    nrecent = (int)cnt;
+    IO(cnt);
+    if (s->bad || cnt > PRE_N) return -1;
+    for (i = 0; i < cnt; i++) {
+        Pre e;
+        memset(&e, 0, sizeof(e));
+        IO(at); io_pre(s, &e);
+        if (s->bad || at >= PRE_N || !fin(e.tokens)) return -1;
+        e.used = 1;
+        pres[at] = e;
+    }
+    IO(cnt);
+    if (s->bad || cnt > ADDR_N) return -1;
+    for (i = 0; i < cnt; i++) {
+        Addr e;
+        memset(&e, 0, sizeof(e));
+        IO(at); io_ad(s, &e);
+        if (s->bad || at >= ADDR_N || e.fails < 0 || e.creates < 0 || !fin(e.rbytes) || !fin(e.rdgrams)) return -1;
+        e.used = 1;
+        addrs[at] = e;
+    }
+    io(s, magic, 4);
+    return !s->bad && s->n == n && !memcmp(magic, "RXEN", 4) ? 0 : -1;
+}
+#undef IO

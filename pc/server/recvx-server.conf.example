@@ -1,12 +1,14 @@
 # recvx-server configuration (docs/SERVER.md "Configuration").
 #
-# Install as /etc/recvx-server.conf (read at start when it exists) or pass --config PATH.
+# Install as /etc/recvx-server.conf (read at start when it exists) or pass --config PATH (the
+# systemd user unit reads ~/recvx-server/recvx-server.conf).
 # Format: one "key = value" per line; '#' or ';' starts a comment; no sections. Unknown keys are
 # reported and ignored; an invalid value stops the server from starting. Every key is also a
 # command-line flag (--relay-kb-per-sec 1024), and flags win over this file.
-# Reload: SIGHUP (systemctl reload recvx-server) applies the limits, log_level and
-# stats_interval at once; port, listen and max_rooms need a restart. A file with errors on
-# reload is refused and the running settings stay.
+# Reload: SIGHUP applies the limits, log_level and stats_interval at once; port, listen,
+# max_rooms and control need a restart. A file with errors on reload is refused and the running
+# settings stay. With a control socket, `systemctl --user reload recvx-server` (--take-over)
+# applies the whole file except port, listen and control, without dropping a session.
 #
 # All values below are the defaults: this file as it is changes nothing.
 
@@ -104,5 +106,14 @@ relay_total_datagrams_per_sec = 50000
 log_level = normal
 
 # Seconds between one-line metrics summaries in the log (0 = off). The full metrics are also
-# available any time from the server machine: recvx-client 127.0.0.1 status
+# available any time from the server machine: recvx-client 127.0.0.1 status (or status-json)
 stats_interval = 300
+
+# --- updates -----------------------------------------------------------------------------------
+
+# A unix socket (an absolute path; created with mode 0600, so only the server's own user can use
+# it) through which a new version takes the running server over without dropping a session
+# (recvx-server --take-over), or the server is told to drain (recvx-server --drain). Empty = none.
+# Restart to change. docs/SERVER.md "Updating without dropping sessions".
+# Example: control = /home/recvx/recvx-server/control.sock
+control =

@@ -5,6 +5,7 @@
      recvx-client SERVER host [options]            prints the room code, waits for a partner
      recvx-client SERVER join CODE [options]
      recvx-client 127.0.0.1[:PORT] status          the server's metrics (only from the server machine)
+     recvx-client 127.0.0.1[:PORT] status-json     the same and the rooms as one JSON object on one line
    options: --pw PASSWORD, --relay (Via server), --no-punch (punches dropped: relay fallback),
    --loss PERCENT (received datagrams dropped at random: loss without tc/netem), --secs N,
    --size BYTES (game datagram size, default 1164), --dgrams N (datagrams per frame, default 1:
@@ -51,6 +52,50 @@ static int status(const char* server)
     return !got;
 }
 
+/* status-json: STATUS "json", answered in parts ("J", index, count: u16 LE, then the text); all
+   parts or a new try (a lost datagram), the object on one line */
+static int status_json(const char* server)
+{
+    static char text[65536];
+    static uint8_t have[64];
+    NetAddr srv, from;
+    RdvMsg m;
+    uint8_t b[RDV_DGRAM_MAX + 1];
+    int n, attempt, per = RDV_DGRAM_MAX - RDV_HDR - 5;
+    struct timespec tick = { 0, 5000000 };
+    if (net_open(0) != 1 || !rdv_server_parse(server, &srv)) { fprintf(stderr, "no socket, or cannot resolve %s\n", server); return 1; }
+    for (attempt = 0; attempt < 3; attempt++) {
+        uint32_t start;
+        int cnt = 0, got = 0, len = 0, old = 0;
+        memset(have, 0, sizeof(have));
+        memset(&m, 0, sizeof(m));
+        m.type = RDV_STATUS;
+        m.payload = (const uint8_t*)"json";
+        m.payload_len = 4;
+        n = rdv_build(b, sizeof(b), &m);
+        net_send(&srv, b, n);
+        for (start = net_ms(); net_ms() - start < 500 && (!cnt || got < cnt); nanosleep(&tick, NULL))
+            while ((n = net_recv(&from, b, sizeof(b))) >= 0) {
+                int i, c;
+                if (rdv_parse(b, n, &m) != RDV_STATUS) continue;
+                if (m.payload_len < 5 || m.payload[0] != 'J') { old = 1; continue; }   /* the Prometheus text: a server without status-json */
+                i = m.payload[1] | m.payload[2] << 8;
+                c = m.payload[3] | m.payload[4] << 8;
+                if (!c || c > (int)sizeof(have) || i >= c || (cnt && c != cnt) || have[i] || (i < c - 1 && m.payload_len != per + 5)) continue;
+                cnt = c;
+                have[i] = 1;
+                got++;
+                memcpy(text + i * per, m.payload + 5, m.payload_len - 5);
+                if (i == c - 1) len = i * per + m.payload_len - 5;
+                start = net_ms() - 300;
+            }
+        if (old) { fprintf(stderr, "%s answers STATUS but not status-json (an older recvx-server)\n", server); return 1; }
+        if (cnt && got == cnt) { fwrite(text, 1, len, stdout); putchar('\n'); return 0; }
+    }
+    fprintf(stderr, "no complete answer from %s (STATUS is answered only from the server machine: 127.0.0.1)\n", server);
+    return 1;
+}
+
 int main(int argc, char** argv)
 {
     RdvConfig c;
@@ -62,9 +107,10 @@ int main(int argc, char** argv)
     memset(&c, 0, sizeof(c));
     c.e2e = 1;
     if (argc == 3 && !strcmp(argv[2], "status")) return status(argv[1]);
+    if (argc == 3 && !strcmp(argv[2], "status-json")) return status_json(argv[1]);
     if (argc < 3 || (strcmp(argv[2], "host") && strcmp(argv[2], "join")) || (!strcmp(argv[2], "join") && argc < 4)) {
         fprintf(stderr, "usage: recvx-client SERVER[:PORT] host|join CODE [--pw P] [--relay] [--no-punch] [--loss PCT] [--secs N] [--size B] [--dgrams N] [--plain]\n"
-                        "       recvx-client 127.0.0.1[:PORT] status\n");
+                        "       recvx-client 127.0.0.1[:PORT] status|status-json\n");
         return 2;
     }
     c.host = !strcmp(argv[2], "host");

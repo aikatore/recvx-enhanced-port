@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changes
+
+- **Co-op server**: updates can now be applied without dropping running sessions, and a machine-readable status is
+  available for monitoring.
+
 ### Fixes
 
 - In the over-the-shoulder camera with Free Camera, mashing the movement keys breaks free of a grab as quickly as

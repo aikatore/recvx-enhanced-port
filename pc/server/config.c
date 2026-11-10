@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { T_INT, T_BOOL, T_LEVEL, T_LISTEN };
+enum { T_INT, T_BOOL, T_LEVEL, T_LISTEN, T_PATH };
 static const struct Key {
     const char* key;
     int type, off, lo, hi;
@@ -38,6 +38,7 @@ static const struct Key {
     { "log_level", T_LEVEL, F(verbose), 0, 1, NULL, "normal or verbose" },
     { "verbose", T_BOOL, F(verbose), 0, 1, "debug", "yes = log_level verbose" },
     { "stats_interval", T_INT, F(stats_s), 0, 86400, NULL, "seconds between metrics lines in the log (0 = off)" },
+    { "control", T_PATH, F(control), 0, 0, NULL, "unix socket for --take-over and --drain, an absolute path (restart to change)" },
 #undef F
 };
 #define NKEYS (int)(sizeof(keys) / sizeof(keys[0]))
@@ -84,6 +85,14 @@ int srv_config_set(SrvConfig* c, const char* key, const char* val, char* msg, in
         if (!val || !strcmp(val, "1") || !strcmp(val, "yes") || !strcmp(val, "true") || !strcmp(val, "on")) *p = 1;
         else if (!strcmp(val, "0") || !strcmp(val, "no") || !strcmp(val, "false") || !strcmp(val, "off")) *p = 0;
         else { snprintf(msg, cap, "%s: '%s' is not yes or no", k->key, val); return 0; }
+        return 1;
+    }
+    if (k->type == T_PATH) {   /* empty: none */
+        char* d = (char*)c + k->off;
+        if (val && *val && *val != '/') { snprintf(msg, cap, "%s: '%s' is not an absolute path", k->key, val); return 0; }
+        if (val && strlen(val) >= sizeof(c->control)) { snprintf(msg, cap, "%s: longer than %d bytes", k->key, (int)sizeof(c->control) - 1); return 0; }
+        memset(d, 0, sizeof(c->control));
+        if (val) memcpy(d, val, strlen(val));
         return 1;
     }
     if (!val || !*val) { snprintf(msg, cap, "%s: a value is missing", k->key); return 0; }
@@ -196,6 +205,7 @@ void srv_config_help(FILE* f)
         if (keys[i].type == T_LISTEN) snprintf(def, sizeof(def), "0.0.0.0");
         else if (keys[i].type == T_LEVEL) snprintf(def, sizeof(def), "normal");
         else if (keys[i].type == T_BOOL) snprintf(def, sizeof(def), "no");
+        else if (keys[i].type == T_PATH) snprintf(def, sizeof(def), "none");
         else snprintf(def, sizeof(def), "%d", *(int*)((char*)&d + keys[i].off));
         fprintf(f, "  %-26s %-24s %s (default %s)\n", flag, keys[i].key, keys[i].help, def);
     }

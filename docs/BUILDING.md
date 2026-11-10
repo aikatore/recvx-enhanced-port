@@ -115,7 +115,7 @@ cmake --build build-server
 ```
 
 On Linux it is linked statically by default (`RECVX_SERVER_STATIC=ON`). A container build is
-in `pc/server/Dockerfile`, a systemd unit in `pc/server/recvx-server.service`.
+in `pc/server/Dockerfile`, a systemd user unit in `pc/server/recvx-server.service`.
 
 ## Release packages
 

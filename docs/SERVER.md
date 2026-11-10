@@ -9,7 +9,8 @@ when no direct path works.
 - No game, no SDL, no disc. It sees room codes and addresses; game data it relays is end-to-end
   encrypted.
 - All state is in memory; nothing is written to disk. A restart forgets every room (the games
-  open a new one automatically).
+  open a new one automatically); an update with `--take-over` keeps them all
+  ([Updating without dropping sessions](#updating-without-dropping-sessions)).
 - Direct P2P co-op (`ip:port#CODE`) does not use the server at all.
 
 ## For players
@@ -67,8 +68,12 @@ log goes to stdout.
 
 ```
 recvx-server [--config PATH] [-v] [--KEY VALUE ...]
+recvx-server --take-over [--config PATH] [--KEY VALUE ...]
+recvx-server --drain [--config PATH]
   --config PATH   the config file (default /etc/recvx-server.conf if it exists)
   -v, --verbose   log requests, joins and relay changes too
+  --take-over     replace the server running on the control socket (see below)
+  --drain         tell that server to open no new rooms and to stop after the last one
   -h, --help      usage and every key with its default
 ```
 
@@ -76,19 +81,81 @@ Every config key is also a flag: `--relay-kb-per-sec 1024` or `--relay-kb-per-se
 and `-` are the same, case is ignored). Boolean keys (`--verbose`) take no value. An unknown flag
 or an invalid value is an error and the server does not start (exit code 2).
 
+Signals: SIGTERM / SIGINT stop it, SIGHUP reloads the config, SIGUSR1 drains it.
+
 ### systemd
 
-`pc/server/recvx-server.service` runs the server without flags (so `/etc/recvx-server.conf` is the
-configuration) as a hardened `DynamicUser` service; `ExecReload` sends SIGHUP.
+`pc/server/recvx-server.service` is a **user** unit: the server runs as an ordinary user, from a
+layout in that user's home that keeps every installed version side by side:
+
+```
+~/recvx-server/
+    versions/0.7.6/recvx-server     one directory per release (recvx-client next to it)
+    versions/0.7.7/recvx-server
+    current -> versions/0.7.7       the version that runs (ExecStart and ExecReload use it)
+    recvx-server.conf               the config, with control = /home/USER/recvx-server/control.sock
+```
 
 ```sh
-sudo install -m 755 build-server/recvx-server build-server/recvx-client /usr/local/bin/
-sudo install -m 644 pc/server/recvx-server.conf.example /etc/recvx-server.conf   # then edit it
-sudo cp pc/server/recvx-server.service /etc/systemd/system/
-sudo systemctl enable --now recvx-server
-sudo systemctl reload recvx-server      # after editing limits / log level
-journalctl -u recvx-server              # log and metrics lines
+mkdir -p ~/recvx-server/versions/0.7.7 ~/.config/systemd/user
+install -m 755 recvx-server recvx-client ~/recvx-server/versions/0.7.7/
+ln -sfn versions/0.7.7 ~/recvx-server/current
+install -m 600 recvx-server.conf.example ~/recvx-server/recvx-server.conf   # then edit it: set control
+cp recvx-server.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now recvx-server
+sudo loginctl enable-linger "$USER"     # start at boot, keep running after logging out
+journalctl --user -u recvx-server       # log and metrics lines
 ```
+
+The unit (`~/.config/systemd/user/recvx-server.service`; the shipped file adds these notes as
+comments):
+
+```ini
+[Unit]
+Description=recvx co-op rendezvous and relay server
+
+[Service]
+Type=notify
+NotifyAccess=all
+ExecStart=%h/recvx-server/current/recvx-server --config %h/recvx-server/recvx-server.conf
+ExecReload=%h/recvx-server/current/recvx-server --take-over --config %h/recvx-server/recvx-server.conf
+Restart=always
+RestartSec=1
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0077
+MemoryMax=64M
+TasksMax=8
+
+[Install]
+WantedBy=default.target
+```
+
+A reload that is refused fails the reload job and leaves the running server as it was: the
+`ExecReload` process exits with the take-over's code (3 = incompatible; the journal says
+`Control process exited, code=exited, status=3/NOTIMPLEMENTED`), while `systemctl --user reload`
+itself exits 1.
+
+The unit is `Type=notify` (the server says `READY=1` once it listens) with `NotifyAccess=all`,
+`Restart=always`, and `ExecReload=%h/recvx-server/current/recvx-server --take-over --config
+%h/recvx-server/recvx-server.conf`: **`systemctl --user reload recvx-server` installs the version
+`current` points at without dropping a session** ([Updating without dropping
+sessions](#updating-without-dropping-sessions)). It applies the whole config file too, except
+`port`, `listen` and `control`. Its hardening needs no namespaces (a user manager may not be
+allowed to create them): a system call filter, no new privileges, IPv4/IPv6/unix sockets only,
+64 MB of memory.
+
+For changing only limits or the log level, SIGHUP still works (`systemctl --user kill -s HUP
+recvx-server`).
 
 ### Docker
 
@@ -150,6 +217,7 @@ need a restart. A file with an error on reload is refused and the running settin
 | `log_level` | | normal | normal, verbose | See [Logging](#logging). |
 | `verbose` | `-v`, `--debug` | no | yes/no | Same as `log_level = verbose`. |
 | `stats_interval` | | 300 | 0-86400 s | Metrics line in the log; 0 = off. |
+| `control` | | none | an absolute path, up to 107 bytes | Unix socket for `--take-over` and `--drain`, created with mode 0600. Restart to change. See [Updating without dropping sessions](#updating-without-dropping-sessions). |
 
 ### Sizing the relay
 
@@ -189,7 +257,7 @@ batches; a stalled reader loses (counted) log lines, not traffic.
 
 ## Metrics
 
-Counters and gauges kept in memory, readable two ways:
+Counters and gauges kept in memory, readable three ways:
 
 - **Summary line** in the log every `stats_interval` seconds:
   `stats: up 120 s, cpu 0.06 s (0.05%), rss 1.1 MB | rooms 1, players 2 | ... | drops: ... | top rooms: E9XM-xxxx 164.9 KB/s`
@@ -198,6 +266,38 @@ Counters and gauges kept in memory, readable two ways:
   node_exporter textfile collector
   (`recvx-client 127.0.0.1 status > recvx.prom.$$ && mv recvx.prom.$$ .../textfile_collector/recvx.prom`).
   There is no HTTP port.
+- **status-json** (the same STATUS, only to 127.0.0.1): `recvx-client 127.0.0.1[:PORT] status-json`
+  prints one JSON object on one line, for monitoring and management tools (exit 0; 1 when the
+  server does not answer, or is a version without status-json):
+
+```json
+{"version":"0.7.7","state_format":1,"started_at":1794343182,"uptime_s":3612,"process_started_at":1794346500,"handovers":1,
+ "draining":false,"handover_capable":true,
+ "rooms":2,"room_list":[{"id":"5f0c2a9e41b7","age_s":95,"players":2,"path":"relay","relay_bps":171230},
+                        {"id":"c81d07e3aa52","age_s":12,"players":1,"path":"waiting","relay_bps":0}],
+ "room_list_truncated":false,"players":3,"sessions":{"direct":0,"relay":1},
+ "counters":{"recvx_uptime_seconds":3612,"recvx_cpu_seconds_total":{"user":0.412,"system":0.733},...,
+             "recvx_drops_total":{"request_rate":0,...,"busy":0},"recvx_code_retries_total":0,...,
+             "drops":{"request_rate":0,"relay_datagram_rate":0,...,"busy":0}},
+ "drops":{"request_rate":0,"relay_datagram_rate":0,...,"busy":0}}
+```
+
+| field | meaning |
+|---|---|
+| `version` | the release version (`--version` adds the git description) |
+| `state_format` | the handover state format this build writes and reads |
+| `started_at`, `uptime_s` | the service's start (unix seconds) and age: kept across `--take-over` (so is `recvx_uptime_seconds`) |
+| `process_started_at`, `handovers` | this process's start (unix seconds), and the take-overs since `started_at`: a take-over raises `handovers` and keeps `started_at`, a crash or restart starts both again |
+| `draining` | `--drain` / SIGUSR1: no new rooms, stops after the last one |
+| `handover_capable` | a control socket is open: `--take-over` can replace this process |
+| `rooms`, `players` | open rooms; players in them (hosts + partners) |
+| `room_list` | each room: `id` (a keyed hash of its internal id, stable across a take-over, nothing of the room code), `age_s`, `players` (1 or 2), `path` (`waiting` = no partner, `relay` = relayed in the last 5 s, else `direct`), `relay_bps` (relayed bytes per second, last ~10 s). At most ~600 rooms; `room_list_truncated` says when more are open |
+| `sessions` | rooms with a partner now, by path |
+| `counters` | every metric below by its Prometheus name; one with a label is an object by label value (`"recvx_joins_total":{"ok":3,"failed":0}`); `drops` repeats `recvx_drops_total` by reason. `recvx_room_relay_bytes_per_second` is left out (`room_list` has it) |
+| `drops` | the drops by reason (the same as `counters.drops`) |
+
+It never contains room codes, passwords, tokens, keys or addresses. The counters (`*_total`,
+`drops`) only grow, across `--take-over` too; the gauges are counted again.
 
 Metric names: `recvx_uptime_seconds`, `recvx_cpu_seconds_total{mode}`,
 `recvx_resident_memory_bytes`, `recvx_rooms`, `recvx_players`, `recvx_rooms_opened_total`,
@@ -212,6 +312,72 @@ Drop reasons: `request_rate`, `relay_datagram_rate`, `relay_bandwidth` (per play
 token), `relay_auth` (bad MAC), `relay_replay`, `busy` (address table full, no randomness).
 
 A health check is a HELLO round trip (or `recvx-client 127.0.0.1 status` on the machine).
+
+## Updating without dropping sessions
+
+With `control = PATH` in the config, a new version replaces the running process in place: the
+UDP socket, every room, code, token and key, the code grace table, the per-address limit tables
+and the counters move over, and no game notices. Under the [systemd user unit](#systemd) this is
+`systemctl --user reload recvx-server` after pointing `current` at the new version:
+
+```sh
+mkdir -p ~/recvx-server/versions/0.7.8 && install -m 755 recvx-server recvx-client ~/recvx-server/versions/0.7.8/
+ln -sfn versions/0.7.8 ~/recvx-server/current
+systemctl --user reload recvx-server    # fails, and changes nothing, when the new version cannot take over
+```
+
+Without systemd, the same is `NEW/recvx-server --take-over --config FILE`. It returns once the
+handover is done or refused (the new server goes on in the background, logging to the same
+stdout):
+
+| exit | meaning |
+|---|---|
+| 0 | the new process runs now; the old one exited 0 |
+| 3 | incompatible: the running server's state format is not one this build reads. Nothing was taken over; the old server goes on |
+| 2 | configuration errors (printed) |
+| 1 | anything else (no server on the control socket, it answered `busy`, a time-out, an invalid state). Nothing was taken over; the old server goes on |
+
+How it works:
+
+1. The new process connects to the control socket and asks to take over. The old one checks the
+   peer is its own user (SO_PEERCRED), **stops reading the UDP socket** (what arrives meanwhile
+   waits in the kernel's buffer) and sends the UDP socket(s) and the listening control socket over
+   SCM_RIGHTS, then the state: a versioned blob (`state_format`, fixed-width fields), its length
+   announced first and limited to 64 MB.
+2. The new process checks the descriptors (bound IPv4 UDP sockets on one port, a listening unix
+   socket) and every field (slots, codes, address families, sockets, numbers that must be finite)
+   and imports it. A format it cannot read: it answers `incompatible` and exits 3; an invalid
+   state: `invalid`, exit 1. Either way the old server resumes at once.
+3. Under systemd it sends `MAINPID=<its pid>` to `$NOTIFY_SOCKET` (no libsystemd) and waits with
+   `BARRIER=1` until systemd has it, then answers `ok`. The old process answers `bye` and exits 0;
+   only then does the new one read the socket, send `READY=1`, and the `--take-over` launcher
+   returns 0 (which ends `ExecReload`). No answer within 10 s on either side also leaves the old
+   server running (and `MAINPID` goes back to it).
+
+The pause is the time to copy the state between two processes: milliseconds for a few hundred
+rooms. Times inside the state are the system's monotonic clock, the same for both processes.
+The new process applies its own config file (like a reload) but keeps the running server's
+`port`, `listen` and `control`, and a `max_rooms` at least as large. The room ids in
+status-json stay, and so do `started_at` and `uptime_s`; `process_started_at` is the new process's and `handovers` goes up by one.
+
+**Incompatible updates (drain)**: when a take-over is refused (exit 3), `recvx-server --drain
+--config FILE` (or SIGUSR1) makes the running server open no new rooms while the open ones go
+on, and it exits 0 when the last room closed; under systemd, `Restart=always` then starts the
+version `current` points at. A refused CREATE gets ERROR 8 (SERVER_FULL): the game shows "The
+co-op server is full or busy" at once and the player can try again a moment later. (Dropping the
+CREATE silently would only end in "No reply from co-op server ... Check port" after 10 s, and a new
+error code would be unknown to games already released.) A retried CREATE of a room that is open
+is still answered, joins and rejoins of open rooms still work. A host waiting for its partner
+keeps its room open, so a drain can take as long as the longest lobby.
+
+**Security**: the control socket is protected by file permissions only: mode 0600 (created under
+`umask 0177`), and connections from another user are refused too. Keep it in a directory only the
+server user can write (its home, as in the layout above). A stale socket file (nobody accepts on
+it) is removed at start; a live one, or a path that is not a socket, makes the start fail. Nothing
+in the handover is reachable over the network: the UDP protocol has no command for it, and STATUS
+only reads. Every size is bounded (command lines 64 bytes, the state 64 MB, at most 8 sockets),
+one control connection at a time (others get `busy`, a silent one is closed after 10 s), and no
+code, token or key is logged.
 
 ## Connection flow
 
@@ -301,7 +467,7 @@ No datagram on any path exceeds 1200 bytes. Addresses are family u8 (4 or 6; 0 n
 | KEEPALIVE 9 | c <-> s | request: room id, token, member sequence the host knows; reply: room id, partner present |
 | CLOSE 10 | c -> s | room id, token |
 | ERROR 11 | s -> c | code, server version, salt (with "password needed" / "wrong password") |
-| STATUS 12 | localhost only | request; reply: the metrics as Prometheus text, in as many datagrams of whole lines as needed |
+| STATUS 12 | localhost only | request (body empty, or `json`); reply: the metrics as Prometheus text, in as many datagrams of whole lines as needed; to `json`: parts of the status-json text, each `J`, part index u16, part count u16, then the text |
 | KICK 13 | host -> s | room id, host token, member sequence; answered like a KEEPALIVE |
 
 ERROR codes (`RDV_E_*`): 1 VERSION, 2 NO_ROOM ("Room not found"), 3 NEED_PW (carries the salt;
@@ -420,11 +586,12 @@ added without a protocol change. IPv6 would help players behind CGNAT who have n
 
 | test | what |
 |---|---|
-| ctest `rdv` (`pc/tests/test_rdv.c`) | protocol and server core: messages, crypto, room codes, hijacks, passwords, rejoin/KICK, limits, config parser (the shipped example must equal the defaults), metrics, log privacy, amplification invariant |
+| ctest `rdv` (`pc/tests/test_rdv.c`) | protocol and server core: messages, crypto, room codes, hijacks, passwords, rejoin/KICK, limits, config parser (the shipped example must equal the defaults), metrics, log privacy, amplification invariant, the handover state (round trip; truncated, corrupted and other-format blobs) |
 | ctest `rdv_client` (`pc/tests/test_rdv_client.c`) | the client (`rendezvous.c`) against the server core on a fake network and clock: INTRO checks, epochs, downgrades, relay/direct switching, restarts, stalls, DNS |
 | ctest `rdv_fuzz` (`pc/tests/fuzz_rdv.c`, Linux) | parser, server and client state machines under AddressSanitizer + UBSan, 300,000 inputs; libFuzzer-ready with `clang -fsanitize=fuzzer -DRDV_LIBFUZZER` |
 | ctest `rdv_paths` (`pc/server/test_paths.sh`, Linux) | a local server and two `recvx-client`s: punched, Via server, relay fallback, passwords, loss, plaintext, sustained relay delivery |
 | ctest `rdv_nat` (`pc/server/test_nat.sh`, Linux) | cone/symmetric NATs, same router, netem, in rootless network namespaces (skipped without user namespaces) |
+| ctest `rdv_handover` (`pc/server/test_handover.sh`, Linux) | `--take-over` refused by a build that cannot read the state (the old server goes on), then done by a second binary during relayed and direct sessions (no drops, a code from before still joins, counters only grow, the old process exits 0, MAINPID / BARRIER / READY on a fake notify socket); status-json parsed by python3; `--drain`; the control socket (mode, stale, live) |
 
 Test aids in the game (environment variables):
 

@@ -886,6 +886,54 @@ static void test_rejoin(void)
     srv_free();
 }
 
+/* the handover state (main.c --take-over): a round trip keeps the room, its tokens, code and the
+   counters; every truncation and a wrong socket count are refused, another format is
+   "incompatible", flipped bytes never crash; status-json carries no code */
+static void test_state(void)
+{
+    SrvConfig c;
+    RdvMsg room, in, r, k = { .type = RDV_KEEPALIVE };
+    RdvAddr h = A(1, 5000), j = A(2, 6000);
+    uint8_t *blob, *bad, b[RDV_DGRAM_MAX];
+    uint32_t n, i;
+    static char js[65536];
+    srv_defaults(&c);
+    c.max_rooms = 8;
+    CHECK(srv_init(&c, cap));
+    CHECK(create(&h, 1, "pw", &room) == RDV_ROOM);
+    CHECK(join(&j, room.code, "pw", &in) == RDV_INTRO);
+    CHECK(srv_state_export(&blob, &n) && n > 100);
+    c.max_rooms = 4;   /* a smaller max_rooms in the new config: the running server's is kept */
+    CHECK(srv_init(&c, cap));
+    CHECK(srv_state_import(blob, n, &c, 1) == 0 && c.max_rooms == 8);
+    CHECK(srv_stats()->rooms == 1 && srv_stats()->members == 1 && srv_stats()->created == 1 && srv_stats()->joined == 1);
+    k.room_id = room.room_id;
+    k.seq = in.seq;
+    memcpy(k.token, room.token, 16);
+    CHECK(ask(&h, &k, &r) == RDV_KEEPALIVE && r.has_member);   /* the host's token still works */
+    nsent = 0;
+    now += 1000;   /* the relay budgets start empty */
+    srv_input(&j, b, relay(b, room.room_id, in.token, "after"), now);
+    CHECK(nsent == 1 && !memcmp(&sent[0].to, &h, sizeof(h)));   /* the joiner's relay frames reach the host */
+    CHECK(srv_status_json(js, sizeof(js), now) > 0 && !strstr(js, room.code) && strstr(js, "\"rooms\":1,") && strstr(js, "\"path\":\"relay\""));
+    for (i = 0; i < n; i += 1 + (i > 64) * 7) { CHECK(srv_init(&c, cap)); CHECK(srv_state_import(blob, i, &c, 1) != 0); }
+    CHECK(srv_init(&c, cap));
+    CHECK(srv_state_import(blob, n, &c, 0) == -1);   /* an address on a socket that did not come along */
+    bad = malloc(n);
+    memcpy(bad, blob, n);
+    bad[4] ^= 0x40;
+    CHECK(srv_init(&c, cap));
+    CHECK(srv_state_import(bad, n, &c, 1) == 1);
+    for (i = 0; i < n; i++) {
+        memcpy(bad, blob, n);
+        bad[i] ^= 0x5A;
+        CHECK(srv_init(&c, cap));
+        srv_state_import(bad, n, &c, 1);   /* any answer, but no crash */
+    }
+    free(bad);
+    free(blob);
+}
+
 int main(void)
 {
     test_messages();
@@ -897,6 +945,7 @@ int main(void)
     test_budgets();
     test_hardening();
     test_rejoin();
+    test_state();
     {
         SrvConfig c;
         srv_defaults(&c);

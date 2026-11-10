@@ -1,41 +1,35 @@
-# systemd unit for recvx-server (docs/SERVER.md "Running a server").
-#   sudo install -m 755 recvx-server /usr/local/bin/
-#   sudo install -m 644 recvx-server.conf.example /etc/recvx-server.conf   # optional: the defaults
-#   sudo cp recvx-server.service /etc/systemd/system/ && sudo systemctl enable --now recvx-server
-# Open UDP 7141 in the firewall. Log and a metrics line every 5 minutes: journalctl -u recvx-server.
-# After editing /etc/recvx-server.conf: systemctl reload recvx-server (limits, log level, stats
-# interval) or restart (port, listen, max_rooms). Metrics: recvx-client 127.0.0.1 status
+# systemd user unit for recvx-server (docs/SERVER.md "systemd" and "Updating without dropping
+# sessions"). It runs as the user that owns this layout:
+#   ~/recvx-server/versions/<version>/recvx-server   one directory per release
+#   ~/recvx-server/current -> versions/<version>     the version that runs
+#   ~/recvx-server/recvx-server.conf                 the config; with control = /home/USER/recvx-server/control.sock
+# Install:
+#   mkdir -p ~/.config/systemd/user && cp recvx-server.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now recvx-server
+#   sudo loginctl enable-linger USER      # runs at boot and after logging out
+# Update without dropping a session: point `current` at the new version, then
+#   systemctl --user reload recvx-server  # the new binary takes the sockets, rooms and counters over
+# A reload that fails (exit 3: the new version cannot read the running one's state) changes
+# nothing; then `current/recvx-server --drain --config ~/recvx-server/recvx-server.conf` stops the
+# old one once its rooms are closed, and Restart=always starts the new one.
+# Open UDP 7141 in the firewall. Log and a metrics line every 5 minutes: journalctl --user -u recvx-server.
+# Metrics: recvx-client 127.0.0.1 status (Prometheus text) or status-json.
 [Unit]
 Description=recvx co-op rendezvous and relay server
-After=network-online.target
-Wants=network-online.target
 
 [Service]
-# reads /etc/recvx-server.conf when it exists; flags here would override it
-ExecStart=/usr/local/bin/recvx-server
-ExecReload=/bin/kill -HUP $MAINPID
-Restart=on-failure
-# no state, no disk, no privileges: a throwaway user, read-only system, one UDP socket
-DynamicUser=yes
-ProtectSystem=strict
-# the config is only read (strict already makes /etc read-only; "-": it need not exist)
-ReadOnlyPaths=-/etc/recvx-server.conf
-ProtectHome=yes
-PrivateTmp=yes
-PrivateDevices=yes
-PrivateIPC=yes
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectKernelLogs=yes
-ProtectControlGroups=yes
-ProtectClock=yes
-ProtectHostname=yes
-ProtectProc=invisible
-ProcSubset=pid
+# READY=1 once listening; the --take-over process says MAINPID=<itself> (NotifyAccess=all), so the
+# service goes on in it when the old process exits
+Type=notify
+NotifyAccess=all
+ExecStart=%h/recvx-server/current/recvx-server --config %h/recvx-server/recvx-server.conf
+ExecReload=%h/recvx-server/current/recvx-server --take-over --config %h/recvx-server/recvx-server.conf
+# also after a drain (exit 0): the version `current` points at now
+Restart=always
+RestartSec=1
+# hardening that needs no namespaces (a user manager may not be allowed to create them)
 NoNewPrivileges=yes
-CapabilityBoundingSet=
-AmbientCapabilities=
-RestrictAddressFamilies=AF_INET AF_INET6
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
@@ -46,7 +40,8 @@ SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
 UMask=0077
 MemoryMax=64M
-TasksMax=4
+# the server, and during a reload the launcher and the new process
+TasksMax=8
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
