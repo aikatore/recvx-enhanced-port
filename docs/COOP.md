@@ -1706,6 +1706,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_FORCE_RELAY=1`, `RECVX_COOP_NO_PUNCH=1`, `RECVX_COOP_PUNCH_MS=ms` | Server path: always relay, no hole punching, punch duration. |
 | `RECVX_COOP_DROP="from:to,..."` | Send nothing in those frames; `RECVX_COOP_DROP_EVENTS` holds back only the events. |
 | `RECVX_COOP_LOSS=pct` | Drop that share of our datagrams at random. |
+| `RECVX_COOP_NETSIM="delay_ms,jitter_ms,loss_pct"` | A network path in our send path (`net.c`, every datagram, also the server's): each waits delay + uniform(-jitter, +jitter) ms, never leaving before the one sent before it (a path keeps a burst's order), and that share is lost; a thread sends them when due. Set it on both instances for both directions (through a server it is each player's leg to it). Two instances on one PC, Linux or Windows, without a proxy. |
 | `RECVX_COOP_REJOIN="frame,..."` | Join again (new session). |
 | `RECVX_COOP_KICK=n` | Host: "Remove Partner" at frame n. |
 | `RECVX_COOP_BYE_GRABBED=n` | Joiner: Disconnect n frames into a zombie grab it runs. |

@@ -25,11 +25,13 @@ void net_resolve_cancel(NetResolve* r);
    or -1 with *why saying what failed. */
 int  net_tcp_fetch(const NetAddr* to, const char* req, int len, char* buf, int cap, int connect_ms, int total_ms, const char** why);
 int  net_send(const NetAddr* to, const void* buf, int len);
+void net_flush(void);                                   /* RECVX_COOP_NETSIM: what it holds back goes now */
 int  net_recv(NetAddr* from, void* buf, int cap);       /* bytes, or -1 when nothing is queued */
 /* when the datagram net_recv returned last arrived (net_us clock): the kernel's receive time on
    Linux (SO_TIMESTAMPNS); on Windows a thread's note of the arrival for the first datagram after an
    empty read (net.c); otherwise when it was read */
 uint64_t net_rx_us(void);
+int net_rx_exact(void);                                 /* 1: that time is the arrival (kernel or thread note), 0: when it was read */
 const char* net_addr_str(const NetAddr* a);             /* "a.b.c.d:port", static buffer */
 /* text with every IPv4 address in it, and the host part of each of hosts[] (NULL-ended,
    "host[:port][#code]"; only one with a dot, so a room code stays), as "xxx.xxx.xxx.xxx", ports

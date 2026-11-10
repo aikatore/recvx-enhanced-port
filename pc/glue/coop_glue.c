@@ -6310,7 +6310,7 @@ static void send_reject(const NetAddr* to, int why)
 /* atexit (main thread: window closed, quit): the game thread may be anywhere, so only the goodbye */
 static void coop_exit(void)
 {
-    if (coop_on && have_peer && !echo_delay) send_bye(0);
+    if (coop_on && have_peer && !echo_delay) { send_bye(0); net_flush(); }
 }
 
 static void stop(void)
