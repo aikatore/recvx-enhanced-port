@@ -1316,6 +1316,44 @@ static void prog_use(int v, const DrawState* st, int premul, int tme)
     uni1i(pcur->tme, tme);
 }
 
+/* A batch that is one opaque black sprite over the whole scissor area (the clear of the draw
+   buffer after the swap, Ps2ShadowStart's of the shadow target), depth unwritten or written 0:
+   glClear in the scissor, with the colour mask the draw would have. The same values (0 is exact
+   in every format; depth 0 is what the sprite's z 0 gives), but the GPU clears the target's
+   compression metadata instead of writing every pixel. RECVX_FAST_CLEAR=0: drawn. */
+static int fast_clear(const DrawState* st, int tme)
+{
+    static int on = -1;
+    int zte = (st->ctx.test >> 16) & 1, ztst = (st->ctx.test >> 17) & 3, zmsk = (st->ctx.zbuf >> 32) & 1;
+    uint64_t sc = st->ctx.scissor;
+    int sx0 = sc & 0x7FF, sx1 = (sc >> 16) & 0x7FF, sy0 = (sc >> 32) & 0x7FF, sy1 = (sc >> 48) & 0x7FF;
+    float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
+    if (on < 0) on = !SDL_getenv("RECVX_FAST_CLEAR") || SDL_atoi(SDL_getenv("RECVX_FAST_CLEAR")) != 0;
+    if (!on || !batch_full_cover || vcount != 6 || nsruns || tme || ((st->prim >> 5) & 1) || (zte && ztst != 1)) return 0;
+    for (int k = 0; k < 6; k++) {
+        const GlVertex* v = &vbuf[k];
+        if (v->r != 0.0f || v->g != 0.0f || v->b != 0.0f || v->a != 0.0f || v->w != 1.0f || (!zmsk && v->z != 0.0f)) return 0;
+        x0 = fminf(x0, v->x); x1 = fmaxf(x1, v->x); y0 = fminf(y0, v->y); y1 = fmaxf(y1, v->y);
+    }
+    if (g_margin_x && sx0 == 0 && sx1 >= (int)((st->ctx.frame >> 16) & 0x3F) * 64 - 1) { sx0 = -g_margin_x; sx1 += g_margin_x; }   /* as gs_flush */
+    {   /* the sprite's pixels (as the vertex shader places them) cover gs_flush's scissor box within the target */
+        float px0 = (x0 + g_margin_x) * g_scale, px1 = (x1 + g_margin_x) * g_scale, py0 = y0 * g_scale, py1 = y1 * g_scale;
+        int bx0 = (int)((sx0 + g_margin_x) * g_scale), by0 = (int)(sy0 * g_scale);
+        int bx1 = bx0 + (int)((sx1 - sx0 + 1) * g_scale), by1 = by0 + (int)((sy1 - sy0 + 1) * g_scale);
+        if (bx0 < 0) bx0 = 0;
+        if (by0 < 0) by0 = 0;
+        if (bx1 > cur_rt->pw) bx1 = cur_rt->pw;
+        if (by1 > cur_rt->ph) by1 = cur_rt->ph;
+        if (px0 > (float)bx0 || py0 > (float)by0 || px1 < (float)bx1 || py1 < (float)by1) return 0;
+    }
+    gp_mark(GP_CLEAR);
+    glClearColor(0, 0, 0, 0);
+    if (!zmsk) glClearDepth(0.0);
+    glClear(GL_COLOR_BUFFER_BIT | (zmsk ? 0 : GL_DEPTH_BUFFER_BIT));
+    gt_cnt[0]++;
+    return 1;
+}
+
 void gs_flush(void)
 {
     const DrawState* st = &batch_state;
@@ -1486,6 +1524,7 @@ void gs_flush(void)
     uni1i(pcur->atst, (int)((test >> 1) & 7));
     uni1f(pcur->aref, (float)((test >> 4) & 0xFF));
 
+    if (fast_clear(st, tme)) { vcount = 0; nsruns = 0; return; }
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     {
