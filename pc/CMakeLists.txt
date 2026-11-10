@@ -146,6 +146,9 @@ FetchContent_Declare(xxhash GIT_REPOSITORY https://github.com/Cyan4973/xxHash.gi
 FetchContent_Declare(bcdec GIT_REPOSITORY https://github.com/iOrange/bcdec.git GIT_TAG 80859ed3b7afb1c527a2a99d70c61457bea72d0c SOURCE_SUBDIR none)
 FetchContent_MakeAvailable(xxhash bcdec)
 target_include_directories(recvx_platform PRIVATE ${xxhash_SOURCE_DIR} ${bcdec_SOURCE_DIR})
+# the render thread's per-vertex loops (GS emulation, native strips, interpolation): -O3 (IEEE as at
+# -O2: no fast-math, -ffp-contract=off)
+set_property(SOURCE src/gs/gs_gl.c src/gs/stream.c src/gs/gs_mem.c src/gs/textures.c APPEND PROPERTY COMPILE_OPTIONS -O3)
 set_property(SOURCE src/host/host.c src/host/overlay.cpp src/net/update.c APPEND PROPERTY COMPILE_DEFINITIONS "RECVX_VERSION=\"${RECVX_VERSION}\"")
 # our texts' table: its text goes into the executable as it is, outside the address window (tr.c, res/recvx.rc)
 set_property(SOURCE src/host/tr.c APPEND PROPERTY COMPILE_DEFINITIONS "TR_TABLE_INC=\"${CMAKE_CURRENT_SOURCE_DIR}/src/host/tr_table.inc\"")
