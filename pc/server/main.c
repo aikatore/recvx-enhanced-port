@@ -41,7 +41,9 @@ static double cpu_base[2];          /* the CPU time of the processes this one to
 /* the control protocol (one connection, lines): "drain" -> "draining, N rooms open";
    "takeover" -> CtlHdr with the UDP sockets and the control socket (SCM_RIGHTS), the state blob
    (CtlHdr.len bytes), then the new process answers "ok", "incompatible" or "invalid", and to
-   "ok" the old one says "bye" and exits: only then does the new one serve */
+   "ok" the old one says "bye" and exits. "bye" is the commit point: the new process, once it said
+   "ok", waits for "bye" (it serves) or the end of the connection (the old one goes on) without a
+   time-out of its own, as the old one always answers or closes within its own */
 typedef struct CtlHdr { char magic[4]; uint32_t nudp, len; char version[52]; } CtlHdr;   /* "RXHO" */
 
 static uint64_t now_ms(void)
@@ -209,14 +211,14 @@ static void proc_info(void)
 }
 
 /* ---------------------------------------------------------------- the control socket */
-static int wait_fd(int fd, short ev, uint64_t deadline)   /* 1: ready (or hung up), 0: time-out */
+static int wait_fd(int fd, short ev, uint64_t deadline)   /* 1: ready (or hung up), 0: time-out; deadline 0: none */
 {
     for (;;) {
         struct pollfd p = { fd, ev, 0 };
         uint64_t now = now_ms();
         int r;
-        if (now >= deadline) return 0;
-        r = poll(&p, 1, (int)(deadline - now));
+        if (deadline && now >= deadline) return 0;
+        r = poll(&p, 1, deadline ? (int)(deadline - now) : -1);
         if (r > 0) return 1;
         if (r < 0 && errno != EINTR) return 0;
     }
@@ -266,9 +268,10 @@ static int unix_addr(const char* path, struct sockaddr_un* a)
     return 1;
 }
 
-/* systemd's notify protocol, without libsystemd: a datagram to $NOTIFY_SOCKET. barrier: then
-   waits (up to 5 s) until systemd has handled it (BARRIER=1 with a pipe that it closes) */
-static void notify(const char* msg, int barrier)
+/* systemd's notify protocol, without libsystemd: a datagram to $NOTIFY_SOCKET. barrier (a
+   deadline, 0: none): then waits until systemd has handled it (BARRIER=1 with a pipe that it
+   closes), at most until then */
+static void notify(const char* msg, uint64_t barrier)
 {
     const char* e = getenv("NOTIFY_SOCKET");
     struct sockaddr_un a;
@@ -300,7 +303,7 @@ static void notify(const char* msg, int barrier)
         memcpy(CMSG_DATA(cm), &p[1], sizeof(int));
         ok = sendmsg(fd, &h, MSG_NOSIGNAL) >= 0;
         close(p[1]);
-        if (ok) wait_fd(p[0], POLLIN, now_ms() + 5000);   /* POLLHUP: systemd closed its end */
+        if (ok) wait_fd(p[0], POLLIN, barrier);   /* POLLHUP: systemd closed its end */
         close(p[0]);
     }
     close(fd);
@@ -550,8 +553,10 @@ static int take_over(SrvConfig* c)
     {
         char t[32];
         snprintf(t, sizeof(t), "MAINPID=%d", (int)getpid());
-        notify(t, 1);   /* systemd must know before the old main process exits */
-        if (!write_all(fd, "ok\n", 3, deadline) || !read_line(fd, line, sizeof(line), deadline) || strcmp(line, "bye")) {
+        notify(t, deadline);   /* systemd must know before the old main process exits */
+        /* past the deadline the old one may have given up: no "ok" then. After "ok" only "bye"
+           decides (no deadline: the old one answers or closes within its own) */
+        if (now_ms() >= deadline || !write_all(fd, "ok\n", 3, deadline) || !read_line(fd, line, sizeof(line), 0) || strcmp(line, "bye")) {
             snprintf(t, sizeof(t), "MAINPID=%d", (int)old);
             notify(t, 0);
             fprintf(stderr, "--take-over: the running server did not hand over (time-out?): nothing taken over\n");

@@ -351,8 +351,12 @@ How it works:
 3. Under systemd it sends `MAINPID=<its pid>` to `$NOTIFY_SOCKET` (no libsystemd) and waits with
    `BARRIER=1` until systemd has it, then answers `ok`. The old process answers `bye` and exits 0;
    only then does the new one read the socket, send `READY=1`, and the `--take-over` launcher
-   returns 0 (which ends `ExecReload`). No answer within 10 s on either side also leaves the old
-   server running (and `MAINPID` goes back to it).
+   returns 0 (which ends `ExecReload`). `bye` decides: once the new process said `ok` it waits
+   for `bye` (then it serves) or for the old one to close the connection (then the old one goes
+   on), and the old one does either within its own time-out. The new process does not say `ok`
+   once its own time-out (from its connect) has passed. So exactly one of the two serves: no
+   answer within 10 s on either side leaves the old server running (and `MAINPID` goes back to
+   it).
 
 The pause is the time to copy the state between two processes: milliseconds for a few hundred
 rooms. Times inside the state are the system's monotonic clock, the same for both processes.
