@@ -1365,20 +1365,23 @@ the line.
   a speaker of a story character shown as another one's model (`shown_model`: the cast's slot, `cast_glue.c as_model`,
   else the double's `actor_double_shown`), whose character has lines: `voice_pick(seed, room file, disc, file,
   character, length, ...)`, a hash of the enemy seed, the room file and the line into that character's lines:
-  * **One line, ending in time**: each original line gets exactly one line (or none: quiet), and always one that
-    ends at most `VOICE_GRACE_MS` (1 s) after the original line's length while the character has one that is not the
-    line it said last. Only where none of its lines ends in time but that one does it the shortest (closest to
-    fitting) instead, which fades out at the original's end and grace ("The end of an inserted line"). The previous
-    line stops when the next original starts (`PlayVoiceEx2` stops slot 1). So a speaker never talks on past its line
-    with one or several lines of another.
-  * **Not said yet first**, among the lines that end in time: the lines said since the room was loaded are kept in
-    order (`VoiceSaid`, `voice_said_add`, `voice_said_age`: how many of that character's lines came since). A line
-    not said yet in the room is taken before one said already. Once every one that ends in time was said, a line comes
-    back only after **min(pool - 1, max(3, pool / 2))** other lines of that character (the pool: the character's lines
-    of that kind with a length; Alfred's 14 spoken: 7, Rodrigo's 20: 10, Alexia's 24: 12, Claire's 128: 64; two
-    lines alternate, three go in turn). So no line twice in a row and no A-B-A; across the rounds too, since nothing
-    is reset when the lines run out. Where none of the lines that end in time is out of that cooldown, any of them
-    but the last one said (an A-B-A then, never a line that runs on); for a gasp, quiet instead ("Short sounds").
+  * **Variety first, then the fit**: each original line gets exactly one line (or none: quiet). A line comes back only
+    after **min(pool - 1, max(3, pool / 2))** other lines of that character (the cooldown; the pool: the character's
+    lines of that kind with a length; Alfred's 14 spoken: 7, Rodrigo's 20: 10, Alexia's 24: 12, Claire's 128: 64; two
+    lines alternate, three go in turn), so no line twice in a row, no A-B-A, and no line is more than 1 / (cooldown + 1)
+    of a character's lines (Alfred: 1 in 8). Of the lines out of the cooldown, in this order:
+    1. one that **ends in time**, at most `VOICE_GRACE_MS` (1 s) after the original line's length: a line not said yet
+       before one said already, the length a soft preference (below);
+    2. else (not for a gasp: "Short sounds") one that **runs longer**, the shorter the likelier ((max / len)², max the
+       original's length and grace), **cut at the original's end** with a 0.27 s fade ("The end of an inserted line"):
+       it sounds like a line cut off, and it never runs into the scene's pauses or the next line;
+    3. only where every line of the character is in the cooldown (a pool of one line) the least recently said, never
+       the last: so a single line is said, then nothing (quiet) for the next.
+    The previous line stops when the next original starts (`PlayVoiceEx2` stops slot 1). So a speaker never talks on
+    past its line with one or several lines of another.
+  * **The history**: the lines said are kept in order (`VoiceSaid`, `voice_said_add`, `voice_said_age`: how many of
+    that character's lines came since; the last 256 of all characters) **across room loads**, for the whole game with
+    that enemy seed (another seed starts afresh: `cast_glue.c voice_room`), so the cooldown spans the cutscenes.
   * **The length a soft preference** within those: a line weighs 1 + 5 r² (r the part of the original's time it fills,
     at most 1: a line that fills it is 6 times as likely as a one-word shout, one filling half 2.25 times), a gasp,
     grunt or shout (shorter than `VOICE_SHORT_MS`, 1.2 s) a tenth of that again in place of a line of 1.2 s or more,
@@ -1392,8 +1395,8 @@ the line.
     nonstop with several lines.
   * The lines said in place of Claire's and Chris's count too, though each co-op screen shows those two with its own
     player's look: the screens pick alike except where one shows them as the character another role is shown as (that
-    role then does not repeat their lines on that screen). A room load starts afresh (co-op players may be in other
-    rooms), so a scene that goes on in the next room may say a line of the last one again.
+    role then does not repeat their lines on that screen), or where one screen saw a scene the other did not (a
+    partner in another room: its history then differs, and so may the lines of the next scenes both see).
   * Measured over every scene of the disc (120 room scripts with lines, 10 seeds including the user's, the user's
     table: pools Claire 151, Chris 77, Steve 148, Wesker 72, Alfred 14, Alexia 25, Rodrigo 20), the real `voice_pick`
     with the lines' lengths, one speaker at a time shown as each character: Alfred's lines back to back 1020 times in
@@ -1405,9 +1408,21 @@ the line.
     soft window, 513 (1.4 %) now, only Alfred's (482) and Wesker's (31) where none of theirs ends in time but the one
     said last; still none back to back; A-B-A 53 to 731, nearly all Alfred's (671 of his 4722: of his 14 lines only
     a few are short, and a line again beats one that runs on), quiet gasps 3025 to 3156.
-  The lengths are the lines' ADX headers (`cast_glue.c line_ms`, read once each). The same line in the
-  same room with the same seed in the same scene order is always the same: replays repeat, and both co-op games
-  pick alike (the lengths come from the disc, the order is the script's). The line is played from its own disc's archive (partitions 28 `VOICE1.AFS`, 29 `VOICE2.AFS`, both
+  * **Variety over the fit, measured** (the same scenes in room order as one playthrough, 10 seeds including the
+    user's 51216, each speaker shown as each character for the whole game as "Per Character" does, the real
+    `voice_pick`): with `6d6525eb` (only lines that end in time, the history afresh at each room) Alfred said his
+    shortest line, 1/242 (1.8 s, from RM_2030), in 36 % of his lines (43 % in the worst playthrough, 36 % with the
+    user's seed): in nearly every scene where he speaks, since it was the one that fit and every room started afresh;
+    his lines back to back across rooms 248 times in 4597, A-B-A 1164. Now his top line takes 11.9 % (15.4 % at the
+    worst; 11.8 % with the user's seed), none back to back, no A-B-A; the other characters' top lines 1.2 % (Claire)
+    to 8.2 % (Rodrigo), against 1.5 % to 11.1 %. The price is Alfred's fit: half of his lines (2218 of 4489) are
+    longer ones cut at the original's end (485 faded out 1 s past it before), as are 8 to 10 % of Alexia's and
+    Rodrigo's and 0.5 % of Wesker's; none is heard more than 0.27 s past the original's end (lines that end in time
+    end by themselves at most 1 s past it, as before). Without the history across rooms Alfred's top line would
+    still take 19.6 % (28 % at the worst), back to back 138 times.
+  The lengths are the lines' ADX headers (`cast_glue.c line_ms`, read once each). The same scenes in the same order
+  with the same seed say the same lines: a replay from the same start repeats, and both co-op games pick alike while
+  they have seen the same scenes (the lengths come from the disc, the order is the script's). The line is played from its own disc's archive (partitions 28 `VOICE1.AFS`, 29 `VOICE2.AFS`, both
   loaded at the first such line; a mods folder's `VOICE1.AFS/<n>` counts as for the game's), so Chris's lines can be
   said in Claire's part.
   The original line's speaker shown as itself, as its own character's other model, or anything without lines (and
@@ -1430,16 +1445,20 @@ the line.
   answers from `pc_voice_playing`: "playing" for exactly the original line's length (its ADX header, `adx_length_ms`),
   whatever the inserted line's, then "ended". So the scene keeps its timing; many scripts time their lines by frame
   counts instead (`FrameCheck`, 6000), which it does not touch either. No script uses `AdxTimeCk`.
-* **The end of an inserted line**: it ends by itself (the pick prefers one that ends at most `VOICE_GRACE_MS` after the
-  original would), at the next line (`PlayVoiceEx2` stops slot 1; `bhVoiceOn` first stops the task's own line), at `StopVoice`
-  (`VoiceOff`, a skip), and at the latest `VOICE_GRACE_MS` after the original's end: a longer one (none of the
-  character's lines ends in time but the one it said last) fades out there over 8 sound ticks with the game's own fade
-  (`RequestAdxFadeFunctionEx`, `StopAdx` at its end; `vl.cap`, checked every tick by `pc_voice_tick`; log `voices: the
-  inserted line fades out 1000 ms after the original's end`). The next line or a room change during the fade stops it
-  at once; a room change before keeps the fade's time. A shorter line leaves a silence. Before, a line could run on
-  well after the scene's speech: a line picked at random from all of the character's could be many times the
-  original's length, and where the script had no next line (a scene's last line, a long gap, a scene timed by frames)
-  nothing cut it (Rodrigo's last 1.8 s line of the opening went on for 11 s as Wesker's).
+* **The end of an inserted line**: it ends by itself (a line that ends in time: at most `VOICE_GRACE_MS` after the
+  original would), at the next line (`PlayVoiceEx2` stops slot 1; `bhVoiceOn` first stops the task's own line), at
+  `StopVoice` (`VoiceOff`, a skip), or, a longer one (rule 2 above), at the original's end: there it fades out over 8
+  sound ticks (`VOICE_FADE` 7 + 1; a tick is a game frame, `VsyncFunc` runs at the buffer swap: 0.27 s) with the game's own fade (`RequestAdxFadeFunctionEx`, which
+  `ExecAdxFadeManager` steps down to -127 and then `StopAdx`s; each step is `ADXT_SetOutVol`, the stream's
+  `SDL_SetAudioStreamGain`; `vl.cap`, checked every tick by `pc_voice_tick`; log `voices: the inserted line is cut at
+  1834 ms (the original's end, 1827 ms), fading out over 250 ms`, and the pick's own log line says `none out of the
+  cooldown ends in time: cut at 1827 ms`). The next line or a room change during the fade stops it at once. A shorter
+  line leaves a silence. Before (`6d6525eb`), such a line was the shortest one but the last, faded out 1 s after the
+  original's end; before that (`cca465b8`) also lines picked for variety, so speakers talked on into the pauses.
+  Earlier still, a line could run on well after the scene's speech: a line picked at random from all of the
+  character's could be many times the original's length, and where the script had no next line (a scene's last line,
+  a long gap, a scene timed by frames) nothing cut it (Rodrigo's last 1.8 s line of the opening went on for 11 s as
+  Wesker's).
 * **Measured** (`RECVX_TEST_SCENE`, 39 scenes of both discs, `RECVX_CAST_TRACE` with the slot's starts and ends in
   the log, `adxt: stop talk 1 at ...`; once with the user's settings: the cast, Claire and Chris as zombies, and
   once with Claire as Wesker and Chris as Steve): before, 32 inserted lines played on more than 1.5 s past the
