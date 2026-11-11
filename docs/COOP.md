@@ -80,7 +80,8 @@ see "BioRand"), **LOOT** (Shared / Individual),
 **GEAR** (For both / Shared; only with shared loot, see "Loot modes"), **TRADING**, **CUTSCENE SKIP** (Together /
 Separately, see "Cutscenes"), **INK RIBBONS** (Needed / Not needed, see "Saving without ink
 ribbons"), **GAME OVER** (Each player / Both, see "Game over"), **HEADSHOTS** (On / Off: third person's "Headshots &
-Piercing", [THIRDPERSON.md](THIRDPERSON.md)), and two entries that open a page
+Piercing", [THIRDPERSON.md](THIRDPERSON.md)), **SHARED ENEMY CONTROL** (On / Off, see "Shared enemy control"; set it
+before OPEN THE LOBBY, it is locked during a session), and two entries that open a page
 of their own (an arrow after them; RANDOMIZER also shows On or Off):
 
 | Entry | Its page |
@@ -89,7 +90,7 @@ of their own (an arrow after them; RANDOMIZER also shows On or Off):
 | **EXTRA EVENTS** | Rules for single events: **QUICK START** (On / Off, see "Quick start"; hidden and off while BioRand is on), **METAL DETECTOR** (Skipped / Original, see "Metal detector"), **BOXES/HERBS** (On / Off, see "Extra item boxes and herbs"). |
 
 Confirm or a click opens a page; BACK (or cancel, or a right click) returns to GAME RULES on its
-entry. The joiner sees the host's GAME OVER and HEADSHOTS rules and both pages read-only (HOST RULES) once
+entry. The joiner sees the host's GAME OVER, HEADSHOTS and SHARED ENEMY CONTROL rules and both pages read-only (HOST RULES) once
 connected; they follow the host's changes as it makes them.
 
 Both players then see each other in the lobby, with model, name and what the other chose. The
@@ -278,6 +279,16 @@ loaded in a case it has (before, the load waited for a file that does not exist:
 * The host reading a text (examining something, a close-up) does not stop the enemies for the joiner: they
   keep going for the joiner meanwhile, leave the reading host alone, and take the joiner's shots at once. Before,
   they stood still for the joiner until the host closed the text.
+
+### Shared enemy control
+
+A host rule, off by default: **Shared Enemy Control** (lobby GAME RULES: SHARED ENEMY CONTROL, F3, ENHANCED
+SETTINGS CO-OP; ini `coop_shared_enemies`). It is locked during a session, and the joiner sees the host's
+choice. On, each common enemy (zombies, Cerberus, Hunter and Sweeper, Bandersnatch, anatomist) runs in the
+game of the player fighting it: that player's hits and the enemy's grabs and bites react at once, without the
+round trip to the host, and the enemy changes hands between attacks. Off, the host's game runs the enemies of
+a shared room and only a zombie's grab of the joiner runs in the joiner's game for the grab (as before). It is
+new and not yet tested much on Windows and over real internet paths. How it works: "Engaged-player ownership".
 
 ### Puzzles
 
@@ -779,6 +790,7 @@ and the APPEARANCE page's Character Models (Same for Both / Per Character) with 
 | Metal Detector (host) | `coop_skip_detector` | 0 Original, 1 Skipped (1); see "Metal detector" |
 | Quick Start (host) | `coop_quick_start` | 0/1 (0); see "Quick start" |
 | Pause Enemies During Trades (host) | `coop_trade_freeze` | 0/1 (1) |
+| Shared Enemy Control (host), locked | `coop_shared_enemies` | 0/1 (0); see "Shared enemy control" |
 | Remember Partner Items (host) | `coop_remember` | 0/1 (1) |
 | Connection, locked | `coop_conn` | 0 Automatic, 1 Direct, 2 Server Relay (0) |
 | Host Port, locked | `coop_port` | 1..65535 (7140) |
@@ -1041,9 +1053,11 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   kill bit is usually hidden already by then: the joiner's `DieCk` set the bit, `EV_FLAGS` brought it, and the
   host's entry script (`EneSetCk`) hid the record; `EV_GONE` covers the records without one, kills of the last
   frames, and extra enemies.
-* **Engaged-player ownership** (prototype, protocol 48 on branch `netexp-combined-types` (47 on `netexp-combined`,
-  zombies only; 46 on `netexp-phase3`), the host's rule `OPT2_OWNERSHIP`; `RECVX_COOP_OWNERSHIP=0` on the host turns it
-  off): a common enemy runs in the game of the player it is engaged with, and the other game shows it as a puppet of
+* **Engaged-player ownership** (protocol 48; 47 had zombies only, 46 was the first prototype): the host's lobby rule
+  "Shared Enemy Control" (`g_coop.shared_enemies`, ini `coop_shared_enemies`, off by default, locked during a
+  session; `OPT2_OWNERSHIP` in `Pose.opts2`, the guest follows the host's bit; test aid `RECVX_COOP_OWNERSHIP=0/1` on
+  the host forces it off / on). Off, only the grab hand-over below runs (a host zombie's grab of the stand-in goes to
+  the guest's game and back with its state at its end). On: a common enemy runs in the game of the player it is engaged with, and the other game shows it as a puppet of
   that game's snapshots, so that player's shots react on its next frame and its grabs and bites are local. `owned[i]`
   keeps its meaning (the guest runs slot i); either game runs the target rule with the partner's stand-in, sends
   `EV_PLY_HIT`, and hands a zombie grab of the stand-in to the victim's game (`EV_GRAB` either way; `EV_UNGRAB` state
@@ -1500,7 +1514,7 @@ bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows t
 list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (prototype, `netexp-combined`; 44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
 `EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 (prototype, `netexp-combined-types`) `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
 the Bandersnatch and the anatomist too (each type's `exp0` with its pointer words kept, the `type` field taken), never for a
-record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1544,7 +1558,7 @@ every frame in practice. The receiver keeps each slot's under its frame ("Enemy 
 | 32-39 | `chr`, `costume`, `stg`, `rom`, `pos` (room entry point), `opts` (host's game rules: `OPT_INDIVIDUAL` 1, `OPT_TRADE_FREEZE` 2, `OPT_IMPORTANT` 4, `OPT_NO_RIBBON` 8, `OPT_SKIP_SYNC` 16, `OPT_GAMEOVER_BOTH` 32, `OPT_SKIP_DETECTOR` 64, `OPT_QUICK_START` 128), `regroup` (host counter), `mfile` (sender's own part file - 10) |
 | 40-91 | position (3 floats), angles (3 ints), `mtn_no`, `frm_no` (the frame shown, before the step's advance: `actor_frame`), `mtn_md`, `hokan_count`, `hokan_rate`, `wpnr_no`, `hp`, `mode0`, `mode1`, `nev`, `nene` |
 | 92-107 | `stflg`, `ev_ack` (highest event id applied from the peer), `mset` (`MSET_OWN` -1, `MSET_ROOM` -2, `MSET_NONE` -3, or an enemy slot 0..254), `busy` (`BUSY_NONE/EVENT/MENU/BOX/TRADE`), `reject` (`PKT_BYE`, `PKT_REJECT`) or, in `PKT_POSE`, `rcase` (the room case of the room the sender is in + 1, 0 not sent; same room means the same case too, and the follow loads it), `voice_n`, `voice`, `pflg` (`flg & 6`: hit / held; bits 0 and 3-7 the aim pitch, -31..31 steps of 60/31 degrees, 0 straight or not sent: `coop_pitch_get`), `flr` (`flr_no + 3`, 0 not sent) |
-| 108-111 | `use` (the room trigger the sender examined and is held by + 1, 0 none: the partner does not take it meanwhile), `opts2` (host's further game rules: `OPT2_EXTRA_OBJECTS` 1, `OPT2_HEADSHOTS` 2; other bits refused), `legs` (the walk under the aim: bits 0-1 which walk, bit 2 backward, bits 3-7 the hips' turn in steps of 4 degrees: `coop_legs_*`), `legs_frm` (its frame + 1, 0: none) |
+| 108-111 | `use` (the room trigger the sender examined and is held by + 1, 0 none: the partner does not take it meanwhile), `opts2` (host's further game rules: `OPT2_EXTRA_OBJECTS` 1, `OPT2_HEADSHOTS` 2, `OPT2_OWNERSHIP` 4 "Shared Enemy Control"; other bits refused), `legs` (the walk under the aim: bits 0-1 which walk, bit 2 backward, bits 3-7 the hips' turn in steps of 4 degrees: `coop_legs_*`), `legs_frm` (its frame + 1, 0: none) |
 
 `flags`: `PF_IN_GAME` 1, `PF_VISIBLE` 2, `PF_ROOM_MTN` 4, `PF_WANT_BLOB` 8 (joiner asks for the
 game state), `PF_EXT` 16 (a `PoseExt` follows), `PF_CINE` 32 (in a cutscene its skip button could
@@ -1833,7 +1847,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_KICK=n` | Host: "Remove Partner" at frame n. |
 | `RECVX_COOP_BYE_GRABBED=n` | Joiner: Disconnect n frames into a zombie grab it runs. |
 | `RECVX_COOP_KILL="hostframe:slot[:damage],..."` | A lethal hit (or one of that damage) on our enemy in that slot, as the weapon code leaves it. |
-| `RECVX_COOP_OWNERSHIP=0` | (host, branch `netexp-phase3`) No engaged-player ownership: the host runs the enemies as before. |
+| `RECVX_COOP_OWNERSHIP=0\|1` | Host: forces "Shared Enemy Control" (engaged-player ownership) off (0: the host runs the enemies, only zombie grabs of the joiner go over) or on (1), whatever the setting says; the joiner follows the host's rule either way. |
 | `RECVX_COOP_ALIVE="hostframe,..."` | Log the room's living, shown enemies (slot:type), how many `ed_flg` bits are set, and `rm_flg` (a kill-count door's bit). |
 | `RECVX_COOP_WARP="hostframe:x:z,..."` | Both players to x/z at that host frame. |
 | `RECVX_COOP_VOMIT="hostframe,..."` | Host: the walking zombie nearest the partner vomits. |

@@ -564,6 +564,8 @@ const Setting g_settings[] = {
     { SP_COOP, "Quick Start", V(g_coop.quick_start), 0, 1, 1,
       .help = "Start with the manual read and a knife in both players' inventories. No effect with BioRand." },
     { SP_COOP, "Pause Enemies During Trades", V(g_coop.trade_freeze), 0, 1, 1, .help = "Pause enemies while both players are on the trade screen. The host decides." },
+    { SP_COOP, "Shared Enemy Control", V(g_coop.shared_enemies), 0, 1, 1, .locked = in_session,
+      .help = "Each enemy is run by the player fighting it, so hits and grabs react at once for both players. The host decides." },
     { SP_COOP, "Remember Partner Items", V(g_coop.remember), 0, 1, 1, .flags = SET_F1,
       .help = "Keep a partner's items for their next visit. After a crash, their items are restored automatically." },
     { SP_COOP, "Connection", V(g_coop.conn), 0, 2, 1, conns, .locked = in_session,

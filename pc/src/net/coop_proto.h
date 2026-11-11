@@ -86,8 +86,8 @@ enum { OPT_INDIVIDUAL = 1, OPT_TRADE_FREEZE = 2,   /* Pose.opts: the host's sess
        OPT_ALL = 255 };
 enum { OPT2_EXTRA_OBJECTS = 1,          /* Pose.opts2 (protocol 33): extra item boxes and blue herb planters (pc/glue/extras_glue.c) */
        OPT2_HEADSHOTS = 2,              /* (protocol 41) third person "Headshots & Piercing": rifle head damage, head bursts, piercing (tps_glue.c) */
-       OPT2_OWNERSHIP = 4,              /* (protocol 46, prototype) engaged-player enemy ownership: common enemies run in
-                                           the game of the player they are engaged with (coop_glue.c "Phase 3") */
+       OPT2_OWNERSHIP = 4,              /* (protocol 46) "Shared Enemy Control", engaged-player enemy ownership: common enemies
+                                           run in the game of the player they are engaged with (coop_glue.c "Phase 3") */
        OPT2_ALL = 7 };
 enum { BUSY_NONE, BUSY_EVENT, BUSY_MENU, BUSY_BOX, BUSY_TRADE };
 enum { MSET_OWN = -1, MSET_ROOM = -2, MSET_NONE = -3 };

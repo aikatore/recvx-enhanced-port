@@ -921,12 +921,12 @@ enum { R_MODE, R_HOSTSTEP, R_JOINSTEP,
        R_SERVER, R_PORT, R_ADDR, R_PW, R_RELAY,
        R_NAME, R_CHARMODE, R_CHAR, R_CHAR2,
        R_START, R_ITEMS, R_FOLLOW, R_RULES,
-       R_BIORAND, R_LOOT, R_IMP, R_TFREEZE, R_SKIPS, R_RIBBON, R_GOVER, R_HEADSHOT, R_ENEMYPG, R_EVENTPG,
+       R_BIORAND, R_LOOT, R_IMP, R_TFREEZE, R_SKIPS, R_RIBBON, R_GOVER, R_HEADSHOT, R_ENEMYCTL, R_ENEMYPG, R_EVENTPG,
        R_RAND, R_VARIETY, R_RATES, R_TYPES, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTENEMY, R_CASTECUSTOM, R_CASTASSIGN, R_CASTIMP,
        R_VOICES, R_MOUTHS, R_QUICK, R_DETECTOR, R_EXTRAOBJ,
        R_HOST, R_GO, R_COPY, R_RCOPY, R_KICK, R_STOP, R_JOIN,
        R_BACK, R_N };
-static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
                                               5, 5, 5, 5, 5, 5, 5, 6 };
 _Static_assert(sizeof(row_group) == R_N, "row_group");
 enum { F_NONE, F_NAME, F_ADDR, F_PORT, F_SEED, F_SERVER, F_PW };
@@ -972,7 +972,7 @@ static int row_visible(int r)
     if (r == R_VARIETY || r == R_EVENTS || r == R_TYPES) return lb.step == 4 && shown_eo()->rand;   /* only the randomizer has them */
     if (r == R_RATES) return lb.step == 4 && shown_eo()->rand && shown_eo()->variety == 2;   /* ... and Custom its rates */
     if (r == R_BIORAND) return lb.step == 3 && (host ? biorand_pack() : coop_biorand() == 1);   /* the host has a pack; a guest sees it while it is on */
-    if (lb.step == 3) return r == R_GOVER || r == R_HEADSHOT || r == R_ENEMYPG || r == R_EVENTPG || ((r == R_LOOT || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON) && host) ||
+    if (lb.step == 3) return r == R_GOVER || r == R_HEADSHOT || r == R_ENEMYCTL || r == R_ENEMYPG || r == R_EVENTPG || ((r == R_LOOT || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON) && host) ||
                              (r == R_IMP && host && !g_coop.loot);   /* only shared loot has it */
     if (lb.step == 4) return (r >= R_RAND && r <= R_PLACE && (r != R_RSEED || host)) || r == R_CASTPG;
     if (lb.step == 7)   /* the cutscene cast: its model and assignment rows while it is on; the imported models' while we have some */
@@ -1002,7 +1002,7 @@ static int row_visible(int r)
 static int row_locked(int r)
 {
     switch (r) {
-    case R_MODE: case R_PORT: case R_LOOT: case R_IMP: case R_ADDR: case R_RELAY: case R_SERVER: case R_PW: return session_on();
+    case R_MODE: case R_PORT: case R_LOOT: case R_IMP: case R_ENEMYCTL: case R_ADDR: case R_RELAY: case R_SERVER: case R_PW: return session_on();
     case R_HOSTSTEP: return joining();
     case R_JOINSTEP: return hosting();
     case R_GOVER: case R_HEADSHOT: case R_QUICK: case R_DETECTOR: case R_EXTRAOBJ: case R_EXTRA: case R_PLACE: case R_RAND: case R_VARIETY: case R_TYPES: case R_EVENTS: case R_SEED: case R_BIORAND:
@@ -1142,6 +1142,7 @@ static void change(int r, int dir)
     case R_SKIPS: g_coop.skip_sync ^= 1; break;
     case R_GOVER: g_coop.gameover_both ^= 1; break;
     case R_HEADSHOT: settings_step(eset(&g_tps.headshots), dir); break;   /* the THIRD PERSON setting */
+    case R_ENEMYCTL: g_coop.shared_enemies ^= 1; break;
     case R_QUICK: g_coop.quick_start ^= 1; break;
     case R_BIORAND: if (!biorand_toggle()) { say(biorand_locked()); CallSystemSe(0, 1); return; } break;
     case R_DETECTOR: g_coop.skip_detector ^= 1; break;
@@ -1172,7 +1173,7 @@ static void change(int r, int dir)
 
 static int has_value(int r)
 {
-    return r == R_MODE || r == R_RELAY || r == R_BIORAND || r == R_LOOT || r == R_IMP || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON || r == R_GOVER || r == R_HEADSHOT || r == R_QUICK || r == R_DETECTOR || r == R_EXTRAOBJ || r == R_START || r == R_ITEMS || r == R_FOLLOW || r == R_CHARMODE ||
+    return r == R_MODE || r == R_RELAY || r == R_BIORAND || r == R_LOOT || r == R_IMP || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON || r == R_GOVER || r == R_HEADSHOT || r == R_ENEMYCTL || r == R_QUICK || r == R_DETECTOR || r == R_EXTRAOBJ || r == R_START || r == R_ITEMS || r == R_FOLLOW || r == R_CHARMODE ||
            r == R_EXTRA || r == R_PLACE || r == R_RAND || r == R_VARIETY || r == R_TYPES || r == R_EVENTS || r == R_CAST || r == R_CASTPOOL || r == R_CASTENEMY || r == R_CASTASSIGN || r == R_CASTIMP ||
            r == R_VOICES || r == R_MOUTHS;
 }
@@ -1412,6 +1413,7 @@ static void row_text(int r, char* label, char* val, int n)
     case R_SKIPS: strcpy(label, "CUTSCENE SKIP"); snprintf(val, n, "%s", g_coop.skip_sync ? "Together" : "Separately"); break;
     case R_GOVER: strcpy(label, "GAME OVER"); snprintf(val, n, "%s", (lb.role ? coop_host_gameover_both() : g_coop.gameover_both) ? "Both" : "Each player"); break;
     case R_HEADSHOT: strcpy(label, "HEADSHOTS"); snprintf(val, n, "%s", (lb.role ? coop_headshots() : g_tps.headshots) ? "On" : "Off"); break;
+    case R_ENEMYCTL: strcpy(label, "SHARED ENEMY CONTROL"); snprintf(val, n, "%s", (lb.role ? coop_shared_enemies() : g_coop.shared_enemies) ? "On" : "Off"); break;
     case R_BIORAND: strcpy(label, "BIORAND"); snprintf(val, n, tr((lb.role ? coop_biorand() == 1 : biorand_setting()) && biorand_seed_text()[0] ? "On (%s)" : "%s"),
                                                        (lb.role ? coop_biorand() == 1 : biorand_setting()) ? biorand_seed_text()[0] ? biorand_seed_text() : "On" : "Off"); break;
     case R_QUICK: strcpy(label, "QUICK START"); snprintf(val, n, "%s", (lb.role ? coop_quick_start() : g_coop.quick_start) ? "On" : "Off"); break;
@@ -1513,6 +1515,7 @@ static const char* row_help(int r)
     case R_SKIPS: return "Together skips shared cutscenes when both players choose to skip. Separately lets either player skip alone.";
     case R_RIBBON: return "Not Needed lets both players save at typewriters without using ink ribbons.";
     case R_HEADSHOT: return eset(&g_tps.headshots)->help;
+    case R_ENEMYCTL: return eset(&g_coop.shared_enemies)->help;
     case R_GOVER: return "Each Player retries alone. Both lets the host retry or return to the title screen for both players.";
     case R_EXTRA: return eset(&g_enemy_opts.extra)->help;
     case R_PLACE: return eset(&g_enemy_opts.place)->help;

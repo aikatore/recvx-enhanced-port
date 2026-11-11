@@ -75,6 +75,8 @@ typedef struct CoopState {
     int gameover_both;              /* game over: 0 each player alone, 1 both (the host's CONTINUE / NO decides; ini coop_gameover) */
     int skip_detector;              /* the prison's metal detector (0/9) never goes off, its empty security boxes rest (ini coop_skip_detector) */
     int quick_start;                /* a new game starts with the manual read and the knife in the bag (ini coop_quick_start) */
+    int shared_enemies;             /* "Shared Enemy Control": each common enemy runs in the game of the player fighting it
+                                       (OPT2_OWNERSHIP, coop_glue.c "Phase 3"; ini coop_shared_enemies; RECVX_COOP_OWNERSHIP overrides) */
     int hide_ip;                    /* Hide IP addresses (ini hide_ip): on screen masked, coop_shown */
 } CoopState;
 /* the session's "Metal detector: Skipped" rule (OPT_SKIP_DETECTOR): hosting our skip_detector, joining the host's (coop_glue.c) */
@@ -85,6 +87,8 @@ int coop_quick_start(void);
 int coop_extra_objects(void);
 /* the session's "Headshots & Piercing" rule (OPT2_HEADSHOTS): hosting our setting, joining the host's (coop_glue.c) */
 int coop_headshots(void);
+/* the session's "Shared Enemy Control" rule (OPT2_OWNERSHIP): hosting our setting (or RECVX_COOP_OWNERSHIP), joining the host's */
+int coop_shared_enemies(void);
 /* Hide IP addresses: every address shown on screen goes through here. With hide_ip on, the
    text with its IPv4 addresses and the join and co-op server host names masked (net_mask_addrs),
    else text itself. A ring of 4 buffers per thread (lobby_io.c). Input fields mask as passwords. */
