@@ -893,6 +893,16 @@ void srv_input(const RdvAddr* from, const uint8_t* buf, int n, uint64_t now)
     }
 }
 
+void srv_pause(uint64_t ms, uint64_t now)   /* the time-outs of hosts and joiners move by ms (at most to now) */
+{
+    int i, k;
+    for (i = 0; i < cfg.max_rooms; i++)
+        for (k = 0; k < 2 && rooms[i].id; k++) {
+            uint64_t* t = &rooms[i].m[k].last_ms;
+            *t = *t + ms < now ? *t + ms : now;
+        }
+}
+
 void srv_tick(uint64_t now)
 {
     uint64_t to = cfg.room_timeout_s * 1000ull;

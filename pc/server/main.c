@@ -26,7 +26,7 @@
 #ifndef RECVX_RELEASE
 #define RECVX_RELEASE RECVX_VERSION
 #endif
-#define CTL_TIMEOUT_MS 10000
+#define CTL_TIMEOUT_MS 3000   /* a handover stops reading UDP for at most this: well below member_timeout (>= 6 s) */
 
 static int socks[SRV_LISTEN_MAX], nsocks;
 static int ctl = -1, conn = -1;     /* the control socket (listening); the one connection being read */
@@ -582,6 +582,7 @@ static int take_over(SrvConfig* c)
     cpu_base[1] = srv_proc.cpu_sys_s;
     if (srv_proc.start_ms > now_ms()) srv_proc.start_ms = now_ms();   /* (a start ahead of the clock: invalid) */
     srv_proc.handovers++;
+    srv_pause(now_ms() - (deadline - CTL_TIMEOUT_MS), now_ms());   /* UDP was not read since (at most) the connect */
     notify("READY=1", 0);
     srv_logf("recvx-server: took over from pid %d (%s): %u rooms, state format %u", (int)old, h.version, srv_stats()->rooms, fmt);
     rc = 0;
@@ -689,7 +690,11 @@ int main(int argc, char** argv)
                     srv_input(&from, buf, n > RDV_DGRAM_MAX ? RDV_DGRAM_MAX + 1 : n, now_ms());
                 }
             }
-            if (pc >= 0 && p[pc].revents && ctl_input()) { handed = 1; break; }
+            if (pc >= 0 && p[pc].revents) {
+                uint64_t t = now_ms();
+                if (ctl_input()) { handed = 1; break; }
+                srv_pause(now_ms() - t, now_ms());   /* a refused handover: UDP was not read meanwhile */
+            }
             if (pl >= 0 && p[pl].revents) ctl_accept();
         }
         now = now_ms();

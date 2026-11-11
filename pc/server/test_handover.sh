@@ -21,7 +21,7 @@ alive() { s=$(ps -o stat= -p "$1" 2>/dev/null); [ -n "$s" ] && [ "${s#Z}" = "$s"
 bad() { echo "FAIL $1"; fails=$((fails + 1)); }
 code_of() { for i in $(seq 1 25); do c=$(sed -n 's/.*rdv: room \([A-Z0-9-]*\).*/\1/p' "$1" | head -1); [ -n "$c" ] && { echo "$c"; return; }; sleep 0.2; done; }
 ctl=$tmp/control.sock
-p2=$((port + 2)); ctl_s=10   # main.c CTL_TIMEOUT_MS
+p2=$((port + 2)); ctl_s=3   # main.c CTL_TIMEOUT_MS
 cleanup() { kill $notifier $pids 2>/dev/null; pkill -f "recvx-server.*--port ($port|$p2)" 2>/dev/null; rm -rf "$tmp"; }
 trap cleanup EXIT
 
@@ -193,6 +193,7 @@ kill $holder; sleep 0.3
 "$bin/recvx-client" 127.0.0.1:$p2 status-json | grep -q '"draining":false' && ok "the busy --drain was not carried out later" || bad "a busy --drain was carried out"
 take_over t2 $((ctl_s + 1)) && [ $r -ne 0 ] && ok "systemd slower than the time-out: no \"ok\", the old server goes on" || bad "a slow systemd barrier"
 take_over t3 $((ctl_s + 1)) $s6 && [ $r -eq 0 ] && ok "the old server frozen after \"ok\" past the time-out: the new one serves" || bad "the old server frozen after ok"
+alive $s6 && { bad "the old server still runs"; kill $s6; }
 wait $s6; [ $? -eq 0 ] && ok "the old server exited 0" || bad "the old server's exit"
 kill $new2 2>/dev/null
 exit $fails

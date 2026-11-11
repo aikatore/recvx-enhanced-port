@@ -916,6 +916,14 @@ static void test_state(void)
     srv_input(&j, b, relay(b, room.room_id, in.token, "after"), now);
     CHECK(nsent == 1 && !memcmp(&sent[0].to, &h, sizeof(h)));   /* the joiner's relay frames reach the host */
     CHECK(srv_status_json(js, sizeof(js), now) > 0 && !strstr(js, room.code) && strstr(js, "\"rooms\":1,") && strstr(js, "\"path\":\"relay\""));
+    srv_pause(1000000, now);   /* a pause (a handover, UDP not read) never moves a time-out past now ... */
+    now += 9000; srv_tick(now);
+    CHECK(srv_stats()->members == 1);
+    srv_pause(9000, now);      /* ... and is not the joiner's silence: 18 s, 9 of them paused */
+    now += 9000; srv_tick(now);
+    CHECK(srv_stats()->members == 1);
+    now += 2000; srv_tick(now);
+    CHECK(srv_stats()->members == 0 && srv_stats()->rooms == 1);
     for (i = 0; i < n; i += 1 + (i > 64) * 7) { CHECK(srv_init(&c, cap)); CHECK(srv_state_import(blob, i, &c, 1) != 0); }
     CHECK(srv_init(&c, cap));
     CHECK(srv_state_import(blob, n, &c, 0) == -1);   /* an address on a socket that did not come along */
