@@ -948,6 +948,7 @@ static unsigned short own_wait[PC_ENE_SLOTS];    /* host: the guest's frames in 
 static unsigned int snap_at[PC_ENE_SLOTS];       /* guest: our frame at which the slot last took the host's state */
 static unsigned int pose_seq[PC_ENE_SLOTS];       /* guest: the host frame of the slot's last snapshot */
 static unsigned char step_ran[PC_ENE_SLOTS];      /* the slot's last step ran its AI here (else a puppet's) */
+static unsigned char gave_grab[PC_ENE_SLOTS];     /* its step here just handed its grab of the stand-in over (grab_out) */
 static CoopXfer estate_x;               /* EV_ESTATE chunks into estate[] */
 static unsigned short xfer_tid;         /* our last transfer id (blob, estate) */
 static void queue_event(Event* e);
@@ -1317,6 +1318,10 @@ static void grab_out(int i, BH_PWORK* ep)
     e.u.gr.exp1_b = *(int*)(exp_save + 128); e.u.gr.exp1_a = *(int*)p2.plhdw;
     queue_event(&e);
     own_set(i, 0);   /* (the host: owned[i] 1; Phase 3, a guest's zombie that grabs the host's stand-in: 0) */
+    /* its steps run in the partner's game now: the hold bit our copy keeps is the stand-in's. Counted as fresh (grips_us: its
+       last step ran here), the guest's copy ran on as well while another zombie of its set held the guest (65-105 frames) */
+    gave_grab[i] = 1;
+    if (c < PC_ENE_SLOTS) gave_grab[c] = 1;
     own_grab[i] = 1;
     own_t[i] = frame_no;
     owned_child[i] = c;
@@ -2573,7 +2578,8 @@ void pc_enemy_watch(BH_PWORK* ep, int i, int ran)
     int s[6] = { *(int*)&ep->mode0, (int)ep->mtn_no, ep->frm_no, 0, 0, ep->hp };
     memcpy(&s[3], &ep->px, 4); memcpy(&s[4], &ep->pz, 4);
     if (i < 0 || i >= PC_ENE_SLOTS) return;
-    step_ran[i] = ran;
+    step_ran[i] = ran && !gave_grab[i];   /* (grab_out: from now on its steps are the partner's) */
+    if (!ran || we_run(i)) gave_grab[i] = 0;
     enemy_trace(ep, i, ran);
     if (frozen) { watch[i].still = 0; return; }   /* the trade screen holds it */
     if (memcmp(s, watch[i].sig, sizeof(s))) { memcpy(watch[i].sig, s, sizeof(s)); watch[i].still = 0; return; }
