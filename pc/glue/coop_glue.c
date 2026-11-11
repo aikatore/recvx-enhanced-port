@@ -962,9 +962,10 @@ void pc_enemy_holds(BH_PWORK* pl, BH_PWORK* by);   /* eneset.c */
    in one burst), a grab it starts on the other player's stand-in goes over as the host's zombie grabs always did
    (grab_out / grab_in, now either way). Only the runner hands an enemy over, so there is one runner at a time. */
 static int peer_opts;                   /* (defined with the game rules below) */
-#define P3_GIVE 8                       /* frames in a row the runner prefers the partner before it hands the enemy over */
-#define P3_HOLD 45                      /* frames after a change of hands before the next one (no flapping) */
-#define P3_HIT 150                      /* frames (5 s) a player's hit counts as being engaged with the enemy */
+/* the policy's constants (test aid RECVX_COOP_P3="give,hold,hit" on both sides overrides them: the tuning runs) */
+static int P3_GIVE = 8;                 /* frames in a row the runner prefers the partner before it hands the enemy over */
+static int P3_HOLD = 45;                /* frames after a change of hands before the next one (no flapping) */
+static int P3_HIT = 150;                /* frames (5 s) a player's hit counts as being engaged with the enemy */
 static unsigned char own_grab[PC_ENE_SLOTS];     /* the slot changed hands for a grab, still running in the runner's game */
 static unsigned char p3_want[PC_ENE_SLOTS];      /* frames in a row we would hand it to the partner */
 static unsigned int own_t[PC_ENE_SLOTS];         /* our frame of its last change of hands */
@@ -2076,6 +2077,9 @@ static void p3_apply(const Event* e)
 static void p3_frame(void)
 {
     int i, leaving, budget = ring.next - ring.head < COOP_RING / 2 ? 2 : 0;   /* hand-overs per frame (each ~51 events) */
+    static int tuned;
+    if (!tuned++ && getenv("RECVX_COOP_P3") && sscanf(getenv("RECVX_COOP_P3"), "%d,%d,%d", &P3_GIVE, &P3_HOLD, &P3_HIT) == 3)
+        host_log("coop: p3: test: give %d, hold %d, hit %d\n", P3_GIVE, P3_HOLD, P3_HIT);
     if (!p3_on() || !sys || !plp) return;
     if (!is_host && have_rx && (rx.flags & PF_IN_GAME) && !partner_here()) {   /* the host plays in another room: its game took them back */
         for (i = 0; i < PC_ENE_SLOTS; i++)
