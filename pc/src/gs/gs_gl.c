@@ -1199,7 +1199,7 @@ typedef struct { uint64_t tex0, texa; uint32_t epoch, gen; int rt; uint32_t fbp,
 static TexMemo memo[MEMO_SIZE];
 static uint32_t memo_gen = 1;
 #define MAX_RELOADS 8
-typedef struct { uint32_t epoch, fbp; int pw, ph, applied; GLuint tex, fbo; int tw, th; } Reload;
+typedef struct { uint32_t epoch, fbp; int pw, ph, applied, zrow; GLuint tex, fbo; int tw, th; } Reload;   /* zrow: the target's after the reload */
 static Reload reloads[MAX_RELOADS];
 static int nreloads;
 static void blit_color(GLuint src_fbo, GLuint dst_fbo, int w, int h);
@@ -1229,6 +1229,35 @@ static TexMemo* memo_slot(uint64_t tex0, uint64_t texa, uint32_t epoch, int crea
 }
 /* the memo's render target is still in its slot (not evicted and reused for another one) */
 static int memo_rt_ok(const TexMemo* m) { return rts[m->rt].used && rts[m->rt].fbp == m->fbp && rts[m->rt].fbw == m->fbw; }
+/* RECVX_ZROW_CHECK=1 (test aid): before each whole-target clear, and after a replay puts back a
+   reload, the rows that the target's (and before a clear its depth's) zrow say are 0 are read back;
+   a row holding anything else is logged ("zrow: ... not 0"). =2: also the draw target reloaded
+   from GS memory at the draw after each executed frame's whole-target clear (the pictures change),
+   so replays put back reloads (clear, reload, clear) */
+static int zrow_check(void)
+{
+    static int on = -1;
+    if (on < 0) on = SDL_getenv("RECVX_ZROW_CHECK") ? SDL_atoi(SDL_getenv("RECVX_ZROW_CHECK")) : 0;
+    return on;
+}
+static void zrow_verify(int depth)
+{
+    if (!zrow_check()) return;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, cur_rt->fbo);
+    for (int d = 0; d <= depth; d++) {
+        int z = d ? dz[dz_cur].zrow : cur_rt->zrow, y0 = (int)ceilf(z * g_scale), n = cur_rt->ph - y0, c = d ? 1 : 4;
+        size_t cnt = (size_t)cur_rt->pw * (n > 0 ? n : 0) * c, i = 0;
+        float* px;
+        if (!cnt || !(px = malloc(cnt * sizeof(float)))) continue;
+        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        glReadPixels(0, y0, cur_rt->pw, n, d ? GL_DEPTH_COMPONENT : GL_RGBA, GL_FLOAT, px);
+        while (i < cnt && px[i] == 0.0f) i++;
+        if (i < cnt)
+            host_log("zrow: FBP %u %s row %d not 0 (zrow %d, %s frame %llu)\n", cur_rt->fbp, d ? "depth" : "colour",
+                     y0 + (int)(i / c / (size_t)cur_rt->pw), z, gs_replaying ? "replay" : "executed", (unsigned long long)frame_no);
+        free(px);
+    }
+}
 /* executed frame: a render target was reloaded from GS memory for a draw in this epoch */
 static void reload_record(const RenderTarget* rt, uint32_t epoch)
 {
@@ -1237,7 +1266,7 @@ static void reload_record(const RenderTarget* rt, uint32_t epoch)
     r = &reloads[nreloads++];
     ensure_target(&r->tex, &r->fbo, &r->tw, &r->th, rt->pw, rt->ph);
     blit_color(rt->fbo, r->fbo, rt->pw, rt->ph);
-    r->epoch = epoch; r->fbp = rt->fbp; r->pw = rt->pw; r->ph = rt->ph; r->applied = 0;
+    r->epoch = epoch; r->fbp = rt->fbp; r->pw = rt->pw; r->ph = rt->ph; r->applied = 0; r->zrow = rt->zrow;
 }
 /* replay: put back what the executed frame reloaded up to this point */
 static void reload_replay(RenderTarget* rt, uint32_t epoch)
@@ -1246,7 +1275,9 @@ static void reload_replay(RenderTarget* rt, uint32_t epoch)
         Reload* r = &reloads[i];
         if (r->applied || r->fbp != rt->fbp || r->epoch > epoch || r->pw != rt->pw || r->ph != rt->ph) continue;
         blit_color(r->fbo, rt->fbo, rt->pw, rt->ph);
+        if (r->zrow > rt->zrow) rt->zrow = r->zrow;   /* (the image's rows above it are not known to be 0) */
         r->applied = 1;
+        zrow_verify(0);   /* (rt is cur_rt: gs_flush) */
     }
 }
 /* the display target as the frame found it: PS2_swap blends the new image over it, so a
@@ -1445,6 +1476,7 @@ static int fast_clear(const DrawState* st, int tme)
         if (keep1 > cur_rt->ph) keep1 = cur_rt->ph;
         full = bx0 == 0 && by0 == 0 && bx1 >= cur_rt->pw && keep1 - keep0 <= (int)(32 * g_scale) && !ab_off(8);
     }
+    if (full) zrow_verify(!zmsk);
     if (full && keep1 > keep0) {
         int kw = keep.pw, kh = keep.ph;
         ensure_target(&keep.tex, &keep.fbo, &keep.pw, &keep.ph, cur_rt->pw, (int)(32 * g_scale) + 1);
@@ -1477,6 +1509,7 @@ static int fast_clear(const DrawState* st, int tme)
         glEnable(GL_SCISSOR_TEST);
         if (fpsm != PSMCT24 && keep1 <= keep0) cur_rt->zrow = 0;   /* (alpha masked: only the rows that were 0 are known) */
         if (!zmsk && keep1 <= keep0) dz[dz_cur].zrow = 0;
+        if (zrow_check() == 2 && !gs_replaying) cur_rt->stale = 1;
     }
     gt_cnt[0]++;
     return 1;
