@@ -994,11 +994,17 @@ unsigned int tps_pad(unsigned int pad)
     {   /* a movement key held as a sub-screen (inventory, item box, files, map, save screen) or the trade screen opens
            or closes counts for neither until let go: no cursor step as it opens, no step forward as it closes. The
            sub-screens' own bits (system.c bhCheckSubTask: status 0x8, map 0x40000, computer, typewriter, option), not
-           ts_flg 0x80 (no 3D scene), which a door, a room load or a movie also set (W held through a door stopped in the new room) */
+           ts_flg 0x80 (no 3D scene), which a door, a room load or a movie also set (W held through a door stopped in the new room).
+           As it closes: only a key held since the last button press (the one that closed it; not run) or since it opened,
+           not one pressed during its closing animation (the bits clear as it ends) or as control comes back */
         static int was;
-        static unsigned stale;
+        static unsigned stale, used, btn_was;
         int sub = (sys->st_flg & 0x1C040008) || pc_trade_screen();
-        if (sub != was) stale = k & (TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT);
+        unsigned btn = (pad & 0xFB00) << 16 | (k & (TPS_K_ACTION | TPS_K_FIRE | TPS_K_CANCEL | TPS_K_STATUS | TPS_K_MAP | TPS_K_OPTIONS));
+        if ((btn & ~btn_was) || (sub && !was)) used = k & (TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT);
+        btn_was = btn;
+        used &= k;
+        if (sub != was) stale = used;
         was = sub;
         stale &= k;
         k &= ~stale;
