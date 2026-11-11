@@ -261,8 +261,9 @@ target_compile_options(test_ntex PRIVATE -std=gnu11)
 add_test(NAME ntex COMMAND test_ntex)
 
 # GS memory (pc/src/gs/gs_mem.c): texture decodes and CLUT loads against per-pixel reads
+# (it #includes gs_mem.c: built with the game's flags for it, -O3 as above)
 add_executable(test_gsmem tests/test_gsmem.c)
-target_compile_options(test_gsmem PRIVATE -std=gnu11 -fno-strict-aliasing -fwrapv)
+target_compile_options(test_gsmem PRIVATE -std=gnu11 -fno-strict-aliasing -fwrapv -ffp-contract=off -msse2 -mfpmath=sse -O3)
 target_include_directories(test_gsmem PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/sdk ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME gsmem COMMAND test_gsmem)
 
