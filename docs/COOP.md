@@ -1710,6 +1710,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_KICK=n` | Host: "Remove Partner" at frame n. |
 | `RECVX_COOP_BYE_GRABBED=n` | Joiner: Disconnect n frames into a zombie grab it runs. |
 | `RECVX_COOP_KILL="hostframe:slot,..."` | A lethal hit on our enemy in that slot. |
+| `RECVX_COOP_ALIVE="hostframe,..."` | Log the room's living, shown enemies (slot:type) and how many `ed_flg` bits are set. |
 | `RECVX_COOP_WARP="hostframe:x:z,..."` | Both players to x/z at that host frame. |
 | `RECVX_COOP_VOMIT="hostframe,..."` | Host: the walking zombie nearest the partner vomits. |
 | `RECVX_COOP_CRAWL="hostframe,..."` | Host: its walking zombies become crawlers (as a knock-down with little health left), which crawl towards their target and grab its legs. |
@@ -1773,6 +1774,12 @@ holds its room file read (its room data cleared that long). It fails unless the 
 joiner's room is set up and is then handled in 6/10, and neither side crashes. With `RECVX_BIORAND_MODS` (a mods
 folder with a BioRand pack with random doors in `biorand/`) also the reported case: the host kills Nosferatu in 6/10
 with its read held, and the joiner's entry block of 7/24 waits for the host's room.
+
+`pc/tools/coop_gone_check.sh OUT [PORT]` (the same needs, about three minutes): a new game in 0/6 with two extra enemies
+(the host's `enemy_extra`), the joiner with `coop_follow = 0`; three pairs at once. A: the host goes to 0/7, the joiner
+kills a zombie record and an extra, then leaves too; the host comes back, then the joiner. B: the same, but the joiner
+stays until the host is back (`EV_GONE`). C: the host kills them while the joiner is in 0/7, and the joiner comes back
+alone. It fails unless the killed ones stay dead on both sides and both see the same enemies in the same slots.
 
 `pc/tools/coop_passage_check.sh OUT [PORT] [host|guest]` (the same needs, about two minutes): in the palace's passage
 to the residence (1/10) the watcher (default the host) examines the trigger at the foot of the stairs, whose scene
