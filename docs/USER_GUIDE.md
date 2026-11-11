@@ -297,9 +297,9 @@ until the right square on the white strip is.
 | Import Memory Card Saves | | copies the card's saves into save files |
 | Free Typewriter Saves | Off | typewriters save without an ink ribbon |
 | Extra Item Boxes and Herbs | Off | four more item boxes and eight blue herb planters in some rooms (helps with the randomizers); in co-op the host's |
-| Extra Enemies | Off | up to 1..8 more per room (one per enemy at most): copies of its enemies, or with Types per Room in Wild or Custom kinds the room lacks |
+| Extra Enemies | Off | up to 1..8 more enemies in every room that has enemies (not in boss rooms, save rooms or the Battle Game), anywhere on the floor but never within 3 m of a door or where you come in, nor at items or typewriters. Fewer where a small room has no more room. With the Enemy Randomizer they follow its selection, rates and Types per Room; without it they are more of the room's own enemies. Killed ones stay dead, also in your saves |
 | Rearranged Enemies | Off | free-roaming enemies start elsewhere in their room |
-| Enemy Randomizer | Off | enemies become other kinds; bosses stay |
+| Enemy Randomizer | Off | enemies become other kinds; bosses stay. Enemies a scene needs keep their kind, some only on the first visit (the Bandersnatches that climb into the palace's outer courtyard change on later visits) |
 | Enemy Selection | Wild | Wild: any kind that fits. Mild: two common kinds per room. Custom: your rate (Off, 1..10) for each kind, set in Enemy Rates (below); picking Wild or Mild presets them |
 | Enemy Rates | | with Custom, right under Enemy Selection: opens the list of rates. The same list is on the BIORAND screen's RANDOMIZER page, in the co-op lobby and in F1 |
 | Types per Room | No Limit | Wild and Custom aim for that many different kinds of enemies in a room (1..8) as far as its enemies allow; Mild stays under it |

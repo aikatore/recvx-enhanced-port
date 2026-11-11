@@ -128,7 +128,8 @@ static void test_events(void)
     BAD(EV_FLAGS, 0, e->u.fl.n = 0);
     BAD(EV_FLAGS, 0, e->u.fl.n = 7);
     BAD(EV_FLAGS, 0, e->u.fl.n = 255);
-    BAD(EV_FLAGS, 0, e->u.fl.word[1] = 120);
+    BAD(EV_FLAGS, 0, e->u.fl.word[1] = 120 + ENEMY_XDEAD_WORDS);   /* (120..: the extras' dead flags) */
+    { Event e = ev(EV_FLAGS); e.u.fl.word[1] = 120 + ENEMY_XDEAD_WORDS - 1; CHECK(coop_check_event(&e, 0) == COOP_OK); }
     BAD(EV_FLAGS, 1, e->u.fl.word[0] = 255);
     BAD(EV_PICKUP, 0, e->u.pk.item = 156);
     BAD(EV_PICKUP, 0, e->u.pk.bit = 512);
@@ -262,9 +263,9 @@ static void test_events(void)
     BAD(EV_BOX, 1, e->u.bx.w[0] = 5 << 16 | 0xFFFF);
     BAD(EV_SPAWN, 1, e->idx = 255);
     BAD(EV_SPAWN, 1, e->u.sp.pz = NAN);
-    BAD(EV_SPAWN, 1, e->u.sp.dead = 511);   /* an extra enemy's dead flag: 0 (none) or ed_flg 512..1023 */
-    BAD(EV_SPAWN, 1, e->u.sp.dead = 1024);
-    { Event e = ev(EV_SPAWN); e.u.sp.dead = 1023; CHECK(coop_check_event(&e, 1) == COOP_OK); }
+    BAD(EV_SPAWN, 1, e->u.sp.dead = ENEMY_XDEAD_BASE - 1);   /* an extra enemy's dead flag: 0 (none) or ENEMY_XDEAD_BASE + its bit */
+    BAD(EV_SPAWN, 1, e->u.sp.dead = ENEMY_XDEAD_BASE + ENEMY_XDEAD_WORDS * 32);
+    { Event e = ev(EV_SPAWN); e.u.sp.dead = ENEMY_XDEAD_BASE + ENEMY_XDEAD_WORDS * 32 - 1; CHECK(coop_check_event(&e, 1) == COOP_OK); }
     BAD(EV_EOPTS, 1, e->u.eo.extra = ENEMY_EXTRA_MAX + 1);
     BAD(EV_EOPTS, 1, e->u.eo.seed = -1);
     BAD(EV_EOPTS, 1, e->u.eo.rand = 2);
@@ -990,7 +991,7 @@ static int sane(const Event* e)
     if (e->type == 0 || e->type >= EV_TYPES) return 0;
     if (e->type == EV_ENE_HIT) for (k = 0; k < 6; k++) if (e->u.eh.jnt[k] < -1 || e->u.eh.jnt[k] > 63) return 0;
     if (e->type == EV_PICKUP && (e->u.pk.undo > 1 || e->u.pk.bit < -1 || e->u.pk.bit >= 512)) return 0;
-    if (e->type == EV_FLAGS) { if (e->u.fl.n > 6) return 0; for (k = 0; k < e->u.fl.n; k++) if (e->u.fl.word[k] >= 120) return 0; }
+    if (e->type == EV_FLAGS) { if (e->u.fl.n > 6) return 0; for (k = 0; k < e->u.fl.n; k++) if (e->u.fl.word[k] >= 120 + ENEMY_XDEAD_WORDS) return 0; }
     if (e->type == EV_BLOB || e->type == EV_ESTATE || e->type == EV_OWN) if (e->u.blob.len > 64 || e->u.blob.off + e->u.blob.len > e->u.blob.total || e->u.blob.pad > (e->type == EV_BLOB ? 2 : 1)) return 0;
     if (e->type == EV_OWN && e->u.blob.total != COOP_OWN_SIZE) return 0;
     if (e->type == EV_TRIG && (e->u.tr.n > COOP_TRIG_OPS || e->u.tr.bit >= 1024)) return 0;

@@ -6,14 +6,15 @@
 extern "C" {
 #endif
 
-#define ENEMY_EXTRA_MAX 8       /* "Extra Enemies": one per eligible record at most (its dead flag, ed_flg 512 + kill bit); the most
-                                   eligible records of a retail room is 7 (RM_5680) */
+#define ENEMY_EXTRA_MAX 8       /* "Extra Enemies": up to this many per room, each with a dead flag of its own (enemy_xdead_word) */
+#define ENEMY_XDEAD_WORDS 41    /* the extras' dead flags: save-region words (sys->itm 302..319, 360..382), a bit per room and extra */
+#define ENEMY_XDEAD_BASE 1024   /* SpawnNote.dead of an extra enemy: this + its dead flag's bit */
 #define ENEMY_TYPES_MAX 8       /* "Types per Room": 1..8, 0 no limit */
 #define ENEMY_RATE_MAX 10       /* a kind's rate under "Custom": 0 (Off) .. 10 */
 #define ENEMY_RATE_N 32         /* EnemyOpts.rate: the base kinds (enemy_rate_*), then the enemy variants by variant_at index
                                    (EnemyOpts fills Event's union, coop_proto.h: 88 bytes) */
 typedef struct EnemyOpts {
-    int extra;                  /* 0 off, 1..ENEMY_EXTRA_MAX: up to that many extra enemies per room (types the room has) */
+    int extra;                  /* 0 off, 1..ENEMY_EXTRA_MAX: up to that many extra enemies per room */
     int place;                  /* 1: rearranged placements */
     int rand;                   /* 1: enemy randomizer */
     int seed;                   /* placements and randomizer (0..2^31-1) */
@@ -54,8 +55,8 @@ typedef struct SpawnNote {
     float px, py, pz;
     short ay;
     unsigned short variant;     /* an enemy variant's id (pc/src/host/variants.h; 0: the type itself) */
-    unsigned short dead;        /* an extra enemy's dead flag (ed_flg 512..1023; 0: none, or an older host): the guest sets it
-                                   too when the enemy dies in its game (in what was the event's padding: the protocol is unchanged) */
+    unsigned short dead;        /* an extra enemy's dead flag (ENEMY_XDEAD_BASE + its bit; 0: none): the guest sets it too when
+                                   the enemy dies in its game */
 } SpawnNote;
 #define SPAWN_NOTE_KEPT 1
 
@@ -79,6 +80,7 @@ void spawn_pending(int run);                    /* guest, every co-op frame (0: 
 void enemy_rand_kept(int room, int rec, int id); /* guest: the host's randomizer kept that record (SPAWN_NOTE_KEPT) */
 void coop_rand_kept(int rec, const SpawnNote* n);   /* coop_glue.c, host: this room load's randomizer kept record rec */
 void enemy_extra_note(int slot, const SpawnNote* n);   /* guest: the host's added enemy in that slot (its dead flag) */
+unsigned int* enemy_xdead_word(int i);          /* word i (< ENEMY_XDEAD_WORDS) of the extras' dead flags (co-op: EV_FLAGS 120 + i) */
 int  enemy_rec_scripted(int slot);           /* the room's scripts act on that record (co-op: never the guest's to run) */
 void spawn_replay(void);                        /* host: every added enemy of the room again (coop_spawn_note) */
 void coop_spawn_note(int slot, const SpawnNote* n);   /* coop_glue.c: host -> guest, if it is in our room */

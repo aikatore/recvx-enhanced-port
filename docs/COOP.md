@@ -1135,10 +1135,13 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
     the victim's pad is not read (`bhEne_LeverCheck` reads the local pad), as with the host's enemies before. A step on the
     partner's stand-in of any of these types runs with the partner's character (`sys->ply_id`: the victim's motions and
     place in a grab, the Hunter's beheading threshold), as only the zombie's did.
-* **Extra enemies' dead flags** (`ed_flg` 512 + the record's kill bit, [ENEMIES.md](ENEMIES.md) "Extra
-  enemies"): `EV_SPAWN` carries an extra's flag (`SpawnNote.dead`, in what was padding; 0 from an older
-  host), and the joiner sets it when that enemy dies in its game, as the host does; `EV_FLAGS` takes it to
-  the host. Before, only the host set it: an extra the joiner killed while the host was elsewhere came back
+* **Extra enemies' dead flags** (a bit per room and extra in save-region words, `sys->itm[302..319]` and
+  `[360..382]`, [ENEMIES.md](ENEMIES.md) "Extra enemies"; protocol 50, before `ed_flg` 512 + a record's kill bit):
+  `EV_SPAWN` carries an extra's flag (`SpawnNote.dead` = 1024 + its bit), and the joiner sets it when that enemy
+  dies in its game, as the host does; `EV_FLAGS` takes it to the host (their words follow the 120 flag words, 120..160,
+  without the flag block's gate and latch rules). They are world state in item words, so the joiner's start and rejoin
+  keep the host's over its own items (`own_restore`) and the host keeps its own in a game state with a joiner's saved
+  items (`own_put`). Before, only the host set it: an extra the joiner killed while the host was elsewhere came back
   on the host's next visit. The host also puts each extra into the same slot on every visit (the first free
   slot of the room plus its place in the room's list), the dead ones' slots left free: before, the next
   extra took a dead one's slot, so a joiner that had stayed in the room saw its dead extra alive again as
@@ -1530,7 +1533,7 @@ bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows t
 list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
 `EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
 the Bandersnatch and the anatomist too (each type's `exp0` with its pointer words kept, the `type` field taken), never for a
-record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1929,11 +1932,12 @@ joiner's room is set up and is then handled in 6/10, and neither side crashes. W
 folder with a BioRand pack with random doors in `biorand/`) also the reported case: the host kills Nosferatu in 6/10
 with its read held, and the joiner's entry block of 7/24 waits for the host's room.
 
-`pc/tools/coop_gone_check.sh OUT [PORT]` (the same needs, about three minutes): a new game in 0/6 with two extra enemies
+`pc/tools/coop_gone_check.sh OUT [PORT]` (the same needs, about three minutes): a new game in 0/6 with an extra enemy
 (the host's `enemy_extra`), the joiner with `coop_follow = 0`; three pairs at once. A: the host goes to 0/7, the joiner
 kills a zombie record and an extra, then leaves too; the host comes back, then the joiner. B: the same, but the joiner
 stays until the host is back (`EV_GONE`). C: the host kills them while the joiner is in 0/7, and the joiner comes back
-alone. It fails unless the killed ones stay dead on both sides and both see the same enemies in the same slots.
+alone. It fails unless the killed ones stay dead on both sides, each side logs the other's extra dead flag arriving
+(`EV_FLAGS`), and both see the same enemies in the same slots.
 
 `pc/tools/coop_passage_check.sh OUT [PORT] [host|guest]` (the same needs, about two minutes): in the palace's passage
 to the residence (1/10) the watcher (default the host) examines the trigger at the foot of the stairs, whose scene
