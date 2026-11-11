@@ -158,15 +158,16 @@ typedef struct { const VoiceLine* l[VOICE_SAID_MAX]; int n; } VoiceSaid;
 void voice_said_add(VoiceSaid* s, const VoiceLine* l);
 int voice_said_age(const VoiceSaid* s, const VoiceLine* l);
 /* the line of character chr said in place of file vid of disc's archive in room file room for seed, a line of ms
-   milliseconds (NULL: chr has none). The lines not said yet in the room (age, NULL: none said; voice_said_age) always
-   before the others; once all were said, one not among the last min(pool - 1, max(3, pool / 2)) of the character's (the
-   pool: its lines of the kind asked for, spoken or grunts), so never one twice in a row while it has another and no
-   A-B-A. Among those, the length a soft preference (ms_of: a line's length, 0 unknown): of those that last at most
-   max_ms the ones filling more of the ms the likelier (1 + 5 r^2, r the part filled; a gasp or shout, under
-   VOICE_SHORT_MS, a tenth of that in place of a line as long or longer); a longer one (faded out at max_ms) 1 (max_ms /
-   len)^2, at most a sixth of a fitting one's; with VOICE_PICK_FIT only those that end in time, else the shortest (a gasp:
-   cast_glue.c keeps it quiet); ms or max_ms 0: any, alike. grunts: VOICE_PICK_* (the lines checked by hand as grunts:
-   none, only those, any), | VOICE_PICK_FIT */
+   milliseconds (NULL: chr has none): always one that ends by max_ms (ms_of: a line's length, 0 unknown) while the
+   character has one. Of those, the ones not said yet in the room (age, NULL: none said; voice_said_age) before the
+   others; once all were said, one not among the last min(pool - 1, max(3, pool / 2)) of the character's (the pool: its
+   lines of the kind asked for, spoken or grunts), so no line twice in a row and no A-B-A; only where none of those ends
+   in time, one that is not the last (VOICE_PICK_FIT: never). Within them the length a soft preference: the ones filling
+   more of the ms the likelier (1 + 5 r^2, r the part filled; a gasp or shout, under VOICE_SHORT_MS, a tenth of that in
+   place of a line as long or longer). None ends in time: the shortest (cast_glue.c fades it out at max_ms; a gasp's,
+   VOICE_PICK_FIT, of those not among the last few: it keeps quiet), not the last while another has a length; ms or
+   max_ms 0: any, alike. grunts: VOICE_PICK_* (the lines checked by hand as grunts: none, only those, any), |
+   VOICE_PICK_FIT */
 #define VOICE_SHORT_MS 1200   /* gasps, grunts, shouts: the short sounds (cast_glue.c: a line this short gets one of them) */
 enum { VOICE_PICK_SPOKEN, VOICE_PICK_GRUNTS, VOICE_PICK_ANY, VOICE_PICK_FIT = 4 };
 const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr, int ms, int max_ms, int (*ms_of)(const VoiceLine*),

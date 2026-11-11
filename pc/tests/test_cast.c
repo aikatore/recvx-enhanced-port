@@ -435,21 +435,22 @@ int main(void)
             a = voice_pick((unsigned)s, 1020, 1, 40, 2, 0, 0, NULL, NULL, VOICE_PICK_ANY);
             CHECK(a && a->chr == 2 && a == voice_pick((unsigned)s, 1020, 1, 40, 2, 0, 0, NULL, NULL, VOICE_PICK_ANY));
             k |= 1 << (a->disc - 1);
-            /* with VOICE_PICK_FIT one that ends in time: the 1 s one where 3 s is too long, the shortest where none fits; where
-               both do, the one filling a 3 s original likelier (6 to 1.6); without, the 3 s one too, less often (n2) */
+            /* one that ends in time: the 1 s one where 3 s is too long, also without VOICE_PICK_FIT (n2: never the 3 s one);
+               the shortest where none fits; where both do, the one filling a 3 s original likelier (6 to 1.6) */
             CHECK(voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, NULL, VOICE_PICK_ANY | VOICE_PICK_FIT) == voice_line(2, 1) &&
                   voice_pick((unsigned)s, 1020, 1, 40, 2, 300, 500, line_ms, NULL, VOICE_PICK_ANY | VOICE_PICK_FIT) == voice_line(2, 1));
             n2 += voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, NULL, VOICE_PICK_ANY) == voice_line(2, 0);
             a = voice_pick((unsigned)s, 1020, 1, 40, 2, 3000, 4000, line_ms, NULL, VOICE_PICK_ANY);
             CHECK(a == voice_pick((unsigned)s, 1020, 1, 40, 2, 3000, 4000, line_ms, NULL, VOICE_PICK_ANY));
             n3 += a == voice_line(2, 0);
-            /* the one not said, also where it is too long; with fit too, never the one just said (cast_glue.c: quiet) */
+            /* the one not said; where only the one just said ends in time, the other (faded out), never the same twice in a
+               row; with fit too (cast_glue.c: quiet) */
             CHECK(voice_pick((unsigned)s, 1020, 1, 40, 2, 3000, 4000, line_ms, said_first, VOICE_PICK_ANY) == voice_line(2, 1) &&
                   voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, said_second, VOICE_PICK_ANY) == voice_line(2, 0) &&
                   voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, said_second, VOICE_PICK_ANY | VOICE_PICK_FIT) == voice_line(2, 0));
             n1 += voice_pick((unsigned)s, 1020, 1, 40, 2, 9000, 9000, line_ms_short, NULL, VOICE_PICK_ANY) == voice_line(2, 1);   /* (a 0.5 s gasp for a 9 s line) */
         }
-        CHECK(n1 > 0 && n1 < 256 / 10 && k == 3 && n3 > 256 * 3 / 4 && n3 < 256 && n2 > 0 && n2 < 256 / 4 && !voice_pick(1, 1020, 1, 40, 1, 0, 0, NULL, NULL, VOICE_PICK_ANY) && !voice_pick(1, 1020, 1, 40, 7, 0, 0, NULL, NULL, VOICE_PICK_ANY));
+        CHECK(n1 > 0 && n1 < 256 / 10 && k == 3 && n3 > 256 * 3 / 4 && n3 < 256 && n2 == 0 && !voice_pick(1, 1020, 1, 40, 1, 0, 0, NULL, NULL, VOICE_PICK_ANY) && !voice_pick(1, 1020, 1, 40, 7, 0, 0, NULL, NULL, VOICE_PICK_ANY));
         CHECK(voice_model_chr(3) == 2 && voice_model_chr(5) == 3 && voice_model_chr(6) == 3 && voice_model_chr(7) == 3 && voice_model_chr(8) == 4 &&
               voice_model_chr(11) == 4 && voice_model_chr(12) == 5 && voice_model_chr(13) == 6 && voice_model_chr(ACTOR_PART + 3) == 3 &&
               voice_model_chr(ACTOR_PART + 4) == 0 && voice_model_chr(17) == -1 && voice_model_chr(14) == -1 && voice_model_chr(ACTOR_MODELS) == -1 &&
@@ -552,11 +553,13 @@ int main(void)
         }
         {   /* the picks in a row (cast_glue.c: the lines said since the room load): those not said first; then none of the last
                min(pool - 1, max(3, pool / 2)) again, so no line twice in a row and no A-B-A, across the rounds too; pools of
-               2, 3, 5, 14 (Alfred's) and 100 lines, lengths 0.4 to 9.4 s, originals 1.2 to 9 s (the length a soft preference) */
+               2, 3, 5, 14 (Alfred's) and 100 lines, lengths 0.4 to 9.4 s, originals 1.2 to 9 s. Each original gets one line that
+               ends by its end and grace (ms + 1 s) whenever the character has one that is not the last; the cooldown gives way
+               only to that (never a longer line while one ends in time), and the length is a preference among those */
             static const int pools[] = { 2, 3, 5, 14, 100 };
             static VoiceCurated tp[101];
             for (int q = 0; q < 5; q++) {
-                int P = pools[q], N = P - 1 < (P / 2 > 3 ? P / 2 : 3) ? P - 1 : (P / 2 > 3 ? P / 2 : 3), longer = 0;
+                int P = pools[q], N = P - 1 < (P / 2 > 3 ? P / 2 : 3) ? P - 1 : (P / 2 > 3 ? P / 2 : 3), longer = 0, eased = 0;
                 for (k = 0; k < P; k++) tp[k] = (VoiceCurated){ 1, (unsigned short)(1000 + k), 4, VOICE_CONFIRMED, 0xFFFF };
                 tp[P] = (VoiceCurated){ 0 };
                 voice_curation_use(tp);
@@ -569,14 +572,27 @@ int main(void)
                         int ms = 1200 + (int)((k * 3571u + (unsigned)s * 977u) % 7800u), j;
                         a = voice_pick((unsigned)s, 1020, 1, k, 4, ms, ms + 1000, len_var, hist_age, VOICE_PICK_SPOKEN);
                         CHECK(a && a->chr == 4 && a == voice_pick((unsigned)s, 1020, 1, k, 4, ms, ms + 1000, len_var, hist_age, VOICE_PICK_SPOKEN));
-                        for (j = k - 1; j >= 0 && j >= k - N; j--) CHECK(seq[j] != a);   /* (none of the last N) */
-                        for (j = 0; k < P && j < k; j++) CHECK(seq[j] != a);            /* (the first round: each once) */
+                        int fresh = 0, cool = 0, other = 0, ag, shortest = -1;   /* (lines that end in time: not said, not among the last N, not the last) */
+                        for (j = 0; j < P; j++) {
+                            const VoiceLine* x = voice_line(4, j);
+                            ag = voice_said_age(&hist, x);
+                            if (ag != 0 && (shortest < 0 || len_var(x) < len_var(voice_line(4, shortest)))) shortest = j;
+                            if (len_var(x) > ms + 1000) continue;
+                            fresh += ag < 0; cool += ag < 0 || ag >= N; other += ag != 0;
+                        }
+                        ag = voice_said_age(&hist, a);
+                        CHECK(!k || a != seq[k - 1]);                                            /* (never twice in a row) */
+                        if (fresh) CHECK(ag < 0 && len_var(a) <= ms + 1000);                     /* (not said first) */
+                        else if (cool) CHECK((ag < 0 || ag >= N) && len_var(a) <= ms + 1000);   /* (none of the last N) */
+                        else if (other) CHECK(len_var(a) <= ms + 1000);                          /* (the cooldown eased: still in time) */
+                        else CHECK(a == voice_line(4, shortest));                                /* (none in time: the shortest, faded out) */
+                        eased += !cool && other;
                         longer += len_var(a) > ms + 1000;
                         voice_said_add(&hist, a);
                         seq[k] = a;
                     }
                 }
-                CHECK(P < 5 || longer > 0);   /* (soft: also lines longer than the original's time) */
+                CHECK((P < 14 || longer == 0) && (P < 100 || eased == 0));   /* (Alfred's 14 or more: always one in time; 100: the cooldown kept too) */
                 {   /* gasps (fit: only those that end in time) with one short line: once, then quiet while it is among the last N */
                     int said = 0;
                     hist.n = 0;
@@ -585,13 +601,31 @@ int main(void)
                         a = voice_pick(7, 1020, 1, k, 4, ms, ms + 1000, len_var, hist_age, VOICE_PICK_SPOKEN | (ms < VOICE_SHORT_MS ? VOICE_PICK_FIT : 0));
                         CHECK(a && voice_said_age(&hist, a) != 0);
                         if (ms < VOICE_SHORT_MS && len_var(a) > ms + 1000) continue;   /* (cast_glue.c: quiet, not said) */
-                        CHECK(voice_said_age(&hist, a) < 0 || voice_said_age(&hist, a) >= N);
+                        CHECK(ms >= VOICE_SHORT_MS || voice_said_age(&hist, a) < 0 || voice_said_age(&hist, a) >= N);   /* (a gasp: never eased) */
                         voice_said_add(&hist, a);
                         said++;
                     }
                     CHECK(said > 40 / 3);
                 }
             }
+            {   /* a pool of one line (Alexia's only grunt): said, then none (quiet) for the next, never the same twice in a row,
+                   also where it is the only one that ends in time or none does */
+                const VoiceLine* one;
+                tp[0] = (VoiceCurated){ 1, 1000, 4, VOICE_CONFIRMED, 0xFFFF };
+                tp[1] = (VoiceCurated){ 0 };
+                voice_curation_use(tp);
+                voice_scan_done();
+                CHECK(voice_count(4) == 1 && (one = voice_line(4, 0)));
+                hist.n = 0;
+                CHECK(voice_pick(3, 1020, 1, 1, 4, 9000, 10000, len_var, hist_age, VOICE_PICK_SPOKEN) == one);
+                voice_said_add(&hist, one);
+                CHECK(!voice_pick(3, 1020, 1, 2, 4, 9000, 10000, len_var, hist_age, VOICE_PICK_SPOKEN) &&
+                      !voice_pick(3, 1020, 1, 2, 4, 100, 200, len_var, hist_age, VOICE_PICK_SPOKEN));
+            }
+            for (k = 0; k < 100; k++) tp[k] = (VoiceCurated){ 1, (unsigned short)(1000 + k), 4, VOICE_CONFIRMED, 0xFFFF };
+            tp[100] = (VoiceCurated){ 0 };
+            voice_curation_use(tp);
+            voice_scan_done();
             for (k = 0; k < VOICE_SAID_MAX + 5; k++) voice_said_add(&hist, voice_line(4, k % 100));   /* (full: the oldest go) */
             {
                 VoiceLine other = *voice_line(4, 4);
