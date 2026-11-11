@@ -957,8 +957,12 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   above the fastest), and at each hand-off it shows the sender's frame P that is due, every slot from that one
   frame, P stepping by one per frame (a dead band keeps the estimate's small moves and clock drift from making the
   cadence uneven). A slot with no snapshot of P (a lost or late datagram, one the sender left out) is shown between
-  the snapshots before and after it, or carried on from the last two (position, turn, the frame of its motion) for
-  at most 4 frames, then held; what the position and turn shown were off by is halved each frame (no snap). Before,
+  the snapshots before and after it, or carried on from the last two (position, turn) for at most 4 frames, then
+  held; its motion's frame comes from the snapshot's motion anchor (protocol 47: exact while the sender keeps it);
+  what the position and turn shown were off by is halved each frame (no snap). Both sides run it for every slot the
+  other side runs (`!we_run(i)`), keyed by the sender's frame. A slot that changes hands starts its kept snapshots
+  and both codec bases again (`owners_sync`); the side that stops running it seeds it with its own last two states as
+  the partner's frames now shown, so it is carried on (not held) until the new runner's first snapshot. Before,
   the newest frame at each hand-off was shown, and a datagram of a newer frame emptied the set: with jitter a puppet
   stood still for a frame and jumped two (23-77 % of frames on internet paths), a zombie's upper half showed another
   frame than its body, and a datagram of only events (a grab's state) left the set empty, so for that frame every
@@ -1032,7 +1036,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   target rule leaves it for the partner), so none attacks the reading player.
 * **Kills while the joiner ran the room** (`EV_GONE`): when the host's enemies take over, the joiner
   names its dead enemies and the host hides its live copies of the same type and version.
-* **Engaged-player ownership** (prototype on branch `netexp-phase3`, protocol 46, the host's rule `OPT2_OWNERSHIP`;
+* **Engaged-player ownership** (prototype, protocol 47 on branch `netexp-combined` (46 on `netexp-phase3`), the host's rule `OPT2_OWNERSHIP`;
   `RECVX_COOP_OWNERSHIP=0` on the host turns it off): a zombie (its body with its upper half) runs in the game of the
   player it is engaged with, and the other game shows it as a puppet of that game's snapshots, so that player's
   shots react on its next frame and its grabs and bites are local. `owned[i]` keeps its meaning (the guest runs
@@ -1045,11 +1049,11 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
     not the holder of the runner's busy flag, its upper half linked. Bosses, other types, event and script enemies
     and the zombie's helper parts (31..38) stay as before.
   * **How**: the enemy's and its upper half's state (`ene_pack`, 3168 bytes) as `EV_ESTATE` chunks plus `EV_ENEOWN`
-    (state 1) in the same frame: up to 96 events per frame (`COOP_EV_BURST`), an event sent once goes again only
-    after a round trip and a frame. The receiver takes it whole (same type and model in the slot, the same upper half,
-    the state plausible, no event of its own on it, not in a door) or refuses it (`EV_ENEOWN` state 0: it runs on in
-    the sender's game, as it was left there). The sender's copy stands still until the new runner's first snapshot
-    (a round trip and a frame).
+    (state 1) in the same frame: the event burst ("Datagrams": every new event in its frame, up to 96). The receiver
+    takes it whole (same type and model in the slot, the same upper half, the state plausible, no event of its own on
+    it, not in a door) or refuses it (`EV_ENEOWN` state 0: it runs on in the sender's game, as it was left there).
+    Until the new runner's first snapshot (a round trip and a frame, then the playout's margin) the sender's copy is
+    carried on from its own last two states (the enemy playout, at most 4 frames; before, it stood still).
   * **Leaving**: the guest gives back what it runs, with the state, when it leaves the room, opens a menu or plays a
     cutscene of its own; at its room change the host releases what is left. The host takes them back (`EV_ENEOWN`
     state 2) when no snapshot of one came for 10 s while both play in the room, when an event of its own drives one,

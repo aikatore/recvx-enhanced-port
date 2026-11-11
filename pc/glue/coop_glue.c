@@ -1000,6 +1000,17 @@ static unsigned int win_st[5];                   /* RECVX_COOP_STATS: window fra
 static void owners_sync(void)
 {
     int i;
+    /* a zombie's helper parts (ids 31..38: its link, head, arms, legs, cap) while linked go with their body: its runner
+       runs them (their hit capsules follow its body there; a limb shot off comes off in the game that runs the body).
+       Before (phase 3) they stayed with the host, following its puppet of a body the guest ran. A part shot off
+       (unlinked) stays with the game that ran it then. */
+    for (i = 0; sys && i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
+        BH_PWORK* ep = &ene[i];
+        BH_PWORK* r;
+        if ((ep->flg & 0x81) != 0x81 || ep->id < 31 || ep->id > 38) continue;
+        r = pc_root_in(ep, ene, PC_ENE_SLOTS);
+        if (r != ep && r->id == 1 && (r->flg & 0x1)) owned[i] = owned[r - ene];
+    }
     for (i = 0; i < PC_ENE_SLOTS; i++) {
         uint32_t P = playout.P;
         int k;
@@ -1238,8 +1249,17 @@ static void owned_drop(void)
 static void grab_out(int i, BH_PWORK* ep)
 {
     BH_PWORK* a = &ply2_save;
+    BH_PWORK* me = swap_plp ? swap_plp : plp;   /* (our player: the step runs on the partner's stand-in) */
     int c = ene_slot(ep->exp1);
     Event e = { 0 };
+    /* its attack began on our player and turned to the partner (Phase 3: a guest's zombie): our busy flag, set at the
+       attack's start, is nobody's now. Left set, it made the enemy's family run here as well (runs_here, the hold)
+       while the partner's game ran the grab: both games ran it for up to 100 frames */
+    if (hold.by >= 0 && me && (me->flg & 4) && pc_root_in(&ene[hold.by], ene, PC_ENE_SLOTS) == pc_root_in(ep, ene, PC_ENE_SLOTS)) {
+        me->flg &= ~0x10004; me->stflg &= ~0x10000;
+        hold.by = -1;
+        host_log("coop: enemy %d turned from our player to the partner: our busy flag cleared\n", i);
+    }
     memset(estate_out, 0, sizeof(estate_out));
     ene_pack(ep, estate_out);
     if (c < PC_ENE_SLOTS) ene_pack(&ene[c], estate_out + ESTATE_ENE);
@@ -1587,11 +1607,14 @@ static int event_driven(const BH_PWORK* ep)
    event). Before, it became a puppet again mid-grab: its AI stopped, so nothing ever released
    the player - stuck in the grab motion, then dragged along by the puppet's snapshots.
    Helper parts (ids 31..38: a zombie's limbs, Monster Steve's arms) share their parent's set but
-   hold nothing: counted as holders, they kept every orphaned zombie grab "held". */
+   hold nothing: counted as holders, they kept every orphaned zombie grab "held".
+   A zombie's hold bit counts only while its steps run here: a puppet's is the stale one of its last step here (Phase 3:
+   a zombie that ran here and went to the partner's game, e.g. with its grab of the partner). Counted, it ran here too
+   (both games) while another zombie of the set held our player. */
 static int grips_us(BH_PWORK* ep)
 {
     return !(ep->id >= 31 && ep->id <= 38) && plp && plp->mnwP && plp->mnwP != plp->mnwPb && plp->mnwP != sys->rmthp && plp->mnwP == ep->mnwP &&
-           (ep->id != 1 || holding(ep));
+           (ep->id != 1 || (holding(ep) && step_ran[ep - ene]));
 }
 
 /* a zombie's upper half (en01.c: a linked id 1 whose exp0 0x40 has bit 31; mlwP its body's model) */
