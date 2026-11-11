@@ -430,27 +430,30 @@ static void attach_depth(GLuint fbo, GLuint dt)
     if (i == natt) { if (natt == 32) { natt = 0; i = 0; } natt++; }
     att[i].fbo = fbo; att[i].dt = dt;
 }
-static GLuint depth_for(uint32_t zbp, int pw, int ph)
+/* the depth texture for ZBP at this size, attached to fbo (bound, its colour target of the same size) */
+static void depth_for(uint32_t zbp, GLuint fbo, int pw, int ph)
 {
     int e = 0;
     dz_clock++;
-    for (int i = 0; i < 8; i++) if (dz[i].tex && dz[i].zbp == zbp && dz[i].pw == pw && dz[i].ph == ph) { dz[i].last = dz_clock; dz_cur = i; return dz[i].tex; }
+    for (int i = 0; i < 8; i++) if (dz[i].tex && dz[i].zbp == zbp && dz[i].pw == pw && dz[i].ph == ph) { dz[i].last = dz_clock; dz_cur = i; attach_depth(fbo, dz[i].tex); return; }
     for (int i = 0; i < 8; i++)   /* a free one, else the least recently used */
         if (!dz[i].tex) { e = i; break; }
         else if (dz[i].last < dz[e].last) e = i;
     if (dz[e].tex) { glDeleteTextures(1, &dz[e].tex); fb_forget(); }   /* (a depth of another size would cut the draws) */
     glGenTextures(1, &dz[e].tex);
     glBindTexture(GL_TEXTURE_2D, dz[e].tex);
-    {   /* created as depth 0 (was undefined), so fast_clear may clear all of it */
-        float* z = calloc((size_t)pw * ph, sizeof(float));
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, pw, ph, 0, GL_DEPTH_COMPONENT, GL_FLOAT, z);
-        free(z);
-    }
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, pw, ph, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    attach_depth(fbo, dz[e].tex);
+    /* cleared to depth 0 on the GPU (was undefined), so fast_clear may clear all of it. The scissor
+       and depth mask are left as gs_flush, the one caller, sets both for its draw right after;
+       the clear depth is fast_clear's too */
+    glDisable(GL_SCISSOR_TEST);
+    glDepthMask(GL_TRUE);
+    glClearDepth(0.0);
+    glClear(GL_DEPTH_BUFFER_BIT);
     dz[e].zbp = zbp; dz[e].pw = pw; dz[e].ph = ph; dz[e].last = dz_clock; dz[e].zrow = 0; dz_cur = e;
-    return dz[e].tex;
 }
 
 #define GL_RGBA16F 0x881A
@@ -507,6 +510,7 @@ static void rt_load_from_mem(RenderTarget* rt)
         glBindFramebuffer(GL_READ_FRAMEBUFFER, fb);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tmp, 0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, rt->fbo);
+        glDisable(GL_SCISSOR_TEST);   /* (the last draw's scissor would cut the blit; gs_flush sets its own) */
         glBlitFramebuffer(0, 0, w, h, (GLint)(g_margin_x * g_scale), 0, (GLint)((g_margin_x + w) * g_scale), (GLint)(h * g_scale),
                           GL_COLOR_BUFFER_BIT, GL_NEAREST);
         glDeleteFramebuffers(1, &fb); fb_forget();
@@ -546,6 +550,8 @@ static RenderTarget* rt_get(uint32_t fbp, uint32_t fbw, uint32_t psm)
     glGenFramebuffers(1, &rt->fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, rt->fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, rt->tex, 0);
+    glDisable(GL_SCISSOR_TEST);   /* all of it 0 (zrow): not the last draw's scissor and FBMSK (gs_flush sets its own) */
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT);
     rt_load_from_mem(rt);
@@ -1539,11 +1545,7 @@ void gs_flush(void)
     }
     if (!gs_replaying && first[cur_rt - rts].how == FIRST_NONE) rt_first_draw(cur_rt, st, fbw, fpsm);
     glBindFramebuffer(GL_FRAMEBUFFER, cur_rt->fbo);
-    {
-        uint32_t zbp = st->ctx.zbuf & 0x1FF;
-        GLuint dt = depth_for(zbp, cur_rt->pw, cur_rt->ph);
-        attach_depth(cur_rt->fbo, dt);
-    }
+    depth_for(st->ctx.zbuf & 0x1FF, cur_rt->fbo, cur_rt->pw, cur_rt->ph);
     glViewport(0, 0, cur_rt->pw, cur_rt->ph);
     {
         uint64_t sc = st->ctx.scissor;
