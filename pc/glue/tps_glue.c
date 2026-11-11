@@ -1143,7 +1143,9 @@ static float body_ray(const BH_PWORK* e, const float* p, const float* d, int con
         t = pc_ray_capsule(p, d, a, b, r, &m);
         if (t >= 0 && (best < 0 || t < best)) best = t, *jnt = j, *no = n;
     }
-    if (!e->cpcl) {
+    /* the bat's and the moth's table holds only the body (the bat's 1 unit across under wings 7 wide): missed, their hit
+       capsule (wing to wing, radius 2; the fixed cameras' test, there with the shot's cone around it) */
+    if (!e->cpcl || (best < 0 && (e->id == 7 || e->id == 6))) {
         const NJS_CAPSULE* w = &e->watr;
         r = w->r;
         if (cone) {
