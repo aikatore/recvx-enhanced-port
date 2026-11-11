@@ -329,6 +329,20 @@ static void pick_iso(void)
 
 /* The game (the decomp's main loop, VU, GIF recording) runs on its own thread; the main
    thread renders (host/render.c). */
+/* Windows: the game and render threads at THREAD_PRIORITY_HIGHEST (no rights needed; SDL's audio
+   thread is TIME_CRITICAL, above them): on one or two busy cores, background work otherwise delays
+   their wake-ups at the vblank and present deadlines (1 % low +12 % at 60 Hz, one core with a busy
+   loop). Not on Linux: where only nice -10 is allowed, SDL's audio thread (asking for -20) would
+   stay below ours. RECVX_THREAD_PRIO=0: off */
+static void host_thread_priority(void)
+{
+#ifdef _WIN32
+    const char* e = SDL_getenv("RECVX_THREAD_PRIO");
+    if (e && !SDL_atoi(e)) return;
+    if (!SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_HIGH) && g_config.log_level > 1) host_log("thread priority: %s\n", SDL_GetError());
+#endif
+}
+
 static int SDLCALL game_thread(void* ud)
 {
     char* game_argv[] = { "cdrom0:\\SLUS_201.84;1", NULL };
@@ -336,6 +350,7 @@ static int SDLCALL game_thread(void* ud)
     crash_thread_init();
     prof_thread(PROF_LOGIC);
     { extern void profile_thread(char); profile_thread('g'); }   /* RECVX_PROFILE */
+    host_thread_priority();
     exit(recvx_game_main(1, game_argv));
 }
 
@@ -407,6 +422,7 @@ int main(int argc, char** argv)
 
     stream_init();
     if (!SDL_CreateThread(game_thread, "game", NULL)) host_fatal("Cannot start the game: %s", SDL_GetError());
+    host_thread_priority();
     render_loop();   /* the main thread renders and presents; never returns */
     return 0;
 }
