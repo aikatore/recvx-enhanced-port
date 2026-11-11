@@ -27,7 +27,7 @@ run() {   # run DIR MODS INI exitframe args...
     printf "show_fps = 0\n$ini" > "$d/save/recvx.ini"
     SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy RECVX_SKIP_MOVIES=1 RECVX_UPDATE_CHECK=0 RECVX_MODS="$m" \
     RECVX_EXIT_FRAME=$x RECVX_INF_HEALTH=1 RECVX_SKIP_CINE=30 \
-    timeout -s KILL 600 "$bin" "$iso" --skip-intro --size 320x240 --vanilla --save-dir "$d/save" "$@" > "$d/log.txt" 2>&1
+    timeout -s KILL 600 "$bin" "$iso" --skip-intro --size 320x240 --vanilla --save-dir "$d/save" --coop-conn direct "$@" > "$d/log.txt" 2>&1
     echo $? > "$d/exit"
 }
 rm -rf "$out"; mkdir -p "$out/mods"

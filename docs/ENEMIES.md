@@ -527,54 +527,99 @@ count for both. Code: `pc/glue/enemyopt_glue.c`, one decomp hook at the end of
 | "Randomize Event Enemies" (GAMEPLAY) | `enemy_random_events` | 0/**1** | `RECVX_ENEMY_EVENTS` |
 | "Randomize Cutscene Cast" and its page (GAMEPLAY, CUTSCENE CAST) | `cast_random`, `cast_models`, `cast_assign`, `cast_imports`, `cast_custom_off` lines, `cast_custom_set` | the story characters drawn as other models in cutscenes, visual only (no enemy is touched): [ACTORS.md](ACTORS.md) "Cutscene cast" | `RECVX_CAST` |
 
-Every option first reads the room script once per load (`scan_script`) and marks records that an
-event drives (`LoadWork`, motion pauses, links, positioning, zombie/face/look/render ops), that the
-script shows or hides, whose HP the script tests or sets, and rooms with an "all dead" count.
-Extra enemies and placements never change marked records; the randomizer changes some of them
-("Randomizer"). Choices come from a xorshift generator seeded with (seed, room file, record), never
-from the game's `rand()`.
+Every room load first reads the room script (`scan_script`) and marks records that an event drives (motion pauses,
+links, positioning, zombie/face/look/render ops, and a `LoadWork` of the record followed by an op only its own type takes),
+that the script shows or hides or loads only for ops any type takes alike, whose HP the script tests or sets, and rooms
+with an "all dead" count ("Which records change" below). It reads only the code that can run on this visit: a block whose
+test wants an `ev_flg` or `ky_flg` bit clear that is set now and that no script of the room clears is skipped, and so is
+an event only such code starts. Placements never change marked records; the randomizer changes some of them
+("Randomizer"); extra enemies keep clear of them. Choices come from a xorshift generator seeded with (seed, room file,
+record or extra), never from the game's `rand()`.
 
 ### Extra enemies
 
-* "Up to N per room": at the first frame a room runs, the host (or single player) picks up to N
-  of the room's unmarked records of the roaming types zombie, Black Widow, Cerberus, Hunter,
-  Bandersnatch, albinoid adult, anatomist (living or dead), and spawns a copy of each from the
-  current room file (`spawn_add`, so it reaches the guest as an added enemy): same type and model
-  version (no upload), variant 0, placed 15..35 units from the source where a line test against
-  the walls (`hitchkl.c bhCollisionCheckLine2`) is clear and it can stand ("Spots" below), at least
-  40 units from every entry position. A spot within 40 units of the player (a loaded save, a retry) skips that extra for the visit.
-* **Kinds the room lacks** (with the randomizer, Wild or Custom, and Types per Room 1..8): while the
-  room has fewer kinds than Types per Room (its records' kinds after the randomizer, then each extra in
-  turn), an extra takes a kind the room lacks instead of the copy, drawn by weight (Wild) or rate
-  (Custom) among the kinds that fit its spot: no fliers, the slot budget, `rm_flg`, open space for the
-  big kinds (`open_dirs` at the spot), one heavy variant per room. The kill-count rule does not apply,
-  as "all dead" doors count no extra. It takes the copy's spot (the same draws, "Spots": every kind
-  here walks), where also no ground rises more than a unit within 6 units along x and z (a crate, a
-  step: a Cerberus put by a crate in RM_2031 stood inside it the next frame); its kind is drawn after
-  that, and its dead flag and slot stay its record's (below). A
-  type the room did not load comes as the F2 spawner's do (its model, textures and sounds from its own
-  room file). None fits, or the room is full: the copy. Mild, No Limit or the randomizer off: copies only.
-* The same on every visit: the picks, spots, angles and kinds depend only on (seed, room file, record),
-  each extra with its own draws, never on which records are dead or where the player came in.
-  Each also keeps its slot: the room's first free slot when the extras come, plus its place in that list
-  (one that stays away leaves its slot free), so a co-op guest still in the room finds them where they were.
-* **Dead flag**: an extra copied from a record that the entry script hides by kill bit b
-  (`EneSetCk`) is remembered dead in `ed_flg` 512 + b (set when it dies, by whichever game runs it: single
-  player, the host, or a co-op guest that has the host's extras while the host is elsewhere; co-op shares it as
-  every `ed_flg` bit, saves keep it) and stays away while that is set,
-  without another taking its place. `EneSetCk` reaches only bits 0..511 (retail uses 0..357, rooms
-  built with `pc/tools` up to 511), so 512..1023 are free. An extra of a record the script does not
-  hide (no `EneSetCk`, e.g. the Battle Game's rooms) comes back with the room, as that record does.
-  "All dead" counts ignore extras.
-* Budgets are the spawner's; a room that runs out stops adding.
-* **Up to 8**: one extra per record at most, because each needs its own dead flag (512 + the
-  record's kill bit: the whole free range), so a room never gets more extras than it has unmarked
-  records of those types. The most any retail room has is 7 (RM_5680; 5530, 5580, 5630 and 5640
-  have 6), so 8 gives every one of them its copy. Each spawn still checks the spawner's budgets
-  (enemy slots with 6 left free of 255, room memory, the 32 MB spawn pool, texture entries) and
-  the room stops adding at the first refusal; the extras of a type the room already has upload
-  no textures. Nothing else grows: the room's list of extras and dead flags is 8 entries, the
-  co-op list of added enemies 64, the guest's pending ones 64.
+"Up to N per room": at the first frame a room runs, the host (or single player) adds up to N enemies to it, whatever
+its records (`pc/glue/enemyopt_glue.c enemy_extras_frame`, spawned as the F2 spawner's: `spawn_add`, so they reach a
+co-op guest as added enemies).
+
+* **Which rooms** (`xrooms`, `extra_room`): the retail room files with enemy records (ids 1..30, event records too: 94
+  files), but none of the boss arenas (`boss_arena`: their scripts wait for the boss), none of the Battle Game's
+  (5510..5710: its own kill counts), not the cutscene rooms 8030 (Wesker's monitor) and 9340 (Wesker and Claire), not
+  9170 (the tiger statue elevator's ant swarm, 76 records) and no room with an item box (a save room: a type 4 trigger
+  with attr 0x2; of these files only 9220). Rooms without enemies get none: an enemy where the game has none (a corridor, a save
+  room) would change what a room is for. Rooms whose doors count the kills (`DieEventCk`) get extras, but their
+  "all dead" counts ignore them, so they never hold a door shut. A mod's or BioRand's room that has enemies where the
+  disc has none gets none either (each extra needs a dead flag, below, and those are per listed room).
+* **How many**: N, fewer only where the room has no more free spots (below) or the spawner refuses one (its budgets:
+  enemy slots with 6 left free of 255, room memory, the 32 MB spawn pool, texture entries), and the room stops adding at
+  the first refusal. Small rooms have few free spots once the doors are kept clear: "Measured" below.
+* **Where** (`extra_grid`, `extra_spot`): once per room load the room's walkable floor is filled in as a grid of 4-unit
+  cells (larger in rooms over 16384 cells), from the records that stand on the ground (after "Rearranged") and the
+  entry positions, one cell at a time where an enemy can walk: no wall between the cells' centres (the wall line of
+  "Spots" at waist height, here with the odd wall types too: the lips along ledges, line walls), ground within a unit of the last cell's on the same floor and no slope (stairs, ramps), or no
+  ground where the last had none (the lowest floor of a room without floor slabs). A record on floor -1 (parked below
+  the room for an event, RM_1121) starts nothing. A cell is a spot when there is no drop nor rising ground within 6
+  units (`no_drop`: no pool edge, ledge, crate or step), no wall of any type within 6 units all round, at the waist and a
+  half unit above the feet (not in an object, nor against a wall or on a line wall: a zombie put on RM_8010's catwalk
+  rail line was pushed into the crate beside it, one on RM_7050's floor lines a unit high onto a table), and it is
+  * at least **30 units (3 m) from every door** (the door's trigger box: type 0, or a trigger the script makes a door with
+    `EtcAtariSet2`, or one where the script calls `SetDoorCall` while the player is at it, as RM_1121's) **and from every
+    entry position**, so nobody coming in meets an extra at the door;
+  * at least 15 units from what the player uses: item pickups and boxes (type 4 triggers), event triggers (type 3 with an
+    event: typewriters, puzzles, the doors an event opens), the item spots of the script's `ItmSetCk`, the stairs'
+    triggers (type 1), and the room's items. The examine messages (type 3 without an event: a shelf, a painting) and
+    the climbing areas (type 2) do not count;
+  * at least 15 units from every record (dead ones too) and from the extras before it.
+  Each extra draws among the spots (32 draws), skipping those within 15 units of an earlier extra.
+* **Which kind** (`plan_extras`): with the randomizer on, an extra is drawn as a free record of a walker would be at its
+  spot (`draw_kind`), after the room's records and the extras before it: Custom by rate, Wild by weight with the kinds
+  not yet drawn in the room first, Mild among the room's two Mild kinds (drawn as for its records, also in a room whose
+  records all keep their kind), Types per Room in Wild and Custom a target (the kinds the room lacks while it has fewer)
+  and in Mild a limit; the kinds' rules hold (open space for the big kinds, and for them level ground 12 units round: a
+  Giant Black Widow on RM_1000's raised walk stood over its edge; no fliers, `rm_flg`, one heavy variant, the
+  slot budget), the extras are not counted by "all dead" doors, so the kinds that may leave a room fit there too. So the
+  extras count into the rates and into Types per Room as records do; once the room has that many kinds, an extra that
+  none of them fits at its spot is left out (a record must become something and may go over the limit, an extra need
+  not: a room of bats gets no walkers past it). A spot where nothing fits (every kind that would fit
+  at Off) is replaced by another (up to 4). A type the room did not load comes as the F2 spawner's do (its model,
+  textures and sounds from its own room file). With the randomizer off: a copy of a random record of the roaming types
+  zombie, Black Widow, Cerberus, Hunter, Bandersnatch, albinoid adult, anatomist (its own type and model: no upload); a
+  room with none of those (bats only) gets none.
+* **The same on every visit**: extra i's spot, angle and kind come from draws of its own (seed, room file, i) and from
+  the extras before it, never from which are dead or where the player is. A spot within 30 units of the player (a loaded
+  save, a retry) skips that extra for the visit. Each keeps its slot: the room's first free slot when the extras come,
+  plus i (a dead one's stays free), so a co-op guest still in the room finds them where they were.
+* **Dead flags**: extra i of the room at index x of `xrooms` has its own flag, bit x * 8 + i of the extras' dead flags
+  (`enemy_xdead_word`: 41 save-region words no game code uses, `sys->itm[302..319]` and `[360..382]`, 1312 bits; 94 rooms
+  use 752). It is set when the extra dies, by whichever game runs it (single player, the host, or a co-op guest that has
+  the host's extras while the host is elsewhere), and the extra stays away while it is set. Being in the save region, the
+  flags go into saves (the card's and the native ones), come back with a load, and go back with a game over's retry to
+  what they were at the retry point (as the records' kill bits do); a new game clears them (`AllItemInit`). Co-op:
+  `EV_SPAWN` carries the flag (`SpawnNote.dead` = 1024 + the bit), `EV_FLAGS` sends their changes both ways (words
+  120..160 after the 120 flag words), the guest's start and rejoin take the host's (EV_BLOB, kept over the guest's own
+  items in `own_restore`, and the host's in `own_put` when it sends a guest's saved items). `xrooms` is append only. Before
+  (0.7.x) an extra copied a free record and took `ed_flg` 512 + that record's kill bit, so a room had at most as many
+  extras as free records (none in the rooms whose records are all event enemies); those bits mean nothing now, and an
+  old save's dead extras come back once.
+* Nothing else grows: the room's list of extras is 8 entries, the co-op list of added enemies 64, the guest's pending
+  ones 64; the grid is 16384 cells (per room load, about 100 KB of static memory).
+
+#### Measured
+
+2026-11-11, `pc/tools/enemy_door_check.sh` (the 94 room files with 50 surveyed seeds each, and two seeds of real extras):
+39574 surveyed spots and 767 extras that came, none within 30 units of a door or entry, as the game measures it and as
+the room files' doors and entries give it. Of 8 asked, 4.26 found a spot on average: 17 rooms take all 8 on every seed
+(0030, 0031, 0050, 0090, 1000, 1060, 1090, 1121, 3030, 3090, 4012, 7100, 7130, 9060, 9100, 9130, 9310), 30 at most 3,
+and 9 none (0160, 1030, 3140, 3160, 6010, 6020, 7200, 9010, 9120: small rooms whose floor is all within 30 units of a
+door or full of furniture). `enemy_floor_check.sh` (4 seeds in Wild, Mild and Custom, 1128 room visits): 4.18 extras of 8
+per room, no spawn refused (the budgets never ran out), the rest without a free spot; none in mid-air or sunk. Custom
+with every kind at 5: zombie, Cerberus, Bandersnatch, Hunter, Sweeper and anatomist each 14..16% of the extras, Black
+Widow, Tyrant, Giant Black Widow and Mutated Steve 2..3% each (open space, level ground, `rm_flg`, one heavy variant).
+
+The radius: the cells of a room that pass every other rule, by their distance to the nearest door or entry at 25 / 30 / 40
+units (measured before the clearance at the feet): 0060 (the barracks) 12 / 9 / 1, 3180 (the turntable control room)
+38 / 20 / 4, 3030 (the indigo card reader corridor) 138 / 98 / 35. 40 units, the placements' distance from the entries,
+left most small rooms without any; 30 keeps 3 m between an extra and wherever anyone comes in.
 
 ### Rearranged placements
 
@@ -586,8 +631,8 @@ from the game's `rand()`.
 
 ### Spots
 
-Rearranged placements and extra enemies take their spots from `find_spot`: up to 16 tries around the
-source, each with its own draws.
+Rearranged placements take their spots from `find_spot`: up to 16 tries around the source, each with its own draws.
+Extra enemies take theirs from a grid of the room's walkable floor under the same ground rules ("Extra enemies").
 
 * **A walker stands on the ground**: the ground under the spot (`hitchk.c bhGetGroundPosition` from
   10 units above the feet: the highest box top, slope or floor slab, the type 7 walls) must be within a
@@ -606,6 +651,8 @@ source, each with its own draws.
 * A skipped spot uses the draws it used before, so a placement changes only where it was invalid, or
   where it started from another record's spot that changed.
 * Bats keep their height (fliers hover where they are placed); extras are never fliers.
+* `no_drop` also tests for ground more than a unit above the spot within 6 units (a crate, a step) for the extra enemies:
+  a Cerberus put by a crate in RM_2031 stood inside it the next frame.
 * The game's own records off the ground on purpose are event enemies (a zombie above a slope in
   RM_0140, Bandersnatches on RM_3100's catwalk, the Hunter of RM_9110, two zombies 3 units
   below RM_9060's floor), never moved or copied, and RM_6090's free Black Widow (variant 6) under the floor.
@@ -625,10 +672,12 @@ the record's own slot during the load.
 |---|---|---|
 | free (no script use but its kill bit) | another kind | nothing in the script depends on its type |
 | shown or hidden by the script only (`InitModelSet`, "later-activated", ambushes that just appear) | another kind, with "Randomize Event Enemies" | the script only switches it on and off; it starts in its AI |
+| loaded by the script (`LoadWork`) only for ops any type takes alike: CommonCtr 7 (position), 11 (angle), 12/13 (sign flags), 23/41 (collision flags), 46 1 (hittable), 47 (`bhCalcModel`); SubCtr 128 (AI start), 139 (task reset), 143/147 with modes 0 or 1 and type 0 (an Init again) | another kind, with "Randomize Event Enemies" | the script puts it somewhere and starts its AI: any type does that alike. Before, every `LoadWork` made a record event-driven: zombies of 0031, 0140, 1021, 1070, 1100, 4000, 9200 took only other looks, and RM_0050's second Cerberus and RM_2000's first Bandersnatch stayed |
 | event-driven (`LoadWork`, motion pauses, links, positioning, zombie/face/render/look ops, `EneSeOn`) or HP read/set by the script | **another look of its own type**, with "Randomize Event Enemies" | the event plays the type's motion numbers and room motions on its skeleton, sets its AI modes (`SubCtr` 143/146/147), tests `id == 1` and its HP. All zombie looks share an 18-node first sub-model, Hunter and Sweeper a 28-node one, so the scene still fits; types with one look (Cerberus, Bandersnatch, Black Widow, bat, Spotter, moth, albinoids, anatomist) stay |
 | bosses and everything in their rooms (ids 2, 12..17, 19, 23, 24, 29, 30, 53..55: Gulp Worm, Alexia, Nosferatu, Alfred, Monster Steve, Tyrant fights, Giant Black Widow, tentacles, knights) | kept: the whole room | the scripts wait for the boss's death or drive it |
 | NPCs (ids >= 31), props (0), fish, albinoids, ants, moths, ceiling trap, scripted object | kept | water/wall/set-piece types, or no AI of their own |
-| a record without a floor (`flr_no < 0`) | kept | hangs somewhere for an event |
+| a record without a floor (`flr_no < 0`) | kept, unless this visit's script puts it somewhere (above) | parked below the room for an event: RM_1121's and RM_2000's Bandersnatches wait 36 units under the courtyard and climb up (types 10 and 9 of their AI); on a later visit (`ev_flg` 168 / 173 set) the script puts them on the ground and starts their AI, and they take a kind that fits there |
+| the Bandersnatch's arm (type 9 model 1) | kept | RM_3130's scene plays its room motions on it; before, it became the whole Bandersnatch (model 0) as "another look" |
 | a free or shown ground record that does not stand on the ground ("Spots": RM_6090's Black Widow under the floor) | another look of its type | its own type does what it does there; another kind would be stuck in the air or under the floor |
 
 **Kinds** a free or shown record can become (`enemyopt_glue.c kinds[]`); a kind is drawn first by
@@ -735,7 +784,7 @@ loads) at each of the 113 room files `enemy_floor_check.sh` tours, 100 seeds eac
 `enemy_extras_frame` picks them; averages over the rooms the randomizer changes something in (11100
 room x seed results per setting). These rooms average 3.3 records: 1.6 free or shown (another kind) and
 1.6 event-driven (another look of their type). 48% have no free record (every zombie there plays in an
-event), so they show 1.17 kinds whatever the setting, and get no extras either; the most kinds the
+event), so they show 1.17 kinds whatever the setting, and got no extras either (extras then copied free records); the most kinds the
 records alone could show averages 2.13. Before the target, Custom drew every record by rate alone, so
 two records often drew the same kind (two free records at equal rates: 2.13 kinds where they could show
 2.37), and extras only copied.
@@ -766,45 +815,48 @@ gain. At every kind 5 the shares stay within 2 points.
 #### Event enemies per room
 
 What "Randomize Event Enemies" does with each room's event-driven and script-shown records of the
-roaming types (generated from the script walk; records not listed are free, or not enemies of these
-types). *Another kind*: the script only shows or hides them. *Another look*: an event drives them
+roaming types on a first visit of a new game (generated from the randomizer's "scripted records" log lines of
+`enemy_floor_check.sh`; records not listed are free, or not enemies of these types). On later visits, with the story
+flags a first visit sets, some change more (the script's code for the first visit no longer runs): RM_1121's and
+RM_2000's Bandersnatches (`ev_flg` 168 / 173, their climb), RM_1090's Bandersnatch (16), RM_0050's first Cerberus
+(114 or 115) take another kind, RM_4010's bats (247) another flier. *Another kind*: the script only shows or hides them. *Another look*: an event drives them
 (the scene keeps its type). *Kept*: event-driven with no other look of their type, or a boss arena.
 
 | Room | Records (index) and what they become |
 |---|---|
 | 0020 | zombie 0,1,2,3,5: another look (event-driven) |
 | 0030 | zombie 3: another look (event-driven) |
-| 0031 | zombie 1,2,3,4,5: another look (event-driven) |
-| 0050 | zombie 2: another look (event-driven); Cerberus 0,1: **kept** (event-driven, one look) |
+| 0031 | zombie 1,4,5: another look (event-driven); zombie 2,3: another kind (loaded only for ops any type takes) |
+| 0050 | Cerberus 0: **kept** (event-driven, one look); Cerberus 1: another kind (loaded only for ops any type takes); zombie 2: another look (event-driven) |
 | 0060 | zombie 3: another look (event-driven) |
 | 0070 | zombie 0,1,2,3: another look (event-driven) |
 | 0080 | zombie 0,1,2,3,4: another look (event-driven) |
 | 0090 | zombie 0,1,2,3,4: another look (event-driven) |
 | 0110 | zombie 1: another look (event-driven); anatomist 4: **kept** (event-driven, one look) |
-| 0140 | zombie 0,1,2,3: another look (event-driven) |
+| 0140 | zombie 0,1: another kind (loaded only for ops any type takes); zombie 2,3: another look (event-driven) |
 | 0150 | zombie 0: another look (event-driven) |
 | 0160 | zombie 0,1,2,3,4: another look (event-driven) |
-| 1021 | zombie 0,1: another kind (shown or hidden only); zombie 2,3: another look (event-driven) |
+| 1021 | zombie 0,1: another kind (shown or hidden only); zombie 2: another kind (loaded only for ops any type takes); zombie 3: another look (event-driven) |
 | 1030 | bat 3: **kept** (event-driven, one look) |
-| 1070 | zombie 0,1,2,3: another look (event-driven) |
+| 1070 | zombie 0,3: another look (event-driven); zombie 1,2: another kind (loaded only for ops any type takes) |
 | 1090 | Bandersnatch 1: **kept** (event-driven, one look) |
-| 1100 | zombie 0,1,2,3,4: another look (event-driven) |
+| 1100 | zombie 0,1,2,3,4: another kind (loaded only for ops any type takes) |
 | 1121 | Bandersnatch 0,1: **kept** (event-driven, one look) |
-| 2000 | Bandersnatch 0,1: **kept** (event-driven, one look) |
+| 2000 | Bandersnatch 0: another kind (loaded only for ops any type takes); Bandersnatch 1: **kept** (event-driven, one look) |
 | 2031 | zombie 0,3: another look (event-driven) |
 | 3020 | Cerberus 2,3: another kind (shown or hidden only) |
 | 3030 | zombie 0,1: another look (event-driven) |
 | 3050 | zombie 0,1,2,3,4: another look (event-driven) |
 | 3070 | zombie 1: another look (event-driven) |
 | 3100 | Bandersnatch 0,1: **kept** (event-driven, one look) |
-| 3120 | zombie 1,2: another look (event-driven); albinoid infant 0: **kept** (event-driven, one look) |
-| 3130 | Bandersnatch 0: **kept** (event-driven, one look) |
-| 3140 | zombie 7: another look (event-driven); albinoid infant 0,1,2,3,4,5,6: **kept** (event-driven, one look) |
+| 3120 | albinoid infant 0: **kept** (not in the pool); zombie 1,2: another look (event-driven) |
+| 3130 | Bandersnatch arm 0: **kept** (its scene plays room motions on it; before, it became the whole Bandersnatch) |
+| 3140 | albinoid infant 0,1,2,3,4,5,6: **kept** (not in the pool); zombie 7: another look (event-driven) |
 | 3160 | zombie 0,1,2,4: another kind (shown or hidden only) |
 | 3170 | zombie 0,1,2,3: another kind (shown or hidden only) |
 | 3180 | Bandersnatch 2,3: another kind (shown or hidden only) |
 | 3200 | zombie 0,1,2: another kind (shown or hidden only) |
-| 4000 | zombie 3,4,5: another look (event-driven) |
+| 4000 | zombie 3,4,5: another kind (loaded only for ops any type takes) |
 | 4001 | zombie 0,1,2: another look (event-driven) |
 | 4010 | bat 0,1,2,3,4: **kept** (event-driven, one look) |
 | 4012 | Bandersnatch 0,1: **kept** (event-driven, one look) |
@@ -816,50 +868,55 @@ types). *Another kind*: the script only shows or hides them. *Another look*: an 
 | 5670 | Hunter 1: another kind (shown or hidden only) |
 | 6010 | zombie 0,1,2,3: another look (event-driven) |
 | 6020 | zombie 1: another look (event-driven) |
-| 6030 | zombie 2: another look (event-driven); moth 3,4,5: **kept** (event-driven, one look) |
+| 6030 | zombie 2: another look (event-driven); moth 3,4,5: **kept** (not in the pool) |
 | 6050 | zombie 0,1,2,3,4: another look (event-driven) |
-| 6070 | Cerberus 1: another kind (shown or hidden only); Cerberus 0,2: **kept** (event-driven, one look) |
+| 6070 | Cerberus 0,2: **kept** (event-driven, one look); Cerberus 1: another kind (shown or hidden only) |
 | 6080 | zombie 1,2,3,4,5: another look (event-driven) |
-| 6090 | Black Widow 0,1,2: another kind (shown or hidden only) |
+| 6090 | Black Widow 0,1: another kind (shown or hidden only); Black Widow 2: **kept** (off the ground, one look) |
 | 7031 | zombie 0,1: another kind (shown or hidden only) |
 | 7050 | Hunter 0: another look (event-driven) |
 | 7060 | zombie 1: another look (event-driven) |
 | 7070 | Bandersnatch 6: **kept** (event-driven, one look) |
 | 7071 | zombie 4,5,6: another kind (shown or hidden only) |
 | 7080 | Black Widow 0,1: **kept** (event-driven, one look) |
-| 7081 | Hunter 2,3: another look (event-driven); Spotter 0,1: **kept** (event-driven, one look) |
-| 7100 | albinoid adult 0: **kept** (event-driven, one look) |
-| 7110 | Hunter 1,3: another look (event-driven); Spotter 0: **kept** (event-driven, one look) |
+| 7081 | Spotter 0,1: **kept** (event-driven, one look); Hunter 2,3: another look (event-driven) |
+| 7100 | albinoid adult 0: **kept** (not in the pool) |
+| 7110 | Spotter 0: **kept** (event-driven, one look); Hunter 1,3: another look (event-driven) |
 | 7130 | Hunter 0,1,2,3: another kind (shown or hidden only) |
 | 7140 | zombie 0: another look (event-driven) |
-| 7181 | Hunter 0: another look (event-driven); Spotter 1: **kept** (event-driven, one look) |
+| 7181 | Hunter 0: another kind (loaded only for ops any type takes); Spotter 1: **kept** (event-driven, one look) |
 | 7190 | zombie 0,1: another kind (shown or hidden only) |
-| 7191 | Hunter 1: another look (event-driven); Spotter 0: **kept** (event-driven, one look) |
+| 7191 | Spotter 0: **kept** (event-driven, one look); Hunter 1: another look (event-driven) |
 | 7200 | Hunter 0: another kind (shown or hidden only) |
 | 7250 | Black Widow 0,1: another kind (shown or hidden only) |
 | 8001 | zombie 0,1,2: another look (event-driven) |
 | 8010 | Hunter 0,1: another kind (shown or hidden only) |
 | 8020 | Hunter 0: another look (event-driven) |
-| 8030 | Hunter 2: another look (event-driven); Spotter 1: **kept** (event-driven, one look) |
+| 8030 | Spotter 1: **kept** (event-driven, one look); Hunter 2: another look (event-driven) |
 | 9010 | zombie 0,1,2,3: another look (event-driven) |
 | 9020 | zombie 0,1,2: another kind (shown or hidden only) |
 | 9030 | zombie 1,2,3,4,5: another look (event-driven) |
 | 9060 | zombie 0,1,2,3,4: another look (event-driven) |
 | 9080 | zombie 1,2,3,4,5: another look (event-driven) |
-| 9100 | Hunter 2: another look (event-driven); Spotter 0,1: **kept** (event-driven, one look) |
+| 9100 | Spotter 0,1: **kept** (event-driven, one look); Hunter 2: another look (event-driven) |
 | 9110 | Hunter 0: another look (event-driven) |
 | 9120 | zombie 0,1,2,3,4,5,6: another kind (shown or hidden only) |
 | 9130 | Hunter 0: another kind (shown or hidden only) |
-| 9190 | zombie 1,4: another kind (shown or hidden only); zombie 0,2,3: another look (event-driven) |
-| 9200 | zombie 0,1,2,3,4: another look (event-driven) |
+| 9190 | zombie 0,2,3: another look (event-driven); zombie 1,4: another kind (shown or hidden only) |
+| 9200 | zombie 0,1,2,3,4: another kind (loaded only for ops any type takes) |
 | 9220 | Hunter 0: another look (event-driven) |
-| 9290 | zombie 3: another kind (shown or hidden only); zombie 2,4,5: another look (event-driven) |
+| 9290 | type 25 0: **kept** (event-driven); zombie 2,4,5: another look (event-driven); zombie 3: another kind (shown or hidden only) |
 | 9340 | zombie 1,2,3: another look (event-driven) |
 
 ### Limits
 
 * Extra enemies come only from the host: in a room only the guest is in, there are none until the
   host comes in.
+* The script is read for this visit with the `ev_flg` / `ky_flg` bits as each co-op side has them at its room load: a
+  flag that changed between the host's load and the guest's could make them randomize a record differently. The flags
+  that matter (RM_1121's 168, RM_2000's 173: their Bandersnatches' climb) are set on an earlier visit, long synced.
+* Extra enemies stand where the grid has one height per cell: where two floors overlap (a balcony over the floor) the
+  first one reached has the cell, so the other gets fewer spots there.
 * Two looks of one type share the first one's sound bank.
 * A refusal by `spawn_at` keeps the original record; both co-op sides decide the same unless one
   side's memory is fuller.
@@ -886,7 +943,8 @@ types). *Another kind*: the script only shows or hides them. *Another look*: an 
 
 `pc/tools/enemy_revisit_check.sh OUT [SEED...]` (headless, about 7 minutes): a new game visits twelve
 rooms twice with the randomizer, placements and three extras on, killing everything (and once only the
-records); every room must get the same records and extras on both visits, and nothing killed may come back.
+records); every room must get the same records and extras on both visits, and nothing killed may come back (an
+extra keeps its slot, so a dead one may not be in its slot again, nor more of a type than lived on).
 `EXTRA=8` raises the extras; the other `RECVX_ENEMY_*` (Custom, its rates, Types per Room) pass through.
 
 `pc/tools/enemy_rates_check.sh OUT [SEED...]` (headless, about 4 minutes): a new game tours 22 rooms per
@@ -894,7 +952,7 @@ seed with eight extras, once with Custom rates (zombies Off, Cerberus 10, the re
 zombie, Cerberus must take most ground records), twice with Hunter 10 and Sweeper Off and the other way round
 (no record may become the one at Off, some must become the other), Wild and Mild each with Types per Room 1 and 2,
 and Custom with Types per Room 2 and 8 (no room over its limit, extras included, unless logged; the Hunter and the
-Sweeper two kinds in every variety; in Mild every extra of a type the room's records have; with 8 some extras of
+Sweeper two kinds in every variety; in Mild every extra of a kind the room's records have or of its two Mild kinds; with 8 some extras of
 kinds the room's records lack). It prints the kinds per room with and without the extras.
 
 `pc/tools/enemy_floor_check.sh OUT [SEED...]` (headless, about 25 minutes): a new game tours the 114 room files
@@ -905,7 +963,14 @@ ground under it ("Spots"); records that keep their type at the game's own spot a
 "Spots" rules, 4 seeds: 87 of 1853 placed or added walkers stood in mid-air (74: over the pool and stairs of
 RM_3060, by the balconies of RM_2011, off RM_9310's platform, over RM_1120's ramp, in RM_5580) or sunk in a crate or
 step (13: RM_1060, RM_2011, RM_5690, RM_7180), and RM_6090's Black Widow under the floor became another kind in
-every run; with them, none.
+every run; with them, none. With the extras anywhere in a room (2026-11-11, 4 seeds): 3 more, now ruled out (RM_8010's
+catwalk line wall, RM_7050's floor lines, a Giant Black Widow by the edge of RM_1000's raised walk).
+
+`pc/tools/enemy_door_check.sh OUT [SEED...]` (headless, about 15 minutes): a new game tours the 94 room files that get
+extras with the randomizer (Wild) and eight extras, and in each room also surveys the extras' spots of 50 seeds
+(`RECVX_ENEMY_SPOTS`). Every surveyed spot and every extra that came must be at least 30 units from every door trigger
+and entry position as the game measures them, and from every entry position and type 0 door trigger of the room file
+as `pc/tools/rdx.py` reads it (an independent check). It prints per room how many of the eight found a spot.
 
 Test aids:
 
@@ -916,6 +981,7 @@ Test aids:
 | `RECVX_ENEMY_EXTRA`, `_PLACE`, `_RANDOM`, `_SEED`, `_VARIETY`, `_EVENTS`, `_TYPES`, `_RATES` | override the enemy options (`_RATES` as the `enemy_rates` line) |
 | `RECVX_ENEMY_KILL=n[:r\|:x]` | from n game frames into each room, every 20 frames each living, shown enemy of the room's records and its extra enemies (ids 1..30, in its AI) takes a heavy hit as from the player's weapon (the knife's without one: weapons 0 and 1, none and the lighter, never hit in the game; `:r` only the records, `:x` only the extras); logs the living ones at frame n, each death (`flg & 2`, what `DieCk` turns into the kill bit) and per room how many died (Black Widows take damage through their body parts and do not die from it) |
 | `RECVX_HEADSHOT=n` | n game frames into each room, every living zombie in its AI (records and added ones) takes one head hit as from the magnum (weapon 6 on joint 11, the game's burst path); its head state (`exp0 + 0x78`), hp and modes are logged every 15 frames for 90 frames |
+| `RECVX_ENEMY_SPOTS=seeds` | at the first frame each room runs, the extras' spots of seeds 1..seeds (eight extras, the randomizer off: spots only, nothing spawns), one line per seed with each spot's x z and distances to the nearest door trigger and entry, then the room's grid (cells, walkable, spots) |
 | `RECVX_ENEMY_FLOORS=n` | n game frames into each room (2: the frame after the extras came), every enemy (ids 1..30) is logged with its position, floor and room-file type, the ground under it as `find_spot` sees it ("Spots", ` slope` on a slope) and the bottom of the box that ground is the top of (a shelf with room below is no crate), its floor's height and what the options did to it (`moved`, `random`, `extra`, `orig`; `other`: a part an enemy's Init put in a slot of its own) |
 | `RECVX_ENEMY_TRACE=dist` | traces enemy steps (co-op targets) |
 | `RECVX_TRACE_SND=1` | logs sound requests and extra banks |

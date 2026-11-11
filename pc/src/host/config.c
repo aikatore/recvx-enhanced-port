@@ -218,7 +218,7 @@ void config_load(void)
 {
     char p[1100], line[1100], k[64], val[128];
     int v;
-    int combined_seen = 0, had_off = 0, migrate, enemy = g_enemy_opts.cast_enemy;
+    int combined_seen = 0, server_seen = 0, had_off = 0, migrate, enemy = g_enemy_opts.cast_enemy;
     FILE* f;
     path(p, sizeof(p));
     if (!(f = pc_fopen(p, "r"))) {   /* first start: the defaults (player_id saves them) */
@@ -233,9 +233,10 @@ void config_load(void)
     while (fgets(line, sizeof(line), f))
         if (sscanf(line, " coop_join = %127s", g_coop.join) == 1) continue;
         else if (sscanf(line, " fixed_cam_version = %d", &v) == 1) { combined_seen = 1; continue; }
+        else if (sscanf(line, " coop_server_version = %d", &v) == 1) { server_seen = 1; continue; }
         else if (sscanf(line, " coop_player_id = %127s", val) == 1) { if (!unhex(val, g_coop.pid, 16)) memset(g_coop.pid, 0, 16); continue; }
         else if (sscanf(line, " coop_player_key = %127s", val) == 1) { if (!unhex(val, g_coop.pkey, 32)) memset(g_coop.pkey, 0, 32); continue; }
-        else if (!strncmp(line, "coop_server =", 13)) { if (sscanf(line + 13, " %127s", g_coop.server) != 1) g_coop.server[0] = 0; continue; }   /* empty: no server */
+        else if (!strncmp(line, "coop_server =", 13)) { if (sscanf(line + 13, " %127s", g_coop.server) != 1) g_coop.server[0] = 0; continue; }   /* empty: no server (before coop_server_version: the default, below) */
         else if (sscanf(line, " coop_name = %15[^\r\n]", g_coop.name) == 1) continue;
         else if (sscanf(line, " iso = %1023[^\r\n]", g_config.iso_path) == 1) continue;
         else if (sscanf(line, " hd_textures_dir = %1023[^\r\n]", ini_hd_dir) == 1) { SDL_strlcpy(g_config.hd_textures_dir, ini_hd_dir, sizeof(ini_hd_dir)); continue; }
@@ -276,6 +277,9 @@ void config_load(void)
     /* a file from before Combined (no fixed_cam_version line): Modern, the default then and always
        written, becomes Combined; Classic, never the default since Modern, stays */
     if (!combined_seen && g_modern_on == 1) g_modern_on = MODERN_COMBINED;
+    /* a file from before the default co-op server (no coop_server_version line) always wrote coop_server,
+       empty for no server: that becomes the default once; an empty one written since was cleared on purpose */
+    if (!server_seen && !g_coop.server[0]) SDL_strlcpy(g_coop.server, COOP_DEFAULT_SERVER, sizeof(g_coop.server));
     g_coop.chr = appear_canon(g_coop.chr);   /* an event double no longer listed: its listed twin (actors.c) */
     for (int c = 0; c < 2; c++) if (g_appear_own[c] >= 0) g_appear_own[c] = appear_canon(g_appear_own[c]);
     g_enemy_opts.cast = g_enemy_opts.cast == 1 || g_enemy_opts.cast == 3;   /* the cutscene cast had 1 Characters, 2 Enemies, 3 Both: the characters' on */
@@ -317,6 +321,7 @@ static int write_ini(FILE* f, void* ud)
     fprintf(f, "fixed_cam_version = 1\n");   /* fixed_cam_controls knows Combined (config_load) */
     fprintf(f, "coop_join = %s\n", g_coop.join);
     fprintf(f, "coop_server = %s\n", g_coop.server);
+    fprintf(f, "coop_server_version = 1\n");   /* an empty coop_server is a choice (config_load) */
     if (g_coop.name[0]) fprintf(f, "coop_name = %s\n", g_coop.name);
     if (nonzero(g_coop.pid, 16)) {   /* who we are in co-op: made once; the key never leaves this file */
         fprintf(f, "coop_player_id = "); hex(f, g_coop.pid, 16);

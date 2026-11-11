@@ -3032,7 +3032,8 @@ static void apply_snapshots(void)
      292..301  a placed typewriter's location text, "LOC=" + UTF-8 (savestore.h SAVE_TEXT_ITM; extras_glue.c sets it for
                the save screen and clears it otherwise: any value)
      320..359  GRANT0: pending event items (word 0 of each entry an item word, its floor in bits 24..31)
-     302..319, 360..382  unused (any value: no code reads them)
+     302..319, 360..382  the extra enemies' dead flags (enemies.h enemy_xdead_word, enemyopt_glue.c xrooms): world
+               state, so EV_FLAGS sends their changes (words NFLAG..), own_restore and own_put keep the host's
      383       the files read (fileview.c: a bit per file, 24 files, so bits 16..23 too)
    Only the item words are items: the game indexes item tables with their bits 16..23. */
 static int own_copies(void);
@@ -3078,6 +3079,13 @@ static const char* blob_valid(const unsigned char* b)
 #undef BF
 }
 static unsigned int last[NFLAG];        /* the flag block as the partner knows it */
+static unsigned int xlast[ENEMY_XDEAD_WORDS];   /* and the extra enemies' dead flags (EV_FLAGS words NFLAG..; enemyopt_glue.c) */
+static void last_sync(void)
+{
+    int w;
+    memcpy(last, sys->ev_flg, sizeof(last));   /* (flag_block) */
+    for (w = 0; w < ENEMY_XDEAD_WORDS; w++) xlast[w] = *enemy_xdead_word(w);
+}
 static int own_live, own_sent_ok;       /* guest: we play in the host's game of this session; our items went to it (EV_OWN) */
 static unsigned int my_sid, peer_sid, blob_end;   /* blob_end: host, id of the last chunk sent */
 static int blob_due, need_blob, pop_pending, popping, follow_pending, host_room = -1;
@@ -3226,12 +3234,13 @@ void pc_quick_start(void)
 /* after bhPopGameData put the host's state in place (the game reads it at the restart) */
 static void own_restore(void)
 {
-    unsigned int box[160], ic = sys->ic_flg[15], spots[16];
+    unsigned int box[160], ic = sys->ic_flg[15], spots[16], xd[ENEMY_XDEAD_WORDS], dead;
     /* our saved items came with the state (the host's record of us): requested, or a rejoin after
        our game ended without a goodbye - not over the game we are playing (a resync) */
     int i, rec = blob_rec == 2 || (blob_rec && (want_rec || own_fixed || !own_valid));   /* 2: a shared game over's continue */
     memcpy(box, &sys->itm[64], sizeof(box));   /* the host's: with shared loot, the one box both use */
     memcpy(spots, &sys->itm[IMP_SPOTS], sizeof(spots));   /* the important item spots the host's game knows */
+    for (i = 0; i < ENEMY_XDEAD_WORDS; i++) xd[i] = *enemy_xdead_word(i);   /* the host's extra enemies' dead flags (world state) */
     own_fixed = 0;   /* a given source applies to this join; from now on our game state */
     if (rec) note(blob_rec == 2 ? "Game over for both: back at the host's continue point, with the items you had there"
                                 : "Restored your saved items from the host");   /* already in place: the host put them into the state */
@@ -3260,6 +3269,8 @@ static void own_restore(void)
         if (sys->ply_hp[i] < 0) sys->ply_hp[i] = sys->gm_mode == 2 ? 320 : 160;
     if (!(rx.opts & OPT_INDIVIDUAL)) memcpy(&sys->itm[64], box, sizeof(box));
     if (own_copies()) imp_restore(spots);
+    for (i = 0, dead = 0; i < ENEMY_XDEAD_WORDS; i++) dead += __builtin_popcount(*enemy_xdead_word(i) = xd[i]);
+    if (dead) host_log("coop: the host's game: %d extra enemies dead\n", dead);
     pc_biorand_stamp();   /* our saves of this game: the session's BioRand state */
     blob_rec = want_rec = 0;   /* this join's; later states (a story switch, a host restart) keep our own */
 }
@@ -3418,7 +3429,7 @@ static void send_blob(void)
         queue_event(&e);
     }
     blob_end = ring.next - 1;
-    memcpy(last, flag_block(), sizeof(last));
+    last_sync();
     blob_due = 0;
     host_log("coop: sent the game state (stage %d room %d)\n", sys->stg_no, sys->rom_no);
 }
@@ -3440,7 +3451,7 @@ static void load_blob(void)
     own_restore();
     own_live = 1;   /* from now on our items go to the host (EV_OWN) */
     inv_log("joined");
-    memcpy(last, flag_block(), sizeof(last));
+    last_sync();
     pop_pending = 0;
     popping = 1;
     follow_pending = 0;
@@ -3575,6 +3586,11 @@ static void own_put(unsigned char* b, const unsigned char* o)
         for (k = 0; k < 16; k++) spots[k] |= sys->itm[IMP_SPOTS + k];
     }
     if (!g_coop.loot) memcpy(b + BO(itm) + 64 * 4, box, sizeof(box));   /* shared loot: one item box, ours */
+    {   /* the extra enemies' dead flags: ours (world state in item words) */
+        int k;
+        for (k = 0; k < ENEMY_XDEAD_WORDS; k++)
+            memcpy(b + BO(itm) + ((char*)enemy_xdead_word(k) - (char*)sys->itm), enemy_xdead_word(k), 4);
+    }
     memcpy(b + BO(ply_stflg), o + OO(stflg), sizeof(own.stflg));
     memcpy(b + BO(ply_wno), o + OO(wno), sizeof(own.wno));
     memcpy(b + BO(ply_hp), o + OO(hp), sizeof(own.hp));
@@ -3972,6 +3988,14 @@ static void diff_flags(void)
         e.u.fl.word[e.u.fl.n] = w; e.u.fl.set[e.u.fl.n] = set; e.u.fl.clr[e.u.fl.n] = clr;
         if (++e.u.fl.n == 6) { queue_event(&e); e.u.fl.n = 0; }
     }
+    for (w = 0; w < ENEMY_XDEAD_WORDS; w++) {   /* the extra enemies' dead flags (world state in item words: as world flags) */
+        unsigned int x = *enemy_xdead_word(w), set = x & ~xlast[w], clr = xlast[w] & ~x;
+        if (!(set | clr)) continue;
+        xlast[w] = x;
+        if (!have_peer) continue;
+        e.u.fl.word[e.u.fl.n] = (uint8_t)(NFLAG + w); e.u.fl.set[e.u.fl.n] = set; e.u.fl.clr[e.u.fl.n] = clr;
+        if (++e.u.fl.n == 6) { queue_event(&e); e.u.fl.n = 0; }
+    }
     if (e.u.fl.n) queue_event(&e);
 
     /* a pickup (bhItmCk) sets the item flag and hides the item object of the examined spot
@@ -4107,7 +4131,16 @@ static int apply_session_event(const Event* e)
         }
         for (j = 0; j < c.u.fl.n && j < 6; j++) {
             int w = c.u.fl.word[j];
-            if (w >= NFLAG) continue;
+            if (w >= NFLAG) {   /* an extra enemy's dead flag */
+                unsigned int* x;
+                if (w >= NFLAG + ENEMY_XDEAD_WORDS) continue;
+                x = enemy_xdead_word(w - NFLAG);
+                if ((c.u.fl.set[j] & ~*x) | (c.u.fl.clr[j] & *x))
+                    host_log("coop: the partner's extra enemy dead flags, word %d: set %08x, cleared %08x\n", w - NFLAG, c.u.fl.set[j] & ~*x, c.u.fl.clr[j] & *x);
+                *x = (*x | c.u.fl.set[j]) & ~c.u.fl.clr[j];
+                xlast[w - NFLAG] = (xlast[w - NFLAG] | c.u.fl.set[j]) & ~c.u.fl.clr[j];
+                continue;
+            }
             if (trace && w >= 64 && w < 96)
                 fprintf(stderr, "coop: ed_flg word %d set %08x clr %08x (the partner's, as sent %08x %08x)\n", w - 64, c.u.fl.set[j], c.u.fl.clr[j], e->u.fl.set[j], e->u.fl.clr[j]);
             if (is_host && item_word(w) && individual()) continue;   /* individual loot: the guest's item words are its own */

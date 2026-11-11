@@ -17,7 +17,7 @@ run() {   # run DIR exitframe args...
     printf "show_fps = 0\ncoop_follow = 0\n" > "$d/save/recvx.ini"
     SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy RECVX_SKIP_MOVIES=1 RECVX_UPDATE_CHECK=0 RECVX_MODS="$d/mods" \
     RECVX_EXIT_FRAME=$x RECVX_COOP_TRACE=1 RECVX_ITEM_TRACE=1 RECVX_INF_HEALTH=1 \
-    timeout -s KILL 600 "$bin" "$iso" --skip-intro --size 320x240 --vanilla --save-dir "$d/save" "$@" > "$d/log.txt" 2>&1
+    timeout -s KILL 600 "$bin" "$iso" --skip-intro --size 320x240 --vanilla --save-dir "$d/save" --coop-conn direct "$@" > "$d/log.txt" 2>&1
 }
 RECVX_COOP_CODE=TEST-KEYS RECVX_INPUT="$newgame" RECVX_TELEPORT=900:3:10:1 RECVX_FLAGS=1:215 RECVX_WARP=3:10:60:44:53.5:0 \
     RECVX_SKIP_CINE=30 run "$out/host" 4500 --coop-host "$port" &

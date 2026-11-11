@@ -297,9 +297,9 @@ until the right square on the white strip is.
 | Import Memory Card Saves | | copies the card's saves into save files |
 | Free Typewriter Saves | Off | typewriters save without an ink ribbon |
 | Extra Item Boxes and Herbs | Off | four more item boxes and eight blue herb planters in some rooms (helps with the randomizers); in co-op the host's |
-| Extra Enemies | Off | up to 1..8 more per room (one per enemy at most): copies of its enemies, or with Types per Room in Wild or Custom kinds the room lacks |
+| Extra Enemies | Off | up to 1..8 more enemies in every room that has enemies (not in boss rooms, save rooms or the Battle Game), anywhere on the floor but never within 3 m of a door or where you come in, nor at items or typewriters. Fewer where a small room has no more room. With the Enemy Randomizer they follow its selection, rates and Types per Room; without it they are more of the room's own enemies. Killed ones stay dead, also in your saves |
 | Rearranged Enemies | Off | free-roaming enemies start elsewhere in their room |
-| Enemy Randomizer | Off | enemies become other kinds; bosses stay |
+| Enemy Randomizer | Off | enemies become other kinds; bosses stay. Enemies a scene needs keep their kind, some only on the first visit (the Bandersnatches that climb into the palace's outer courtyard change on later visits) |
 | Enemy Selection | Wild | Wild: any kind that fits. Mild: two common kinds per room. Custom: your rate (Off, 1..10) for each kind, set in Enemy Rates (below); picking Wild or Mild presets them |
 | Enemy Rates | | with Custom, right under Enemy Selection: opens the list of rates. The same list is on the BIORAND screen's RANDOMIZER page, in the co-op lobby and in F1 |
 | Types per Room | No Limit | Wild and Custom aim for that many different kinds of enemies in a room (1..8) as far as its enemies allow; Mild stays under it |
@@ -437,7 +437,7 @@ COOP.md, "Settings".
 | Setting | Default | What it does |
 |---|---|---|
 | Partner Name Tag, Show Ping | On | |
-| Hide IP Addresses | Off | for streaming: addresses show as `xxx.xxx.xxx.xxx` |
+| Hide IP Addresses | Off | for streaming: addresses show as `xxx.xxx.xxx.xxx` (the co-op server's stays visible) |
 | Follow Host | On | go through every door the host takes |
 | Loot Sharing | Shared | Shared: each item once, split the supplies. Individual: a copy each |
 | Duplicate Weapons and Ribbons | On | shared loot: weapons and ink ribbons for each player |
@@ -447,7 +447,7 @@ COOP.md, "Settings".
 | Quick Start | Off | start with the manual read and the knife in the bag |
 | Pause Enemies During Trades, Remember Partner Items | On | |
 | Shared Enemy Control | Off | each enemy runs in the game of the player fighting it, so hits and grabs react at once for both players (new: not yet tested much on Windows and over the internet); the host can change it until the game starts |
-| Connection | Automatic | or Direct, Server Relay |
+| Connection | Automatic | or Direct, Server Relay. Automatic: room codes through the co-op server (eu.cvxenhanced.de unless changed; direct first, then its relay), addresses directly; without a server, as Direct |
 | Host Port, Automatic Port Forwarding | 7140, On | |
 
 ## Difficulty select
@@ -499,6 +499,10 @@ LAN.
 3. **Partner**: MULTIPLAYER -> *Direct* -> **JOIN A GAME**, paste the address
    (`ip:port#CODE`) into ADDRESS, **JOIN**.
 4. Host: **START THE GAME**.
+
+Without port forwarding, through the co-op server **eu.cvxenhanced.de** (filled in; the game
+contacts it only when you host or join this way): both choose *Via server* instead of *Direct*;
+the host sends the **ROOM CODE** (COPY ROOM CODE), the partner types it into CODE.
 
 F3 offers the same in a small window, also during a game. Everything else: COOP.md.
 
