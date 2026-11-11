@@ -33,7 +33,7 @@ extern int cast_n;                      /* actor_glue.c: hooks run while > 0 */
 unsigned coop_partner_import_id(void);  /* coop_glue.c: the partner's cast_import_id, 0 none */
 int coop_look_model(int c);             /* coop_glue.c: the player's look for Claire or Chris as a model, -1 themselves */
 static void voice_end(void);             /* "Randomize Voice Lines": the line's end (below) */
-static void voice_room(void);
+static void voice_room(int seed);
 extern unsigned char* bhScePtr;          /* event.c */
 extern BH_SCEWORK* bhCetask;
 static struct { const BH_SCEWORK *task, *skip; const unsigned char* end; int rec; } pre;   /* "Randomize Voice Lines": the last LipSet run
@@ -104,7 +104,7 @@ void cast_room(const EnemyOpts* o)
     }
     voice_end();   /* (an inserted line going on into this room still fades out at its time) */
     pre.end = NULL;   /* (the last LipSet was the room before's) */
-    voice_room();   /* (the lines and sounds said: this room's from now) */
+    voice_room(o ? o->seed : 0);   /* (the sounds said: this room's from now; the lines: this seed's) */
     if (o && o->voices) voices_want();   /* "Randomize Voice Lines": the lines for the room files now (read at the start already, else now) */
     if (!o || !rom || (!o->cast && !g_appear_per)) { cast_release(); return; }   /* ("Per Character": Claire's and Chris's looks without the cast) */
     imports = import_count(o);
@@ -320,8 +320,9 @@ int cast_draw(BH_PWORK* ep)
    that character instead (voice_pick: from the seed, the room file and the line), played from that line's disc's archive
    (partitions VOICE_PT + 0/1), and the LipSet after it plays that line's lip entry. The script waits for it as long as for
    its own line (pc_voice_playing), and the line is one that ends by then or soon after (voice_pick: at most VOICE_GRACE_MS
-   longer; a shorter one leaves a silence); one still going then (none of that character fits) fades out (vl.cap). The
-   scene keeps its timing. Subtitles stay the script's (the original line's text). */
+   longer; a shorter one leaves a silence) while the character has one out of its cooldown; else a longer one, cut at the
+   original's end with a short fade (vl.cap). The scene keeps its timing. Subtitles stay the script's (the original
+   line's text). */
 int coop_insn_len_raw(const unsigned char* p);   /* net/coop_proto.c */
 int adx_length_ms(int ptid, int fid);            /* audio/adx.c */
 int ADXF_LoadPartitionNw(int ptid, char* fname, void* dir, void* ptinfo);
@@ -330,8 +331,9 @@ int actor_double_shown(const BH_PWORK* ep);      /* actor_glue.c */
 uint64_t SDL_GetTicks(void);
 extern int PatId[4];
 #define VOICE_PT 28
-#define VOICE_GRACE_MS 1000          /* an inserted line ends at most this long after the original's end */
-#define VOICE_FADE 8                 /* ... fading out over this many sound ticks (ExecAdxFadeManager) */
+#define VOICE_GRACE_MS 1000          /* an inserted line ends at most this long after the original's end, */
+#define VOICE_FADE 7                 /* ... else is cut there, fading out over this many sound ticks + 1 (ExecAdxFadeManager, */
+#define VOICE_FADE_MS 267            /* ... one a game frame, VsyncFunc at the swap: 0.27 s) */
 extern unsigned int AdxPlayFlag[2];  /* sdfunc.c */
 extern ADXT_INFO AdxTInfo[4];        /* adxwrap.c */
 static struct {
@@ -432,13 +434,13 @@ static void cr_play(int prog)
 void pc_voice_tick(void)
 {
     uint64_t now = SDL_GetTicks();
-    if (vl.cap && now >= vl.cap) {   /* an inserted line longer than the original's time and grace: it fades out */
-        vl.cap = 0; vl.gnext = -1;   /* (nor does a group's next part start after it) */
+    if (vl.cap && now >= vl.cap) {   /* an inserted line longer than the original's time and grace: cut at the original's end */
         if (AdxPlayFlag[1]) {
             RequestAdxFadeFunctionEx(1, -1, -127, VOICE_FADE);   /* (StopAdx at the end: ExecAdxFadeManager) */
             vl.fading = 1;
-            host_log("voices: the inserted line fades out %d ms after the original's end\n", VOICE_GRACE_MS);
+            host_log("voices: the inserted line is cut at the original's end (%d ms late), fading out over %d ms\n", (int)(now - vl.cap), VOICE_FADE_MS);
         }
+        vl.cap = 0; vl.gnext = -1;   /* (nor does a group's next part start after it) */
     }
     if (vl.gnext >= 0 && !AdxPlayFlag[1] && !vl.fading) {   /* an inserted group: its next part when one ends */
         const VoiceCurated* c = voice_curated(vl.gpt - VOICE_PT + 1, vl.gnext);
@@ -509,11 +511,14 @@ static int group_ms(int disc, int vid)
 }
 static int line_ms(const VoiceLine* l) { return group_ms(l->disc, l->vid); }   /* (voice_pick) */
 
-/* the lines said since the room was loaded (voice_pick: the ones not said first; then none of the character's last few, never
-   one twice in a row), in the scene's order: the same in every run; a room load starts afresh (cast_room). Also those said
-   in place of Claire's and Chris's, which each co-op screen shows with its own player's look: the two screens pick alike
-   but where one shows them as the character another role is shown as (that one's lines then do not repeat theirs) */
+/* the lines said with this seed (voice_pick: the ones not said first; then none of the character's last few, never one
+   twice in a row), in the order the scenes said them: across room loads, so a character's few short lines do not open
+   every scene; another seed starts afresh (voice_room). The same scenes in the same order with the same seed say the same
+   lines. Also those said in place of Claire's and Chris's, which each co-op screen shows with its own player's look: the
+   two screens pick alike but where one shows them as the character another role is shown as (that one's lines then do
+   not repeat theirs), or one screen said lines in a scene the other did not see */
 static VoiceSaid said;
+static int said_seed;
 static int line_age(const VoiceLine* l) { return voice_said_age(&said, l); }
 
 /* a line not replaced: the speaker shown as another character (or as an enemy) says nothing of its own; quiet, and the
@@ -532,7 +537,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     const VoiceLine* l;
     const VoiceCurated *cv = voice_curated(disc, vid), *lc;   /* (checked by hand: docs/ACTORS.md "Lines checked by hand") */
     const char* why;
-    char from[12];
+    char from[12], cut[64];
 #define KEEP(why) do { if (getenv("RECVX_CAST_TRACE") || cv) host_log("voices: room %04d line %d/%d kind %d rec %d, speaker %d (%s), shown as %d: stays (%s)\n", room_file_now(), disc, vid, kind, rec, sp, sp >= 0 && sp < RECS ? cast_name(cast_character(ene[sp].id, ene[sp].mdlver)) : "-", m, why); vl.cap = 0; return vid; } while (0)
     voice_end();   /* (an enemy's sound stops at the next line, as PlayVoiceEx2 stops a line) */
     vl.gnext = -1;   /* (an inserted group starts no more parts) */
@@ -586,15 +591,17 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
         host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a short sound and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr));
         return quiet(sp, ms);
     }
-    voice_said_add(&said, l);   /* (said in this room: back only after others of that character) */
+    voice_said_add(&said, l);   /* (said: back only after others of that character) */
     why = lip < 0 ? mouth_add(sp, vid, l->lip, sure) : NULL;   /* (the catalogue lines have lips, but some checked by hand) */
     lc = voice_curated(l->disc, l->vid);
     snprintf(from, sizeof from, l->room != VOICE_NO_ROOM ? "RM_%04d" : "no scene", l->room);
+    cut[0] = 0;
+    if (ms > 0 && lms > fit + VOICE_GRACE_MS) snprintf(cut, sizeof cut, ", none out of the cooldown ends in time: cut at %d ms", fit);
     host_log("voices: room %04d record %d: %s's line %d/%d (%d ms%s%s), shown as %s -> %s's line %d/%d (%d ms%s%s%s) from %s, %s%s%s\n", room_file_now(), sp,
              cast_name(own), disc, vid, ms, sure ? ", speaker checked" : "", grunts == VOICE_PICK_GRUNTS ? ", a grunt" : "",
              m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?", cast_name(chr), l->disc, l->vid,
              lms, l->grunt ? ", a grunt" : "", lc && lc->next != 0xFFFF ? ", a group" : "",
-             ms > 0 && lms > fit + VOICE_GRACE_MS ? ", none ends in time: faded out" : "", from,
+             cut, from,
              lip >= 0 ? "with its lips" : sure ? "the speaker checked by hand: " : "no lips in the script (the speaker is the VoiceOn's record): ",
              lip >= 0 ? (l->lip ? "" : " (none: the script's)") : why ? "a still mouth, " : "Talking Mouths: its lips added", why ? why : "");
     vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = lip >= 0 ? l->lip : NULL; vl.t0 = SDL_GetTicks();
@@ -604,7 +611,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
         ((LIP_WORK*)ene[sp].exp2)->flag = 0;
         vl.lip = NULL;
     }
-    vl.cap = ms > 0 && lms > fit + VOICE_GRACE_MS ? vl.t0 + (uint64_t)(fit + VOICE_GRACE_MS) : 0;
+    vl.cap = cut[0] ? vl.t0 + (uint64_t)fit : 0;   /* (a longer line: cut at the original's end, pc_voice_tick) */
     *ptid = VOICE_PT + l->disc - 1;
     return l->vid;
 #undef KEEP
@@ -644,7 +651,7 @@ static void voice_end(void)
     if (cr.n) { cr.n = 0; StopSe(CR_SLOT); }   /* (an enemy's sound stops as the line would) */
 }
 
-static void voice_room(void) { said.n = 0; cr.last = -1; }
+static void voice_room(int seed) { if (seed != said_seed) said.n = 0; said_seed = seed; cr.last = -1; }
 
 /* StopVoice (sdfunc.c): VoiceOff, a skip, the line before an enemy's sounds; the slot stops or fades as the game asks */
 void pc_voice_stop(void)
