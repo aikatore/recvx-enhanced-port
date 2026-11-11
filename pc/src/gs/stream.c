@@ -186,15 +186,18 @@ static NativeVertex nv_blend_pos(const NativeVertex* a, const NativeVertex* b, f
    vertices for it) */
 static int nv_same_pos(const NativeVertex* a, const NativeVertex* b, uint32_t n)
 {
+    static const size_t at[6] = { offsetof(NativeVertex, x), offsetof(NativeVertex, y), offsetof(NativeVertex, z),
+                                  offsetof(NativeVertex, w), offsetof(NativeVertex, near_d), offsetof(NativeVertex, far_d) };
     if (n > 64) n = 64;   /* what native_draw draws */
     for (uint32_t k = 0; k < n; k++) {
-        const float *fa[6] = { &a[k].x, &a[k].y, &a[k].z, &a[k].w, &a[k].near_d, &a[k].far_d },
-                    *fb[6] = { &b[k].x, &b[k].y, &b[k].z, &b[k].w, &b[k].near_d, &b[k].far_d };
+        uint32_t d = 0, bad = 0;   /* (the fields of a vertex at once: one branch, not six) */
         for (int j = 0; j < 6; j++) {
             uint32_t x, y;
-            memcpy(&x, fa[j], 4); memcpy(&y, fb[j], 4);
-            if (x != y || (x & 0x7F800000u) == 0x7F800000u || x == 0x80000000u) return 0;   /* differ, Inf/NaN, -0 */
+            memcpy(&x, (const char*)&a[k] + at[j], 4); memcpy(&y, (const char*)&b[k] + at[j], 4);
+            d |= x ^ y;
+            bad |= ((x & 0x7F800000u) == 0x7F800000u) | (x == 0x80000000u);   /* Inf/NaN, -0 */
         }
+        if (d | bad) return 0;
     }
     return 1;
 }
@@ -754,11 +757,13 @@ static long inst_gap(const Frame* p, size_t a, const Frame* c, size_t b)
    rotating GS memory, so a mesh's texture address changes between frames; the tags
    identify the geometry. */
 static int32_t* pair; static size_t cap_pair;
+static const Inst *pair_a, *pair_b;   /* whose pairs pair[] holds */
 static long inst_pair(const Frame* p, const Inst* a, const Frame* c, const Inst* b)
 {
     int64_t sum = 0, n = 0, total = 0, near = 0, paired = 0;
     uint32_t j = 0;
     int native = 1;   /* all its groups native strips */
+    pair_a = a; pair_b = b;
     for (uint32_t k = 0; k < b->ng; k++) {
         const Group* g = &c->g[b->g0 + k];
         pair[k] = -1;
@@ -1035,7 +1040,8 @@ int stream_match(const Frame* p, const Frame* c)
             continue;
         }
         used[best] = 1;
-        inst_pair(p, &p->in[order[best]], c, b);   /* the pairs of the chosen instance */
+        if (pair_a != &p->in[order[best]] || pair_b != b)
+            inst_pair(p, &p->in[order[best]], c, b);   /* the pairs of the chosen instance (unless the last one judged) */
         {
             int lone = 0;   /* native strips without a pair */
             for (uint32_t k = 0; k < b->ng; k++) {

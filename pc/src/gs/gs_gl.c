@@ -48,6 +48,7 @@ typedef struct {
     int pending_reload;    /* reload from GS memory before the next draw unless it is fully overwritten */
     int has_box, bx0, by0, bx1, by1;   /* area drawn since it last mirrored GS memory (GS pixels);
                                           outside it GS memory is the authoritative copy */
+    int zrow;              /* GS rows zrow.. are 0 across the whole width in every channel (fast_clear) */
 } RenderTarget;
 static RenderTarget rts[MAX_RT];
 /* what the executed frame did first to each target (replay targets, below) */
@@ -56,6 +57,19 @@ static struct { int how, x0, y0, x1, y1; } first[MAX_RT];   /* COVER: area overw
 static uint64_t frame_no;
 static int scene_smooth, scene_dith;   /* Dithering: the 3D scene being drawn keeps its fraction; the image is dithered (gs_scene_begin) */
 static uint32_t stat_prims, stat_flushes, stat_reloads, stat_decodes, stat_decode_px;
+/* RECVX_GPU_TIME=2: the kind of GPU work that follows (gp_mark, below) */
+enum { GP_OTHER, GP_3D_OPAQUE, GP_3D_BLEND, GP_GS_RTREAD, GP_GS_TEX, GP_GS_FLAT, GP_FINAL_COPY, GP_REPLAY_START, GP_CAPTURE,
+       GP_RELOAD, GP_AA, GP_PRESENT, GP_OVERLAY, GP_CLEAR, GP_N };
+void gp_mark(int cat);
+/* RECVX_AB=mask (test aid, with RECVX_GPU_TIME): the optimizations in mask (1 fast clear, 8 the
+   whole-target clear, 16 the capture pool) are off in every other 2-second log interval
+   ("gputime: ab 0" on, "ab 1" off), so one run compares both under the same load */
+static int ab_mask = -1, ab_phase;
+static int ab_off(int bit)
+{
+    if (ab_mask < 0) ab_mask = SDL_getenv("RECVX_AB") ? SDL_atoi(SDL_getenv("RECVX_AB")) : 0;
+    return (ab_mask & bit) && ab_phase;
+}
 uint64_t gs_frame_count(void) { extern uint64_t stream_game_frames(void); return stream_game_frames(); }
 
 /* ---------------- texture cache ---------------- */
@@ -398,7 +412,8 @@ static void clip_distances(int on)
 
 /* ---------------- render target management ---------------- */
 
-static struct { uint32_t zbp; int pw, ph; GLuint tex; uint64_t last; } dz[8];
+static struct { uint32_t zbp; int pw, ph; GLuint tex; uint64_t last; int zrow; } dz[8];   /* zrow: GS rows zrow.. hold depth 0 */
+static int dz_cur;   /* dz[] of the last depth_for */
 static uint64_t dz_clock;
 /* the depth texture attached to each FBO: attaching it again on every flush made the driver
    revalidate the framebuffer per draw. Forgotten whenever an FBO or depth texture is deleted
@@ -419,17 +434,22 @@ static GLuint depth_for(uint32_t zbp, int pw, int ph)
 {
     int e = 0;
     dz_clock++;
-    for (int i = 0; i < 8; i++) if (dz[i].tex && dz[i].zbp == zbp && dz[i].pw == pw && dz[i].ph == ph) { dz[i].last = dz_clock; return dz[i].tex; }
+    for (int i = 0; i < 8; i++) if (dz[i].tex && dz[i].zbp == zbp && dz[i].pw == pw && dz[i].ph == ph) { dz[i].last = dz_clock; dz_cur = i; return dz[i].tex; }
     for (int i = 0; i < 8; i++)   /* a free one, else the least recently used */
         if (!dz[i].tex) { e = i; break; }
         else if (dz[i].last < dz[e].last) e = i;
     if (dz[e].tex) { glDeleteTextures(1, &dz[e].tex); fb_forget(); }   /* (a depth of another size would cut the draws) */
     glGenTextures(1, &dz[e].tex);
     glBindTexture(GL_TEXTURE_2D, dz[e].tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, pw, ph, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    {   /* created as depth 0 (was undefined), so fast_clear may clear all of it */
+        float* z = calloc((size_t)pw * ph, sizeof(float));
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, pw, ph, 0, GL_DEPTH_COMPONENT, GL_FLOAT, z);
+        free(z);
+    }
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    dz[e].zbp = zbp; dz[e].pw = pw; dz[e].ph = ph; dz[e].last = dz_clock;
+    dz[e].zbp = zbp; dz[e].pw = pw; dz[e].ph = ph; dz[e].last = dz_clock; dz[e].zrow = 0; dz_cur = e;
     return dz[e].tex;
 }
 
@@ -443,25 +463,41 @@ static RenderTarget* rt_find(uint32_t fbp, uint32_t fbw)
 }
 
 /* initial contents from emulated GS memory (e.g. data uploaded before the first draw) */
+static const float* u8_unit(void);
 static void rt_load_from_mem(RenderTarget* rt)
 {
     rt->has_box = 0;   /* mirrors GS memory again */
+    gp_mark(GP_RELOAD);
     ntex_before_access(0, 511);
     int w = rt->vw - 2 * g_margin_x, h = rt->vh;
     float* fx = malloc((size_t)w * h * 16);
+    uint32_t* px = malloc((size_t)w * h * 4);
+    const float* u = u8_unit();   /* i / 255.0f, the division the pixels had */
     GLuint tmp;
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
-            float* o = &fx[((size_t)y * w + x) * 4];
-            if (psm_is16(rt->psm)) {
-                uint32_t c = gs_read_pixel(rt->psm, rt->fbp * 32, rt->fbw, (uint32_t)x, (uint32_t)y);
-                o[0] = ((c & 0x1F) << 3) / 255.0f; o[1] = (((c >> 5) & 0x1F) << 3) / 255.0f; o[2] = (((c >> 10) & 0x1F) << 3) / 255.0f;
-                o[3] = (c & 0x8000) ? 1.0f : 0.0f;
-            } else {
-                uint32_t c = gs_read_pixel(rt->psm == PSMCT24 ? PSMCT24 : PSMCT32, rt->fbp * 32, rt->fbw, (uint32_t)x, (uint32_t)y);
-                o[0] = (c & 0xFF) / 255.0f; o[1] = ((c >> 8) & 0xFF) / 255.0f; o[2] = ((c >> 16) & 0xFF) / 255.0f; o[3] = (c >> 24) / 128.0f;
-            }
+    int is16 = psm_is16(rt->psm);
+    gs_read_rect(is16 ? (int)rt->psm : rt->psm == PSMCT24 ? PSMCT24 : PSMCT32, rt->fbp * 32, rt->fbw, (uint32_t)w, (uint32_t)h, px);
+    for (size_t i = 0; i < (size_t)w * h; i++) {
+        float* o = &fx[i * 4];
+        uint32_t c = px[i];
+        if (is16) {
+            o[0] = u[(c & 0x1F) << 3]; o[1] = u[((c >> 5) & 0x1F) << 3]; o[2] = u[((c >> 10) & 0x1F) << 3];
+            o[3] = (c & 0x8000) ? 1.0f : 0.0f;
+        } else {
+            o[0] = u[c & 0xFF]; o[1] = u[(c >> 8) & 0xFF]; o[2] = u[(c >> 16) & 0xFF]; o[3] = (c >> 24) / 128.0f;
         }
+    }
+    free(px);
+    {   /* the rows loaded as 0 from the bottom up; the margins keep what they held (rt_get: 0) */
+        int z = h;
+        while (z > 0) {
+            const float* r = &fx[(size_t)(z - 1) * w * 4];
+            int k = 0;
+            while (k < w * 4 && r[k] == 0.0f) k++;
+            if (k < w * 4) break;
+            z--;
+        }
+        if (z > rt->zrow) rt->zrow = z;
+    }
     glGenTextures(1, &tmp);
     glBindTexture(GL_TEXTURE_2D, tmp);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, fx);
@@ -517,15 +553,23 @@ static RenderTarget* rt_get(uint32_t fbp, uint32_t fbw, uint32_t psm)
     return rt;
 }
 
-/* internal resolution: the configured multiplier, or (auto) enough to cover the window */
-float gs_wanted_scale(void)
+/* internal resolution: the configured multiplier, or (auto) enough to cover the window, with
+   dyn_res at most the dynamic resolution's cap (drs_update) */
+static float auto_scale(void)
 {
     int ww, wh;
     float s;
-    if (g_config.scale > 0) return (float)g_config.scale;
     SDL_GetWindowSizeInPixels(g_window, &ww, &wh);
     s = floorf((float)wh / 448.0f + 0.5f);
     return s < 1.0f ? 1.0f : s > 8.0f ? 8.0f : s;
+}
+static int drs_cap(void);
+float gs_wanted_scale(void)
+{
+    float s;
+    if (g_config.scale > 0) return (float)g_config.scale;
+    s = auto_scale();
+    return g_config.dyn_res && s > (float)drs_cap() ? (float)drs_cap() : s;
 }
 
 /* change the internal resolution; existing render targets are resampled, not lost */
@@ -554,6 +598,7 @@ void gs_set_scale(float scale)
         glDeleteFramebuffers(1, &rt->fbo); fb_forget();
         glDeleteTextures(1, &rt->tex);
         rt->tex = tex; rt->fbo = fbo; rt->pw = pw; rt->ph = ph;
+        if (rt->zrow < rt->vh) rt->zrow++;   /* (the linear resample reaches a row further) */
     }
     for (int i = 0; i < 8; i++) if (dz[i].tex) { glDeleteTextures(1, &dz[i].tex); dz[i].tex = 0; }
     fb_forget();
@@ -698,11 +743,12 @@ void gs_notify_mem_write(uint32_t bp, uint32_t bw, int psm, uint32_t x, uint32_t
 
 void gs_notify_pages(const uint64_t* pages, int changed)
 {
-    for (uint32_t p = 0; p < 512; p++) {
-        if (!((pages[p >> 6] >> (p & 63)) & 1)) continue;
-        if (changed) page_dirty[p] = 1;
-        rt_invalidate_pages(p, p);   /* render targets do not mirror GS memory: always reload */
-    }
+    for (uint32_t wi = 0; wi < 8; wi++)   /* the set bits only, in order */
+        for (uint64_t m = pages[wi]; m; m &= m - 1) {
+            uint32_t p = wi * 64 + (uint32_t)__builtin_ctzll(m);
+            if (changed) page_dirty[p] = 1;
+            rt_invalidate_pages(p, p);   /* render targets do not mirror GS memory: always reload */
+        }
 }
 
 static uint32_t clut_hash(uint64_t tex0)
@@ -901,7 +947,8 @@ typedef void (GLAPIENTRY *PFN_GetQueryObjectui64v)(GLuint, GLenum, uint64_t*);
 typedef void (GLAPIENTRY *PFN_GetQueryObjectiv)(GLuint, GLenum, GLint*);
 typedef void (GLAPIENTRY *PFN_GenQueries)(GLsizei, GLuint*);
 static struct {
-    int on;
+    int on;                     /* timing this slot: RECVX_GPU_TIME (log) or the dynamic resolution (drs) */
+    int log, ok;                /* RECVX_GPU_TIME's level; the query functions exist */
     PFN_QueryCounter counter; PFN_GetQueryObjectui64v get64; PFN_GetQueryObjectiv geti; PFN_GenQueries gen;
     GLuint q[GT_RING][GT_N];
     int kind[GT_RING];          /* 0 free, 1 present (in-between), 2 present (frame), +4 with exec */
@@ -913,23 +960,105 @@ static struct {
     int n_cpu[3], n_gpu[3];
     uint64_t last_log;
 } gt;
+static int drs_wanted(void);
+static void drs_sample(int exec, double ms);
+static void drs_exec(void);
+static void drs_update(uint64_t now);
+/* the slot's timing on: for the log, or for the dynamic resolution (each slot keeps its choice) */
 static void gt_init(void)
 {
     static int done;
-    if (done++) return;
-    gt.on = SDL_getenv("RECVX_GPU_TIME") && SDL_atoi(SDL_getenv("RECVX_GPU_TIME"));
-    if (!gt.on) return;
-    gt.counter = (PFN_QueryCounter)SDL_GL_GetProcAddress("glQueryCounter");
-    gt.get64 = (PFN_GetQueryObjectui64v)SDL_GL_GetProcAddress("glGetQueryObjectui64v");
-    gt.geti = (PFN_GetQueryObjectiv)SDL_GL_GetProcAddress("glGetQueryObjectiv");
-    gt.gen = (PFN_GenQueries)SDL_GL_GetProcAddress("glGenQueries");
-    if (!gt.counter || !gt.get64 || !gt.geti || !gt.gen) { gt.on = 0; return; }
-    for (int i = 0; i < GT_RING; i++) gt.gen(GT_N, gt.q[i]);
+    if (!done++) {
+        gt.log = SDL_getenv("RECVX_GPU_TIME") ? SDL_atoi(SDL_getenv("RECVX_GPU_TIME")) : 0;
+        gt.counter = (PFN_QueryCounter)SDL_GL_GetProcAddress("glQueryCounter");
+        gt.get64 = (PFN_GetQueryObjectui64v)SDL_GL_GetProcAddress("glGetQueryObjectui64v");
+        gt.geti = (PFN_GetQueryObjectiv)SDL_GL_GetProcAddress("glGetQueryObjectiv");
+        gt.gen = (PFN_GenQueries)SDL_GL_GetProcAddress("glGenQueries");
+        gt.ok = gt.counter && gt.get64 && gt.geti && gt.gen;
+        if (gt.ok) for (int i = 0; i < GT_RING; i++) gt.gen(GT_N, gt.q[i]);
+    }
+    gt.on = gt.ok && (gt.log || drs_wanted());
 }
 #define GL_TIMESTAMP 0x8E28
 #define GL_QUERY_RESULT 0x8866
 #define GL_QUERY_RESULT_AVAILABLE 0x8867
 static void gt_mark(int which) { if (gt.on) gt.counter(gt.q[gt.slot][which], GL_TIMESTAMP); }
+
+/* RECVX_GPU_TIME=2 (test aid): also a timestamp and a samples-passed count at every pass
+   boundary (gp_mark: each GS draw, copy, filter, present), summed per kind of pass, so the log
+   says where the GPU time goes and how many pixels each kind writes (overdraw). Costs a query
+   pair per draw; the totals above stay comparable only roughly. */
+#define GP_MAX 4096
+static const char* const gp_name[GP_N] = { "other", "3d-opaque", "3d-blend", "gs-rtread", "gs-tex", "gs-flat", "final-copy",
+                                           "replay-start", "capture", "reload", "aa", "present", "overlay", "clear" };
+static struct {
+    int on, active;
+    void (GLAPIENTRY *begin)(GLenum, GLuint); void (GLAPIENTRY *end)(GLenum);
+    GLuint (*ts)[GP_MAX], (*sp)[GP_MAX];
+    uint8_t (*cat)[GP_MAX], (*ph)[GP_MAX];
+    int n[GT_RING];
+    int phase;                  /* 0 executed frame, 1 in-between image, 2 frame image */
+    double ms[3][GP_N], px[3][GP_N];
+} gp;
+#define GL_SAMPLES_PASSED 0x8914
+static void gp_init(void)
+{
+    if (!gt.on || gp.ts || gt.log < 2) return;
+    gp.begin = (void (GLAPIENTRY *)(GLenum, GLuint))SDL_GL_GetProcAddress("glBeginQuery");
+    gp.end = (void (GLAPIENTRY *)(GLenum))SDL_GL_GetProcAddress("glEndQuery");
+    if (!gp.begin || !gp.end) return;
+    gp.ts = calloc(GT_RING, sizeof(*gp.ts)); gp.sp = calloc(GT_RING, sizeof(*gp.sp));
+    gp.cat = calloc(GT_RING, sizeof(*gp.cat)); gp.ph = calloc(GT_RING, sizeof(*gp.ph));
+    for (int i = 0; i < GT_RING; i++) { gt.gen(GP_MAX, gp.ts[i]); gt.gen(GP_MAX, gp.sp[i]); }
+    gp.on = 1;
+}
+static void gp_close(void) { if (gp.active) { gp.end(GL_SAMPLES_PASSED); gp.active = 0; } }
+void gp_mark(int cat)
+{
+    int s = gt.slot, i;
+    if (!gp.on || (i = gp.n[s]) >= GP_MAX - 1) return;
+    gp_close();
+    gt.counter(gp.ts[s][i], GL_TIMESTAMP);
+    gp.begin(GL_SAMPLES_PASSED, gp.sp[s][i]); gp.active = 1;
+    gp.cat[s][i] = (uint8_t)cat; gp.ph[s][i] = (uint8_t)gp.phase;
+    gp.n[s] = i + 1;
+}
+static void gp_finish(void)   /* the slot's last mark: the end time of the pass before it */
+{
+    int s = gt.slot, i = gp.n[s];
+    if (!gp.on || !i) return;
+    gp_close();
+    gt.counter(gp.ts[s][i], GL_TIMESTAMP);
+}
+static void gp_collect(int s)
+{
+    uint64_t t0, t1, px;
+    if (!gp.on || !gp.n[s]) return;
+    gt.get64(gp.ts[s][0], GL_QUERY_RESULT, &t0);
+    for (int i = 0; i < gp.n[s]; i++, t0 = t1) {
+        gt.get64(gp.ts[s][i + 1], GL_QUERY_RESULT, &t1);
+        gt.get64(gp.sp[s][i], GL_QUERY_RESULT, &px);
+        gp.ms[gp.ph[s][i]][gp.cat[s][i]] += (t1 - t0) / 1e6;
+        gp.px[gp.ph[s][i]][gp.cat[s][i]] += px / 1e6;
+    }
+    gp.n[s] = 0;
+}
+static void gp_log(const int* n)
+{
+    static const char* const what[3] = { "per frame", "per in-between", "per frame image" };
+    char line[1024];
+    if (!gp.on) return;
+    for (int p = 0; p < 3; p++) {
+        int at = 0;
+        if (!n[p]) continue;
+        for (int c = 0; c < GP_N; c++)
+            if (gp.ms[p][c] / n[p] >= 0.005)
+                at += SDL_snprintf(line + at, sizeof(line) - (size_t)at, " %s %.2f/%.1f", gp_name[c], gp.ms[p][c] / n[p], gp.px[p][c] / n[p]);
+        host_log("gpupass: %s (ms/Mpx):%s\n", what[p], line);
+    }
+    memset(gp.ms, 0, sizeof(gp.ms)); memset(gp.px, 0, sizeof(gp.px));
+}
+
 static void gt_collect(int s, int wait)
 {
     GLint avail = 1;
@@ -938,19 +1067,22 @@ static void gt_collect(int s, int wait)
     if (!k) return;
     if (!wait) gt.geti(gt.q[s][GT_PRES1], GL_QUERY_RESULT_AVAILABLE, &avail);
     if (!avail) return;
+    gp_collect(s);
     for (int i = (k & 4) ? GT_EXEC0 : GT_PRES0; i < GT_N; i++)
         if ((k & 3) == 1 || i < GT_RB || i == GT_PRES1) gt.get64(gt.q[s][i], GL_QUERY_RESULT, &t[i]);
     if ((k & 3) == 1) for (int i = 0; i < 4; i++) gt.part[i] += (t[GT_RB + i] - t[GT_PRES0 + i]) / 1e6;
-    if (k & 4) { gt.sum_gpu[0] += (t[GT_EXEC1] - t[GT_EXEC0]) / 1e6; gt.n_gpu[0]++; }
+    if (k & 4) { gt.sum_gpu[0] += (t[GT_EXEC1] - t[GT_EXEC0]) / 1e6; gt.n_gpu[0]++; drs_sample(1, (t[GT_EXEC1] - t[GT_EXEC0]) / 1e6); }
     gt.sum_gpu[k & 3] += (t[GT_PRES1] - t[GT_PRES0]) / 1e6; gt.n_gpu[k & 3]++;
+    drs_sample(0, (t[GT_PRES1] - t[GT_PRES0]) / 1e6);
     gt.kind[s] = 0;
 }
 static void gt_exec_begin(void)
 {
-    gt_init();
-    if (!gt.on) return;
     if (gt.kind[gt.slot] == 4) gt.kind[gt.slot] = 0;   /* executed, never presented (skipped): no GPU time */
     gt_collect(gt.slot, 1);
+    gt_init();
+    if (!gt.on) return;
+    gp_init(); gp.n[gt.slot] = 0; gp.phase = 0;
     gt_mark(GT_EXEC0);
     memset(gt_cnt, 0, sizeof(gt_cnt));
     gt.cpu_exec0 = SDL_GetTicksNS();
@@ -961,13 +1093,13 @@ static void gt_exec_end(void)
     gt_mark(GT_EXEC1);
     for (int i = 0; i < 4; i++) gt.cnt[0][i] += gt_cnt[i];
     gt.kind[gt.slot] = 4;
+    drs_exec();
     gt.sum_cpu[0] += (SDL_GetTicksNS() - gt.cpu_exec0) / 1e6; gt.n_cpu[0]++;
 }
 static void gt_present_begin(void)
 {
-    gt_init();
+    if (!(gt.kind[gt.slot] & 4)) { gt_collect(gt.slot, 1); gp.n[gt.slot] = 0; gt_init(); }
     if (!gt.on) return;
-    if (!(gt.kind[gt.slot] & 4)) gt_collect(gt.slot, 1);
     gt_mark(GT_PRES0);
     memset(gt_cnt, 0, sizeof(gt_cnt));
     gt.cpu_pres0 = SDL_GetTicksNS();
@@ -977,16 +1109,20 @@ static void gt_present_end(int inbetween)
     uint64_t now;
     if (!gt.on) return;
     now = SDL_GetTicksNS();
+    gp_finish();
     gt_mark(GT_PRES1);
     gt.kind[gt.slot] = (gt.kind[gt.slot] & 4) | (inbetween ? 1 : 2);
     gt.sum_cpu[inbetween ? 1 : 2] += (now - gt.cpu_pres0) / 1e6; gt.n_cpu[inbetween ? 1 : 2]++;
     if (inbetween) for (int i = 0; i < 4; i++) gt.cnt[1][i] += gt_cnt[i];
     gt.slot = (gt.slot + 1) % GT_RING;
     for (int i = 1; i < GT_RING / 2; i++) gt_collect((gt.slot + i) % GT_RING, 0);
+    drs_update(now);
+    if (!gt.log) return;
     if (!gt.last_log) gt.last_log = now;
     if (now - gt.last_log >= 2000000000ull) {
         double s = (now - gt.last_log) / 1e9;
 #define A(x, n) ((n) ? (x) / (n) : 0.0)
+        if (ab_mask > 0) host_log("gputime: ab %d\n", ab_phase);
         host_log("gputime: exec %.1f/s cpu %.2f gpu %.2f ms | in-between %.1f/s cpu %.2f gpu %.2f ms (start %.2f draw %.2f display %.2f restore %.2f) | frame image %.1f/s cpu %.2f gpu %.2f ms\n",
                  gt.n_cpu[0] / s, A(gt.sum_cpu[0], gt.n_cpu[0]), A(gt.sum_gpu[0], gt.n_gpu[0]),
                  gt.n_cpu[1] / s, A(gt.sum_cpu[1], gt.n_cpu[1]), A(gt.sum_gpu[1], gt.n_gpu[1]),
@@ -995,12 +1131,54 @@ static void gt_present_end(int inbetween)
         for (int k = 0; k < 2; k++)
             host_log("gputime: %s draws %.0f, GS-path sprites %.0f, other GS-path primitives %.0f, native triangles %.0f\n", k ? "per in-between" : "per frame",
                      A(gt.cnt[k][0], gt.n_cpu[k]), A(gt.cnt[k][1], gt.n_cpu[k]), A(gt.cnt[k][2], gt.n_cpu[k]), A(gt.cnt[k][3], gt.n_cpu[k]));
+        gp_log(gt.n_gpu);
+        ab_phase ^= 1;
 #undef A
         memset(gt.sum_cpu, 0, sizeof(gt.sum_cpu)); memset(gt.sum_gpu, 0, sizeof(gt.sum_gpu));
         memset(gt.n_cpu, 0, sizeof(gt.n_cpu)); memset(gt.n_gpu, 0, sizeof(gt.n_gpu)); memset(gt.part, 0, sizeof(gt.part));
         memset(gt.cnt, 0, sizeof(gt.cnt));
         gt.last_log = now;
     }
+}
+
+/* ---------------- dynamic resolution (dyn_res, with Internal Resolution Auto) ----------------
+   Auto's scale (enough to cover the window) is lowered while the GPU cannot keep up and raised
+   again when the next step up fits, measured with the timestamps above: the GPU milliseconds of
+   an executed frame and of a presented image, averaged over a second, give the share of the GPU
+   that 30 executed frames and the display's images (render.c present rate) need. Down after 2
+   seconds above 90 % in which images were also missing (below 95 % of the present rate, or the
+   game below 28.5 frames a second: on a GPU shared with other programs the timestamps also
+   count their work), up after 5 seconds in which the next scale would need below 70 % (its cost
+   taken as growing with the pixel count): no back and forth. A change resamples the render
+   targets (gs_set_scale) at a frame boundary. */
+static struct { int cap; double ms[2]; int n[2], over, under, skip, presents, execs; uint64_t t0; } drs = { 8 };
+static int drs_wanted(void) { return g_config.dyn_res && g_config.scale == 0; }
+static int drs_cap(void) { return drs.cap; }
+static void drs_sample(int exec, double ms) { drs.ms[exec] += ms; drs.n[exec]++; }
+static void drs_exec(void) { drs.execs++; }
+static float auto_scale(void);
+static void drs_update(uint64_t now)
+{
+    extern double render_present_hz(void);
+    double u, f;
+    int s, top, missing;
+    if (!drs_wanted()) { drs.cap = 8; drs.t0 = 0; return; }
+    drs.presents++;
+    if (!drs.t0) { drs.t0 = now; drs.ms[0] = drs.ms[1] = 0; drs.n[0] = drs.n[1] = 0; drs.presents = drs.execs = 0; return; }
+    if (now - drs.t0 < 1000000000ull) return;
+    missing = drs.presents < 0.95 * render_present_hz() * (now - drs.t0) / 1e9 || drs.execs < 28.5 * (now - drs.t0) / 1e9;
+    top = (int)auto_scale();
+    s = drs.cap < top ? drs.cap : top;
+    u = (30.0 * (drs.n[1] ? drs.ms[1] / drs.n[1] : 0.0) + render_present_hz() * (drs.n[0] ? drs.ms[0] / drs.n[0] : 0.0)) / 1000.0;
+    f = (double)(s + 1) * (s + 1) / ((double)s * s);
+    drs.t0 = now; drs.ms[0] = drs.ms[1] = 0; drs.n[0] = drs.n[1] = 0; drs.presents = drs.execs = 0;
+    if (drs.skip) { drs.skip--; return; }   /* the second after a change: resampled targets, new shaders' warm-up */
+    if (u > 0.9 && missing && s > 1) { drs.under = 0; if (++drs.over < 2) return; }
+    else if (s < top && u * f < 0.7) { drs.over = 0; if (++drs.under < 5) return; }
+    else { drs.over = drs.under = 0; return; }
+    drs.cap = drs.over ? s - 1 : s + 1;
+    host_log("gs: dynamic resolution %dx -> %dx (GPU %.0f %% at %dx)\n", s, drs.cap, u * 100.0, s);
+    drs.over = drs.under = 0; drs.skip = 1;
 }
 
 int gs_flush_blocked;
@@ -1183,6 +1361,7 @@ void gs_replay_begin(void)
     RenderTarget* disp = start_valid ? rt_find(start_fbp, start_fbw) : NULL;
     if (disp && (disp->pw != img[sti].pw || disp->ph != img[sti].ph)) disp = NULL;
     for (int i = 0; i < nreloads; i++) reloads[i].applied = 0;
+    gp_mark(GP_REPLAY_START);
     for (int i = 0; i < MAX_RT; i++) {
         RenderTarget* rt = &rts[i];
         Shadow* sh = &shadow[i];
@@ -1194,6 +1373,7 @@ void gs_replay_begin(void)
         rt->tex = sh->tex; rt->fbo = sh->fbo;
         sh->tex = tex; sh->fbo = fbo;
         src = rt == disp ? img[sti].fbo : fbo;
+        if (rt == disp) rt->zrow = rt->vh;   /* (the start image's zero rows are not known; restored after the replay) */
         if (how == FIRST_NONE && (rt == disp || i == disp_end)) how = FIRST_READ;   /* presented */
         if (how == FIRST_READ) blit_color(src, rt->fbo, rt->pw, rt->ph);
         else if (how == FIRST_COVER) {
@@ -1222,12 +1402,92 @@ static void prog_use(int v, const DrawState* st, int premul, int tme)
     uni1i(pcur->tme, tme);
 }
 
+/* A batch that is one opaque black sprite over the whole scissor area (the clear of the draw
+   buffer after the swap, Ps2ShadowStart's of the shadow target), depth unwritten or written 0:
+   glClear in the scissor, with the colour mask the draw would have. The same values (0 is exact
+   in every format; depth 0 is what the sprite's z 0 gives), but the GPU clears the target's
+   compression metadata instead of writing every pixel. RECVX_FAST_CLEAR=0: drawn. */
+static int fast_clear(const DrawState* st, int tme)
+{
+    static int on = -1;
+    int zte = (st->ctx.test >> 16) & 1, ztst = (st->ctx.test >> 17) & 3, zmsk = (st->ctx.zbuf >> 32) & 1;
+    uint64_t sc = st->ctx.scissor;
+    int sx0 = sc & 0x7FF, sx1 = (sc >> 16) & 0x7FF, sy0 = (sc >> 32) & 0x7FF, sy1 = (sc >> 48) & 0x7FF;
+    float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
+    uint32_t fpsm = (st->ctx.frame >> 24) & 0x3F;
+    int full = 0, keep0 = 0, keep1 = 0;
+    static struct { GLuint tex, fbo, depth; int pw, ph; } keep;
+    if (on < 0) on = !SDL_getenv("RECVX_FAST_CLEAR") || SDL_atoi(SDL_getenv("RECVX_FAST_CLEAR")) != 0;
+    if (!on || ab_off(1) || !batch_full_cover || vcount != 6 || nsruns || tme || ((st->prim >> 5) & 1) || (zte && ztst != 1)) return 0;
+    for (int k = 0; k < 6; k++) {
+        const GlVertex* v = &vbuf[k];
+        if (v->r != 0.0f || v->g != 0.0f || v->b != 0.0f || v->a != 0.0f || v->w != 1.0f || (!zmsk && v->z != 0.0f)) return 0;
+        x0 = fminf(x0, v->x); x1 = fmaxf(x1, v->x); y0 = fminf(y0, v->y); y1 = fmaxf(y1, v->y);
+    }
+    if (g_margin_x && sx0 == 0 && sx1 >= (int)((st->ctx.frame >> 16) & 0x3F) * 64 - 1) { sx0 = -g_margin_x; sx1 += g_margin_x; }   /* as gs_flush */
+    {   /* the sprite's pixels (as the vertex shader places them) cover gs_flush's scissor box within the target */
+        float px0 = (x0 + g_margin_x) * g_scale, px1 = (x1 + g_margin_x) * g_scale, py0 = y0 * g_scale, py1 = y1 * g_scale;
+        int bx0 = (int)((sx0 + g_margin_x) * g_scale), by0 = (int)(sy0 * g_scale);
+        int bx1 = bx0 + (int)((sx1 - sx0 + 1) * g_scale), by1 = by0 + (int)((sy1 - sy0 + 1) * g_scale);
+        if (bx0 < 0) bx0 = 0;
+        if (by0 < 0) by0 = 0;
+        if (bx1 > cur_rt->pw) bx1 = cur_rt->pw;
+        if (by1 > cur_rt->ph) by1 = cur_rt->ph;
+        if (px0 > (float)bx0 || py0 > (float)by0 || px1 < (float)bx1 || py1 < (float)by1) return 0;
+        /* The whole target where the rest of it already holds what the clear writes (0 below the
+           box, the box the full width from the top): a GPU clears a whole target by resetting its
+           compression metadata (fast clear), a part of it by drawing (radeonsi: no faster than the
+           sprite). RECVX_AB bit 8: always the box. */
+        /* a few rows below the box that hold something (a fade sprite once drew row 480 of FBP 0) are
+           copied aside and put back */
+        keep0 = by1; keep1 = (int)ceilf(cur_rt->zrow * g_scale);
+        if (!zmsk && (int)ceilf(dz[dz_cur].zrow * g_scale) > keep1) keep1 = (int)ceilf(dz[dz_cur].zrow * g_scale);
+        if (keep1 > cur_rt->ph) keep1 = cur_rt->ph;
+        full = bx0 == 0 && by0 == 0 && bx1 >= cur_rt->pw && keep1 - keep0 <= (int)(32 * g_scale) && !ab_off(8);
+    }
+    if (full && keep1 > keep0) {
+        int kw = keep.pw, kh = keep.ph;
+        ensure_target(&keep.tex, &keep.fbo, &keep.pw, &keep.ph, cur_rt->pw, (int)(32 * g_scale) + 1);
+        if (!keep.depth || kw != keep.pw || kh != keep.ph) {   /* (and a depth of the same size: the blit takes both) */
+            if (!keep.depth) glGenTextures(1, &keep.depth);
+            glBindTexture(GL_TEXTURE_2D, keep.depth);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, keep.pw, keep.ph, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glBindFramebuffer(GL_FRAMEBUFFER, keep.fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, keep.depth, 0);
+        }
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, cur_rt->fbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, keep.fbo);
+        glDisable(GL_SCISSOR_TEST);
+        glBlitFramebuffer(0, keep0, cur_rt->pw, keep1, 0, 0, cur_rt->pw, keep1 - keep0, GL_COLOR_BUFFER_BIT | (zmsk ? 0 : GL_DEPTH_BUFFER_BIT), GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, cur_rt->fbo);
+    }
+    gp_mark(GP_CLEAR);
+    glClearColor(0, 0, 0, 0);
+    if (!zmsk) glClearDepth(0.0);
+    if (full) glDisable(GL_SCISSOR_TEST);
+    glClear(GL_COLOR_BUFFER_BIT | (zmsk ? 0 : GL_DEPTH_BUFFER_BIT));
+    if (full) {
+        if (keep1 > keep0) {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, keep.fbo);
+            glBlitFramebuffer(0, 0, cur_rt->pw, keep1 - keep0, 0, keep0, cur_rt->pw, keep1, GL_COLOR_BUFFER_BIT | (zmsk ? 0 : GL_DEPTH_BUFFER_BIT), GL_NEAREST);
+            glBindFramebuffer(GL_FRAMEBUFFER, cur_rt->fbo);
+        }
+        glEnable(GL_SCISSOR_TEST);
+        if (fpsm != PSMCT24 && keep1 <= keep0) cur_rt->zrow = 0;   /* (alpha masked: only the rows that were 0 are known) */
+        if (!zmsk && keep1 <= keep0) dz[dz_cur].zrow = 0;
+    }
+    gt_cnt[0]++;
+    return 1;
+}
+
 void gs_flush(void)
 {
     const DrawState* st = &batch_state;
     TexMemo *replay_memo = NULL, *record_memo = NULL;
     uint32_t fbp, fbw, fpsm, fbmsk;
-    int premul = 0, tme, afail, from_rt = 0, pv;
+    int premul = 0, tme, afail, from_rt = 0, pv, draw_y1;
     if (gs_flush_blocked) return;
     uint64_t test;
     if (!batch_valid || vcount == 0) { vcount = 0; nsruns = 0; return; }
@@ -1285,6 +1545,7 @@ void gs_flush(void)
         }
         if (g_margin_x && x0 == 0 && x1 >= (int)fbw * 64 - 1) { x0 = -g_margin_x; x1 += g_margin_x; }   /* full width -> widened view */
         glEnable(GL_SCISSOR_TEST);
+        draw_y1 = y1 + 1 < cur_rt->vh ? y1 + 1 : cur_rt->vh;
         glScissor((GLint)((x0 + g_margin_x) * g_scale), (GLint)(y0 * g_scale),
                   (GLsizei)((x1 - x0 + 1) * g_scale), (GLsizei)((y1 - y0 + 1) * g_scale));
     }
@@ -1392,6 +1653,10 @@ void gs_flush(void)
     uni1i(pcur->atst, (int)((test >> 1) & 7));
     uni1f(pcur->aref, (float)((test >> 4) & 0xFF));
 
+    if (fast_clear(st, tme)) { vcount = 0; nsruns = 0; return; }   /* (it writes 0: the zero rows stay) */
+    if (draw_y1 > cur_rt->zrow) cur_rt->zrow = draw_y1;   /* rows the draw may write are no longer known to be 0 */
+    if ((!((st->ctx.zbuf >> 32) & 1) || (two_pass(test) && ((test >> 12) & 3) == 2)) && draw_y1 > dz[dz_cur].zrow)
+        dz[dz_cur].zrow = draw_y1;   /* (with ZMSK only an alpha-fail pass ZB_ONLY writes depth) */
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     {
@@ -1411,6 +1676,8 @@ void gs_flush(void)
         vbo_next += vcount;
     }
     afail = (test >> 12) & 3;
+    gp_mark(vbuf[0].w != 1.0f || nsruns ? (((st->prim >> 6) & 1) ? GP_3D_BLEND : GP_3D_OPAQUE) :
+            from_rt ? GP_GS_RTREAD : tme ? GP_GS_TEX : GP_GS_FLAT);
     if (two_pass(test)) {
         /* alpha-test fail still writes some buffers: second pass for failing pixels */
         draw_batch(0);
@@ -1659,6 +1926,7 @@ static void draw_display(GLuint tex, int rt_vw, int rt_vh, int dith)
 {
     int ww, wh;
     SDL_GetWindowSizeInPixels(g_window, &ww, &wh);
+    gp_mark(GP_PRESENT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_DEPTH_TEST);
@@ -1872,6 +2140,7 @@ static void capture_rt(GLuint* tex, GLuint* fbo, int* cw, int* ch, uint32_t fbp,
     int pw = (int)(gw * g_scale), ph = (int)(h * g_scale);
     gs_flush();
     rt_touch(rt);
+    gp_mark(GP_CAPTURE);
     ensure_target(tex, fbo, cw, ch, pw, ph);
     glBindFramebuffer(GL_FRAMEBUFFER, *fbo);   /* (ensure_target binds it only when it makes it) */
     glDisable(GL_SCISSOR_TEST);
@@ -1885,11 +2154,28 @@ static void capture_rt(GLuint* tex, GLuint* fbo, int* cw, int* ch, uint32_t fbp,
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
+/* StoreRenderTex's textures are kept for the next ones (a room with a render texture made and
+   deleted one of the target's size every frame: at 4x a 16F texture of up to 56 MB, which the
+   driver allocated and cleared each time, and a framebuffer). Free again when deleted
+   (gs_tex_delete: at the next frame, gs_frame_begin). RECVX_AB bit 16: made and deleted. */
+static struct { GLuint tex, fbo; int w, h, state; } cpool[8];   /* state: 0 none, 1 handed out, 2 free */
+static int cpool_release(GLuint tex)
+{
+    for (int i = 0; i < 8; i++) if (cpool[i].state == 1 && cpool[i].tex == tex) { cpool[i].state = 2; return 1; }
+    return 0;
+}
 unsigned int gs_capture_rt(uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, int wide)
 {
     GLuint tex = 0, fbo = 0;
-    int cw = 0, ch = 0;
+    int cw = 0, ch = 0, k = -1;
+    float gw = wide && g_margin_x ? w * gs_hor_scale() : (float)w;
+    int pw = (int)(gw * g_scale), ph = (int)(h * g_scale);   /* (as capture_rt) */
+    if (!ab_off(16))
+        for (int i = 0; i < 8; i++)   /* a free one of this size, else any free or unused slot */
+            if (cpool[i].state != 1 && (k < 0 || (cpool[i].state == 2 && cpool[i].w == pw && cpool[i].h == ph))) k = i;
+    if (k >= 0) { tex = cpool[k].tex; fbo = cpool[k].fbo; cw = cpool[k].w; ch = cpool[k].h; }
     capture_rt(&tex, &fbo, &cw, &ch, fbp, fbw, w, h, wide);
+    if (k >= 0) { cpool[k] = (typeof(cpool[k])){ tex, fbo, cw, ch, 1 }; return tex; }
     glDeleteFramebuffers(1, &fbo); fb_forget();
     return tex;
 }
@@ -1934,6 +2220,7 @@ void gs_scene_aa(uint32_t fbp, uint32_t fbw)
         GLuint t, f;
         if (!mode) continue;
         ensure_target(&tex, &fbo, &pw, &ph, rt->pw, rt->ph);
+        gp_mark(GP_AA);
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_BLEND);
@@ -1943,6 +2230,7 @@ void gs_scene_aa(uint32_t fbp, uint32_t fbw)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         aa_apply(mode, rt->tex, fbo, rt->pw, rt->ph, g_scale);
+        rt->zrow = rt->zrow + 16 < rt->vh ? rt->zrow + 16 : rt->vh;   /* (the filters reach a few rows into the zeros, Deband 12) */
         t = rt->tex; f = rt->fbo;
         rt->tex = tex; rt->fbo = fbo;
         tex = t; fbo = f;
@@ -2057,7 +2345,12 @@ void gs_frame_begin(void)
 {
     gt_exec_begin();
     if (++memo_gen == 0) memo_gen = 1;   /* resources of the frame about to execute */
-    if (ndoomed) { for (size_t i = 0; i < ndoomed; i++) hdpack_forget(doomed[i]); glDeleteTextures((GLsizei)ndoomed, doomed); ndoomed = 0; }
+    if (ndoomed) {
+        size_t n = 0;
+        for (size_t i = 0; i < ndoomed; i++) { hdpack_forget(doomed[i]); if (!cpool_release(doomed[i])) doomed[n++] = doomed[i]; }
+        if (n) glDeleteTextures((GLsizei)n, doomed);
+        ndoomed = 0;
+    }
     nreloads = 0;
     mv_tbp = UINT32_MAX;   /* a movie frame binds it again (EV_MOVIE) */
     snapshot_valid = 0;   /* no replays of the previous frame while this one is half executed (download) */
@@ -2075,6 +2368,7 @@ void gs_frame_begin(void)
         else if (rt) {
             sti = fin ^ 1;   /* img[fin] may still be presented (a partial frame) */
             ensure_target(&img[sti].tex, &img[sti].fbo, &img[sti].pw, &img[sti].ph, rt->pw, rt->ph);
+            gp_mark(GP_REPLAY_START);
             blit_color(rt->fbo, img[sti].fbo, rt->pw, rt->ph);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
@@ -2085,17 +2379,43 @@ void gs_frame_begin(void)
 
 /* fences after the GPU work last handed over (executed frames, presented images), newest last */
 static GLsync gpu_fence[2];
-static void gpu_fence_set(void)
+/* RECVX_TEST_GPU="exec_ms:replay_ms" (test aid): a model of a slow GPU for the pacing; each executed frame and each
+   in-between image takes that long on a virtual GPU that works through them in order, and gs_gpu_ready asks it
+   instead of the real fences (which are kept as they are) */
+static double vgpu_exec = -1, vgpu_replay;
+static uint64_t vgpu_done[2], vgpu_tail;
+static void vgpu_push(double ms)
 {
+    uint64_t now = SDL_GetTicksNS();
+    vgpu_tail = (vgpu_tail > now ? vgpu_tail : now) + (uint64_t)(ms * 1e6);
+    vgpu_done[0] = vgpu_done[1];
+    vgpu_done[1] = vgpu_tail;
+}
+static void gpu_fence_set_kind(int kind)   /* 0 executed frame, 1 in-between image, 2 executed image presented */
+{
+    if (vgpu_exec < 0) {
+        const char* e = SDL_getenv("RECVX_TEST_GPU");
+        vgpu_exec = 0;
+        if (e) { vgpu_exec = SDL_atof(e); vgpu_replay = SDL_strchr(e, ':') ? SDL_atof(SDL_strchr(e, ':') + 1) : vgpu_exec; }
+    }
+    if (vgpu_exec > 0) vgpu_push(kind == 0 ? vgpu_exec : kind == 1 ? vgpu_replay : 0.3);
     if (gpu_fence[0]) glDeleteSync(gpu_fence[0]);
     gpu_fence[0] = gpu_fence[1];
     gpu_fence[1] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 }
+#define gpu_fence_set() gpu_fence_set_kind(0)
 
 /* the GPU has at most the last executed frame or image left to do (waiting up to wait_ns): one
    more in-between image keeps it busy without queueing replays behind each other */
 int gs_gpu_ready(uint64_t wait_ns)
 {
+    if (vgpu_exec > 0) {   /* RECVX_TEST_GPU */
+        uint64_t now = SDL_GetTicksNS();
+        if (vgpu_done[0] > now + wait_ns) { SDL_DelayPrecise(wait_ns); return 0; }
+        if (vgpu_done[0] > now) SDL_DelayPrecise(vgpu_done[0] - now);
+        vgpu_done[0] = 0;
+        return 1;
+    }
     if (gpu_fence[0] && glClientWaitSync(gpu_fence[0], GL_SYNC_FLUSH_COMMANDS_BIT, wait_ns) == GL_TIMEOUT_EXPIRED) return 0;
     if (gpu_fence[0]) glDeleteSync(gpu_fence[0]);
     gpu_fence[0] = NULL;
@@ -2122,6 +2442,7 @@ void gs_frame_executed(int interpolate)
     if (rt) {
         if (start_valid && sti == fin) fin ^= 1;   /* the start image stays for the replays */
         ensure_target(&img[fin].tex, &img[fin].fbo, &img[fin].pw, &img[fin].ph, rt->pw, rt->ph);
+        gp_mark(GP_FINAL_COPY);
         blit_color(rt->fbo, img[fin].fbo, rt->pw, rt->ph);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         fin_fresh = 1; fin_fbp = rt->fbp; fin_fbw = rt->fbw;
@@ -2129,7 +2450,7 @@ void gs_frame_executed(int interpolate)
         img[fin].dith = scene_dith;
         if (dump_on()) { draw_display(img[fin].tex, final_vw, final_vh, img[fin].dith); dump_frame(0); }   /* RECVX_DUMP_FRAMES: the real image */
         final_dumped = 1;
-        if (interpolate) { snapshot_valid = rt_snapshot(); gs_native_cache_upload(); }
+        if (interpolate) { gp_mark(GP_OTHER); snapshot_valid = rt_snapshot(); gs_native_cache_upload(); }
     } else {
         final_vw = 0;
     }
@@ -2183,24 +2504,27 @@ uint64_t gs_present(const struct Frame* cur, float t)
     int inbetween = cur && snapshot_valid && t < 1.0f;
     prof_push(PROF_PRESENT);
     gt_present_begin();
+    gp.phase = inbetween ? 1 : 2;
     if (inbetween) {
         RenderTarget* rt;
         stream_replay(cur, t);
         gt_mark(GT_RD);
         rt = rt_find(gs.disp_fbp, gs.disp_fbw ? gs.disp_fbw : 10);
         draw_display(rt ? rt->tex : 0, rt ? rt->vw : 640, rt ? rt->vh : 512, scene_dith);
+        gp_mark(GP_OVERLAY);
         overlay_render();
         if (!interp_dumped) { dump_frame(1); interp_dumped = 1; }
         gt_mark(GT_DD);
         rt_restore();
     } else {
         draw_display(final_vw ? img[fin].tex : 0, final_vw ? final_vw : 640, final_vw ? final_vh : 512, final_vw && img[fin].dith);
+        gp_mark(GP_OVERLAY);
         overlay_render();
         if (!final_dumped) { dump_frame(0); final_dumped = 1; }
         dump_window();
     }
     gt_present_end(inbetween);
-    gpu_fence_set();   /* before the swap: the image's own work, not the presentation queue */
+    gpu_fence_set_kind(inbetween ? 1 : 2);   /* before the swap: the image's own work, not the presentation queue */
     swap = SDL_GetTicksNS();
     SDL_GL_SwapWindow(g_window);
     swap = SDL_GetTicksNS() - swap;

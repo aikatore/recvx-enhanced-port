@@ -7,6 +7,7 @@
 #include "fileio.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
+#include <time.h>
 
 const char* const prof_names[PROF_COUNT] = { "logic", "vu0", "vu1", "gif", "queue", "wait",
                                              "r_exec", "r_interp", "r_present", "r_idle" };
@@ -22,10 +23,33 @@ static unsigned hist_n;
 static FILE* csv;
 static uint64_t frame_no;
 
+/* RECVX_CPUTIME=1 (test aid, POSIX): each thread's own CPU time charged to the categories like the
+   wall time, one more CSV column per category (<name>_cpu_ms): not inflated by other processes
+   taking the core, nor by waits in the GL driver */
+static int cpu_on = -1;
+static __thread uint64_t last_cpu;
+static uint64_t acc_cpu[PROF_COUNT];
+static uint64_t thread_cpu_ns(void)
+{
+#ifdef CLOCK_THREAD_CPUTIME_ID
+    struct timespec ts;
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
+#else
+    return 0;
+#endif
+}
+
 static void charge(void)
 {
     uint64_t now = SDL_GetTicksNS();
-    if (last_ns) __atomic_fetch_add(&acc[sp ? stack[sp - 1] : base], now - last_ns, __ATOMIC_RELAXED);
+    int c = sp ? stack[sp - 1] : base;
+    if (last_ns) __atomic_fetch_add(&acc[c], now - last_ns, __ATOMIC_RELAXED);
+    if (cpu_on > 0) {
+        uint64_t t = thread_cpu_ns();
+        if (last_ns) __atomic_fetch_add(&acc_cpu[c], t - last_cpu, __ATOMIC_RELAXED);
+        last_cpu = t;
+    }
     last_ns = now;
 }
 
@@ -54,6 +78,8 @@ void prof_open_csv(const char* path)
     if (!csv) { fprintf(stderr, "profile: cannot write %s\n", path); return; }
     fprintf(csv, "frame,total_ms");
     for (int i = 0; i < PROF_COUNT; i++) fprintf(csv, ",%s_ms", prof_names[i]);
+    cpu_on = SDL_getenv("RECVX_CPUTIME") && SDL_atoi(SDL_getenv("RECVX_CPUTIME"));
+    if (cpu_on) for (int i = 0; i < PROF_COUNT; i++) fprintf(csv, ",%s_cpu_ms", prof_names[i]);
     fprintf(csv, "\n");
 }
 
@@ -72,6 +98,7 @@ void prof_frame_end(void)
     if (csv) {
         fprintf(csv, "%llu,%.3f", (unsigned long long)frame_no, f.total);
         for (int i = 0; i < PROF_COUNT; i++) fprintf(csv, ",%.3f", f.ms[i]);
+        if (cpu_on > 0) for (int i = 0; i < PROF_COUNT; i++) fprintf(csv, ",%.3f", __atomic_exchange_n(&acc_cpu[i], 0, __ATOMIC_RELAXED) / 1e6);
         fprintf(csv, "\n");
         if (frame_no % 60 == 0) fflush(csv);
     }

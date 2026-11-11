@@ -50,6 +50,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "gamma", &g_config.gamma, 5, 20 },
     { "anti_aliasing", &g_config.anti_aliasing, 0, 2 },   /* 0 off, 1 FXAA, 2 SMAA */
     { "dithering", &g_config.dithering, 0, 2 },   /* 0 off, 1 on, 2 deband */
+    { "dyn_res", &g_config.dyn_res, 0, 1 },       /* with scale = 0 (Auto): lowered while the GPU cannot keep up */
     { "skip_doors", &g_config.skip_doors, 0, 2 },     /* 0 off, 1 instant, 2 skippable */
     { "fast_loading", &g_config.fast_loading, 0, 1 },
     { "quick_knife", &g_config.quick_knife, 0, 1 },
