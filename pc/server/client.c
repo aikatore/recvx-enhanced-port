@@ -77,11 +77,12 @@ static int status_json(const char* server)
         for (start = net_ms(); net_ms() - start < 500 && (!cnt || got < cnt); nanosleep(&tick, NULL))
             while ((n = net_recv(&from, b, sizeof(b))) >= 0) {
                 int i, c;
-                if (rdv_parse(b, n, &m) != RDV_STATUS) continue;
+                if (from.ip != srv.ip || from.port != srv.port || rdv_parse(b, n, &m) != RDV_STATUS) continue;   /* only the server asked */
                 if (m.payload_len < 5 || m.payload[0] != 'J') { old = 1; continue; }   /* the Prometheus text: a server without status-json */
                 i = m.payload[1] | m.payload[2] << 8;
                 c = m.payload[3] | m.payload[4] << 8;
-                if (!c || c > (int)sizeof(have) || i >= c || (cnt && c != cnt) || have[i] || (i < c - 1 && m.payload_len != per + 5)) continue;
+                if (!c || c > (int)sizeof(have) || i >= c || (cnt && c != cnt) || have[i] || (i < c - 1 && m.payload_len != per + 5) ||
+                    i * per + m.payload_len - 5 > (int)sizeof(text)) continue;   /* (the server's text is < 64 KB: 56 parts, the last one short) */
                 cnt = c;
                 have[i] = 1;
                 got++;
