@@ -6,6 +6,8 @@
 
 - **Smoother co-op enemies**: in direct and relay co-op, enemies move and animate evenly for both players even with
   lag, zombies' heads follow their target, grabs by enemies work reliably, and co-op needs far less bandwidth.
+- **Shared Enemy Control**: a new co-op host rule, off by default. Each enemy is run by the player fighting it, so
+  hits and grabs react at once for both players.
 - **Performance**: rendering is lighter and entering a room hitches less, and on slow graphics cards the picture no
   longer freezes or drops frames.
 - **Co-op server**: updates can now be applied without dropping running sessions, and a machine-readable status is
