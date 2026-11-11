@@ -1041,28 +1041,70 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   kill bit is usually hidden already by then: the joiner's `DieCk` set the bit, `EV_FLAGS` brought it, and the
   host's entry script (`EneSetCk`) hid the record; `EV_GONE` covers the records without one, kills of the last
   frames, and extra enemies.
-* **Engaged-player ownership** (prototype, protocol 47 on branch `netexp-combined` (46 on `netexp-phase3`), the host's rule `OPT2_OWNERSHIP`;
-  `RECVX_COOP_OWNERSHIP=0` on the host turns it off): a zombie (its body with its upper half) runs in the game of the
-  player it is engaged with, and the other game shows it as a puppet of that game's snapshots, so that player's
-  shots react on its next frame and its grabs and bites are local. `owned[i]` keeps its meaning (the guest runs
-  slot i); either game runs the target rule with the partner's stand-in, sends `EV_PLY_HIT`, and hands a zombie
-  grab of the stand-in to the victim's game (`EV_GRAB` either way; `EV_UNGRAB` state 2: the grab is over, the runner
-  keeps the zombie).
+* **Engaged-player ownership** (prototype, protocol 48 on branch `netexp-combined-types` (47 on `netexp-combined`,
+  zombies only; 46 on `netexp-phase3`), the host's rule `OPT2_OWNERSHIP`; `RECVX_COOP_OWNERSHIP=0` on the host turns it
+  off): a common enemy runs in the game of the player it is engaged with, and the other game shows it as a puppet of
+  that game's snapshots, so that player's shots react on its next frame and its grabs and bites are local. `owned[i]`
+  keeps its meaning (the guest runs slot i); either game runs the target rule with the partner's stand-in, sends
+  `EV_PLY_HIT`, and hands a zombie grab of the stand-in to the victim's game (`EV_GRAB` either way; `EV_UNGRAB` state
+  2: the grab is over, the runner keeps the zombie). Other types' grabs and bites of the stand-in go as hits, as the
+  host's always did.
+  * **Which types** (`own_types` in `coop_glue.c`: each type's `exp0` size and its pointer words, which stay the
+    receiver's own; the `type` field goes along; the conditions are `own_movable`'s, from the type's `en*.c` code):
+
+    | type | changes hands | when (in its Move, between attacks) |
+    |---|---|---|
+    | zombie (1) | yes, with its upper half | not the waiting type 8; its parts (31..38) follow their body |
+    | Cerberus (4) | yes | idle, wandering, chasing or searching with its Brain on (`mode1` 1), awake (type 0), on the ground and not on stairs, airborne, biting or linked to a player (`exp0` 0x10) |
+    | Hunter, Sweeper (5) | yes | walking or running, its Brain on, type 0/1, no attack, chained damage or beheading under way, not in a jump; its helper (31) stays where it is |
+    | Bandersnatch (9) | yes | idle or walking, its Brain on, types 0..8 (9 drops in, 10 sleeps), its arm in, no climb, jump or grab (`exp0` 0x18); the receiver puts the arm back to its rest lengths |
+    | anatomist (26) | yes | idle, walking or chasing, no grab or player link (`exp0` 0x40) |
+    | Black Widow (3) | no | its climb lives in `exp0` pointers to the wall or ceiling it is on (0x60/0x64: the receiver cannot take them over), its legs fly off with their own state, one leader per game plays every spider's grab from a block all spiders share (`exp1`: grab, drop and wall bits, the grab pause); `exp0` 0xF0 |
+    | moth (6) | no | one hit kills it (one room, 6030); its leader and the shared `exp1` play its grab, its eggs belong to the player they are laid on |
+    | bat (7) | no | one hit kills it; the swarm's grab state is one block all bats share (`exp1`); a woken roost sets `rm_flg` |
+    | Spotter (11) | no | cannot be hurt; its light (an `eff[]` entry) raises the room's alarm (`rm_flg`) |
+    | albinoid infant (21), adult (22) | no | the infants write each other's `exp0` (the shock pause, the next death); the adult's light is a room light it animates by its slot, its spark an `eff[]` entry (one room, 7100) |
+    | ants (10, 20, 71), fish (8), ceiling trap (25) | no | one hit, or they cannot be hurt; the trap moves a room wall |
+    | bosses and their parts (Gulp Worm, Alexia, Nosferatu, Alfred, Steve, Tyrant, Giant Black Widow, babies, tentacles, knights) | no | their rooms' scripts drive them |
   * **Who**: the only player that shot it in the last 5 s (150 frames), unless it is within 1.5 m of the other player it
     goes for; else its target. Only the runner hands it over, after 8 frames of that preference and at most once per
-    45 frames, between attacks: in its Move, alive, awake (hittable, not the waiting type 8), not driven by an event,
-    not the holder of the runner's busy flag, its upper half linked. Bosses, other types, event and script enemies
-    and the zombie's helper parts (31..38) stay as before.
-  * **How**: the enemy's and its upper half's state (`ene_pack`, 3168 bytes) as `EV_ESTATE` chunks plus `EV_ENEOWN`
-    (state 1) in the same frame: the event burst ("Datagrams": every new event in its frame, up to 96). The receiver
-    takes it whole (same type and model in the slot, the same upper half, the state plausible, no event of its own on
-    it, not in a door) or refuses it (`EV_ENEOWN` state 0: it runs on in the sender's game, as it was left there).
-    Until the new runner's first snapshot (a round trip and a frame, then the playout's margin) the sender's copy is
-    carried on from its own last two states (the enemy playout, at most 4 frames; before, it stood still).
+    45 frames, in the state above: alive, hittable, not driven by an event, not a record the room's scripts act on (next
+    item), not the holder of the runner's busy flag.
+  * **Scripts and events**: an enemy a room script acts on is never the guest's to run. At each room load the room's
+    script is scanned (`enemyopt_glue.c enemy_rec_scripted`, the scan the enemy randomizer uses: `REC_EVENT` and
+    `REC_HP`): a record that any `LoadWork`, motion pause, link, positioning, zombie/face/render/look op, `EneSeOn`, or
+    an HP test or set names - in `scd0`, `scd1` or any event - stays with the host for the whole visit, whether or
+    not the script runs that part now. A script runs on the host's copy; before (protocol 47) its step on a guest-run
+    zombie was undone by the guest's next snapshot (e.g. 0/7's `scd1` places record 3 every frame and records 1 and 2
+    while `rm_flg` 4 is set; 1/02's events wake records 2 and 3 by `LoadWork; SubCtr 143`), and only a running event
+    task (`bhEtask`) made the host take the zombie back. That take-back stays as a second net. A script record's grab
+    of the joiner still goes to the joiner's game (`EV_GRAB`, as before ownership), but at its end it goes back to the
+    host with its state (`EV_UNGRAB` state 1) instead of running on there. Records only shown by the script (`InitModelSet`: the 1/02
+    ambush) and the kill-count checks (`DieCk`, `DieEventCk`, `EneSetCk`) do not count: the runner's death sets the
+    dead flag in both games (the snapshot's `flg` 2), and both scripts count it. "Randomize Event Enemies" keeps those
+    records their type (another look), so they stay with the host too. Extra and added enemies are never script
+    records (a record is always in the slot of its number).
+  * **How**: the enemy's and (a zombie) its upper half's state (`ene_pack`, 3168 bytes) as `EV_ESTATE` chunks plus
+    `EV_ENEOWN` (state 1) in the same frame: the event burst ("Datagrams": every new event in its frame, up to 96). The
+    receiver takes it whole (same type and model in the slot, the same upper half, the state plausible, no event of its
+    own on it, not a script record, not in a door) or refuses it (`EV_ENEOWN` state 0: it runs on in the sender's game,
+    as it was left there). Until the new runner's first snapshot (a round trip and a frame, then the playout's margin)
+    the sender's copy is carried on from its own last two states (the enemy playout, at most 4 frames; before, it stood
+    still).
   * **Leaving**: the guest gives back what it runs, with the state, when it leaves the room, opens a menu or plays a
-    cutscene of its own; at its room change the host releases what is left. The host takes them back (`EV_ENEOWN`
-    state 2) when no snapshot of one came for 10 s while both play in the room, when an event of its own drives one,
-    and at the partner's time-out; the guest drops them when the host plays in another room.
+    cutscene of its own; one caught mid-action then (a Hunter getting up after a hit: its status screen stops it) goes
+    back after 15 frames without its state (`EV_UNGRAB` state 0), and the host lets it go from its puppet (a zombie stands,
+    another type starts its Move again: its work is as it last ran on the host), so it does not stand still in both
+    games through the screen; at its room change the host releases what is left the same way. The host takes them back (`EV_ENEOWN` state 2) when no snapshot of
+    one came for 10 s while both play in the room, when an event of its own drives one, and at the partner's time-out;
+    the guest drops them when the host plays in another room.
+  * **What differs from single player**: a Cerberus that lunges alerts only the dogs its own game runs (the pack's
+    signal is a static of `en04.c`); a Hunter reads the other Hunter's work from its own copy (stale while that one
+    is a puppet); a Bandersnatch's arm pushes enemies of the other game only until their next snapshot; the
+    anatomist's burning shows in the game that set it. During a grab or bite of the partner's stand-in the mashing of
+    the victim's pad is not read (`bhEne_LeverCheck` reads the local pad), as with the host's enemies before. A step on the
+    partner's stand-in of any of these types runs with the partner's character (`sys->ply_id`: the victim's motions and
+    place in a grab, the Hunter's beheading threshold), as only the zombie's did.
 * **Extra enemies' dead flags** (`ed_flg` 512 + the record's kill bit, [ENEMIES.md](ENEMIES.md) "Extra
   enemies"): `EV_SPAWN` carries an extra's flag (`SpawnNote.dead`, in what was padding; 0 from an older
   host), and the joiner sets it when that enemy dies in its game, as the host does; `EV_FLAGS` takes it to
@@ -1456,7 +1498,9 @@ in the first of the pose's spare bytes (`OPT2_EXTRA_OBJECTS` 1, see "Extra item 
 bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. 37 `Pose.legs` and `legs_frm` in the two spare bytes (third person "Move While Aiming": the legs walking under the aim, see "Pose"). 38 `EV_EOPTS` `voices`, "Randomize Voice Lines" ([ACTORS.md](ACTORS.md) "Voice lines"; the event stays 88 bytes). 39 `EV_EOPTS` fills the union's 80 bytes with `types` (the randomizer's Types per Room) and `rate[32]` (its Custom rates), `variety` 2 (Custom) and `extra` up to 8 (the event stays 88 bytes; [ENEMIES.md](ENEMIES.md) "Randomizer"). 40 `EV_FX` of `FX_REACT` (third person "Locational Hit Reactions": the region where the sender's shot hit a zombie and the shot's direction, see "Effects and voices"; the event is unchanged in size). 41 `OPT2_HEADSHOTS` 2 in `Pose.opts2`, the host's "Headshots & Piercing" (the rifles' head damage, head bursts on killing head hits, the sniper rifle's piercing; [THIRDPERSON.md](THIRDPERSON.md#headshots-and-piercing)); the pose is unchanged in size. 42 the randomizer makes the Hunter and the Sweeper two kinds in Wild and Mild too (as in Custom; [ENEMIES.md](ENEMIES.md) "Randomizer"), so the same seed places other enemies (nothing on the wire changed); 43 `EV_EOPTS` carries the cutscene cast's
 "Enemy Models" (`cast_enemy` 0..3) and its own "Custom" list (`cast_enemy_off`, 4 bytes: a bit per entry of the enemies'
 list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (prototype, `netexp-combined`; 44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
-`EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+`EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 (prototype, `netexp-combined-types`) `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
+the Bandersnatch and the anatomist too (each type's `exp0` with its pointer words kept, the `type` field taken), never for a
+record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1790,7 +1834,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_BYE_GRABBED=n` | Joiner: Disconnect n frames into a zombie grab it runs. |
 | `RECVX_COOP_KILL="hostframe:slot[:damage],..."` | A lethal hit (or one of that damage) on our enemy in that slot, as the weapon code leaves it. |
 | `RECVX_COOP_OWNERSHIP=0` | (host, branch `netexp-phase3`) No engaged-player ownership: the host runs the enemies as before. |
-| `RECVX_COOP_ALIVE="hostframe,..."` | Log the room's living, shown enemies (slot:type) and how many `ed_flg` bits are set. |
+| `RECVX_COOP_ALIVE="hostframe,..."` | Log the room's living, shown enemies (slot:type), how many `ed_flg` bits are set, and `rm_flg` (a kill-count door's bit). |
 | `RECVX_COOP_WARP="hostframe:x:z,..."` | Both players to x/z at that host frame. |
 | `RECVX_COOP_VOMIT="hostframe,..."` | Host: the walking zombie nearest the partner vomits. |
 | `RECVX_COOP_CRAWL="hostframe,..."` | Host: its walking zombies become crawlers (as a knock-down with little health left), which crawl towards their target and grab its legs. |

@@ -624,6 +624,18 @@ static void randomize(const EnemyOpts* o)
              o->events ? ", event enemies" : "", nset, o->types, o->types && nset > o->types ? ": over it, records that could only be another kind" : "", line);
 }
 
+/* co-op ownership (coop_glue.c own_movable): a record the room's scripts act on - LoadWork, motion pauses, links,
+   positioning, the type's work, its sounds (REC_EVENT) or its HP (REC_HP) - is never run by the guest's game: a script
+   step on the host would act on a puppet and the guest's next snapshot undo it. Scanned once per room load (the scan
+   reads the script only; also without the enemy options). */
+int enemy_rec_scripted(int slot)
+{
+    static int gen = -1;
+    if (!rom || !sys || slot < 0 || slot >= rom->ene_n || slot >= 128) return 0;
+    if (gen != enemy_room_gen) { scan_script(); gen = enemy_room_gen; }
+    return (rec_flags[slot] & (REC_EVENT | REC_HP)) != 0;
+}
+
 /* ---------------------------------------------------------------- the room load (room.c bhFinishRoom) */
 void enemy_room_finished(void)
 {
