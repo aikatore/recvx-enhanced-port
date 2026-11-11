@@ -973,6 +973,7 @@ static unsigned char p3_want[PC_ENE_SLOTS];      /* frames in a row we would han
 #define LEAVE_WAIT 15
 static unsigned char p3_leave[PC_ENE_SLOTS];     /* guest: frames we left with it not in a state to go with its state */
 static unsigned int own_t[PC_ENE_SLOTS];         /* our frame of its last change of hands */
+static unsigned int p3_ref_t[PC_ENE_SLOTS];      /* our frame + 1 of the partner's last refusal of it */
 static unsigned int own_ms[PC_ENE_SLOTS];        /* net_ms when we handed it over (until the new runner's first snapshot) */
 static unsigned int hit_t[PC_ENE_SLOTS][2];      /* our frame + 1 of the last hit on it: [0] ours, [1] the partner's */
 static unsigned int p3_n[8];                     /* stats: gave, took, refused, gave back (leaving), taken back, glitch ms sum, glitches */
@@ -2124,7 +2125,7 @@ static void p3_apply(const Event* e)
     if (e->u.gr.state == 0) {
         if (!we_run(i) && owned_room == coop_room_key() && (ep->flg & 0x1) && own_child(ep) == c) {
             own_set(i, 1); own_set(c, 1);
-            own_t[i] = frame_no; own_ms[i] = 0;
+            own_t[i] = frame_no; own_ms[i] = 0; p3_ref_t[i] = frame_no + 1;
             p3_n[2]++;
             host_log("coop: p3: enemy %d: the partner's game did not take it, it runs on here\n", i);
         }
@@ -2200,8 +2201,8 @@ static void p3_frame(void)
             continue;
         }
         p3_leave[i] = 0;
-        if (leaving) {
-            if (budget-- <= 0) continue;
+        if (leaving) {   /* (refused: again after P3_HOLD, not every round trip while the status screen is up) */
+            if ((p3_ref_t[i] && frame_no + 1 - p3_ref_t[i] < (unsigned int)P3_HOLD) || budget-- <= 0) continue;
             ev_room = is_host ? -1 : owned_room;   /* (in a door our room number may be the next one's already) */
             p3_give(i, "leaving");
             ev_room = -1;
