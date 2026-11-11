@@ -412,11 +412,11 @@ static int added_n, added_gen = -1;
 
 static void added_room(void) { if (added_gen != enemy_room_gen) { added_gen = enemy_room_gen; added_n = 0; } }
 
-/* host or single player: spawn and keep it in the room's list; NULL or why not */
-const char* spawn_add(const ActorModel* am, const SpawnNote* n, int* slot_out)
+/* host or single player: spawn into slot `want` (-1: the first free one) and keep it in the room's list; NULL or why not */
+const char* spawn_add(const ActorModel* am, const SpawnNote* n, int want, int* slot_out)
 {
     int slot;
-    const char* r = spawn_at(am, n, -1, 0, &slot);
+    const char* r = spawn_at(am, n, want, 0, &slot);
     if (r) return r;
     added_room();
     if (added_n < ADDED) { added[added_n] = *n; added_slot[added_n++] = (unsigned char)slot; }
@@ -440,9 +440,10 @@ static void note_apply(int slot, const SpawnNote* n, int stg, int rom_no)
     const char* r;
     int first;
     if (stg != sys->stg_no || rom_no != sys->rom_no) return;   /* another room's: it went with that room */
-    if (slot < PC_ENE_SLOTS && (ene[slot].flg & 0x1) && ene[slot].id == n->id) return;   /* already here (a replay) */
+    if (slot < PC_ENE_SLOTS && (ene[slot].flg & 0x1) && ene[slot].id == n->id) { enemy_extra_note(slot, n); return; }   /* already here (a replay) */
     for (first = 0; first < PC_ENE_SLOTS && (ene[first].flg & 0x1); first++);
     r = spawn_at(&am, n, slot, SPAWN_DICTATED, NULL);
+    if (!r) enemy_extra_note(slot, n);
     host_log("spawn: partner's enemy type %d model %d into slot %d (first free here: %d): %s\n", n->id, n->mdlver, slot, first, r ? r : "done");
 }
 
@@ -512,7 +513,7 @@ static const char* spawn(int i, float dist, int* slot_out)
     n.py = plp->py;
     n.ay = (short)((plp->ay + 0x8000) & 0xFFFF);
     n.flr = plp->flr_no;
-    if ((r = spawn_add(am, &n, slot_out))) return r;
+    if ((r = spawn_add(am, &n, -1, slot_out))) return r;
     snprintf(msg, sizeof(msg), tr("Spawned %s."), v ? v->name : am->name);
     return msg;
 }

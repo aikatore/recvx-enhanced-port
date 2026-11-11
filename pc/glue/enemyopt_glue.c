@@ -26,7 +26,7 @@
 
 void host_log(const char* fmt, ...);
 int coop_is_guest(void);
-const char* spawn_add(const ActorModel* am, const SpawnNote* n, int* slot_out);
+const char* spawn_add(const ActorModel* am, const SpawnNote* n, int want, int* slot_out);
 const char* spawn_at(const ActorModel* am, const SpawnNote* n, int want, int mode, int* slot_out);
 const ActorModel* spawn_entry(int i);
 int spawn_base_count(void);
@@ -768,16 +768,28 @@ static void floor_test(void)
    the Battle Game's) comes back with the room, as that record does. */
 #define EXTRA_DEAD 512
 
+/* guest: the host's extra enemies of this room as the host's notes realize them, with their dead flags. Before, only the
+   host set one: an extra the guest killed while the host was elsewhere came back for both on the host's next visit
+   (in single player it stays dead). */
+void enemy_extra_note(int slot, const SpawnNote* n)
+{
+    int k;
+    if (!n->dead || n->dead < EXTRA_DEAD || n->dead >= 32 * 32) return;
+    if (xtra_gen != enemy_room_gen) { xtra_gen = enemy_room_gen; xtra_n = 0; }
+    for (k = 0; k < xtra_n; k++) if (xtra[k].slot == slot) return;
+    if (xtra_n < ENEMY_EXTRA_MAX) { xtra[xtra_n].slot = (unsigned char)slot; xtra[xtra_n].id = n->id; xtra[xtra_n++].bit = (short)n->dead; }
+}
+
 void enemy_extras_frame(void)
 {
     static int done_gen = -1;
     const EnemyOpts* o;
-    int cand[128], nc = 0, k, made = 0, room;
+    int cand[128], nc = 0, k, made = 0, room, base;
     kill_test();
     headshot_test();
     floor_test();
     if (!sys || !plp || !rom) return;
-    if (xtra_gen == enemy_room_gen && !coop_is_guest())   /* (a guest gets the host's flags) */
+    if (xtra_gen == enemy_room_gen)   /* (also a guest's: one that dies while the host is elsewhere, the guest's game runs it) */
         for (k = 0; k < xtra_n; k++) {
             const BH_PWORK* ep = &ene[xtra[k].slot];
             if (xtra[k].bit >= 0 && (ep->flg & 0x3) == 0x3 && ep->id == xtra[k].id && !bhCkFlg(sys->ed_flg, xtra[k].bit)) {
@@ -792,6 +804,7 @@ void enemy_extras_frame(void)
     done_gen = xtra_gen = enemy_room_gen;
     xtra_n = 0;
     room = room_file_now();
+    for (base = 0; base < PC_ENE_SLOTS && (ene[base].flg & 0x1); base++);
     /* the same extras on every visit: the room file alone picks the candidates (dead records too: their extras have
        flags of their own) and each extra has its own draws, so one that stays dead moves no other */
     for (k = 0; k < rom->ene_n && k < 128; k++)
@@ -803,18 +816,24 @@ void enemy_extras_frame(void)
         ActorModel am = { "extra enemy", (unsigned short)room, (unsigned char)cand[k], (unsigned char)r->id, r->mdlver, 0, 0 };
         SpawnNote n = { 0 };
         const char* why;
-        int bit = rec_kill[cand[k]] >= 0 && rec_kill[cand[k]] < EXTRA_DEAD ? EXTRA_DEAD + rec_kill[cand[k]] : -1, slot = -1;
+        int bit = rec_kill[cand[k]] >= 0 && rec_kill[cand[k]] < EXTRA_DEAD ? EXTRA_DEAD + rec_kill[cand[k]] : -1, slot = -1, want;
         float dx, dz;
         if (rand_src[cand[k]]) { am = *rand_src[cand[k]]; n.variant = rand_var[cand[k]]; }   /* a randomized record: a copy of its new type (and variant) */
         n.room = am.room; n.rec = am.rec; n.id = am.id; n.mdlver = am.mdlver;
         rnd_seed((unsigned)o->seed, (unsigned)room * 7u + 2u + (unsigned)cand[k] * 7919u);
         n.flr = r->flr_no; n.ay = (short)(rnd() & 0xFFFF);   /* (from the record, not where its enemy walked to) */
+        n.dead = (unsigned short)(bit >= 0 ? bit : 0);
         if (!find_spot(r->px, r->py, r->pz, r->flr_no, 1, 15.0f, 35.0f, &n.px, &n.py, &n.pz)) continue;
         made++;
+        /* each extra in its own slot on every visit, the dead ones' left free: a co-op guest that stayed in the room has
+           the host's earlier ones in these slots (before, the next one took a dead one's slot: the guest's dead extra came
+           alive again as the host's other one, and the guest's own copy of that one ran on with no host enemy behind it) */
+        want = base + made - 1;
+        if (want >= PC_ENE_SLOTS || (ene[want].flg & 0x1)) want = -1;
         dx = n.px - plp->px; dz = n.pz - plp->pz;
         if (bit >= 0 && bhCkFlg(sys->ed_flg, bit)) why = "dead (killed before)";
         else if (dx * dx + dz * dz < 40.0f * 40.0f) why = "not now: the player stands there (a loaded save, a retry)";
-        else if (!(why = spawn_add(&am, &n, &slot)) && xtra_n < ENEMY_EXTRA_MAX) {
+        else if (!(why = spawn_add(&am, &n, want, &slot)) && xtra_n < ENEMY_EXTRA_MAX) {
             xtra[xtra_n].slot = (unsigned char)slot; xtra[xtra_n].id = (unsigned char)am.id; xtra[xtra_n++].bit = (short)bit;
         }
         host_log("enemies: extra %s (type %d model %d, from record %d, dead flag %d) at %.0f %.0f: %s\n", am.name, am.id, am.mdlver, cand[k], bit,

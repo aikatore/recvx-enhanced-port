@@ -54,6 +54,8 @@ typedef struct SpawnNote {
     float px, py, pz;
     short ay;
     unsigned short variant;     /* an enemy variant's id (pc/src/host/variants.h; 0: the type itself) */
+    unsigned short dead;        /* an extra enemy's dead flag (ed_flg 512..1023; 0: none, or an older host): the guest sets it
+                                   too when the enemy dies in its game (in what was the event's padding: the protocol is unchanged) */
 } SpawnNote;
 #define SPAWN_NOTE_KEPT 1
 
@@ -76,6 +78,7 @@ int  spawn_note_apply(int slot, const SpawnNote* n, int stg, int rom);   /* gues
 void spawn_pending(int run);                    /* guest, every co-op frame (0: the session ended, forget them) */
 void enemy_rand_kept(int room, int rec, int id); /* guest: the host's randomizer kept that record (SPAWN_NOTE_KEPT) */
 void coop_rand_kept(int rec, const SpawnNote* n);   /* coop_glue.c, host: this room load's randomizer kept record rec */
+void enemy_extra_note(int slot, const SpawnNote* n);   /* guest: the host's added enemy in that slot (its dead flag) */
 void spawn_replay(void);                        /* host: every added enemy of the room again (coop_spawn_note) */
 void coop_spawn_note(int slot, const SpawnNote* n);   /* coop_glue.c: host -> guest, if it is in our room */
 int  coop_insn_len(const unsigned char* p);     /* coop_glue.c: a room script instruction's length (0: unknown) */

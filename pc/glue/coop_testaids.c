@@ -56,6 +56,24 @@ void coop_test_aids(CoopTest* t)
             kl = kl[n] == ',' ? kl + n + 1 : NULL;
         }
     }
+    {   /* test aid: RECVX_COOP_ALIVE="hostframe[,...]": logs the room's living, shown enemies (slot:type; not linked parts)
+           and its ed_flg bits, e.g. that a kill stayed dead */
+        static const char* al = (const char*)-1;
+        unsigned int f;
+        int k, n, bits = 0;
+        char line[600];
+        if (al == (const char*)-1) al = getenv("RECVX_COOP_ALIVE");
+        if (al && sys && plp && t->in_game && sscanf(al, "%u%n", &f, &n) == 1 && t->clock >= f) {
+            int ln = snprintf(line, sizeof(line), "coop: test: in %d/%d at host frame %u, ed_flg", sys->stg_no, sys->rom_no, t->clock);
+            for (k = 0; k < 32; k++) bits += __builtin_popcount(sys->ed_flg[k]);
+            ln += snprintf(line + ln, sizeof(line) - ln, " %d bits, alive:", bits);
+            for (k = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS && ln < (int)sizeof(line) - 16; k++)
+                if ((ene[k].flg & 0x83) == 0x1 && !(ene[k].stflg & 0x1000000) && ene[k].id >= 1 && ene[k].id <= 30)
+                    ln += snprintf(line + ln, sizeof(line) - ln, " %d:%d", k, ene[k].id);
+            host_log("%s\n", line);
+            al = al[n] == ',' ? al + n + 1 : NULL;
+        }
+    }
     {   /* test aid: RECVX_COOP_WARP="hostframe:x:z[,...]": both players at once (host frames) */
         static const char* wp = (const char*)-1;
         unsigned int f;

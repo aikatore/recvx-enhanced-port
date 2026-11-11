@@ -434,7 +434,7 @@ int coop_check_event(const Event* e, int from_host)
             if (!coop_item_word_ok(e->u.bx.w[k])) return COOP_BAD_FIELD;
         return COOP_OK;
     case EV_SPAWN:
-        if (e->idx >= COOP_ENE_SLOTS || e->u.sp.room > 9999) return COOP_BAD_FIELD;
+        if (e->idx >= COOP_ENE_SLOTS || e->u.sp.room > 9999 || (e->u.sp.dead && (e->u.sp.dead < 512 || e->u.sp.dead > 1023))) return COOP_BAD_FIELD;
         return fin(e->u.sp.px) && fin(e->u.sp.py) && fin(e->u.sp.pz) ? COOP_OK : COOP_BAD_FLOAT;
     case EV_EOPTS:
         for (k = 0; k < ENEMY_RATE_N; k++)
