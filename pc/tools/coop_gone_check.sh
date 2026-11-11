@@ -37,7 +37,7 @@ pair() {   # pair NAME PORT HOST_TELEPORT HOST_KILL GUEST_TELEPORT GUEST_KILL (R
      run "$o/guest" "coop_follow = 0\n" 3460 --coop-join "127.0.0.1:$p#TEST-KEYS") &
     wait
 }
-alive() { sed -n "s/.*coop: test: in 0\/6 at host frame $3, ed_flg [0-9]* bits, alive:\(.*\)/\1/p" "$out/$1/$2/log.txt" | head -1; }
+alive() { sed -n "s/.*coop: test: in 0\/6 at host frame $3, ed_flg [0-9]* bits, rm_flg [0-9a-f]*, alive:\(.*\)/\1/p" "$out/$1/$2/log.txt" | head -1; }
 rm -rf "$out"; mkdir -p "$out/mods"
 pair A "$port"       1:0:6:0,1400:0:7:0,1000:0:6:0 "" 1650:0:7:0,1000:0:6:0 1850:1,1860:30 &
 pair B "$((port + 1))" 1:0:6:0,1400:0:7:0,1000:0:6:0 "" "" 1850:1,1860:30 &
