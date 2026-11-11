@@ -1103,8 +1103,10 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   * **How**: the enemy's and (a zombie) its upper half's state (`ene_pack`, 3168 bytes) as `EV_ESTATE` chunks plus
     `EV_ENEOWN` (state 1) in the same frame: the event burst ("Datagrams": every new event in its frame, up to 96). The
     receiver takes it whole (same type and model in the slot, the same upper half, the state plausible, no event of its
-    own on it, not a script record, not in a door) or refuses it (`EV_ENEOWN` state 0: it runs on in the sender's game,
-    as it was left there). Until the new runner's first snapshot (a round trip and a frame, then the playout's margin)
+    own on it, not a script record, not in a door, its type and modes within the tables its code calls through,
+    `coop_ene_modes_ok`) or refuses it (`EV_ENEOWN` state 0: it runs on in the sender's game, as it was left there; state 2
+    when the receiver runs it already, a take-back that crossed the give: the sender's copy stays a puppet). A sender
+    refused while it leaves tries again only after 45 frames. Until the new runner's first snapshot (a round trip and a frame, then the playout's margin)
     the sender's copy is carried on from its own last two states (the enemy playout, at most 4 frames; before, it stood
     still).
   * **Leaving**: the guest gives back what it runs, with the state, when it leaves the room, opens a menu or plays a

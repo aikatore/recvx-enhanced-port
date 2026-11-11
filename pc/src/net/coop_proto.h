@@ -686,6 +686,12 @@ int coop_wake_scan(const uint8_t* d, int size, int scd1, int scd1_end, const uin
 typedef struct AtrSet { uint8_t kind, ix, type, prm[4]; uint32_t attr; } AtrSet;
 int coop_atr_set(const uint8_t* insn, AtrSet* out);   /* 1: the instruction is such a write (out: what it writes) */
 void coop_atr_merge(AtrRec* rec, const AtrRec* in, int kind, int ix, const AtrSet* sets, int n);
+/* A partner's enemy state that our game would run (EV_ENEOWN, EV_GRAB/UNGRAB, a snapshot's modes): the types that change
+   hands call through tables by their type, mode0 and mode2 (bhEne01_MoveTypeW[type], bhEne04_Mode0[mode0],
+   bhEne05_MoveMode2[mode2], bhEne09_BrainMode2[mode2] ...) and a few by mode1. 1: every index within its table and not
+   one of its NULL entries; id 1 `upper`: the zombie's upper half (en01b's tables, exp0 0x40 bit 31). Other ids: 1 (not
+   known here). */
+int coop_ene_modes_ok(int id, int type, int mode0, int mode1, int mode2, int upper);
 
 #ifdef __cplusplus
 }

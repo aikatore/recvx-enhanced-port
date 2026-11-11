@@ -1119,6 +1119,17 @@ static const struct { unsigned short from, to; } ene_fields[] = {
     FLD(wax, kdnp), FLD(kdnidx, dan_ap),             /* angles, hp, damage, hit data, sounds */
     { offsetof(BH_PWORK, comb_flg), sizeof(BH_PWORK) },   /* combo state, total damage */
 };
+/* the modes (and type) the partner sends for an enemy of ours: within the tables its code calls through and indexes
+   (coop_ene_modes_ok); `x0`: its exp0 as it will be (a zombie's upper half runs en01b's tables), NULL none */
+static int ene_modes_ok(const BH_PWORK* ep, int type, const unsigned char* m, const unsigned char* x0)
+{
+    int up = ep->id == 1 && x0 && (*(const int*)(x0 + 0x40) & 0x80000000);
+    return coop_ene_modes_ok(ep->id, type, m[0], m[1], m[2], up) &&
+           /* and en01's own tables by its work: en01_PersonalType[27] by 0x4C, en01_walk_mtn[6] / stp_tbl[6] by 0xA0 and
+              0xA0 + 1, rot_tbl[4][8] by the byte 0x2C (en26 the same) */
+           (!x0 || ep->id != 1 || ((unsigned int)*(const int*)(x0 + 0x4C) < 27 && (unsigned int)*(const int*)(x0 + 0xA0) < 5 && x0[0x2C] < 8)) &&
+           (!x0 || ep->id != 26 || x0[0x2C] < 8);
+}
 static int ene_unpack(BH_PWORK* ep, const unsigned char* in, int mdl, int mnw)
 {
     const BH_PWORK* r = (const BH_PWORK*)in;
@@ -1126,6 +1137,7 @@ static int ene_unpack(BH_PWORK* ep, const unsigned char* in, int mdl, int mnw)
     const OwnType* t = own_type(ep);
     unsigned int k;
     if (!finite3(r->px, r->py, r->pz) || !finite3(r->pxb, r->pyb, r->pzb) || r->hp < -10000 || r->hp > 100000 ||
+        !ene_modes_ok(ep, r->type, &r->mode0, ep->exp0 && t ? in + sizeof(BH_PWORK) : NULL) ||
         (mdl >= 0 && (mdl >= 16 || !ep->mdl[mdl].objP)) || !mtn_ok(ep, set, r->mtn_no, r->frm_no))
         return 0;
     for (k = 0; k < sizeof(ene_fields) / sizeof(ene_fields[0]); k++)
@@ -2910,7 +2922,9 @@ static void apply_snapshots(void)
         if (at != COOP_AT_EXACT && !mtn_ok(ep, ep->mnwP, s->mtn_no, s->frm_no)) s->frm_no = hist[k].s[from % COOP_HIST].frm_no;   /* (carried past its motion's end) */
         if (s->mdl >= 0 && ep->mdl[s->mdl].objP) ep->mlwP = &ep->mdl[s->mdl];
         if ((int)ep->mtn_no != s->mtn_no) { ep->hokan_count = s->hokan_count ? s->hokan_count + 1 : 0; ep->hokan_rate = s->hokan_rate; }
-        ep->mode0 = s->mode[0]; ep->mode1 = s->mode[1]; ep->mode2 = s->mode[2]; ep->mode3 = s->mode[3];
+        /* (modes our game would call out of its tables with, when it runs the enemy: a door's, a cutscene's local frames,
+           a hand-over: not taken; their type is ours, the snapshot carries none) */
+        if (!own_type(ep) || ene_modes_ok(ep, ep->type, s->mode, ep->exp0)) { ep->mode0 = s->mode[0]; ep->mode1 = s->mode[1]; ep->mode2 = s->mode[2]; ep->mode3 = s->mode[3]; }
         if (trace && (ep->flg & 0x82) == 0x2 && !(ep->stflg & 0x1000000) && !(s->flg & 0x2) && !(s->stflg & 0x1000000))
             fprintf(stderr, "coop: enemy %d dead here, alive in the host's game: alive again\n", k);
         /* not the host's hit marker (flg & 4): it would come back as a hit of ours */
