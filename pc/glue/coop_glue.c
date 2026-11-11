@@ -880,7 +880,20 @@ static unsigned int in_last;            /* the partner's last event applied here
    frame emptied it: a zombie's halves (in other datagrams) showed different frames, and a datagram with only events
    (a grab's state) left the set empty for that frame, so every enemy ran its own AI here - the grab that refused the
    host's handover. */
-static CoopSnapHist hist[PC_ENE_SLOTS];
+/* The session's larger buffers (~1.4 MB) live on the heap from the session's first frame to its end (stop): static, they
+   took that much of the PS2 address window (ARCHITECTURE.md "Address window"; Linux had ~0.5 MB left). NULL out of a
+   session. */
+static struct CoopBufs {
+    CoopSnapHist hist[PC_ENE_SLOTS];
+    CoopSnapTx stx;                     /* protocol 45: our snapshots as coded, the partner's acknowledgements */
+    CoopSnapRx srx;                     /* ... and the partner's as taken */
+    EneSnap run_snap[PC_ENE_SLOTS][2];  /* our last two snapshots of a slot we run (owners_sync) */
+    EneSnap rx_sn[COOP_ENE_SLOTS], tx_snaps[PC_ENE_SLOTS];   /* receive(), send_frame() */
+}* bufs;
+static CoopSnapHist* hist;
+static CoopSnapTx* stx;
+static CoopSnapRx* srx;
+static EneSnap (*run_snap)[2];
 static uint32_t hist_applied[PC_ENE_SLOTS];       /* the sender frame of the snapshot applied last */
 static uint32_t shown_seq[PC_ENE_SLOTS];          /* the frame shown last, its position and turn as shown (the blend back) */
 static float shown_p[PC_ENE_SLOTS][3];
@@ -888,14 +901,25 @@ static int32_t shown_ay[PC_ENE_SLOTS];
 static CoopPlayout playout;
 static struct { uint32_t seq; int n; } snap_cnt[8];   /* snapshots that came per sender frame (snaps_live) */
 static struct { unsigned int at[5], frames, held, skipped; int behind; uint32_t last; } play_st;   /* RECVX_COOP_STATS */
+static void bufs_free(void)
+{
+    free(bufs);
+    bufs = NULL; hist = NULL; stx = NULL; srx = NULL; run_snap = NULL;
+}
+static int bufs_get(void)
+{
+    if (bufs) return 1;
+    if (!(bufs = calloc(1, sizeof(*bufs)))) return 0;
+    hist = bufs->hist; stx = &bufs->stx; srx = &bufs->srx; run_snap = bufs->run_snap;   /* (zero: as reset) */
+    return 1;
+}
 static void snaps_reset(void)
 {
-    memset(hist, 0, sizeof(hist)); memset(hist_applied, 0, sizeof(hist_applied)); memset(shown_seq, 0, sizeof(shown_seq));
+    if (hist) memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist));
+    memset(hist_applied, 0, sizeof(hist_applied)); memset(shown_seq, 0, sizeof(shown_seq));
     memset(snap_cnt, 0, sizeof(snap_cnt));
     coop_playout_reset(&playout);
 }
-static CoopSnapTx stx;                  /* protocol 45: our snapshots as coded, the partner's acknowledgements */
-static CoopSnapRx srx;                  /* ... and the partner's as taken */
 static uint32_t snap_neck[PC_ENE_SLOTS];         /* EneSnap.neck of the slot (SNAP_NECK in snap_root) */
 static int proxy_ok;                    /* host: the partner is in our room, its model loaded */
 static unsigned char tgt[PC_ENE_SLOTS];          /* host: the enemy targets the partner */
@@ -1001,8 +1025,7 @@ static void own_set(int i, int m) { if (i >= 0 && i < PC_ENE_SLOTS) owned[i] = (
 static uint32_t own_seed[PC_ENE_SLOTS];          /* the newest seeded frame (the partner's seq), 0 none */
 static unsigned char own_win[PC_ENE_SLOTS];      /* handed over, the new runner's first snapshot not shown yet */
 static unsigned char owned_was[PC_ENE_SLOTS];
-static EneSnap run_snap[PC_ENE_SLOTS][2];        /* our last two snapshots of a slot we run, and our frames of them */
-static uint32_t run_q[PC_ENE_SLOTS][2];
+static uint32_t run_q[PC_ENE_SLOTS][2];          /* our frames of run_snap */
 static unsigned int win_st[5];                   /* RECVX_COOP_STATS: window frames carried on, held; windows; position
                                                     correction at the first real one (x100 units), motion frames stepped back */
 static void owners_sync(void)
@@ -1025,7 +1048,7 @@ static void owners_sync(void)
         if (owned[i] == owned_was[i]) continue;
         owned_was[i] = owned[i];
         memset(&hist[i], 0, sizeof(hist[i])); hist_applied[i] = 0; shown_seq[i] = 0; own_seed[i] = 0; own_win[i] = 0;
-        coop_snaptx_forget(&stx, i); coop_snaprx_forget(&srx, i);
+        coop_snaptx_forget(stx, i); coop_snaprx_forget(srx, i);
         if (we_run(i) || !sys || i >= (int)sys->ewk_n || !(ene[i].flg & 0x1) || !playout.started || !P || frame_no - run_q[i][0] > 2) continue;
         own_win[i] = 1; win_st[2]++;
         for (k = 1; k >= 0; k--) {   /* the older one a frame before */
@@ -2853,7 +2876,7 @@ static void apply_snapshots(void)
     int k, mismatch = 0, n = sys->ewk_n < PC_ENE_SLOTS ? sys->ewk_n : PC_ENE_SLOTS, me = coop_room_key() | my_case() << 16;
     uint32_t P, from, was;
     owners_sync();
-    if (me != key) { memset(hist, 0, sizeof(hist)); memset(hist_applied, 0, sizeof(hist_applied)); key = me; }   /* our room: other enemies */
+    if (me != key) { memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist)); memset(hist_applied, 0, sizeof(hist_applied)); key = me; }   /* our room: other enemies */
     if (is_host ? !same_room() : !puppets()) return;
     if (!coop_playout_frame(&playout, net_us(), &P)) return;
     if (stats < 0) stats = getenv("RECVX_COOP_STATS") != NULL;
@@ -3086,7 +3109,7 @@ static void session_reset(void)
     own_live = own_sent_ok = 0;
     own_done_ok = retry_ok = go_want = go_seen = 0; cont_tid = 0;   /* a new partner session: its items come again */
     in_last = 0; coop_ring_reset(&ring); blob_end = 0; snaps_reset();
-    coop_snaptx_reset(&stx); coop_snaprx_reset(&srx);   /* (protocol 45) the bases were the old session's */
+    if (bufs) { coop_snaptx_reset(stx); coop_snaprx_reset(srx); }   /* (protocol 45) the bases were the old session's */
     coop_xfer_init(&blob_x, blob_in, sizeof(blob_in));   /* half a transfer of the old session is no use */
     coop_xfer_init(&estate_x, estate, sizeof(estate));
     if (is_host) blob_due = 1; else need_blob = 1;
@@ -6933,6 +6956,7 @@ static void stop(void)
     g_trade.want[0] = g_trade.want[1] = -1;
     frozen = 0;
     g_coop.status[0] = 0;   /* "not connected"; a failed start or a goodbye writes its reason after this */
+    bufs_free();
 }
 
 /* host: "Remove stuck player" (F3, lobby). The session with the partner ends here and, through a
@@ -7312,7 +7336,7 @@ static void receive(void)
         }
         /* events: in order, each once (the sender repeats unacknowledged ones) */
         coop_ring_ack(&ring, p.ev_ack);
-        coop_snaptx_ack(&stx, p.snap_ack);
+        coop_snaptx_ack(stx, p.snap_ack);
         for (k = 0; k < nev; k++)
             if (ev[k].id == in_last + 1) {
                 if (!apply_event(&ev[k])) break;   /* not yet: the peer resends it */
@@ -7326,9 +7350,9 @@ static void receive(void)
             int c = p.seq % 8, room = (p.stg * 256 + (unsigned char)p.rom) | p.rcase << 16;
             if (snap_cnt[c].seq != p.seq) { snap_cnt[c].seq = p.seq; snap_cnt[c].n = 0; }
             if (nene) {   /* (protocol 45: decoded against the bases we hold, late frames too) */
-                static EneSnap sn[COOP_ENE_SLOTS];
-                int got = coop_snaprx_take(&srx, p.seq, sb, n - (int)(sb - buf) - ext * (int)sizeof(PoseExt), nene, sn);
-                if (room != snap_room) { memset(hist, 0, sizeof(hist)); memset(hist_applied, 0, sizeof(hist_applied)); snap_room = room; }   /* other enemies */
+                EneSnap* sn = bufs->rx_sn;
+                int got = coop_snaprx_take(srx, p.seq, sb, n - (int)(sb - buf) - ext * (int)sizeof(PoseExt), nene, sn);
+                if (room != snap_room) { memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist)); memset(hist_applied, 0, sizeof(hist_applied)); snap_room = room; }   /* other enemies */
                 snap_cnt[c].n += got;
                 for (k = 0; k < got; k++) {
                     int i = sn[k].idx;
@@ -7565,7 +7589,7 @@ static void send_frame(void)
 {
     static unsigned char buf[COOP_DGRAM_MAX];
     static Event evs[EV_BURST];
-    static EneSnap snaps[PC_ENE_SLOTS];
+    EneSnap* snaps = bufs->tx_snaps;
     static unsigned char recs[COOP_SNAP_BUDGET + COOP_SNAP_REC_MAX];
     static short rlen[PC_ENE_SLOTS];
     static int stats = -1, frames, dgrams, evn, snn, bytes, maxb, peakd, peakb, snb, sfull, sleft;
@@ -7583,7 +7607,7 @@ static void send_frame(void)
     }
     if (need_blob && br_offer != BR_ASK && br_offer != BR_GEN) tx.flags |= PF_WANT_BLOB;
     tx.ev_ack = in_last;
-    tx.snap_ack = srx.ack;
+    tx.snap_ack = srx->ack;
     {   /* the events: each new one now (a grab's state goes whole in its frame: EV_BURST) and once more in the next
            frame (a lost datagram of a burst then costs a frame, not a round trip: the receiver takes events only in
            order); one not acknowledged again once its answer is overdue (EV_RTO); at most EV_RESEND sent again a frame.
@@ -7602,7 +7626,7 @@ static void send_frame(void)
     ns = build_snapshots(snaps);
     snap_prioritise(snaps, ns);
     while (nr < ns && used < COOP_SNAP_BUDGET) {   /* coded = sent (coop_snaptx_put notes it as this frame's) */
-        int full = 0, r = coop_snaptx_put(&stx, tx.seq, &snaps[nr], recs + used, (int)sizeof(recs) - used, &full);
+        int full = 0, r = coop_snaptx_put(stx, tx.seq, &snaps[nr], recs + used, (int)sizeof(recs) - used, &full);
         if (!r) break;
         if (stats > 0) {   /* RECVX_COOP_STATS: the quantization's error, of what was coded */
             CoopSnapQ q;
@@ -7656,7 +7680,7 @@ static void send_frame(void)
                  "quantization error max %.4f units / %.5f frames; taken: %u records without their base, ack %u of seq %u; "
                  "anchors: %u of %u frames predicted to 1/256 (%u of %u over 2+ frames)\n",
                  snb / frames, snn / (float)frames, snn ? snb / (float)snn : 0.0f, sfull / (float)frames, sleft / (float)frames, qe_pos, qe_frm,
-                 srx.n_bad, srx.ack, srx.seq, anc_ok, anc_n, anc_far_ok, anc_far);
+                 srx->n_bad, srx->ack, srx->seq, anc_ok, anc_n, anc_far_ok, anc_far);
         snb = sfull = sleft = 0; qe_pos = qe_frm = 0; anc_n = anc_ok = anc_far = anc_far_ok = 0;
         host_log("coop: stats: %d frames, %.2f datagrams per frame, avg %d bytes per datagram (max %d), %d bytes per frame, "
                  "%.1f events and %.1f snapshots per frame, ping %.2f ms, room %d/%d, %d enemy slots, %u bad / %u foreign datagrams, path %s (+%d bytes per datagram on the wire), "
@@ -7762,6 +7786,7 @@ void coop_frame(void)
         return;
     }
 
+    if (!bufs_get()) { host_log("coop: out of memory: the session ends\n"); stop(); return; }
     now = net_ms();
     frame_no++;
     if (is_host) records_resolve();   /* the saved partner items of the save our game came from */
