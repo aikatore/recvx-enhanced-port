@@ -1079,7 +1079,8 @@ static int finite3(float x, float y, float z)
    less a 0x24-byte pointer head, which only the zombie has. */
 typedef struct { unsigned char id, exp0; uint64_t ptrs; } OwnType;
 static const OwnType own_types[] = {
-    { 1, 0xB0, 0x1FFull },                                  /* zombie: 0x00..0x23 (en01 bhEne01_Init) */
+    { 1, 0xB0, 0x1FFull | 1ull << 9 | 1ull << 29 },        /* zombie: 0x00..0x23 (en01 bhEne01_Init), 0x24 its eff[] shadow, 0x74
+                                                               the stairs (ATR_WORK*) */
     { 4, 0x58, 7ull << 15 },                                /* Cerberus: 0x3C wall, 0x40 stairs, 0x44 line of sight (ATR_WORK*) */
     { 5, 0x84, 3ull << 24 | 1ull << 29 | 1ull << 31 },      /* Hunter, Sweeper: 0x60 the other Hunter, 0x64 its helper, 0x74 a floor
                                                                area (ATR_WORK*), 0x7C into its joint_tree */
@@ -2055,7 +2056,7 @@ void coop_enemy_end(BH_PWORK* ep)
    attacking, holding, leaping, climbing, hit), alive, awake (hittable: flg 0x20; not a waiting variant), not driven by an
    event, not a record the room's scripts act on (enemy_rec_scripted: the scripts run on the host), not the holder of our
    player's busy flag. Per type (the conditions from its en*.c code, docs/COOP.md):
-   zombie: not a room script's waiting type 8, with its upper half (the linked zombie that poses its arms and head);
+   zombie: not a room script's waiting type 8, not on stairs, with its upper half (the linked zombie that poses its arms and head);
    Cerberus (en04): mode2 idle, wander, chase or search, its Brain on (mode1 1), awake (type 0), on the ground, not on
    stairs, airborne, holding or linked to a player (exp0 0x10); Hunter (en05): standing, walking, running or getting up
    after a hit (mode2 16), its Brain on, type 0/1,
@@ -2081,7 +2082,9 @@ static int own_movable(int i)
     case 26:
         return m2 <= 2 && !(*(int*)(ep->exp0 + 0x40) & 0xA0000) && !(ep->flg2 & 1);
     }
-    if (ep->type == 8 || holding(ep)) return 0;
+    /* (not on stairs: MV08, flg2 1, exp0 0x40 0x400000 - the stair's in-use mark, its ATR_WORK at 0x74, stay in the game
+       that set them: the other zombies there kept off those stairs for the visit) */
+    if (ep->type == 8 || holding(ep) || m2 == 8 || (ep->flg2 & 1) || (*(int*)(ep->exp0 + 0x40) & 0x400000)) return 0;
     c = own_child(ep);
     return c < PC_ENE_SLOTS && c < (int)sys->ewk_n && (ene[c].flg & 0x81) == 0x81 && ene[c].lkwkp == (unsigned char*)ep && ene[c].exp0 &&
            we_run(c) && !event_driven(&ene[c]);

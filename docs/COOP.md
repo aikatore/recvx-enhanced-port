@@ -1070,7 +1070,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
 
     | type | changes hands | when (in its Move, between attacks) |
     |---|---|---|
-    | zombie (1) | yes, with its upper half | not the waiting type 8; its parts (31..38) follow their body |
+    | zombie (1) | yes, with its upper half | not the waiting type 8, not on stairs (MV08, `flg2` 1, its stair mark `exp0` 0x40 0x400000: the mark and the stair record at 0x74 stay in the game that set them); its parts (31..38) follow their body |
     | Cerberus (4) | yes | idle, wandering, chasing or searching with its Brain on (`mode1` 1), awake (type 0), on the ground and not on stairs, airborne, biting or linked to a player (`exp0` 0x10) |
     | Hunter, Sweeper (5) | yes | walking or running, its Brain on, type 0/1, no attack, chained damage or beheading under way, not in a jump; its helper (31) stays where it is |
     | Bandersnatch (9) | yes | idle or walking, its Brain on, types 0..8 (9 drops in, 10 sleeps), its arm in, no climb, jump or grab (`exp0` 0x18); the receiver puts the arm back to its rest lengths |
