@@ -545,9 +545,12 @@ from the game's `rand()`.
   40 units from every entry position. A spot within 40 units of the player (a loaded save, a retry) skips that extra for the visit.
 * The same on every visit: the picks, spots and angles depend only on (seed, room file, record),
   each extra with its own draws, never on which records are dead or where the player came in.
+  Each also keeps its slot: the room's first free slot when the extras come, plus its place in that list
+  (one that stays away leaves its slot free), so a co-op guest still in the room finds them where they were.
 * **Dead flag**: an extra copied from a record that the entry script hides by kill bit b
-  (`EneSetCk`) is remembered dead in `ed_flg` 512 + b (set when it dies; the host or single player
-  sets it, co-op shares it as every `ed_flg` bit, saves keep it) and stays away while that is set,
+  (`EneSetCk`) is remembered dead in `ed_flg` 512 + b (set when it dies, by whichever game runs it: single
+  player, the host, or a co-op guest that has the host's extras while the host is elsewhere; co-op shares it as
+  every `ed_flg` bit, saves keep it) and stays away while that is set,
   without another taking its place. `EneSetCk` reaches only bits 0..511 (retail uses 0..357, rooms
   built with `pc/tools` up to 511), so 512..1023 are free. An extra of a record the script does not
   hide (no `EneSetCk`, e.g. the Battle Game's rooms) comes back with the room, as that record does.

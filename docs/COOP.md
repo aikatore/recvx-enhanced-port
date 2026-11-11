@@ -270,6 +270,8 @@ loaded in a case it has (before, the load waited for a file that does not exist:
   that room's enemies itself. Re-entering the partner's room hands the enemies back to the host.
 * Enemies killed while the joiner ran them stay dead when the host's enemies take over again
   (within the visit; once both left, the room is loaded the game's way again, as in single player).
+  Extra enemies the joiner killed stay dead for good, as the host's own kills do: before, one the joiner
+  killed while the host was in another room was back on the host's next visit.
 * Enemies that wait for a player to walk by (zombies that stand still and take no hits until you come
   close) wake for either of you. Before, they woke only when the host
   walked there: for the joiner they stood still and its shots went through them.
@@ -1016,7 +1018,18 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   and the host's player counts as busy for them (as the loop guard does: `flg` 4 for each step, and the
   target rule leaves it for the partner), so none attacks the reading player.
 * **Kills while the joiner ran the room** (`EV_GONE`): when the host's enemies take over, the joiner
-  names its dead enemies and the host hides its live copies of the same type and version.
+  names its dead enemies and the host hides its live copies of the same type and version. A record with a
+  kill bit is usually hidden already by then: the joiner's `DieCk` set the bit, `EV_FLAGS` brought it, and the
+  host's entry script (`EneSetCk`) hid the record; `EV_GONE` covers the records without one, kills of the last
+  frames, and extra enemies.
+* **Extra enemies' dead flags** (`ed_flg` 512 + the record's kill bit, [ENEMIES.md](ENEMIES.md) "Extra
+  enemies"): `EV_SPAWN` carries an extra's flag (`SpawnNote.dead`, in what was padding; 0 from an older
+  host), and the joiner sets it when that enemy dies in its game, as the host does; `EV_FLAGS` takes it to
+  the host. Before, only the host set it: an extra the joiner killed while the host was elsewhere came back
+  on the host's next visit. The host also puts each extra into the same slot on every visit (the first free
+  slot of the room plus its place in the room's list), the dead ones' slots left free: before, the next
+  extra took a dead one's slot, so a joiner that had stayed in the room saw its dead extra alive again as
+  the host's other one, and its own copy of that one ran on without a host enemy behind it.
 
 ### World events and records
 

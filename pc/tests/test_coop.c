@@ -258,6 +258,9 @@ static void test_events(void)
     BAD(EV_BOX, 1, e->u.bx.w[0] = 5 << 16 | 0xFFFF);
     BAD(EV_SPAWN, 1, e->idx = 255);
     BAD(EV_SPAWN, 1, e->u.sp.pz = NAN);
+    BAD(EV_SPAWN, 1, e->u.sp.dead = 511);   /* an extra enemy's dead flag: 0 (none) or ed_flg 512..1023 */
+    BAD(EV_SPAWN, 1, e->u.sp.dead = 1024);
+    { Event e = ev(EV_SPAWN); e.u.sp.dead = 1023; CHECK(coop_check_event(&e, 1) == COOP_OK); }
     BAD(EV_EOPTS, 1, e->u.eo.extra = ENEMY_EXTRA_MAX + 1);
     BAD(EV_EOPTS, 1, e->u.eo.seed = -1);
     BAD(EV_EOPTS, 1, e->u.eo.rand = 2);
