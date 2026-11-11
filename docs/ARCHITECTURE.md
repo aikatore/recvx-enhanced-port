@@ -138,6 +138,21 @@ point: the partial frame is executed and the game waits for the pixels.
   pixels cost nothing. On the Ryzen 9800X3D's integrated GPU (RM_0060, 2x, at its top clock) an
   in-between image went from 3.15 to 2.68 ms, an executed frame from 2.92 to 2.62 ms;
   `layout_check.sh` stays identical.
+- Clears: a batch that is one opaque black sprite over the whole scissor box (the draw buffer's
+  clear after the swap, Ps2ShadowStart's of the shadow target) is a `glClear`, and of the whole
+  target where everything outside the box is already 0 (`gs_gl.c fast_clear`): each target and
+  depth texture knows from which GS row down it is 0 (`zrow`, kept by every writer), a few rows
+  that hold something are copied aside and back. Only a whole-surface clear resets the GPU's
+  compression metadata; radeonsi draws a partial one like the sprite. Ryzen iGPU, RM_0060, 4x: an
+  executed frame 9.81 -> 8.53 ms, an in-between image 9.34 -> 7.97 ms (`RECVX_AB=1`). With AA or
+  Deband the draw buffer keeps the box clear (the filters reach 16 rows into the zeros).
+- StoreRenderTex captures (`gs_capture_rt`) reuse up to 8 textures: RM_4030 made and freed one of
+  the target's size every frame (at 4x 4.8 ms of GPU time a frame, now 1.35).
+- The render thread's CPU side: CLUT loads read GS memory through a per-format offset table, the
+  common texture formats (PSMT8/T4 block by block) and render-target reloads address GS memory
+  directly, and `gs_gl.c`, `stream.c`, `gs_mem.c`, `textures.c` build at `-O3` (IEEE kept:
+  `-ffp-contract=off`, no fast-math). `ctest gsmem` checks each fast path against
+  `gs_read_pixel`. Render thread -16 to -18 % CPU, its worst room-entry frame about -50 %.
 
 ### Widescreen (hor+)
 
@@ -354,7 +369,16 @@ fence after each): replays queued up behind each other would hold up the next ga
 and with one frame in flight the game thread would wait for it and drop below 30 updates a second
 (Alexia's burning hall at 3x and 32:9 on an integrated GPU: 27.6 updates a second, frames up to
 330 ms). Under GPU overload the in-between images thin out instead; the game frames are executed
-and shown as before. The frame
+and shown as before. A refresh whose in-between image cannot be made shows the frame's own image
+(t = 1, a copy: no replay) instead, once per frame, and nothing older of that frame after it
+(`render.c render_loop`): with the next frame queued, when nothing was presented for 1.5 game
+frames (a GPU below 30 executed frames a second otherwise showed nothing for seconds); with the
+GPU behind and presenting by time (VSync off, a refresh that is not a multiple of 30, the 144
+limit), on the last refresh before the next frame is due (by time, t reaches 1 only when the
+next frame is late, so a third of the frames were never shown). Stepped by refreshes the last
+one is t = 1 anyway. Windows: the game and render threads run at `THREAD_PRIORITY_HIGHEST`
+(their wake-ups at the vblank and present deadlines on a busy core; SDL's audio thread is above
+them). Not on Linux, where only nice -10 may be allowed and SDL's audio thread would stay below. The frame
 rate limit (`fps_limit`: 30/60/90/120/144) caps presents per second below the display refresh
 (`render.c present_hz`); the game itself stays at 30.
 
@@ -889,6 +913,7 @@ options: [ENEMIES.md](ENEMIES.md#enemy-options); bindings: [Binding ini format](
 | Window Size | `window_w`, `window_h` |
 | (no row) Windows borderless margin | `borderless_extra` (1; see Option details) |
 | VSync, Frame Rate Limit, Show Frame Rate | `vsync`, `fps_limit` (0 off, then 30, 60, 90, 120, 144), `show_fps` |
+| (no row, prototype) Auto's dynamic resolution | `dyn_res` (with `scale` 0: lowered while images go missing, `gs_gl.c drs_update`) |
 | Aspect Ratio, Internal Resolution | `aspect` (0 4:3, 1 stretch, 2 widescreen), `scale` (0 Auto, 1-8) |
 | Smoother Motion, Smooth Menus, Motion Trails | `interpolate`, `smooth_menus`, `frame_blend` (-1 Auto, 0 Off, 1 On) |
 | Cutscene Bars, Camera Vignette, Screen Effects | `cinema_bars`, `screen_filter`, `screen_effects` (0 Original, 1 Stretch, 2 Off) |
@@ -1370,7 +1395,12 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_REPLAY_CHECK=1` (or `=n`), `RECVX_REPLAY_CHECK_DIR=dir` | replay each interpolated frame at t = 1, which must reproduce it; log and save differing frames |
 | `RECVX_REPLAY_RTSTART=0` | in-between images start from the executed frame's display image (old behaviour) |
 | `RECVX_DISPLAY_HZ=n` | assume an n Hz display (e.g. 1000 with vsync off: present as fast as possible) |
-| `RECVX_TRACE_PRESENT=file` | one line per present: frame, t, start time, swap duration |
+| `RECVX_TRACE_PRESENT=file` | one line per present: frame, t, start time, swap duration, executed frames so far; every 300 presents a `#` line: images, refreshes skipped (next frame queued, GPU behind), the frame's own image instead, time in the GPU check |
+| `RECVX_TEST_GPU=exec:replay` | a slow-GPU model for the pacing: `gs_gpu_ready` asks a virtual GPU that takes exec ms per executed frame and replay ms per in-between image |
+| `RECVX_PACE_FALLBACK=0`, `RECVX_PACE_GAP=n` | no own image of a frame for a GPU behind (by time); game-frame periods without an image before a frame whose successor is already waiting shows its own (default 1.5, 0 always) |
+| `RECVX_THREAD_PRIO=0` | Windows: game and render threads at normal priority |
+| `RECVX_FAST_CLEAR=0` | clears drawn as sprites (as before) |
+| `RECVX_AB=mask` | with `RECVX_GPU_TIME`: the optimizations in mask (1 clear, 8 whole-target clear, 16 capture pool) off in every other 2-second interval (`gputime: ab 0/1`) |
 | `RECVX_MOVIE_TRACE=file` | one line per game frame of a movie: time, vblanks, frame shown, game-thread time, sound position and queue, sound minus picture (ms); at the end decode times and frames shown before they were decoded; when the movie opens, starts and ends a `#` line with its sound (open, rate, seconds queued, paused, gain, RMS at that gain) and the room's (BGM, background SE, playing MIDI ports) |
 | `RECVX_GPU_TIME=1` | every 2 s: frames and in-between images per second, render-thread CPU and GPU time; GL draws, GS-path sprites and other primitives, native triangles per frame and per in-between image |
 | `RECVX_GPU_TIME=2` | also a timestamp and a samples-passed query at every pass boundary (each GS draw, copy, filter, present), one `gpupass:` line per executed frame / in-between / frame image: GPU ms and million pixels written per kind of pass (3D opaque/blended, GS-path draws reading a render target, textured, flat, clears, the final-image copy, replay start copies, captures, reloads, AA, present, overlay). The queries cost time per draw: the totals are only roughly comparable with `=1` |
@@ -1396,6 +1426,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_MOUSE_TRACE=1` | who has the mouse, on each change: captured (third person), OS cursor shown, a menu screen up, the player in control, overlay, focus |
 | `RECVX_ITEM_TRACE=1` | the bag (equipped slot, lighter slot, slots), the item box's first 16 entries (`sys->itm[64]`) and the metal detector's security boxes (`sys->itm[192]`, `[224]`) whenever a word changes, with the box screen's cursors, by presented frame; in 0/9 also the detector's floor zone (`sys->flr_idx`), its "metal carried" flag (`rm_flg` bit 2) and whether it went off (`ev_flg` bit 53) |
 | `RECVX_PROFILE=file` | sampling profiler (as `--profile-samples`) |
+| `RECVX_CPUTIME=1` | with `--profile`: each category's thread CPU time (`*_cpu_ms` columns) besides its wall time |
 
 ## Tools
 
