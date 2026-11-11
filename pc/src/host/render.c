@@ -47,7 +47,9 @@ void render_loop(void)
     double swap_avg = 0.0;   /* how long the buffer swap blocks, smoothed */
     double period = 1001.0 / 30000.0 * 1e9;   /* game frame period, measured below */
     int interp = 0, shown = 0;   /* refreshes presented since the frame arrived */
-    unsigned skip_q = 0, skip_gpu = 0, n_inb = 0, n_exe = 0;   /* RECVX_TRACE_PRESENT: why refreshes got no image */
+    int done = 0;   /* cur's own image (t = 1) is up */
+    int fallback = !SDL_getenv("RECVX_PACE_FALLBACK") || SDL_atoi(SDL_getenv("RECVX_PACE_FALLBACK"));   /* A/B: 0 off */
+    unsigned skip_q = 0, skip_gpu = 0, skip_fb = 0, n_inb = 0, n_exe = 0;   /* RECVX_TRACE_PRESENT: why refreshes got no image */
     uint64_t gpu_wait = 0, executed = 0;   /* (and the trace's last column: executed frames, cur's number) */
     int check_replay = SDL_getenv("RECVX_REPLAY_CHECK") && SDL_atoi(SDL_getenv("RECVX_REPLAY_CHECK"));
     float fixed_t = SDL_getenv("RECVX_INTERP_T") ? (float)SDL_atof(SDL_getenv("RECVX_INTERP_T")) : 0.0f;   /* test aid: first refresh shows t */
@@ -74,6 +76,7 @@ void render_loop(void)
             }
             arrived = now;
             shown = 0;
+            done = 0;
             executed++;
             prof_push(PROF_INTERP);
             interp = g_config.interpolate && stream_match(cur, f);
@@ -101,33 +104,49 @@ void render_loop(void)
             uint64_t tick = (uint64_t)(1e9 / present_hz());
             float t;
             uint64_t swap;
+            int stepped = g_config.vsync && n > 1.5 && fabs(n - floor(n + 0.5)) < 0.1;
             if (!interp) t = 1.0f;
             else if (fixed_t > 0.0f) t = shown ? 1.0f : fixed_t;
-            else if (g_config.vsync && n > 1.5 && fabs(n - floor(n + 0.5)) < 0.1) t = (float)((shown + 1) / floor(n + 0.5));
+            else if (stepped) t = (float)((shown + 1) / floor(n + 0.5));
             else t = (float)((double)(now - arrived) / period);
-            /* the next game frame is already waiting (the game runs below its rate): an
-               in-between image of this one would only delay it (a whole replay of the scene).
-               Its own image (a copy) is shown, once, when none was for 1.5 game frames: skipped
-               too, a GPU that cannot execute 30 frames a second showed none for seconds
-               (llvmpipe, 2x: 1 thread 3.9 images a second, gaps up to 10.5 s; 2 threads 6.1 and
-               0.87 s, the game at 29.9 frames a second; now 15.8, 0.15 s, 28.6. Shown every
-               time, RECVX_PACE_GAP=0: 24.3 images, the game at 24.2) */
-            if (t < 1.0f && fixed_t <= 0.0f && stream_queued()) {
-                if (shown || now - last_present < (uint64_t)(period * pace_gap)) { skip_q++; continue; }
-                t = 1.0f;
-            }
-            /* the GPU is still two frames or images behind most of a refresh later (a heavy
-               scene at a high resolution and rate): this refresh gets no in-between image.
-               Replays queued up behind each other would hold up the next game frame's execution,
-               and with it the game thread (one frame in flight): the game would slow down. */
-            uint64_t w0 = trace ? SDL_GetTicksNS() : 0;
-            int ready = t >= 1.0f || fixed_t > 0.0f || gs_gpu_ready(tick / 8 * 7);
-            if (trace) gpu_wait += SDL_GetTicksNS() - w0;
-            if (!ready) {
-                skip_gpu++;
-                shown++;
-                pace_until = pace_until && pace_until + tick > now ? pace_until + tick : now + tick;
-                continue;
+            /* When an in-between image cannot be made, the frame's own image (t = 1: a copy, no
+               replay, hardly any GPU work) is the fallback, once per frame; after it nothing older
+               of the frame is shown. (RECVX_INTERP_T runs never come here.) */
+            if (t < 1.0f && fixed_t <= 0.0f) {
+                int ready = 0;
+                if (stream_queued()) {
+                    /* the next game frame is already waiting (the game or the GPU runs below its
+                       rate): an in-between image would only delay it (a whole replay). Its own
+                       image is shown when nothing was for 1.5 game frames: a GPU that cannot
+                       execute 30 frames a second showed none for seconds otherwise (llvmpipe, 2x:
+                       1 thread 3.9 images a second, gaps up to 10.5 s; 2 threads 6.1 and 0.87 s).
+                       Shown every time (RECVX_PACE_GAP=0) the game slows down more. */
+                    if (done || now - last_present < (uint64_t)(period * pace_gap)) { skip_q++; continue; }
+                } else if (done) {   /* its own image is up: nothing older of it any more */
+                    shown++;
+                    pace_until = pace_until && pace_until + tick > now ? pace_until + tick : now + tick;
+                    continue;
+                } else {
+                    /* the GPU is still two frames or images behind most of a refresh later (a heavy
+                       scene at a high resolution and rate): no in-between image. Replays queued up
+                       behind each other would hold up the next game frame's execution, and with it
+                       the game thread (one frame in flight): the game would slow down. */
+                    uint64_t w0 = trace ? SDL_GetTicksNS() : 0;
+                    ready = gs_gpu_ready(tick / 8 * 7);
+                    if (trace) gpu_wait += SDL_GetTicksNS() - w0;
+                    /* not ready on the last refresh before the next frame is due, by time: its
+                       own image. By time t reaches 1 only when the next frame is late, so a GPU
+                       that fell behind showed neither the in-between images nor the frame (a
+                       third of the frames unshown, 8-30 images a second at 144 Hz); stepped by
+                       refreshes the last one is t = 1 anyway. RECVX_PACE_FALLBACK=0: off. */
+                    if (!ready && !(fallback && !stepped && (double)(SDL_GetTicksNS() - arrived) + 1.25 * tick > period)) {
+                        skip_gpu++;
+                        shown++;
+                        pace_until = pace_until && pace_until + tick > now ? pace_until + tick : now + tick;
+                        continue;
+                    }
+                }
+                if (!ready) { skip_fb++; t = 1.0f; }
             }
             {   /* the name tag moves with the 3D */
                 float x, y;
@@ -136,9 +155,10 @@ void render_loop(void)
             swap = gs_present(cur, t);
             last_present = now;
             shown++;
+            if (t >= 1.0f) done = 1;
             if (t < 1.0f) n_inb++; else n_exe++;
             if (trace && (n_inb + n_exe) % 300 == 0)
-                fprintf(trace, "# in-between %u executed %u skipped: queued %u gpu %u, gpu wait %.1f ms\n", n_inb, n_exe, skip_q, skip_gpu, gpu_wait / 1e6);
+                fprintf(trace, "# in-between %u executed %u skipped: queued %u gpu %u, own image instead %u, gpu wait %.1f ms\n", n_inb, n_exe, skip_q, skip_gpu, skip_fb, gpu_wait / 1e6);
             if (trace) fprintf(trace, "%llu %.3f %llu %llu %llu\n", (unsigned long long)gs_frame_count(), t, (unsigned long long)(now / 1000),
                                (unsigned long long)(swap / 1000), (unsigned long long)executed);
             /* pace to the display refresh instead of spinning: without vsync, and with vsync when
