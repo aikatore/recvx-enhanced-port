@@ -813,3 +813,124 @@ int coop_atk_note(CoopAtk* a, unsigned int now)
 }
 
 int coop_atk_cooling(const CoopAtk* a, unsigned int now) { return (int)(a->until - now) > 0; }
+
+/* ---------------------------------------------------------------- playout (coop_proto.h) */
+static int cmpf(const void* a, const void* b) { float x = *(const float*)a, y = *(const float*)b; return (x > y) - (x < y); }
+
+void coop_playout_reset(CoopPlayout* po) { memset(po, 0, sizeof(*po)); }
+
+void coop_playout_arrive(CoopPlayout* po, uint32_t seq, uint64_t arr_us, int exact)
+{
+    double o = (double)arr_us - seq * COOP_TICK_US;
+    int k = seq % COOP_PO_WIN;
+    if (!seq) return;
+    if (!po->have || (int32_t)(seq - po->newest) > 100000 || (int32_t)(po->newest - seq) > 100000) {   /* the first, or another counter */
+        coop_playout_reset(po);
+        po->have = 1; po->base = o; po->newest = seq;
+    }
+    o -= po->base;
+    if ((int32_t)(po->newest - seq) >= COOP_PO_WIN) return;   /* too old to count */
+    if ((int32_t)(seq - po->newest) > 0) {
+        /* every new frame over two frames above the margin, 8 in a row: the sender's grid moved (it stalled and
+           re-phased): measured again from these */
+        po->high = po->started && o > po->delay + 2 * COOP_TICK_US ? po->high + 1 : 0;
+        if (po->high >= 8) {
+            int j;
+            for (j = 0; j < COOP_PO_WIN; j++)
+                if ((int32_t)(seq - po->f[j].seq) >= 8) po->f[j].seq = 0;
+            po->high = 0;
+            po->delay = o;
+        }
+        po->newest = seq;
+    }
+    if (po->f[k].seq != seq) { po->f[k].seq = seq; po->f[k].lo = (float)o; po->f[k].hi = -1e30f; }
+    if (o < po->f[k].lo) po->f[k].lo = (float)o;
+    if (exact && o > po->f[k].hi) po->f[k].hi = (float)o;
+}
+
+int coop_playout_frame(CoopPlayout* po, uint64_t now_us, uint32_t* P)
+{
+    float hi[COOP_PO_WIN];
+    double fast = 1e30, want, pf, d;
+    int j, n = 0;
+    if (!po->have) return 0;
+    for (j = 0; j < COOP_PO_WIN; j++) {
+        if (!po->f[j].seq || (int32_t)(po->newest - po->f[j].seq) >= COOP_PO_WIN) continue;
+        if (po->f[j].lo < fast) fast = po->f[j].lo;
+        if (po->f[j].hi > -1e29f) hi[n++] = po->f[j].hi;
+    }
+    if (fast > 1e29) { *P = po->P; return po->started; }
+    if (n) {
+        qsort(hi, n, sizeof(hi[0]), cmpf);
+        want = hi[(int)(0.98 * (n - 1))] + COOP_PO_PAD_US;
+    } else want = fast + COOP_PO_PAD_US;
+    if (want > fast + COOP_PO_MAX * COOP_TICK_US) want = fast + COOP_PO_MAX * COOP_TICK_US;
+    if (want < fast) want = fast;
+    po->fast = fast;
+    if (!po->started || want > po->delay) po->delay = want;                                     /* up at once */
+    else po->delay = want < po->delay - COOP_PO_FALL_US ? po->delay - COOP_PO_FALL_US : want;   /* down slowly */
+    pf = ((double)now_us - (po->base + po->delay)) / COOP_TICK_US;   /* frame k is due once now >= base + k * T + delay */
+    if (!po->started) {
+        if (pf < 1) return 0;
+        po->P = (uint32_t)floor(pf + COOP_PO_EARLY);   /* (a frame due within the dead band's early side: now) */
+        po->started = 1;
+    } else {
+        d = pf - (po->P + 1.0);
+        if (d >= 4.0) po->P = (uint32_t)floor(pf + COOP_PO_EARLY);          /* far behind (we stalled): to the due frame */
+        else if (d >= 1.0 + COOP_PO_LATE) po->P += 2;          /* a frame behind: catch up by one */
+        else if (d >= -COOP_PO_EARLY) po->P += 1;              /* in step */
+    }                                                          /* (else early: the same frame again) */
+    if ((int32_t)(po->P - (po->newest + COOP_PO_EXTRA)) > 0) po->P = po->newest + COOP_PO_EXTRA;   /* not past the data */
+    *P = po->P;
+    return 1;
+}
+
+void coop_hist_put(CoopSnapHist* h, uint32_t seq, const EneSnap* s)
+{
+    int k = seq % COOP_HIST;
+    if (!seq || (h->seq[k] && (int32_t)(h->seq[k] - seq) > 0)) return;   /* older than what that place holds */
+    h->seq[k] = seq;
+    h->s[k] = *s;
+}
+
+static int32_t ang_at(int32_t a0, int32_t a1, double t)   /* from a0 towards a1 (the short way round) by t (also beyond) */
+{
+    int32_t r = a0 + (int32_t)lround((int16_t)(uint16_t)(a1 - a0) * t);
+    return a0 >= 0 && a0 < 0x10000 ? r & 0xFFFF : r;
+}
+
+int coop_hist_at(const CoopSnapHist* h, uint32_t P, uint32_t applied, EneSnap* out, uint32_t* from)
+{
+    int j, b = -1, o = -1, n = -1;   /* the newest at or before P, the one before that, the first after P */
+    for (j = 0; j < COOP_HIST; j++) {
+        if (!h->seq[j]) continue;
+        if ((int32_t)(h->seq[j] - P) <= 0) { if (b < 0 || (int32_t)(h->seq[j] - h->seq[b]) > 0) b = j; }
+        else if (n < 0 || (int32_t)(h->seq[j] - h->seq[n]) < 0) n = j;
+    }
+    if (b < 0) return COOP_AT_NONE;
+    for (j = 0; j < COOP_HIST; j++)
+        if (h->seq[j] && (int32_t)(h->seq[j] - h->seq[b]) < 0 && (o < 0 || (int32_t)(h->seq[j] - h->seq[o]) > 0)) o = j;
+    *out = h->s[b];
+    *from = h->seq[b];
+    if (h->seq[b] == P) return COOP_AT_EXACT;
+    if ((int32_t)(P - h->seq[b]) > COOP_PO_EXTRA) return (int32_t)(h->seq[b] - applied) > 0 ? COOP_AT_OLD : COOP_AT_NONE;
+    {
+        const EneSnap* s0 = &h->s[b];
+        const EneSnap* s1;
+        int interp = n >= 0 && (int32_t)(h->seq[n] - h->seq[b]) <= 2 * COOP_PO_EXTRA;
+        double gap, t;
+        if (!interp && (o < 0 || (int32_t)(h->seq[b] - h->seq[o]) > COOP_PO_EXTRA)) return COOP_AT_EXTRAP;   /* one snapshot: held */
+        s1 = interp ? &h->s[n] : &h->s[o];
+        gap = interp ? (double)(h->seq[n] - h->seq[b]) : (double)(h->seq[b] - h->seq[o]);
+        t = (double)(P - h->seq[b]) / gap * (interp ? 1 : -1);   /* P's place from s0 towards s1 (the older one: backwards) */
+        if (fabsf(s1->px - s0->px) + fabsf(s1->py - s0->py) + fabsf(s1->pz - s0->pz) < 20.0 * gap) {   /* (2 m a frame: a jump, not a move) */
+            out->px = (float)(s0->px + (s1->px - s0->px) * t);
+            out->py = (float)(s0->py + (s1->py - s0->py) * t);
+            out->pz = (float)(s0->pz + (s1->pz - s0->pz) * t);
+            out->ax = ang_at(s0->ax, s1->ax, t); out->ay = ang_at(s0->ay, s1->ay, t); out->az = ang_at(s0->az, s1->az, t);
+        }
+        if (s1->mtn_no == s0->mtn_no && s1->mnw == s0->mnw && s1->mdl == s0->mdl && (interp ? s1->frm_no >= s0->frm_no : s1->frm_no <= s0->frm_no))
+            out->frm_no = s0->frm_no + (int32_t)lround((double)(s1->frm_no - s0->frm_no) * t);   /* one motion, going forward */
+        return interp ? COOP_AT_INTERP : COOP_AT_EXTRAP;
+    }
+}

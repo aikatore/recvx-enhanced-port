@@ -43,6 +43,7 @@ static int net_startup(void) { return 1; }
 
 static sock_t sock = BAD_SOCK;
 static uint64_t rx_us;                  /* net_rx_us */
+static int rx_exact;                    /* net_rx_exact */
 
 #ifdef _WIN32
 /* Arrival times on Windows: a thread waits for the socket's FD_READ event and notes when data came;
@@ -133,6 +134,7 @@ int net_open(int port)
 
 void net_close(void)
 {
+    net_flush();
 #ifdef _WIN32
     ts_end();
 #endif
@@ -265,7 +267,7 @@ int net_tcp_fetch(const NetAddr* to, const char* req, int len, char* buf, int ca
     return *why ? -1 : n;
 }
 
-int net_send(const NetAddr* to, const void* buf, int len)
+static int raw_send(const NetAddr* to, const void* buf, int len)
 {
     struct sockaddr_in a;
     if (sock == BAD_SOCK) return 0;
@@ -275,6 +277,87 @@ int net_send(const NetAddr* to, const void* buf, int len)
     a.sin_port = to->port;
     return sendto(sock, (const char*)buf, len, 0, (struct sockaddr*)&a, sizeof(a)) == len;
 }
+
+#ifndef RECVX_NET_NO_SDL
+/* Test aid RECVX_COOP_NETSIM="delay_ms,jitter_ms,loss_pct" (docs/COOP.md "Test aids"): a network path in our send
+   path, so two instances on one PC (Linux or Windows) see delay, jitter and loss without a proxy. Every datagram we
+   send waits delay + uniform(-jitter, +jitter) ms but never leaves before the one sent before it (a path keeps a
+   burst's order, as the measurements' udp_proxy.py), loss_pct % are dropped; a thread sends them when due. Each
+   player's own direction: set it on both. Through a server: our leg to it. */
+#define SIM_N 1024
+static struct {
+    SDL_Mutex* mu;
+    int on, head, n;                    /* on: -1 not read yet */
+    double delay, jit, loss;
+    uint64_t last;                      /* the previous datagram's departure (us) */
+    uint32_t rng;
+    struct { uint64_t due; NetAddr to; int len; unsigned char b[1500]; }* q;
+} sim = { .on = -1, .rng = 0x9E3779B9u };
+static double sim_rand(void)   /* [0, 1) */
+{
+    sim.rng ^= sim.rng << 13; sim.rng ^= sim.rng >> 17; sim.rng ^= sim.rng << 5;
+    return (sim.rng >> 8) / 16777216.0;
+}
+static int SDLCALL sim_main(void* unused)
+{
+    (void)unused;
+    for (;;) {
+        unsigned char b[1500];
+        NetAddr to;
+        int len = 0;
+        SDL_LockMutex(sim.mu);
+        if (sim.n && sim.q[sim.head].due <= net_us()) {
+            to = sim.q[sim.head].to; len = sim.q[sim.head].len;
+            memcpy(b, sim.q[sim.head].b, len);
+            sim.head = (sim.head + 1) % SIM_N; sim.n--;
+        }
+        SDL_UnlockMutex(sim.mu);
+        if (len) raw_send(&to, b, len);
+        else SDL_DelayNS(250000);
+    }
+    return 0;
+}
+static int sim_send(const NetAddr* to, const void* buf, int len)
+{
+    uint64_t t;
+    double d;
+    if (sim.on < 0) {
+        const char* e = getenv("RECVX_COOP_NETSIM");
+        sim.on = e && sscanf(e, "%lf,%lf,%lf", &sim.delay, &sim.jit, &sim.loss) >= 1 && (sim.q = calloc(SIM_N, sizeof(*sim.q))) &&
+                 (sim.mu = SDL_CreateMutex()) != NULL;
+        if (sim.on) {
+            SDL_Thread* th = SDL_CreateThread(sim_main, "netsim", NULL);
+            if (th) SDL_DetachThread(th); else sim.on = 0;
+            fprintf(stderr, "net: test aid RECVX_COOP_NETSIM: %.1f ms +-%.1f, %.1f %% loss on what we send\n", sim.delay, sim.jit, sim.loss);
+        }
+    }
+    if (!sim.on) return raw_send(to, buf, len);
+    if (sim_rand() * 100.0 < sim.loss || len > (int)sizeof(sim.q->b)) return 1;   /* lost on the way */
+    d = (sim.delay + (sim_rand() * 2.0 - 1.0) * sim.jit) * 1000.0;
+    t = net_us() + (uint64_t)(d > 0 ? d : 0);
+    SDL_LockMutex(sim.mu);
+    if (t < sim.last) t = sim.last;
+    sim.last = t;
+    if (sim.n < SIM_N) {
+        int k = (sim.head + sim.n++) % SIM_N;
+        sim.q[k].due = t; sim.q[k].to = *to; sim.q[k].len = len;
+        memcpy(sim.q[k].b, buf, len);
+    }
+    SDL_UnlockMutex(sim.mu);
+    return 1;
+}
+int net_send(const NetAddr* to, const void* buf, int len) { return sim_send(to, buf, len); }
+void net_flush(void)   /* what waits goes now (a goodbye at exit, the socket closing) */
+{
+    if (sim.on <= 0) return;
+    SDL_LockMutex(sim.mu);
+    for (; sim.n; sim.n--, sim.head = (sim.head + 1) % SIM_N) raw_send(&sim.q[sim.head].to, sim.q[sim.head].b, sim.q[sim.head].len);
+    SDL_UnlockMutex(sim.mu);
+}
+#else
+int net_send(const NetAddr* to, const void* buf, int len) { return raw_send(to, buf, len); }
+void net_flush(void) {}
+#endif
 
 int net_recv(NetAddr* from, void* buf, int cap)
 {
@@ -299,6 +382,7 @@ int net_recv(NetAddr* from, void* buf, int cap)
         }
         s = drained ? __atomic_exchange_n(&ts_stamp, 0, __ATOMIC_ACQUIRE) : 0;
         rx_us = s && s >= drain_end ? s : net_us();
+        rx_exact = s && s >= drain_end;
         drained = 0;
     }
 #else
@@ -321,6 +405,7 @@ int net_recv(NetAddr* from, void* buf, int cap)
             mh.msg_namelen = sizeof(a), mh.msg_controllen = sizeof(ctl.b);
         if (n < 0) return -1;   /* EWOULDBLOCK */
         rx_us = net_us();
+        rx_exact = 0;
         for (c = CMSG_FIRSTHDR(&mh); c; c = CMSG_NXTHDR(&mh, c))
             if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_TIMESTAMPNS) memcpy(&ts, CMSG_DATA(c), sizeof(ts));
         if (ts.tv_sec) {   /* a wall-clock time: how long ago, taken off our monotonic clock */
@@ -328,7 +413,7 @@ int net_recv(NetAddr* from, void* buf, int cap)
             int64_t ago;
             clock_gettime(CLOCK_REALTIME, &now);
             ago = ((int64_t)now.tv_sec - ts.tv_sec) * 1000000 + (now.tv_nsec - ts.tv_nsec) / 1000;
-            if (ago >= 0 && ago < 60000000) rx_us -= (uint64_t)ago;   /* (a slow frame waits seconds; else the clock was set: when it was read) */
+            if ((rx_exact = ago >= 0 && ago < 60000000)) rx_us -= (uint64_t)ago;   /* (a slow frame waits seconds; else the clock was set: when it was read) */
         }
     }
 #endif
@@ -338,6 +423,7 @@ int net_recv(NetAddr* from, void* buf, int cap)
 }
 
 uint64_t net_rx_us(void) { return rx_us; }
+int net_rx_exact(void) { return rx_exact; }
 
 const char* net_addr_str(const NetAddr* a)
 {
