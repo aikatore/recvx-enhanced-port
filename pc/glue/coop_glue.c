@@ -955,6 +955,7 @@ static void queue_event(Event* e);
 static int same_room(void);
 static int in_session_game(void);
 static int owned_room = -1;
+static int ev_room = -1;                /* >= 0: the room key queue_event stamps instead of ours (an enemy of the room we leave) */
 void pc_enemy_holds(BH_PWORK* pl, BH_PWORK* by);   /* eneset.c */
 /* Phase 3 (protocol 46..48, the host's rule "Shared Enemy Control", OPT2_OWNERSHIP): engaged-player ownership. A common
    enemy (zombies: id 1, its body with its upper half) runs in the game of the player it is engaged with; the other
@@ -1560,7 +1561,11 @@ static void grab_check(void)
         if (!we_run(i) || ep->flg & 0x80) continue;   /* children go with their parent */
         if (is_host && !own_grab[i]) continue;   /* (the host: only a grab taken from the guest's zombie, Phase 3) */
         if (owned_room != coop_room_key() || i >= (int)sys->ewk_n || !(ep->flg & 0x1)) {
-            if (!is_host) grab_back(i, 0, own_child(ep));   /* (also one we ran between attacks, Phase 3: the host lets it go) */
+            if (!is_host) {   /* (also one we ran between attacks, Phase 3: the host lets it go) */
+                ev_room = owned_room;   /* (the room it is in: past a door ours is the next one, which the host's handler ignores) */
+                grab_back(i, 0, own_child(ep));
+                ev_room = -1;
+            }
             own_grab[i] = 0;
         } else if (own_grab[i] && !holding(ep) && plp->mnwP != ep->mnwP && tx_in_game) {
             if (p3_on() && (is_host || !enemy_rec_scripted(i))) {   /* Phase 3: the grab is over, we keep running it (the partner's game:
@@ -1584,7 +1589,6 @@ static void grab_check(void)
    same on both sides, instead of a stream that waits forever for an event that was dropped. */
 /* send_frame: when each unacknowledged event went last (net_ms, 0 not yet), by id */
 static unsigned int ev_sent[COOP_RING];
-static int ev_room = -1;                /* >= 0: the room key queue_event stamps instead of ours (an enemy of the room we leave) */
 static void queue_event(Event* e)
 {
     int was = ring.overflow;
@@ -2160,6 +2164,9 @@ static void p3_frame(void)
        plays on in the room: what we run goes to the partner's game with its state (the host's only to a partner that is
        a target) */
     leaving = same_room() && (!tx_in_game || (sys->cb_flg & 0x5) || frame_no - enemy_frame > 2) && (!is_host || proxy_ok);
+    /* a door is one frame of this (the next one runs in the next room, where grab_check hands the rest back without their
+       state): leaving, as many as three quarters of the ring hold */
+    if (leaving) budget = ((int)(COOP_RING * 3 / 4) - (int)(ring.next - ring.head)) / ((ESTATE_PLY + 63) / 64 + 1);
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
         if (own_grab[i] && !we_run(i) && (!(ene[i].flg & 0x1) || (frame_no - own_t[i] > 90 && !ply_busy(&ply2)))) own_grab[i] = 0;   /* (no word of its end) */
         if (is_host && owned[i] && !own_grab[i] && (ene[i].flg & 0x1) && event_driven(&ene[i])) { p3_takeback(i, 0, "an event of ours drives it"); continue; }
@@ -6715,7 +6722,16 @@ static int apply_event(const Event* e)
         owned_child[i] = 255;
         if (c < PC_ENE_SLOTS) own_set(c, 1);
         own_wait[i] = 0;
-        if (e->stg != sys->stg_no || e->rom != sys->rom_no || !(ene[i].flg & 0x1)) return 1;
+        if (!(ene[i].flg & 0x1)) return 1;
+        if (e->stg != sys->stg_no || e->rom != sys->rom_no) {
+            /* stamped with another room (an older guest's door hand-back: its next room), the enemy still in ours: it ran there
+               from the puppet's modes on its own stale work (a Hunter mid-jump on a floor-area pointer of 0) - released */
+            if (is_host && !e->u.gr.state && owned_room == coop_room_key()) {
+                pc_enemy_unhold(&ene[i]);
+                host_log("coop: enemy %d is back from the partner (another room's stamp): released\n", i);
+            }
+            return 1;
+        }
         if (!e->u.gr.state || c != e->u.gr.child || !estate_x.done || estate_x.tid != e->u.gr.tid || estate_x.total != ESTATE_PLY ||
             !ene_unpack(&ene[i], estate, e->u.gr.mdl, e->u.gr.mnw)) {
             pc_enemy_unhold(&ene[i]);

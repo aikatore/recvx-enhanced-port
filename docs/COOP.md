@@ -1111,7 +1111,9 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
     cutscene of its own; one caught mid-action then (a Hunter getting up after a hit: its status screen stops it) goes
     back after 15 frames without its state (`EV_UNGRAB` state 0), and the host lets it go from its puppet (a zombie stands,
     another type starts its Move again: its work is as it last ran on the host), so it does not stand still in both
-    games through the screen; at its room change the host releases what is left the same way. The host takes them back (`EV_ENEOWN` state 2) when no snapshot of
+    games through the screen. A door is one frame of leaving: in it the guest gives as many as three quarters of the
+    event ring hold with their state, and in the next room hands the rest back without it (stamped with the room they
+    are in), which the host lets go from its puppet the same way. The host takes them back (`EV_ENEOWN` state 2) when no snapshot of
     one came for 10 s while both play in the room, when an event of its own drives one, and at the partner's time-out;
     the guest drops them when the host plays in another room.
   * **What differs from single player**: a Cerberus that lunges alerts only the dogs its own game runs (the pack's
