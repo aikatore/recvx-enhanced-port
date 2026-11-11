@@ -578,11 +578,13 @@ float gs_wanted_scale(void)
     return g_config.dyn_res && s > (float)drs_cap() ? (float)drs_cap() : s;
 }
 
+static void cpool_trim(uint64_t age);
 /* change the internal resolution; existing render targets are resampled, not lost */
 void gs_set_scale(float scale)
 {
     if (scale == g_scale) return;
     gs_flush();
+    cpool_trim(0);
     for (int i = 0; i < MAX_RT; i++) {
         RenderTarget* rt = &rts[i];
         GLuint tex, fbo;
@@ -664,6 +666,7 @@ void gs_update_widescreen(void)
     }
     if (m == g_margin_x) return;
     gs_flush();
+    cpool_trim(0);
     for (int i = 0; i < MAX_RT; i++)   /* recreated (and reloaded from GS memory) at the new width */
         if (rts[i].used) { glDeleteTextures(1, &rts[i].tex); glDeleteFramebuffers(1, &rts[i].fbo); fb_forget(); rts[i].used = 0; }
     for (int i = 0; i < 8; i++) if (dz[i].tex) { glDeleteTextures(1, &dz[i].tex); dz[i].tex = 0; }
@@ -2197,11 +2200,21 @@ static void capture_rt(GLuint* tex, GLuint* fbo, int* cw, int* ch, uint32_t fbp,
    deleted one of the target's size every frame: at 4x a 16F texture of up to 56 MB, which the
    driver allocated and cleared each time, and a framebuffer). Free again when deleted
    (gs_tex_delete: at the next frame, gs_frame_begin). RECVX_AB bit 16: made and deleted. */
-static struct { GLuint tex, fbo; int w, h, state; } cpool[8];   /* state: 0 none, 1 handed out, 2 free */
+static struct { GLuint tex, fbo; int w, h, state; uint64_t freed; } cpool[8];   /* state: 0 none, 1 handed out, 2 free (since frame_no freed) */
 static int cpool_release(GLuint tex)
 {
-    for (int i = 0; i < 8; i++) if (cpool[i].state == 1 && cpool[i].tex == tex) { cpool[i].state = 2; return 1; }
+    for (int i = 0; i < 8; i++) if (cpool[i].state == 1 && cpool[i].tex == tex) { cpool[i].state = 2; cpool[i].freed = frame_no; return 1; }
     return 0;
+}
+/* free textures not taken again for 120 frames (the room left), or all of them (age 0: a new scale
+   or margin, none of their sizes comes again) deleted: no peak VRAM kept for the session */
+static void cpool_trim(uint64_t age)
+{
+    for (int i = 0; i < 8; i++)
+        if (cpool[i].state == 2 && frame_no - cpool[i].freed >= age) {
+            glDeleteTextures(1, &cpool[i].tex); glDeleteFramebuffers(1, &cpool[i].fbo); fb_forget();
+            memset(&cpool[i], 0, sizeof(cpool[i]));
+        }
 }
 unsigned int gs_capture_rt(uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, int wide)
 {
@@ -2214,7 +2227,7 @@ unsigned int gs_capture_rt(uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, i
             if (cpool[i].state != 1 && (k < 0 || (cpool[i].state == 2 && cpool[i].w == pw && cpool[i].h == ph))) k = i;
     if (k >= 0) { tex = cpool[k].tex; fbo = cpool[k].fbo; cw = cpool[k].w; ch = cpool[k].h; }
     capture_rt(&tex, &fbo, &cw, &ch, fbp, fbw, w, h, wide);
-    if (k >= 0) { cpool[k] = (typeof(cpool[k])){ tex, fbo, cw, ch, 1 }; return tex; }
+    if (k >= 0) { cpool[k] = (typeof(cpool[k])){ tex, fbo, cw, ch, 1, 0 }; return tex; }
     glDeleteFramebuffers(1, &fbo); fb_forget();
     return tex;
 }
@@ -2390,6 +2403,7 @@ void gs_frame_begin(void)
         if (n) glDeleteTextures((GLsizei)n, doomed);
         ndoomed = 0;
     }
+    cpool_trim(120);
     nreloads = 0;
     mv_tbp = UINT32_MAX;   /* a movie frame binds it again (EV_MOVIE) */
     snapshot_valid = 0;   /* no replays of the previous frame while this one is half executed (download) */

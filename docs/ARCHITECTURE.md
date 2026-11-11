@@ -146,7 +146,8 @@ point: the partial frame is executed and the game waits for the pixels.
   compression metadata; radeonsi draws a partial one like the sprite. Ryzen iGPU, RM_0060, 4x: an
   executed frame 9.81 -> 8.53 ms, an in-between image 9.34 -> 7.97 ms (`RECVX_AB=1`). With AA or
   Deband the draw buffer keeps the box clear (the filters reach 16 rows into the zeros).
-- StoreRenderTex captures (`gs_capture_rt`) reuse up to 8 textures: RM_4030 made and freed one of
+- StoreRenderTex captures (`gs_capture_rt`) reuse up to 8 textures (a free one unused for 120 frames,
+  or at a new scale or margin, is deleted): RM_4030 made and freed one of
   the target's size every frame (at 4x 4.8 ms of GPU time a frame, now 1.35).
 - The render thread's CPU side: CLUT loads read GS memory through a per-format offset table, the
   common texture formats (PSMT8/T4 block by block) and render-target reloads address GS memory
