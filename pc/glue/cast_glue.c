@@ -331,7 +331,6 @@ uint64_t SDL_GetTicks(void);
 extern int PatId[4];
 #define VOICE_PT 28
 #define VOICE_GRACE_MS 1000          /* an inserted line ends at most this long after the original's end */
-#define VOICE_GAP_MS 4000            /* a short line followed by a pause: a line of up to this long in it (voice_gap) */
 #define VOICE_FADE 8                 /* ... fading out over this many sound ticks (ExecAdxFadeManager) */
 extern unsigned int AdxPlayFlag[2];  /* sdfunc.c */
 extern ADXT_INFO AdxTInfo[4];        /* adxwrap.c */
@@ -415,8 +414,6 @@ extern int pc_se_xbank;                          /* ps2_sg_sd.c: the extra bank 
 static struct { int n, last, last_m, xb, k, seq_n, seq[3], len[3]; uint64_t end, cap; } cr;   /* n: its sounds play (the one
     now until end), cut at cap (0 none); the program played last and its model; the bank, the sounds (seq), the one now (k) */
 
-static int frm_last[RECS], frm_step[RECS];   /* each record's motion frame (16.16) at the last tick, its step a tick */
-
 static void cr_play(int prog)
 {
     RequestInfo.SlotNo = CR_SLOT;
@@ -435,13 +432,8 @@ static void cr_play(int prog)
 void pc_voice_tick(void)
 {
     uint64_t now = SDL_GetTicks();
-    for (int r = 0; rom && r < (int)sys->ewk_n && r < RECS; r++) {   /* (voice_gap: how fast each record's motion runs) */
-        int f = ene[r].frm_no, d = f - frm_last[r];
-        frm_step[r] = d > 0 && d < 8 << 16 ? d : 0;
-        frm_last[r] = f;
-    }
     if (vl.cap && now >= vl.cap) {   /* an inserted line longer than the original's time and grace: it fades out */
-        vl.cap = 0;
+        vl.cap = 0; vl.gnext = -1;   /* (nor does a group's next part start after it) */
         if (AdxPlayFlag[1]) {
             RequestAdxFadeFunctionEx(1, -1, -127, VOICE_FADE);   /* (StopAdx at the end: ExecAdxFadeManager) */
             vl.fading = 1;
@@ -517,31 +509,6 @@ static int group_ms(int disc, int vid)
 }
 static int line_ms(const VoiceLine* l) { return group_ms(l->disc, l->vid); }   /* (voice_pick) */
 
-/* How long until the task says its next line, at least, in ms (the game's 30 ticks a second): its script from p walked
-   as it waits, Sleep's ticks and the While-FrameCheck loops on a record's motion frame (the ticks that motion needs to
-   get there at its pace now), up to the next VoiceOn or the event's end; an If, another loop or wait ends the walk
-   (the time so far is still a lower bound). From the game's state only: the same on both co-op screens. */
-static int voice_gap(const unsigned char* p)
-{
-    int k, len, ticks = 0;
-    for (k = 0; k < 64; k++, p += len) {
-        if (*p == 25 || *p == 255 || *p == 0 || (*p >= 1 && *p <= 3)) break;   /* (VoiceOn, EvtEnd, End; If, Else, Endif) */
-        if (*p == 0xF8) { ticks += p[2] | p[3] << 8; len = 4; continue; }   /* Sleep: its ticks */
-        if (*p == 0xFC) {   /* While FrameCheck(enemy record, half, frame) EvtNext Ewhile: until its motion frame gets there */
-            int to = (p[6] | p[7] << 8) << 16 | (p[5] ? 0x8000 : 0), w, t;
-            if (p[2] != 0x38 || p[3] != 1 || p[8] != 0xFE || p[9] != 0xFD || !rom || p[4] >= rom->ene_n) break;
-            w = rom->enep[p[4]].wrk_no;
-            if (w < 0 || w >= RECS || w >= (int)sys->ewk_n || !frm_step[w]) break;
-            t = (to - ene[w].frm_no) / frm_step[w];   /* (from now: the frame counts on through the waits before) */
-            if (t > ticks) ticks = t;
-            len = 10;
-            continue;
-        }
-        if ((len = coop_insn_len_raw(p)) <= 0) break;
-    }
-    return ticks * 1000 / 30;
-}
-
 /* the lines said since the room was loaded (voice_pick: the ones not said first; then none of the character's last few, never
    one twice in a row), in the scene's order: the same in every run; a room load starts afresh (cast_room). Also those said
    in place of Claire's and Chris's, which each co-op screen shows with its own player's look: the two screens pick alike
@@ -561,7 +528,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
 {
     static int logged, part[2];
     const EnemyOpts* o = enemy_opts();
-    int disc = (sys->ss_flg & 0x1) + 1, sp = -1, own, chr, m, lrec, ms, lip, lms, d, before = 0, fit, gap = 0, sure = 0, grunts, paused = 0;
+    int disc = (sys->ss_flg & 0x1) + 1, sp = -1, own, chr, m, lrec, ms, lip, lms, d, before = 0, fit, sure = 0, grunts;
     const VoiceLine* l;
     const VoiceCurated *cv = voice_curated(disc, vid), *lc;   /* (checked by hand: docs/ACTORS.md "Lines checked by hand") */
     const char* why;
@@ -606,8 +573,6 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     if (cv && cv->flags & VOICE_PART) return quiet(sp, ms);   /* (a group's later part: the line in place of its first takes all their time) */
     fit = cv && cv->next != 0xFFFF ? group_ms(disc, vid) : ms;
     grunts = cv && cv->flags & VOICE_GRUNT ? VOICE_PICK_GRUNTS : VOICE_PICK_ANY;   /* (a grunt for a grunt) */
-    if (grunts != VOICE_PICK_GRUNTS && ms > 0 && ms < VOICE_SHORT_MS && (gap = voice_gap(next)) - 300 > ms + VOICE_GRACE_MS)   /* a gasp before a pause: a line in it */
-        fit = (gap - 300 < VOICE_GAP_MS ? gap - 300 : VOICE_GAP_MS) - VOICE_GRACE_MS, paused = 1;
     if (grunts != VOICE_PICK_GRUNTS && (fit <= 0 || fit >= VOICE_SHORT_MS)) grunts = VOICE_PICK_SPOKEN;   /* (a spoken line for one: never a grunt) */
     if (!(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr, fit, fit > 0 ? fit + VOICE_GRACE_MS : 0, line_ms, line_age,
                          grunts | (ms > 0 && ms < VOICE_SHORT_MS ? VOICE_PICK_FIT : 0)))) {   /* (a gasp: one that ends in time, else quiet below) */
@@ -629,7 +594,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
              cast_name(own), disc, vid, ms, sure ? ", speaker checked" : "", grunts == VOICE_PICK_GRUNTS ? ", a grunt" : "",
              m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?", cast_name(chr), l->disc, l->vid,
              lms, l->grunt ? ", a grunt" : "", lc && lc->next != 0xFFFF ? ", a group" : "",
-             ms > 0 && lms > fit + VOICE_GRACE_MS ? ", longer: faded out" : paused ? ", in the pause after it" : "", from,
+             ms > 0 && lms > fit + VOICE_GRACE_MS ? ", none ends in time: faded out" : "", from,
              lip >= 0 ? "with its lips" : sure ? "the speaker checked by hand: " : "no lips in the script (the speaker is the VoiceOn's record): ",
              lip >= 0 ? (l->lip ? "" : " (none: the script's)") : why ? "a still mouth, " : "Talking Mouths: its lips added", why ? why : "");
     vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = lip >= 0 ? l->lip : NULL; vl.t0 = SDL_GetTicks();
