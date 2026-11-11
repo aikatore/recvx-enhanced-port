@@ -3,8 +3,8 @@
 # roaming enemies stay dead (the entry script hides them: EneSetCk), with the randomizer, rearranged placements and three
 # extra enemies on, killing every enemy of each room (RECVX_ENEMY_KILL; ":r" kills only the records, so the extras of the
 # first visit live on). Passes when, for every seed, each room got the same randomizer result and the same extras (type,
-# source record, spot) on both visits, and nothing that died on the first visit is there on the second (extras of
-# records without a kill bit come back, as those records do). About 7 minutes, all runs in parallel.
+# index, spot) on both visits, and nothing that died on the first visit is there on the second (every extra has a dead
+# flag of its own). About 7 minutes, all runs in parallel.
 #   pc/tools/enemy_revisit_check.sh OUT [SEED...]      (default seeds 1234 77 900001)
 # Environment: RECVX_ISO (disc image), RECVX_BIN (binary, default build/pc/recvx), ROOMS (stg:rom:pos:case list), EXTRA (extra
 # enemies, default 3); the other RECVX_ENEMY_* (e.g. _VARIETY=2, _RATES, _TYPES) pass through.
@@ -39,15 +39,13 @@ for seed in seeds:
             line = re.sub(r'^\[ *[0-9.]+\] ', '', line.rstrip())
             m = re.match(r'room: RM_(\d{4}) \d+ KB expanded', line)
             if m:
-                cur = {'room': m.group(1), 'now': '', 'extras': [], 'living': None, 'died': set(), 'flagless': set()}
+                cur = {'room': m.group(1), 'now': '', 'extras': [], 'living': None, 'died': set()}
                 visits.append(cur)
             elif cur:
                 m = re.match(r'enemies: room \d+: .*records randomized.*now(.*)', line)
                 if m: cur['now'] = m.group(1)
-                m = re.match(r'enemies: extra .*?\(type (\d+) model (\d+), from record (\d+), dead flag (-?\d+)\) at (-?\d+) (-?\d+): (.*)', line)
-                if m:
-                    cur['extras'].append(m.group(1, 2, 3, 5, 6))
-                    if m.group(4) == '-1': cur['flagless'].add(m.group(3))
+                m = re.match(r'enemies: extra .*?\(type (\d+) model (\d+), extra (\d+), dead flag (-?\d+)\) at (-?\d+) (-?\d+) ', line)
+                if m: cur['extras'].append(m.group(1, 2, 3, 5, 6))
                 m = re.match(r'test: room \d+ (?:\(\d+ ed_flg bits set\) )?living enemies at frame \d+:(.*)', line)
                 if m: cur['living'] = m.group(1).split()
                 m = re.match(r'test: room \d+ record (\d+) \(type \d+\) died', line)
@@ -68,11 +66,12 @@ for seed in seeds:
             for e in v['living']:   # "k:id" (record k) or "extra@slot:id"
                 if not e.startswith('extra@') and 'r' + e.split(':')[0] in a['died']:
                     back.append(v['room'] + ' ' + e)
-            # extras by type (a slot an extra that stayed dead left can hold another one): no more of a type than lived on
-            if not a['flagless']:   # (extras of records without a kill bit come back)
-                types = lambda l: collections.Counter(e.split(':')[1] for e in l if e.startswith('extra@'))
-                lived, died, now = types(a['living']), collections.Counter(d.split(':')[1] for d in a['died'] if d[0] == 'x'), types(v['living'])
-                back += ['%s extra of type %s' % (v['room'], t) for t in now if now[t] > lived[t] - died[t]]
+                if e.startswith('extra@') and 'x' + e[6:] in a['died']:   # (each extra keeps its slot)
+                    back.append(v['room'] + ' ' + e)
+            # extras by type: no more of a type than lived on
+            types = lambda l: collections.Counter(e.split(':')[1] for e in l if e.startswith('extra@'))
+            lived, died, now = types(a['living']), collections.Counter(d.split(':')[1] for d in a['died'] if d[0] == 'x'), types(v['living'])
+            back += ['%s extra of type %s' % (v['room'], t) for t in now if now[t] > lived[t] - died[t]]
         ok = rooms >= 8 and not differ and not back
         fail |= not ok
         print('%s seed %s, kill %s: %d rooms visited twice; differ: %s; died and back: %s' %
