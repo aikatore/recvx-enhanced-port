@@ -4,11 +4,17 @@
 
 ### Changes
 
+- **Smoother co-op enemies**: in direct and relay co-op, enemies move and animate evenly for both players even with
+  lag, zombies' heads follow their target, grabs by enemies work reliably, and co-op needs far less bandwidth.
+- **Performance**: rendering is lighter and entering a room hitches less, and on slow graphics cards the picture no
+  longer freezes or drops frames.
 - **Co-op server**: updates can now be applied without dropping running sessions, and a machine-readable status is
   available for monitoring.
 
 ### Fixes
 
+- In co-op, an extra enemy killed by the partner in another room no longer comes back to life, and extra enemies
+  stay in the same place for both players.
 - In the over-the-shoulder camera with Free Camera, mashing the movement keys breaks free of a grab as quickly as
   with the fixed cameras.
 
