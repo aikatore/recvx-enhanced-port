@@ -578,7 +578,9 @@ co-op guest as added enemies).
   and in Mild a limit; the kinds' rules hold (open space for the big kinds, and for them level ground 12 units round: a
   Giant Black Widow on RM_1000's raised walk stood over its edge; no fliers, `rm_flg`, one heavy variant, the
   slot budget), the extras are not counted by "all dead" doors, so the kinds that may leave a room fit there too. So the
-  extras count into the rates and into Types per Room as records do. A spot where nothing fits (every kind that would fit
+  extras count into the rates and into Types per Room as records do; once the room has that many kinds, an extra that
+  none of them fits at its spot is left out (a record must become something and may go over the limit, an extra need
+  not: a room of bats gets no walkers past it). A spot where nothing fits (every kind that would fit
   at Off) is replaced by another (up to 4). A type the room did not load comes as the F2 spawner's do (its model,
   textures and sounds from its own room file). With the randomizer off: a copy of a random record of the roaming types
   zombie, Black Widow, Cerberus, Hunter, Bandersnatch, albinoid adult, anatomist (its own type and model: no upload); a

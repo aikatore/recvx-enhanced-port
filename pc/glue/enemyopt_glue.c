@@ -1185,6 +1185,8 @@ static int plan_extras(const EnemyOpts* o, XPlan* x, int dry)
             kd = draw_kind(o, kt, nk, &rk, 1, -1, n->px, n->py, n->pz, flr, rk.cost, 0, &m, &v);
             xdraw = 0;
             if (!m) { x[i].why = "no kind fits its spot"; continue; }
+            if (o->types && rk.nset >= o->types && !rk.set[kd]) { x[i].why = "Types per Room: none of the room's kinds fits its spot"; continue; }   /* (a
+                record must become something and may go over; an extra need not: a room of bats gets no walkers past it) */
             x[i].am = *m;
             n->variant = v ? v->id : 0;
             for (k = 0; k < spawn_base_count() && spawn_entry(k) != m; k++);
