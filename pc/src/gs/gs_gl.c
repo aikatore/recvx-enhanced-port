@@ -62,8 +62,8 @@ enum { GP_OTHER, GP_3D_OPAQUE, GP_3D_BLEND, GP_GS_RTREAD, GP_GS_TEX, GP_GS_FLAT,
        GP_RELOAD, GP_AA, GP_PRESENT, GP_OVERLAY, GP_CLEAR, GP_N };
 void gp_mark(int cat);
 /* RECVX_AB=mask (test aid, with RECVX_GPU_TIME): the optimizations in mask (1 fast clear, 8 the
-   whole-target clear) are off in every other 2-second log interval ("gputime: ab 0" on, "ab 1"
-   off), so one run compares both under the same load */
+   whole-target clear, 16 the capture pool) are off in every other 2-second log interval
+   ("gputime: ab 0" on, "ab 1" off), so one run compares both under the same load */
 static int ab_mask = -1, ab_phase;
 static int ab_off(int bit)
 {
@@ -2099,11 +2099,28 @@ static void capture_rt(GLuint* tex, GLuint* fbo, int* cw, int* ch, uint32_t fbp,
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
+/* StoreRenderTex's textures are kept for the next ones (a room with a render texture made and
+   deleted one of the target's size every frame: at 4x a 16F texture of up to 56 MB, which the
+   driver allocated and cleared each time, and a framebuffer). Free again when deleted
+   (gs_tex_delete: at the next frame, gs_frame_begin). RECVX_AB bit 16: made and deleted. */
+static struct { GLuint tex, fbo; int w, h, state; } cpool[8];   /* state: 0 none, 1 handed out, 2 free */
+static int cpool_release(GLuint tex)
+{
+    for (int i = 0; i < 8; i++) if (cpool[i].state == 1 && cpool[i].tex == tex) { cpool[i].state = 2; return 1; }
+    return 0;
+}
 unsigned int gs_capture_rt(uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, int wide)
 {
     GLuint tex = 0, fbo = 0;
-    int cw = 0, ch = 0;
+    int cw = 0, ch = 0, k = -1;
+    float gw = wide && g_margin_x ? w * gs_hor_scale() : (float)w;
+    int pw = (int)(gw * g_scale), ph = (int)(h * g_scale);   /* (as capture_rt) */
+    if (!ab_off(16))
+        for (int i = 0; i < 8; i++)   /* a free one of this size, else any free or unused slot */
+            if (cpool[i].state != 1 && (k < 0 || (cpool[i].state == 2 && cpool[i].w == pw && cpool[i].h == ph))) k = i;
+    if (k >= 0) { tex = cpool[k].tex; fbo = cpool[k].fbo; cw = cpool[k].w; ch = cpool[k].h; }
     capture_rt(&tex, &fbo, &cw, &ch, fbp, fbw, w, h, wide);
+    if (k >= 0) { cpool[k] = (typeof(cpool[k])){ tex, fbo, cw, ch, 1 }; return tex; }
     glDeleteFramebuffers(1, &fbo); fb_forget();
     return tex;
 }
@@ -2273,7 +2290,12 @@ void gs_frame_begin(void)
 {
     gt_exec_begin();
     if (++memo_gen == 0) memo_gen = 1;   /* resources of the frame about to execute */
-    if (ndoomed) { for (size_t i = 0; i < ndoomed; i++) hdpack_forget(doomed[i]); glDeleteTextures((GLsizei)ndoomed, doomed); ndoomed = 0; }
+    if (ndoomed) {
+        size_t n = 0;
+        for (size_t i = 0; i < ndoomed; i++) { hdpack_forget(doomed[i]); if (!cpool_release(doomed[i])) doomed[n++] = doomed[i]; }
+        if (n) glDeleteTextures((GLsizei)n, doomed);
+        ndoomed = 0;
+    }
     nreloads = 0;
     mv_tbp = UINT32_MAX;   /* a movie frame binds it again (EV_MOVIE) */
     snapshot_valid = 0;   /* no replays of the previous frame while this one is half executed (download) */
