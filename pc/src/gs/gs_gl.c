@@ -967,6 +967,7 @@ static struct {
     uint64_t last_log;
 } gt;
 static int drs_wanted(void);
+static void drs_reset(void);
 static void drs_sample(int exec, double ms);
 static void drs_exec(void);
 static void drs_update(uint64_t now);
@@ -984,6 +985,7 @@ static void gt_init(void)
         if (gt.ok) for (int i = 0; i < GT_RING; i++) gt.gen(GT_N, gt.q[i]);
     }
     gt.on = gt.ok && (gt.log || drs_wanted());
+    if (!drs_wanted()) drs_reset();   /* (drs_update does not run while gt.on is off) */
 }
 #define GL_TIMESTAMP 0x8E28
 #define GL_QUERY_RESULT 0x8866
@@ -1160,6 +1162,8 @@ static void gt_present_end(int inbetween)
 static struct { int cap; double ms[2]; int n[2], over, under, skip, presents, execs; uint64_t t0; } drs = { 8 };
 static int drs_wanted(void) { return g_config.dyn_res && g_config.scale == 0; }
 static int drs_cap(void) { return drs.cap; }
+/* off: back to the top, and on again the first interval starts fresh (no counts from before) */
+static void drs_reset(void) { memset(&drs, 0, sizeof(drs)); drs.cap = 8; }
 static void drs_sample(int exec, double ms) { drs.ms[exec] += ms; drs.n[exec]++; }
 static void drs_exec(void) { drs.execs++; }
 static float auto_scale(void);
@@ -1168,7 +1172,7 @@ static void drs_update(uint64_t now)
     extern double render_present_hz(void);
     double u, f;
     int s, top, missing;
-    if (!drs_wanted()) { drs.cap = 8; drs.t0 = 0; return; }
+    if (!drs_wanted()) { drs_reset(); return; }
     drs.presents++;
     if (!drs.t0) { drs.t0 = now; drs.ms[0] = drs.ms[1] = 0; drs.n[0] = drs.n[1] = 0; drs.presents = drs.execs = 0; return; }
     if (now - drs.t0 < 1000000000ull) return;
