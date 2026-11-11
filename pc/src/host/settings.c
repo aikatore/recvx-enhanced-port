@@ -453,7 +453,7 @@ const Setting g_settings[] = {
     { SP_GAMEPLAY, "Enemy Selection", V(g_enemy_opts.variety), 0, 2, 1, varieties, .set = variety_set,
       .help = "Mild uses two common types per room; Wild adds variety, including Tyrants and bats. Custom uses your rate for each type. Applies next room." },
     { SP_GAMEPLAY, "Types per Room", V(g_enemy_opts.types), 0, ENEMY_TYPES_MAX, 1, types_names,
-      .help = "Limit how many different enemy types the randomizer puts in one room. Applies next room." },
+      .help = "Wild and Custom aim for this many enemy types in each room as far as its enemies allow, and extra enemies can add types. Mild only stays under it. Applies next room." },
     { SP_GAMEPLAY, "Randomize Event Enemies", V(g_enemy_opts.events), 0, 1, 1,
       .help = "Change event enemies too; those needed for scenes only change appearance. Applies next room." },
     { SP_GAMEPLAY, "Enemy Seed", V(g_enemy_opts.seed), 0, 99999, 1, .fmt = "%d", .help = "Use the same seed for repeatable enemy and cast choices. In co-op, both players use the host's seed." },

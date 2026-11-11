@@ -5,10 +5,12 @@
 #           and Cerberus took more than half of the records that changed to a ground kind.
 #   hunter, sweeper  Custom: the other kinds 1, Hunter 10 and Sweeper Off (sweeper: the other way round). Pass when no record
 #           became the one at Off and some became the one at 10 (the two looks of type 5 are separate kinds).
-#   wild1, wild2, mild1, mild2  Wild / Mild with Types per Room 1 / 2;  custom2  Custom with every kind at 5, Types per
-#           Room 2. Pass when every room has at most that many kinds (the Hunter and the Sweeper count as two in every
-#           variety; unless its log says some records could only be another kind) and every extra enemy is of a type the
-#           room's records have. Each says how many rooms have both a Hunter and a Sweeper (none under a limit of 1).
+#   wild1, wild2, mild1, mild2  Wild / Mild with Types per Room 1 / 2;  custom2, custom8  Custom with every kind at 5,
+#           Types per Room 2 / 8. Pass when every room, its extra enemies included, has at most that many kinds (the Hunter
+#           and the Sweeper count as two in every variety; unless its log says some records could only be another kind),
+#           in Mild every extra enemy is of a type the room's records have, and in custom8 some extras took a kind the
+#           room's records lack (Types per Room is a target in Wild and Custom). Each says how many rooms have both a
+#           Hunter and a Sweeper (none under a limit of 1), and the kinds per room with the extras.
 # About 4 minutes, all runs in parallel.
 #   pc/tools/enemy_rates_check.sh OUT [SEED...]      (default seeds 1234 77 900001 31337)
 # Environment: RECVX_ISO (disc image), RECVX_BIN (binary, default build/pc/recvx), ROOMS (stg:rom:pos:case list).
@@ -24,14 +26,14 @@ for r in $rooms; do d=300; [ -z "$tp" ] && d=1; tp="$tp${tp:+,}$d:$r"; f=$((f + 
 rm -rf "$out"; mkdir -p "$out/mods"
 one="1:1 4:1 9:1 5.0:1 5.1:1 3:1 26:1 19:1 23:1 7:1 11:1 v1:1"
 for seed in $seeds; do
-    for run in rates hunter sweeper wild1 wild2 mild1 mild2 custom2; do
+    for run in rates hunter sweeper wild1 wild2 mild1 mild2 custom2 custom8; do
         case $run in
         rates) v=2; t=0; r="${one/1:1 4:1/1:0 4:10}" ;;
         hunter) v=2; t=0; r="${one/5.0:1 5.1:1/5.0:10 5.1:0}" ;;
         sweeper) v=2; t=0; r="${one/5.0:1 5.1:1/5.0:0 5.1:10}" ;;
         wild[12]) v=1; t=${run#wild}; r="" ;;
         mild[12]) v=0; t=${run#mild}; r="" ;;
-        custom2) v=2; t=2; r="${one//:1/:5}" ;;
+        custom[28]) v=2; t=${run#custom}; r="${one//:1/:5}" ;;
         esac
         d=$out/$seed-$run; mkdir -p "$d/save"; echo "show_fps = 0" > "$d/save/recvx.ini"
         SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy RECVX_SKIP_MOVIES=1 RECVX_SKIP_CINE=30 RECVX_UPDATE_CHECK=0 RECVX_MODS="$out/mods" \
@@ -47,8 +49,8 @@ out, seeds, fail = sys.argv[1], sys.argv[2:], 0
 KINDS = {1, 3, 4, 5, 7, 9, 11, 17, 19, 23, 26}      # what the randomizer places (17: Mutated Steve's base)
 GROUND = {1, 3, 4, 5, 9, 17, 19, 23, 26}
 for seed in seeds:
-    for run in ('rates', 'hunter', 'sweeper', 'wild1', 'wild2', 'mild1', 'mild2', 'custom2'):
-        rooms, changed, looks, extras, bad = {}, [], [], 0, []
+    for run in ('rates', 'hunter', 'sweeper', 'wild1', 'wild2', 'mild1', 'mild2', 'custom2', 'custom8'):
+        rooms, changed, looks, extras, bad, xkinds, newx = {}, [], [], 0, [], {}, 0
         cur = None
         for line in open('%s/%s-%s/log.txt' % (out, seed, run), errors='replace'):
             line = re.sub(r'^\[ *[0-9.]+\] ', '', line.rstrip())
@@ -63,10 +65,13 @@ for seed in seeds:
                 # kinds: the type ids; the Hunter and the Sweeper (type 5 models 0, 1) are two
                 kinds = {(int(i), int(v) if i == '5' else 0) for i, v in (x.split(':')[1].split('.') for x in m.group(4).split())}
                 rooms[m.group(1)] = (ids, int(m.group(2)), bool(m.group(3)), {k for k in kinds if k[0] in KINDS})
-            m = re.match(r'enemies: extra .*?\(type (\d+) model \d+, from record \d+.*: spawned', line)
+            m = re.match(r'enemies: extra .*?\(type (\d+) model (\d+), from record \d+.*: spawned', line)
             if m and cur in rooms:
                 extras += 1
-                if int(m.group(1)) not in rooms[cur][0]: bad.append('%s extra of type %s' % (cur, m.group(1)))
+                k = (int(m.group(1)), int(m.group(2)) if m.group(1) == '5' else 0)
+                if k[0] in KINDS: xkinds.setdefault(cur, set()).add(k)
+                newx += k[0] in KINDS and k not in rooms[cur][3]
+                if run.startswith('mild') and k[0] not in rooms[cur][0]: bad.append('%s extra of type %s' % (cur, m.group(1)))
         if run == 'rates':
             ground = [t for t in changed if t in GROUND]
             cer = sum(t == 4 for t in ground)
@@ -81,12 +86,16 @@ for seed in seeds:
         else:
             over = both = 0
             for room, (ids, lim, forced, kinds) in rooms.items():
-                n = len(kinds)
+                n = len(kinds | xkinds.get(room, set()))
                 if n > lim and not forced: bad.append('%s has %d kinds' % (room, n))
                 over += forced
                 both += (5, 0) in kinds and (5, 1) in kinds
-            what = '%d rooms randomized (%d over the limit by records that could only be another kind), most kinds in a room %d, %d with Hunter and Sweeper' % (
-                len(rooms), over, max([len(k) for _, _, _, k in rooms.values()] or [0]), both)
+            if run == 'custom8' and not newx: bad.append('no extra took a kind its room lacks')
+            what = '%d rooms randomized (%d over the limit by records that could only be another kind), most kinds in a room %d, %d with Hunter and Sweeper, ' \
+                   'kinds per room %.2f (records %.2f), %d extras of a kind the records lack' % (
+                len(rooms), over, max([len(k) for _, _, _, k in rooms.values()] or [0]), both,
+                sum(len(k | xkinds.get(r, set())) for r, (_, _, _, k) in rooms.items()) / max(len(rooms), 1),
+                sum(len(k) for _, _, _, k in rooms.values()) / max(len(rooms), 1), newx)
         ok = len(rooms) >= 8 and not bad
         fail |= not ok
         print('%s seed %s, %s: %s; %d extra enemies spawned%s' % ('ok:  ' if ok else 'FAIL:', seed, run, what, extras,
