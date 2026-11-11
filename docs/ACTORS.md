@@ -1420,6 +1420,11 @@ the line.
     Rodrigo's and 0.5 % of Wesker's; none is heard more than 0.27 s past the original's end (lines that end in time
     end by themselves at most 1 s past it, as before). Without the history across rooms Alfred's top line would
     still take 19.6 % (28 % at the worst), back to back 138 times.
+    Headless (the user's settings, Claire shown as Alfred; 0030, 1020, 6000, 9350, 9370 one scene a run, seeds
+    51216 and 91202; 184 lines, the same originals both times): a line again within a run 6 times before (4 A-B-A,
+    Alfred's 1/242 and 1/303), none now; 6 of Alfred's 30 lines cut where before a short line came again or ran 1 s
+    on; the cut started 4 to 79 ms after the original's end, the gain stepped down in 8 frames and the slot stopped
+    (`adxt: stop talk 1`; 0.46 to 0.76 s there, as headless frames come irregularly under load).
   The lengths are the lines' ADX headers (`cast_glue.c line_ms`, read once each). The same scenes in the same order
   with the same seed say the same lines: a replay from the same start repeats, and both co-op games pick alike while
   they have seen the same scenes (the lengths come from the disc, the order is the script's). The line is played from its own disc's archive (partitions 28 `VOICE1.AFS`, 29 `VOICE2.AFS`, both
@@ -1448,11 +1453,12 @@ the line.
 * **The end of an inserted line**: it ends by itself (a line that ends in time: at most `VOICE_GRACE_MS` after the
   original would), at the next line (`PlayVoiceEx2` stops slot 1; `bhVoiceOn` first stops the task's own line), at
   `StopVoice` (`VoiceOff`, a skip), or, a longer one (rule 2 above), at the original's end: there it fades out over 8
-  sound ticks (`VOICE_FADE` 7 + 1; a tick is a game frame, `VsyncFunc` runs at the buffer swap: 0.27 s) with the game's own fade (`RequestAdxFadeFunctionEx`, which
-  `ExecAdxFadeManager` steps down to -127 and then `StopAdx`s; each step is `ADXT_SetOutVol`, the stream's
-  `SDL_SetAudioStreamGain`; `vl.cap`, checked every tick by `pc_voice_tick`; log `voices: the inserted line is cut at
-  1834 ms (the original's end, 1827 ms), fading out over 250 ms`, and the pick's own log line says `none out of the
-  cooldown ends in time: cut at 1827 ms`). The next line or a room change during the fade stops it at once. A shorter
+  sound ticks (`VOICE_FADE` 7 + 1; a tick is a game frame, `VsyncFunc` runs at the buffer swap: 0.27 s) with the
+  game's own fade (`RequestAdxFadeFunctionEx`, which `ExecAdxFadeManager` steps down to -127 and then `StopAdx`s; each
+  step is `ADXT_SetOutVol`, the stream's `SDL_SetAudioStreamGain`; `vl.cap`, checked every tick by `pc_voice_tick`;
+  log `voices: the inserted line is cut at the original's end (4 ms late), fading out over 267 ms`, and the pick's
+  own log line says `none out of the cooldown ends in time: cut at 2749 ms`). The next line or a room change during
+  the fade stops it at once. A shorter
   line leaves a silence. Before (`6d6525eb`), such a line was the shortest one but the last, faded out 1 s after the
   original's end; before that (`cca465b8`) also lines picked for variety, so speakers talked on into the pauses.
   Earlier still, a line could run on well after the scene's speech: a line picked at random from all of the
