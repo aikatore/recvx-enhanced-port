@@ -543,7 +543,18 @@ from the game's `rand()`.
   version (no upload), variant 0, placed 15..35 units from the source where a line test against
   the walls (`hitchkl.c bhCollisionCheckLine2`) is clear and it can stand ("Spots" below), at least
   40 units from every entry position. A spot within 40 units of the player (a loaded save, a retry) skips that extra for the visit.
-* The same on every visit: the picks, spots and angles depend only on (seed, room file, record),
+* **Kinds the room lacks** (with the randomizer, Wild or Custom, and Types per Room 1..8): while the
+  room has fewer kinds than Types per Room (its records' kinds after the randomizer, then each extra in
+  turn), an extra takes a kind the room lacks instead of the copy, drawn by weight (Wild) or rate
+  (Custom) among the kinds that fit its spot: no fliers, the slot budget, `rm_flg`, open space for the
+  big kinds (`open_dirs` at the spot), one heavy variant per room. The kill-count rule does not apply,
+  as "all dead" doors count no extra. It takes the copy's spot (the same draws, "Spots": every kind
+  here walks), where also no ground rises more than a unit within 6 units along x and z (a crate, a
+  step: a Cerberus put by a crate in RM_2031 stood inside it the next frame); its kind is drawn after
+  that, and its dead flag and slot stay its record's (below). A
+  type the room did not load comes as the F2 spawner's do (its model, textures and sounds from its own
+  room file). None fits, or the room is full: the copy. Mild, No Limit or the randomizer off: copies only.
+* The same on every visit: the picks, spots, angles and kinds depend only on (seed, room file, record),
   each extra with its own draws, never on which records are dead or where the player came in.
   Each also keeps its slot: the room's first free slot when the extras come, plus its place in that list
   (one that stays away leaves its slot free), so a co-op guest still in the room finds them where they were.
@@ -654,7 +665,7 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
 * **Custom** (Enemy Selection's third choice, as BioRand's enemy ratio sliders): each kind's
   weight is its rate, Off or 1..10 (`EnemyOpts.rate`, recvx.ini `enemy_rates`), one per kind
   above (the Hunter and the Sweeper each their own) and per variant with a randomizer weight (Mutated Steve too). The kinds' rules stay; a
-  record draws from the kinds that fit it by rate alone (no "unused kinds first"), so a kind at
+  record draws from the kinds that fit it by rate alone (no "unused kinds first"; under Types per Room the kinds the room lacks first), so a kind at
   10 among kinds at 1 takes most records, and a kind at Off is never placed. Records that cannot
   change keep their type (event-driven records, single-look types, boss rooms, a record where
   nothing else with a rate fits): an Off zombie still appears where the room's own zombie stays. An event-driven Hunter
@@ -663,15 +674,20 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
   rates to that variety's weights (variants capped at 10), so Custom starts from the last one
   picked. Variants past the 21st have no rate and are not placed by Custom (the rates fill the
   co-op event, see "Co-op").
-* **Types per Room** (`enemy_types`, 1..8, default No Limit): at most that many kinds in a room.
-  The records that keep their type count first; then, in record order, once the room has that
-  many kinds a record draws only among them (if one of them fits it), else as before; an event's
-  record taking another look of its type takes one of the room's kinds then too (an event Hunter
-  becomes a Sweeper only when the Sweeper is already one), else keeps its look. A room
-  can only go over the limit when a record fits none of its kinds (a bat record among ground
-  kinds: fliers stay fliers), logged as `over it` on the room's line. Extra enemies copy records,
-  so they never add a kind. It depends only on the options, the room file and the draws (the
-  same on every visit and on both co-op sides).
+* **Types per Room** (`enemy_types`, 1..8, default No Limit): in **Wild and Custom a target**, in
+  Mild a limit. The records that keep their type count first, then each record in record order.
+  Wild and Custom: while the room has fewer kinds, a free or shown record draws only among the
+  kinds it lacks that fit it (by weight or rate), so the room gets that many where its records and
+  the kinds' rules allow; then the extra enemies add kinds it still lacks ("Extra enemies"). Once
+  the room has that many (Mild: always), a record draws only among them (if one of them fits it),
+  else as before; an event's record taking another look of its type takes one of the room's kinds
+  then too (an event Hunter becomes a Sweeper only when the Sweeper is already one), else keeps its
+  look. A room can only go over when a record fits none of its kinds (a bat record among ground
+  kinds: fliers stay fliers), logged as `over it` on the room's line. No Limit draws as before the
+  target (Wild's unused kinds first, Custom's rates alone: the same enemies per seed). It depends
+  only on the options, the room file and the draws (the same on every visit and on both co-op sides).
+  The price of variety: in a room with few records each takes another kind, so a kind with a high
+  rate takes fewer records than its share ("Types per Room as a target" below).
 * **Variants**: a record that keeps its type (another look) keeps its variant (an event's pose, a
   lying zombie); another kind gets variant 0 (free-roaming).
 * **Slots**: all records are counted with what their Inits spawn; a change may only add up to 122
@@ -711,6 +727,41 @@ Wild's free and script-shown records: Cerberus 22%, zombies 21%, Bandersnatches 
 anatomists 13%, bats 5%, Spotters 4%, Black Widows 1.4%, Tyrants 0.9%, Giant Black Widows 0.6%
 (the big kinds pass the open-space test at few records). Rooms that still show one kind have only
 event-driven records (other looks of one type) or single-look event types.
+
+#### Types per Room as a target
+
+Measured 2026-11-11 with dry runs of the randomizer (its draws without the spawns, checked against real
+loads) at each of the 113 room files `enemy_floor_check.sh` tours, 100 seeds each, the extras as
+`enemy_extras_frame` picks them; averages over the rooms the randomizer changes something in (11100
+room x seed results per setting). These rooms average 3.3 records: 1.6 free or shown (another kind) and
+1.6 event-driven (another look of their type). 48% have no free record (every zombie there plays in an
+event), so they show 1.17 kinds whatever the setting, and get no extras either; the most kinds the
+records alone could show averages 2.13. Before the target, Custom drew every record by rate alone, so
+two records often drew the same kind (two free records at equal rates: 2.13 kinds where they could show
+2.37), and extras only copied.
+
+| Custom, every kind at 5 | No Limit | 1 | 2 | 4 | 8 |
+|---|---|---|---|---|---|
+| kinds per room, before | 1.87 | 1.11 | 1.55 | 1.86 | 1.87 |
+| kinds per room, now (records) | 1.87 | 1.11 | 1.58 | 2.08 | 2.13 |
+| now with 3 / 8 extras | 1.87 | 1.11 | 1.59 | 2.25 / 2.25 | 2.59 / 2.61 |
+| rooms at the setting or their records' most, before / now | | 100% / 100% | 97% / 100% | 81% / 100% | 79% / 100% |
+
+Custom at 5 with Types per Room 8, by the room's free records (share of the results): none (48%) 1.17
+kinds; one (5%) 1.41 before, 1.50 now, 1.78 with extras; two (17%) 2.13, 2.37, 3.02; three (12%) 2.54,
+3.00, 4.12; four or more (18%) 3.20, 4.05, 5.30. With 8 extras 12% of the rooms show 6 or more kinds
+(before 0.1%). Wild with 8: 2.11 before (its unused kinds first already spread the records), 2.13
+now, 2.61 with extras. No Limit (Wild, Mild, Custom) and Mild with a limit give the same results as before
+for every seed and room.
+
+The rates: at No Limit each free record's kind follows the rates among the kinds that fit it (chi-square
+7 to 8 at 11 degrees of freedom, every kind within 0.3 points of its share). Under a target a room's
+records take different kinds, so a kind with a high rate takes fewer records than its share: with
+zombies 10, anatomists 8, Hunters 6, bats 5, Black Widows 4, Bandersnatches 3, Sweepers 2, Giant Black
+Widows 2, Cerberus 1, Tyrants 1, Spotters 1 and Mutated Steve 3, at Types per Room 8 zombies take 22% of
+the free records (33% at No Limit; most rooms already have event zombies), anatomists 24% (27%), Hunters
+14% (13%), Bandersnatches 15% (10%), Cerberus 9% (3%): the kinds with high rates lose share, those with low rates
+gain. At every kind 5 the shares stay within 2 points.
 
 #### Event enemies per room
 
@@ -842,8 +893,9 @@ records); every room must get the same records and extras on both visits, and no
 seed with eight extras, once with Custom rates (zombies Off, Cerberus 10, the rest 1: no record may become a
 zombie, Cerberus must take most ground records), twice with Hunter 10 and Sweeper Off and the other way round
 (no record may become the one at Off, some must become the other), Wild and Mild each with Types per Room 1 and 2,
-and Custom with Types per Room 2 (no room over its limit unless logged, the Hunter and the Sweeper two kinds in every
-variety; every extra of a type the room's records have).
+and Custom with Types per Room 2 and 8 (no room over its limit, extras included, unless logged; the Hunter and the
+Sweeper two kinds in every variety; in Mild every extra of a type the room's records have; with 8 some extras of
+kinds the room's records lack). It prints the kinds per room with and without the extras.
 
 `pc/tools/enemy_floor_check.sh OUT [SEED...]` (headless, about 25 minutes): a new game tours the 114 room files
 with records the options touch, per seed in Wild, Mild and Custom (every kind at 5), each with the randomizer,

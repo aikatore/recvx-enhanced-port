@@ -297,12 +297,12 @@ until the right square on the white strip is.
 | Import Memory Card Saves | | copies the card's saves into save files |
 | Free Typewriter Saves | Off | typewriters save without an ink ribbon |
 | Extra Item Boxes and Herbs | Off | four more item boxes and eight blue herb planters in some rooms (helps with the randomizers); in co-op the host's |
-| Extra Enemies | Off | up to 1..8 more per room, of kinds the room has (one copy per enemy at most) |
+| Extra Enemies | Off | up to 1..8 more per room (one per enemy at most): copies of its enemies, or with Types per Room in Wild or Custom kinds the room lacks |
 | Rearranged Enemies | Off | free-roaming enemies start elsewhere in their room |
 | Enemy Randomizer | Off | enemies become other kinds; bosses stay |
 | Enemy Selection | Wild | Wild: any kind that fits. Mild: two common kinds per room. Custom: your rate (Off, 1..10) for each kind, set in Enemy Rates (below); picking Wild or Mild presets them |
 | Enemy Rates | | with Custom, right under Enemy Selection: opens the list of rates. The same list is on the BIORAND screen's RANDOMIZER page, in the co-op lobby and in F1 |
-| Types per Room | No Limit | at most that many different kinds of enemies in a room (1..8) |
+| Types per Room | No Limit | Wild and Custom aim for that many different kinds of enemies in a room (1..8) as far as its enemies allow; Mild stays under it |
 | Randomize Event Enemies | On | event enemies change too |
 | Enemy Seed | 0 | the same seed gives the same enemies (and the same cutscene cast) |
 | Randomize Cutscene Cast | Off | see [Cutscene cast](#cutscene-cast): the story characters as other models in cutscenes |
