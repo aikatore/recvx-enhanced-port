@@ -1272,6 +1272,12 @@ static void own_timeout(void)
         owned[i] = 0; owned_child[i] = 255; own_wait[i] = 0; own_grab[i] = 0;
         if (c < PC_ENE_SLOTS) owned[c] = 0;
         if (ene[i].flg & 0x1) pc_enemy_unhold(&ene[i]);
+        {   /* the guest's game is told (taken back): silent, a grab it still ran there went on in both games */
+            Event e = { 0 };
+            e.type = EV_ENEOWN; e.idx = i; e.u.gr.child = c; e.u.gr.state = 2;
+            e.u.gr.mdl = e.u.gr.cmdl = -1; e.u.gr.mnw = e.u.gr.cmnw = MNW_KEEP;
+            queue_event(&e);
+        }
         host_log("coop: enemy %d: no word from the partner's game running it for %d of its frames, ours again: released\n", i, OWN_LOST);
     }
 }
@@ -2133,11 +2139,13 @@ static void p3_apply(const Event* e)
         (c < PC_ENE_SLOTS && (!(ene[c].flg & 0x1) || we_run(c) || !ene[c].exp0)) ||
         !estate_x.done || estate_x.tid != e->u.gr.tid || estate_x.total != ESTATE_PLY || event_driven(ep) || enemy_rec_scripted(i) || !ep->exp0 ||
         !ene_unpack(ep, estate, e->u.gr.mdl, e->u.gr.mnw) || (c < PC_ENE_SLOTS && !ene_unpack(&ene[c], estate + ESTATE_ENE, e->u.gr.cmdl, e->u.gr.cmnw))) {
-        r.type = EV_ENEOWN; r.idx = i; r.u.gr.child = c; r.u.gr.state = 0;
+        /* one we run already (the host's take-back crossed the give): not 0 - the giver would run it on as well, both games
+           running one enemy for the visit - but 2, which leaves the giver's copy a puppet */
+        r.type = EV_ENEOWN; r.idx = i; r.u.gr.child = c; r.u.gr.state = we_run(i) ? 2 : 0;
         r.u.gr.mdl = r.u.gr.cmdl = -1; r.u.gr.mnw = r.u.gr.cmnw = MNW_KEEP;
         queue_event(&r);
         p3_n[2]++;
-        host_log("coop: p3: enemy %d from the partner's game does not fit here: refused\n", i);
+        host_log("coop: p3: enemy %d from the partner's game does not fit here: refused%s\n", i, we_run(i) ? " (we run it)" : "");
         return;
     }
     own_set(i, 1); own_set(c, 1);
@@ -6691,7 +6699,7 @@ static int apply_event(const Event* e)
         return 1;
     }
     if (e->type == EV_ENEOWN) {
-        if (sys && plp && p3_on()) p3_apply(e);
+        if (sys && plp && (p3_on() || (!is_host && e->u.gr.state == 2))) p3_apply(e);   /* (a grab the host let go: also with the rule off) */
         return 1;
     }
     if (e->type == EV_TRIG) return sys ? apply_trig(e) : 1;
