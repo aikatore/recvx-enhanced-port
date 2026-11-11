@@ -2307,6 +2307,17 @@ void actor_cast_hands(int who)
     host_log("actor: slot %d: the unarmed hands of character %d\n", who, c);
 }
 
+/* the game draws object w now (objitm.c bhDrawObjItm, bhDrawObject): not left out of the lists (mdflg 0x1: the script's
+   pieces not in use stay linked to the hand, a prop in one too), not hidden (stflg 0x1000000; NJD_EVAL_HIDE: cast_glue.c
+   hands_hide), not shown only in other cuts */
+extern int tps_cam_active;
+static int piece_drawn(const O_WRK* w)
+{
+    if ((w->mdflg & 0x1) || (w->stflg & 0x1000000) || !w->mlwP || !w->mlwP->objP || (w->mlwP->objP[0].evalflags & 0x8)) return 0;
+    return !(w->flg & 0x40000000) || (sys->gm_flg & 0x40) || tps_cam_active || (cam.flg & 0x46) || cam.ncut == w->hide[0] || cam.ncut == w->hide[1]
+           || cam.ncut == w->hide[2] || cam.ncut == w->hide[3];
+}
+
 /* actor_put_as, actor_put_enemy: slot who's own hands where its model has none and record ep shows no piece on that hand */
 static void cast_hands_draw(int who, const BH_PWORK* ep)
 {
@@ -2319,9 +2330,10 @@ static void cast_hands_draw(int who, const BH_PWORK* ep)
         if (op->lkono < 0 || node_has_mesh(&d->w, op->lkono)) continue;
         for (o = 0; o < 32 && src >= 0; o++) {
             const O_WRK* w = &sys->obwp[o];
-            if ((w->flg & 0x81) == 0x81 && w->lkwkp == (const unsigned char*)ep && w->lkono == src && w->mlwP && w->mlwP->objP && !(w->mlwP->objP[0].evalflags & 0x8)) break;
+            if ((w->flg & 0x81) == 0x81 && w->lkwkp == (const unsigned char*)ep && w->lkono == src && piece_drawn(w)) break;
         }
-        if (src >= 0 && o < 32) continue;   /* (the script's piece shown: it is the hand, a prop in it too; cast_glue.c) */
+        if (src >= 0 && o < 32) continue;   /* (the script's piece drawn: it is the hand, a prop in it too; cast_glue.c. One it
+            keeps linked but does not draw left the hand bare) */
         bhCalcModel((BH_PWORK*)op);
         bhPutModel((BH_PWORK*)op);
     }

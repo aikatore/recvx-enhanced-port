@@ -1151,11 +1151,22 @@ the same in Claire's part and in Chris's.
   lighter, two of Rodrigo's) and stays whole; items the script links to a hand are other objects and stay.
   The same for a model without that hand at all (the Bandersnatch's left). A creature's record has no pieces:
   a model without hands gets a character's unarmed ones there ("Creatures"). Ours are drawn on a hand only while no
-  piece of the script's is shown there (`cast_hands_draw`: a kept piece with a prop is the hand). The same for the
+  piece of the script's is drawn there (`cast_hands_draw` -> `piece_drawn`, the test of `objitm.c bhDrawObject`: a kept
+  piece with a prop is the hand). The script keeps its pieces linked to the hand while it does not use them (left out
+  of the drawing by `mdflg 0x1`; also `stflg 0x1000000`, or shown only in other cuts): those do not count. Before
+  (until 2026-11-11) any linked piece counted, so a kept prop piece not in use left the hand bare, with the record's
+  one-node pieces hidden and ours not drawn: Rodrigo in the opening (0000, both hands the whole scene: his pieces
+  1131 and 1137 linked, not drawn), Alfred's left hand in 1020 and Wesker's right in 8030 (event model 47) at times, on
+  every model without hands of its own (the cutscene models, Claire's second costume, Monster Steve). The same for the
   double of the character played ("Cutscene doubles"). Wesker's afterimages (`trail_glue.c`) leave no trail of a
   hidden piece. Test aid: `RECVX_CAST_TRACE=1` logs each piece hidden (`... hidden: the model has Claire's hands`) or
   kept (`... kept: a prop in it`). Checked in 9350, 8030, 9370 (Wesker as Alexia), 1020 (Alfred as Steve; Claire's
-  double as Rodrigo), 0030 (Steve as Rodrigo).
+  double as Rodrigo), 0030 (Steve as Rodrigo); on 2026-11-11 every kind of model (the cutscene models, Claire's second
+  costume, the creatures, the zombies, Outbreak imports of every kind: high-detail with fingers, standard, the
+  player characters) as the only model of *Custom*, in 0000, 0030, 0040, 1002, 1020, 3230, 6000, 6040, 8030, 9340,
+  9350 and 9370, and as the double: each hand shows the model's own, our unarmed pieces, the record's piece (a prop
+  in it, or the model is the record's character) or, on a model without that hand at all (Nosferatu's right, the
+  Bandersnatch's left), none.
 * **Head parts**: Claire's ponytail is an object of its own on her cutscene record's head (id 1200, 4
   nodes, node 5: 9150, 9320, 3210), and so are Wesker's sunglasses on his event model 47 (id 1127, 8030);
   the player's head part `sys->obwp[2]` when a script links it there. Drawn as another model, the record
