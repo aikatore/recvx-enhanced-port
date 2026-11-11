@@ -742,7 +742,7 @@ static void coop_window(void)
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip(tr("Save at typewriters without using ink ribbons.\n"
                           "The host decides in co-op."));
-    const int* rules[] = { &c->gameover_both, &c->skip_detector, &c->quick_start, &g_config.extra_objects, &g_tps.headshots };   /* more host rules: their table rows */
+    const int* rules[] = { &c->gameover_both, &c->skip_detector, &c->quick_start, &g_config.extra_objects, &g_tps.headshots, &c->shared_enemies };   /* more host rules: their table rows */
     for (const int* v : rules) changed |= setting_row(settings_of(v));
     if (ImGui::InputText(tr("Your Name"), c->name, sizeof(c->name), ImGuiInputTextFlags_CallbackCharFilter,
                          [](ImGuiInputTextCallbackData* d) -> int { return !(d->EventChar >= 32 && d->EventChar < 127 && (isalnum(d->EventChar) || strchr(" -_.!?'()+", d->EventChar))); }))

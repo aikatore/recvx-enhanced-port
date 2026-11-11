@@ -96,6 +96,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "coop_gameover", &g_coop.gameover_both, 0, 1 },     /* host: 0 each player, 1 both (one game over is both players') */
     { "coop_skip_detector", &g_coop.skip_detector, 0, 1 }, /* host: no metal detector in the prison (0/9) */
     { "coop_quick_start", &g_coop.quick_start, 0, 1 },    /* host: a new game starts with the manual read and the knife */
+    { "coop_shared_enemies", &g_coop.shared_enemies, 0, 1 }, /* host: each enemy runs in the game of the player fighting it */
     { "hide_ip", &g_coop.hide_ip, 0, 1 },                /* Hide IP addresses: on screen masked (coop_shown) */
     { "coop_start", &g_coop.start, 0, 1000002 },
     { "menu_mouse", (int*)&g_menu_mouse.on, 0, 1 },

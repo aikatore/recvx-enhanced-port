@@ -446,6 +446,7 @@ COOP.md, "Settings".
 | Metal Detector | Skipped | the prison's detector lets you through with weapons |
 | Quick Start | Off | start with the manual read and the knife in the bag |
 | Pause Enemies During Trades, Remember Partner Items | On | |
+| Shared Enemy Control | Off | each enemy runs in the game of the player fighting it, so hits and grabs react at once for both players (new: not yet tested much on Windows and over the internet); the host can change it until the game starts |
 | Connection | Automatic | or Direct, Server Relay |
 | Host Port, Automatic Port Forwarding | 7140, On | |
 

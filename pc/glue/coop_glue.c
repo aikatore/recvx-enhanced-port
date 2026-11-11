@@ -956,7 +956,7 @@ static int same_room(void);
 static int in_session_game(void);
 static int owned_room = -1;
 void pc_enemy_holds(BH_PWORK* pl, BH_PWORK* by);   /* eneset.c */
-/* Phase 3 (netexp-phase3 prototype, protocol 46, the host's rule OPT2_OWNERSHIP): engaged-player ownership. A common
+/* Phase 3 (protocol 46..48, the host's rule "Shared Enemy Control", OPT2_OWNERSHIP): engaged-player ownership. A common
    enemy (zombies: id 1, its body with its upper half) runs in the game of the player it is engaged with; the other
    game shows it as a puppet of that game's snapshots. owned[i] keeps its meaning on both sides (the guest runs slot
    i); we_run(i): this game runs it. It changes hands between attacks (p3_frame, p3_give, p3_apply: EV_ESTATE + EV_ENEOWN
@@ -975,17 +975,19 @@ static unsigned int own_t[PC_ENE_SLOTS];         /* our frame of its last change
 static unsigned int own_ms[PC_ENE_SLOTS];        /* net_ms when we handed it over (until the new runner's first snapshot) */
 static unsigned int hit_t[PC_ENE_SLOTS][2];      /* our frame + 1 of the last hit on it: [0] ours, [1] the partner's */
 static unsigned int p3_n[8];                     /* stats: gave, took, refused, gave back (leaving), taken back, glitch ms sum, glitches */
-/* the host's rule: on unless RECVX_COOP_OWNERSHIP=0 (the prototype's A/B switch; a release would make it a lobby rule) */
+/* the host's rule "Shared Enemy Control" (g_coop.shared_enemies, off by default; locked once a session's game runs, settings.c); test aid
+   RECVX_COOP_OWNERSHIP=0/1 on the host forces it off / on */
 static int p3_env(void)
 {
-    static int env = -1;
-    if (env < 0) env = !getenv("RECVX_COOP_OWNERSHIP") || atoi(getenv("RECVX_COOP_OWNERSHIP")) != 0;
-    return env;
+    static int env = -2;
+    if (env == -2) env = getenv("RECVX_COOP_OWNERSHIP") ? atoi(getenv("RECVX_COOP_OWNERSHIP")) != 0 : -1;
+    return env >= 0 ? env : g_coop.shared_enemies;
 }
 static int p3_on(void)
 {
     return coop_on && !echo_delay && have_peer && (is_host ? p3_env() : peer_opts >= 0 && (peer_opts & (OPT2_OWNERSHIP << 8)));
 }
+int coop_shared_enemies(void) { return is_host || g_coop.state == COOP_OFF ? p3_env() : peer_opts >= 0 && (peer_opts & (OPT2_OWNERSHIP << 8)); }   /* the guest's lobby: the host's */
 static int we_run(int i) { return i >= 0 && i < PC_ENE_SLOTS && owned[i] != is_host; }
 static void own_set(int i, int m) { if (i >= 0 && i < PC_ENE_SLOTS) owned[i] = (unsigned char)(is_host ? !m : !!m); }
 /* Protocol 47 (netexp-combined): a slot that changed hands, by any path (a grab, a hand-over, a take-back, a time-out,
@@ -3025,6 +3027,7 @@ static unsigned char regroups, seen_regroup;   /* host: regroups so far; client:
 
 static unsigned int* flag_block(void) { return sys->ev_flg; }
 static int in_session_game(void) { return (sys->tk_flg & 0x80) && !(sys->ss_flg & 0x400000); }   /* game task, not the attract demo */
+int coop_session_game(void) { return g_coop.state != COOP_OFF && sys && in_session_game(); }   /* (coop.h) */
 
 /* "Game over: Both" (OPT_GAMEOVER_BOTH, docs/COOP.md "Game over"): one game over is both players'; the host's CONTINUE / NO
    decides. Each game sends PF_GAME_OVER while its game over runs. The host keeps the guest's items (EV_OWN) as they were at
