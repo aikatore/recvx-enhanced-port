@@ -1409,6 +1409,37 @@ static PoRes po_run(const PoPath* p)
     return r;
 }
 
+/* 30 Hz, 20 ms one way, exact stamps; at 10 s for H ms either the path holds every datagram and delivers them in one
+   burst at its end (any OS), or the receiver stalls with no hand-off and reads them at its end, the first stamped
+   exact, the rest with the read time (Windows). Frames where P is older than the CoopSnapHist (every puppet frozen). */
+static int po_freeze(int H, int hitch)
+{
+    static CoopPlayout po;
+    double T = COOP_TICK_US, t0 = 1e6, fs = t0 + 300 * T, fe = fs + H * 1000.0;
+    uint32_t P, seq = 1, last = 0;
+    int f, out = 0;
+    coop_playout_reset(&po);
+    for (f = 0; f < 30 * 90; f++) {
+        double now = t0 + f * T + 5000;
+        if (hitch && now >= fs && now < fe) continue;
+        for (;;) {
+            double a = t0 + seq * T + 20000;
+            int ex = 1;
+            if (a >= fs && a < fe) {
+                if (!hitch) a = fe + (seq % 3) * 100;
+                else if (a - fs >= T) { a = now; ex = 0; }
+            }
+            if (a > now) break;
+            coop_playout_arrive(&po, seq++, (uint64_t)a, ex);
+        }
+        if (!coop_playout_frame(&po, (uint64_t)now, &P)) continue;
+        if ((int32_t)(P - last) < 0) out += 1000;
+        last = P;
+        out += (int32_t)(po.newest - P) >= COOP_HIST;
+    }
+    return out;
+}
+
 static void test_playout(void)
 {
     static const PoPath paths[] = {
@@ -1441,6 +1472,11 @@ static void test_playout(void)
         PoRes r = po_run(&p);
         CHECK(r.back == 0 && r.uneven_tail <= 1);
         CHECK(r.lag <= r.ow98 + COOP_TICK_US / 1000 + 4 + 1500.0 * 60 / 9000);
+    }
+    {   /* a burst after a path freeze, a Windows receiver hitch: the re-anchor stays under the cap, no freeze, no step back */
+        static const int H[] = { 300, 600, 1000, 2000, 3000 };
+        int k;
+        for (k = 0; k < 5; k++) { CHECK(po_freeze(H[k], 0) == 0); CHECK(po_freeze(H[k], 1) == 0); }
     }
     {   /* a slot's state at P: exact, between two (also a turn across 0), carried on (at most COOP_PO_EXTRA), held, once when old */
         static CoopSnapHist h;

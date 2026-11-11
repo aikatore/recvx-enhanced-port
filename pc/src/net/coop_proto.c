@@ -1008,7 +1008,7 @@ void coop_playout_arrive(CoopPlayout* po, uint32_t seq, uint64_t arr_us, int exa
     if ((int32_t)(seq - po->newest) > 0) {
         /* every new frame over two frames above the margin, 8 in a row: the sender's grid moved (it stalled and
            re-phased): measured again from these */
-        po->high = po->started && o > po->delay + 2 * COOP_TICK_US ? po->high + 1 : 0;
+        if (exact) po->high = po->started && o > po->delay + 2 * COOP_TICK_US ? po->high + 1 : 0;   /* (a read-time stamp says nothing) */
         if (po->high >= 8) {
             int j;
             for (j = 0; j < COOP_PO_WIN; j++)
@@ -1044,6 +1044,7 @@ int coop_playout_frame(CoopPlayout* po, uint64_t now_us, uint32_t* P)
     po->fast = fast;
     if (!po->started || want > po->delay) po->delay = want;                                     /* up at once */
     else po->delay = want < po->delay - COOP_PO_FALL_US ? po->delay - COOP_PO_FALL_US : want;   /* down slowly */
+    if (po->delay > fast + COOP_PO_MAX * COOP_TICK_US) po->delay = fast + COOP_PO_MAX * COOP_TICK_US;   /* the cap holds for a re-anchor too */
     pf = ((double)now_us - (po->base + po->delay)) / COOP_TICK_US;   /* frame k is due once now >= base + k * T + delay */
     if (!po->started) {
         if (pf < 1) return 0;
