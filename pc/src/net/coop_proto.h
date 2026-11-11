@@ -50,14 +50,14 @@ extern "C" {
                                                enemies from the same seed; nothing on the wire changed);
                                            43: EV_EOPTS cast_enemy, cast_enemy_off (the cutscene cast's "Enemy Models" and its
                                                "Custom" list; Event 96 bytes);
-                                           47 (prototype, branch netexp-combined; 44-46 were the separate phase prototypes):
+                                           47 (44-46 were the separate phase prototypes):
                                                enemy snapshots quantized and delta-coded against the frame the peer acknowledged
                                                (CoopSnapTx/Rx; Pose.snap_ack in the old rsv), with the motion's anchor (mtn_seq,
                                                mtn_frm0), speed (mtn_add) and a zombie's neck, no per-frame count cap:
                                                COOP_SNAP_BUDGET bytes in priority order; OPT2_OWNERSHIP, EV_ENEOWN (an enemy
                                                changes hands: the player it is engaged with runs it), EV_PLY_HIT / EV_GRAB /
                                                EV_UNGRAB either way, EV_UNGRAB state 2 (the grab is over, the runner keeps it);
-                                           48 (prototype, branch netexp-combined-types): EV_ENEOWN and EV_ESTATE also for the
+                                           48: EV_ENEOWN and EV_ESTATE also for the
                                                Cerberus, the Hunter/Sweeper, the Bandersnatch and the anatomist (exp0 per type,
                                                its pointer words kept; the type field taken), never for a record the room's
                                                scripts act on (a 47 peer would copy a zombie's exp0 into theirs) */

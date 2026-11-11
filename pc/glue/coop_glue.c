@@ -1017,7 +1017,7 @@ static int p3_on(void)
 int coop_shared_enemies(void) { return is_host || g_coop.state == COOP_OFF ? p3_env() : peer_opts >= 0 && (peer_opts & (OPT2_OWNERSHIP << 8)); }   /* the guest's lobby: the host's */
 static int we_run(int i) { return i >= 0 && i < PC_ENE_SLOTS && owned[i] != is_host; }
 static void own_set(int i, int m) { if (i >= 0 && i < PC_ENE_SLOTS) owned[i] = (unsigned char)(is_host ? !m : !!m); }
-/* Protocol 47 (netexp-combined): a slot that changed hands, by any path (a grab, a hand-over, a take-back, a time-out,
+/* Protocol 47: a slot that changed hands, by any path (a grab, a hand-over, a take-back, a time-out,
    a slot gone free). Its kept snapshots and its codec bases were the other direction's: they start again (the new
    runner's first record is full). One we stopped running is seeded with our own last two states (build_snapshots)
    as the partner's frames now shown, so the playout carries it on (coop_hist_at: its speed and motion anchor, at most
