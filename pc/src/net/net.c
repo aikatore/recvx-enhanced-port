@@ -445,21 +445,30 @@ static int ipv4_at(const char* s)
     return s[n] >= '0' && s[n] <= '9' ? 0 : n;
 }
 
-const char* net_mask_addrs(const char* text, const char* const* hosts, char* out, int cap)
+/* part of a host name or address: a kept one stands alone (1.2.3.4 is not the start of 1.2.3.45) */
+static int host_ch(char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '.' || c == '-'; }
+
+const char* net_mask_addrs(const char* text, const char* const* hosts, const char* const* keep, char* out, int cap)
 {
     static const char mask[] = "xxx.xxx.xxx.xxx";   /* the game font draws * as a spade */
-    const char* name[4];
-    int len[4], nn = 0, o = 0, i, k;
+    const char *name[4], *kname[4];
+    int len[4], klen[4], nn = 0, nk = 0, o = 0, i, k, kept;
     for (; hosts && *hosts && nn < 4; hosts++) {   /* the host part, if it is a name or address with a dot */
         k = (int)strcspn(*hosts, ":# ");
         if (k > 2 && memchr(*hosts, '.', k)) { name[nn] = *hosts; len[nn++] = k; }
     }
+    for (; keep && *keep && nk < 4; keep++)   /* the host part, whatever it is */
+        if ((k = (int)strcspn(*keep, ":# ")) > 0) { kname[nk] = *keep; klen[nk++] = k; }
     while (*text && o < cap - 1) {
-        k = 0;
+        k = kept = 0;
+        if (o == 0 || !host_ch(out[o - 1]))
+            for (i = 0; i < nk && !k; i++)
+                if (!strncmp(text, kname[i], klen[i]) && !host_ch(text[klen[i]])) k = kept = klen[i];
         for (i = 0; i < nn && !k; i++)
             if (!strncmp(text, name[i], len[i])) k = len[i];
         if (!k && (o == 0 || !(out[o - 1] == '.' || (out[o - 1] >= '0' && out[o - 1] <= '9')))) k = ipv4_at(text);
-        if (k) { o += snprintf(out + o, cap - o, "%s", mask); if (o > cap - 1) o = cap - 1; text += k; }
+        if (kept) while (k-- > 0 && o < cap - 1) out[o++] = *text++;
+        else if (k) { o += snprintf(out + o, cap - o, "%s", mask); if (o > cap - 1) o = cap - 1; text += k; }
         else out[o++] = *text++;
     }
     out[o] = 0;

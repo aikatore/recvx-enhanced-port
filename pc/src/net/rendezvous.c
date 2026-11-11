@@ -180,13 +180,16 @@ static int fresh_keys(void)
     return 1;
 }
 
+/* the server as the player entered it (shown unmasked: coop_shown keeps g_coop.server), else its address */
+static const char* server_shown(void) { return cfg.server_name[0] ? cfg.server_name : net_addr_str(&cfg.server); }
+
 /* from the top: HELLO, CREATE / JOIN (also after the server lost our room) */
 static void begin_hello(void)
 {
     st = RDV_ST_HELLO;
     t_start = net_ms();
     t_sent = t_start - RETRY_MS;
-    snprintf(status, sizeof(status), tr("Contacting co-op server %s..."), net_addr_str(&cfg.server));
+    snprintf(status, sizeof(status), tr("Contacting co-op server %s..."), server_shown());
 }
 
 /* the server name: "host" or "host:port"; 1 with host and port split off */
@@ -236,7 +239,7 @@ void rdv_start(const RdvConfig* c)
        room is always encrypted (docs/SERVER.md "End-to-end encryption") */
     flags = cfg.host ? ((cfg.e2e || pw_used) ? RDV_F_E2E : 0) | (pw_used ? RDV_F_PW : 0) : 0;
     host_log("rdv: %s %s via %s\n", cfg.host ? "creating a room" : "joining room", cfg.host ? "" : fmt_code(cfg.code),
-             cfg.server_name[0] ? cfg.server_name : net_addr_str(&cfg.server));
+             server_shown());
     if (cfg.server_name[0]) {   /* a name: resolved on a thread (the cache, or a numeric address, at once) */
         char host[128];
         int port;
@@ -598,7 +601,7 @@ void rdv_frame(void)
     case RDV_ST_REQUEST:
         if (now - t_start > GIVE_UP_MS) {
             char b[400];
-            snprintf(b, sizeof(b), tr("No reply from co-op server %s. Check port %d and your connection.%s"), net_addr_str(&cfg.server),
+            snprintf(b, sizeof(b), tr("No reply from co-op server %s. Check port %d and your connection.%s"), server_shown(),
                      ntohs(cfg.server.port), cfg.host ? tr(" - direct joins still work") : "");
             fail(b);
             return;

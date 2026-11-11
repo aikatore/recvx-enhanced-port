@@ -437,7 +437,7 @@ COOP.md, "Settings".
 | Setting | Default | What it does |
 |---|---|---|
 | Partner Name Tag, Show Ping | On | |
-| Hide IP Addresses | Off | for streaming: addresses show as `xxx.xxx.xxx.xxx` |
+| Hide IP Addresses | Off | for streaming: addresses show as `xxx.xxx.xxx.xxx` (the co-op server's stays visible) |
 | Follow Host | On | go through every door the host takes |
 | Loot Sharing | Shared | Shared: each item once, split the supplies. Individual: a copy each |
 | Duplicate Weapons and Ribbons | On | shared loot: weapons and ink ribbons for each player |
@@ -447,7 +447,7 @@ COOP.md, "Settings".
 | Quick Start | Off | start with the manual read and the knife in the bag |
 | Pause Enemies During Trades, Remember Partner Items | On | |
 | Shared Enemy Control | Off | each enemy runs in the game of the player fighting it, so hits and grabs react at once for both players (new: not yet tested much on Windows and over the internet); the host can change it until the game starts |
-| Connection | Automatic | or Direct, Server Relay |
+| Connection | Automatic | or Direct, Server Relay. Automatic: room codes through the co-op server (eu.cvxenhanced.de unless changed; direct first, then its relay), addresses directly; without a server, as Direct |
 | Host Port, Automatic Port Forwarding | 7140, On | |
 
 ## Difficulty select
@@ -499,6 +499,10 @@ LAN.
 3. **Partner**: MULTIPLAYER -> *Direct* -> **JOIN A GAME**, paste the address
    (`ip:port#CODE`) into ADDRESS, **JOIN**.
 4. Host: **START THE GAME**.
+
+Without port forwarding, through the co-op server **eu.cvxenhanced.de** (filled in; the game
+contacts it only when you host or join this way): both choose *Via server* instead of *Direct*;
+the host sends the **ROOM CODE** (COPY ROOM CODE), the partner types it into CODE.
 
 F3 offers the same in a small window, also during a game. Everything else: COOP.md.
 

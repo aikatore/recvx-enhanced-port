@@ -15,15 +15,17 @@ when no direct path works.
 
 ## For players
 
-The game has no built-in default server (`COOP_DEFAULT_SERVER` in `pc/src/host/coop.h` is empty),
-so someone in your group has to run one (below) and both players enter its address:
+The game comes with a server address filled in: **eu.cvxenhanced.de** (UDP 7141;
+`COOP_DEFAULT_SERVER` in `pc/src/host/coop.h`). The game contacts it only when you host or join
+through it, never at startup or at the title. To use your own server (below), both players enter
+its address instead; to use none, clear the field (it stays empty):
 
 | where | setting |
 |---|---|
 | Lobby (co-op screen) | mode **VIA SERVER** / **DIRECT**, row **SERVER**, **PASSWORD**, **RELAY** (*Only if needed* / *Always*), **COPY ROOM CODE** |
 | F3 window | **Connection**, **Co-op Server**, **Room code** / **Join address** |
 | ENHANCED SETTINGS > CO-OP (F1) | **Connection** (Automatic, Direct, Server Relay) |
-| recvx.ini | `coop_conn` (0 Automatic, 1 Direct, 2 Server Relay), `coop_server` (`host` or `host:port`; empty = no server) |
+| recvx.ini | `coop_conn` (0 Automatic, 1 Direct, 2 Server Relay), `coop_server` (`host` or `host:port`; empty = no server; a file from before the default, without the `coop_server_version` line, gets the default once in place of an empty value) |
 | command line | `--coop-server ADDR`, `--coop-conn auto\|direct\|server`, `--coop-pw PASSWORD`, `--coop-join ROOMCODE` |
 
 The port 7141 is implied when the address has none. The password is never saved. With
