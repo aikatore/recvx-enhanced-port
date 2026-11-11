@@ -540,6 +540,9 @@ static int open_dirs_m(float x, float y, float z, int flr, float len, unsigned m
 }
 static int open_dirs(float x, float y, float z, int flr, float len) { return open_dirs_m(x, y, z, flr, len, 0x4400, 10.0f); }   /* (waist height) */
 
+static int xdraw;                       /* kind_w for an extra enemy (plan_extras) */
+static int flat_around(float x, float y, float z, float r);
+
 /* kind i's weight for a record of type id at (x, y, z) on floor flr, with `cost` slots taken by the rest of the room and
    `heavy` heavy variants in it, `counted` where the doors count its kill (0: it does not fit there); *big: open_dirs
    there, -1 until a big kind needs it */
@@ -553,6 +556,7 @@ static int kind_w(const EnemyOpts* o, const Kind* kt, int i, int id, float x, fl
     if (cost + kt[i].cost > PC_ENE_SLOTS - SPAWN_SLOTS_FREE) return 0;
     if (w && (f & K_BIG)) {
         if (*big < 0) *big = open_dirs(x, y, z, flr, 35.0f);
+        if (xdraw && *big >= 5 && !flat_around(x, y, z, 12.0f)) *big = 0;   /* (an extra: level ground 12 units round, flat_around) */
         if (*big < 5) return 0;
     }
     return w;
@@ -1177,9 +1181,10 @@ static int plan_extras(const EnemyOpts* o, XPlan* x, int dry)
                 x[i].ok = 1;
                 break;
             }
+            xdraw = 1;   /* (kind_w: the big kinds also need level ground round the spot) */
             kd = draw_kind(o, kt, nk, &rk, 1, -1, n->px, n->py, n->pz, flr, rk.cost, 0, &m, &v);
+            xdraw = 0;
             if (!m) { x[i].why = "no kind fits its spot"; continue; }
-            if ((kt[kd].flags & K_BIG) && !flat_around(n->px, n->py, n->pz, 12.0f)) { x[i].why = "a big kind with a drop near its spot"; continue; }
             x[i].am = *m;
             n->variant = v ? v->id : 0;
             for (k = 0; k < spawn_base_count() && spawn_entry(k) != m; k++);
