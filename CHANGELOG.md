@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+> [!IMPORTANT]
+> This update changes parts of the renderer to make it faster. If anything looks different or broken, such as
+> missing or flickering parts of the picture, wrong colours or black areas, please report it together with the room and
+> the display settings used.
+
 ### Changes
 
 - **Smoother co-op enemies**: in direct and relay co-op, enemies move and animate evenly for both players even with
