@@ -186,8 +186,11 @@ take_over() {
 sleep 0.3
 python3 -c 'import socket, sys, time; s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); time.sleep(30)' "$tmp/c2.sock" & holder=$!
 sleep 0.5
-take_over t1 1 && ok "take-over behind a silent control connection (busy or late): one server" || bad "take-over behind a silent control connection"
+"$bin/recvx-server" --drain --control "$tmp/c2.sock" > "$tmp/d2.txt" 2>&1 && bad "--drain behind a silent control connection succeeded" || \
+    { grep -q "busy" "$tmp/d2.txt" && ok "--drain behind a silent control connection: busy at once" || { bad "--drain behind a silent control connection"; cat "$tmp/d2.txt"; }; }
+take_over t1 1 && [ $r -eq 1 ] && grep -q "busy" "$tmp/t1.txt" && [ ! -s "$tmp/t1.notify" ] && ok "take-over behind a silent control connection: busy at once, one server" || bad "take-over behind a silent control connection"
 kill $holder; sleep 0.3
+"$bin/recvx-client" 127.0.0.1:$p2 status-json | grep -q '"draining":false' && ok "the busy --drain was not carried out later" || bad "a busy --drain was carried out"
 take_over t2 $((ctl_s + 1)) && [ $r -ne 0 ] && ok "systemd slower than the time-out: no \"ok\", the old server goes on" || bad "a slow systemd barrier"
 take_over t3 $((ctl_s + 1)) $s6 && [ $r -eq 0 ] && ok "the old server frozen after \"ok\" past the time-out: the new one serves" || bad "the old server frozen after ok"
 wait $s6; [ $? -eq 0 ] && ok "the old server exited 0" || bad "the old server's exit"

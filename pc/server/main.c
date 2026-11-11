@@ -490,7 +490,7 @@ static int take_over(SrvConfig* c)
 {
     CtlHdr h;
     pid_t old = 0;
-    int fd, i, r, nfd = 0, rc = 1, fds[SRV_LISTEN_MAX + 1];
+    int fd, i, r, w, nfd = 0, rc = 1, fds[SRV_LISTEN_MAX + 1];
     uint8_t* blob = NULL;
     uint32_t fmt = 0;
     char line[16], cb[CMSG_SPACE(sizeof(fds)) + 64];
@@ -507,7 +507,7 @@ static int take_over(SrvConfig* c)
     m.msg_iovlen = 1;
     m.msg_control = cb;
     m.msg_controllen = sizeof(cb);
-    if (!write_all(fd, "takeover\n", 9, deadline)) { fprintf(stderr, "--take-over: the server closed the connection\n"); goto out; }
+    w = write_all(fd, "takeover\n", 9, deadline);   /* (failed: "busy" may be there to read) */
     r = (int)recvmsg(fd, &m, MSG_WAITALL | MSG_CMSG_CLOEXEC);
     for (cm = CMSG_FIRSTHDR(&m); cm; cm = CMSG_NXTHDR(&m, cm))
         if (cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_RIGHTS)
@@ -518,6 +518,7 @@ static int take_over(SrvConfig* c)
                 else close(f);
             }
     if (r == 5 && !memcmp(&h, "busy\n", 5)) { fprintf(stderr, "--take-over: the server is busy with another control connection, try again\n"); goto out; }
+    if (!w) { fprintf(stderr, "--take-over: the server closed the connection\n"); goto out; }
     if (r != (int)sizeof(h) || (m.msg_flags & MSG_CTRUNC) || memcmp(h.magic, "RXHO", 4) || h.nudp < 1 || h.nudp > SRV_LISTEN_MAX ||
         nfd != (int)h.nudp + 1 || h.len < 8 || h.len > SRV_STATE_MAX) {
         fprintf(stderr, "--take-over: not a recvx-server handover (%d bytes, %d descriptors)\n", r, nfd);
@@ -597,12 +598,14 @@ static int ctl_drain(const SrvConfig* c)   /* --drain */
     int fd;
     if (!c->control[0]) { fprintf(stderr, "--drain: no control socket (control = PATH in the config, or --control PATH; or send SIGUSR1)\n"); return 1; }
     if ((fd = ctl_connect(c->control, NULL)) < 0) return 1;
-    if (!write_all(fd, "drain\n", 6, now_ms() + CTL_TIMEOUT_MS) || !read_line(fd, line, sizeof(line), now_ms() + CTL_TIMEOUT_MS)) {
+    write_all(fd, "drain\n", 6, now_ms() + CTL_TIMEOUT_MS);   /* (failed: "busy" may be there to read) */
+    if (!read_line(fd, line, sizeof(line), now_ms() + CTL_TIMEOUT_MS)) {
         fprintf(stderr, "--drain: no answer\n");
         close(fd);
         return 1;
     }
     close(fd);
+    if (!strcmp(line, "busy")) { fprintf(stderr, "--drain: the server is busy with another control connection, nothing changed: try again\n"); return 1; }
     puts(line);
     return strncmp(line, "draining", 8) != 0;
 }
@@ -663,9 +666,10 @@ int main(int argc, char** argv)
     while (!quit) {
         struct pollfd p[SRV_LISTEN_MAX + 2];
         uint64_t now;
-        int np = nsocks;
+        int np = nsocks, pc = -1, pl = -1;
         for (i = 0; i < nsocks; i++) { p[i].fd = socks[i]; p[i].events = POLLIN; p[i].revents = 0; }
-        if (ctl >= 0) { p[np].fd = conn >= 0 ? conn : ctl; p[np].events = POLLIN; p[np].revents = 0; np++; }   /* one connection at a time */
+        if (conn >= 0) { pc = np; p[np].fd = conn; p[np].events = POLLIN; p[np].revents = 0; np++; }
+        if (ctl >= 0) { pl = np; p[np].fd = ctl; p[np].events = POLLIN; p[np].revents = 0; np++; }   /* more while one is open: "busy" */
         if (poll(p, np, 1000) > 0) {
             for (i = 0; i < nsocks; i++) {
                 int k;
@@ -685,10 +689,8 @@ int main(int argc, char** argv)
                     srv_input(&from, buf, n > RDV_DGRAM_MAX ? RDV_DGRAM_MAX + 1 : n, now_ms());
                 }
             }
-            if (np > nsocks && p[nsocks].revents) {
-                if (conn >= 0) { if (ctl_input()) { handed = 1; break; } }
-                else ctl_accept();
-            }
+            if (pc >= 0 && p[pc].revents && ctl_input()) { handed = 1; break; }
+            if (pl >= 0 && p[pl].revents) ctl_accept();
         }
         now = now_ms();
         if (conn >= 0 && now - conn_ms > CTL_TIMEOUT_MS) conn_close();   /* a silent client does not hold the socket */
