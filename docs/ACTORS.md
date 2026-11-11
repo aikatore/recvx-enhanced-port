@@ -1156,9 +1156,9 @@ the same in Claire's part and in Chris's.
   of the drawing by `mdflg 0x1`; also `stflg 0x1000000`, or shown only in other cuts): those do not count. Before
   (until 2026-11-11) any linked piece counted, so a kept prop piece not in use left the hand bare, with the record's
   one-node pieces hidden and ours not drawn: Rodrigo in the opening (0000, both hands the whole scene: his pieces
-  1131 and 1137 linked, not drawn), Alfred's left hand in 1020 and Wesker's right in 8030 (event model 47) at times, on
-  every model without hands of its own (the cutscene models, Claire's second costume, Monster Steve). The same for the
-  double of the character played ("Cutscene doubles"). Wesker's afterimages (`trail_glue.c`) leave no trail of a
+  1131 and 1137 linked, not drawn), Alfred's left hand in 1020, Wesker's right in 8030 (event model 47) and, as the
+  double, Chris's left in 9350 at times, on every model without hands of its own (the cutscene models, Claire's second
+  costume, Monster Steve). The same for the double of the character played ("Cutscene doubles"). Wesker's afterimages (`trail_glue.c`) leave no trail of a
   hidden piece. Test aid: `RECVX_CAST_TRACE=1` logs each piece hidden (`... hidden: the model has Claire's hands`) or
   kept (`... kept: a prop in it`). Checked in 9350, 8030, 9370 (Wesker as Alexia), 1020 (Alfred as Steve; Claire's
   double as Rodrigo), 0030 (Steve as Rodrigo); on 2026-11-11 every kind of model (the cutscene models, Claire's second
