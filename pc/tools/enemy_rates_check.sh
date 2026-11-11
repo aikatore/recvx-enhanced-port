@@ -8,7 +8,7 @@
 #   wild1, wild2, mild1, mild2  Wild / Mild with Types per Room 1 / 2;  custom2, custom8  Custom with every kind at 5,
 #           Types per Room 2 / 8. Pass when every room, its extra enemies included, has at most that many kinds (the Hunter
 #           and the Sweeper count as two in every variety; unless its log says some records could only be another kind),
-#           in Mild every extra enemy is of a type the room's records have, and in custom8 some extras took a kind the
+#           in Mild every extra enemy is of a kind the room's records have or of its two Mild kinds, and in custom8 some extras took a kind the
 #           room's records lack (Types per Room is a target in Wild and Custom). Each says how many rooms have both a
 #           Hunter and a Sweeper (none under a limit of 1), and the kinds per room with the extras.
 # About 4 minutes, all runs in parallel.
@@ -50,7 +50,7 @@ KINDS = {1, 3, 4, 5, 7, 9, 11, 17, 19, 23, 26}      # what the randomizer places
 GROUND = {1, 3, 4, 5, 9, 17, 19, 23, 26}
 for seed in seeds:
     for run in ('rates', 'hunter', 'sweeper', 'wild1', 'wild2', 'mild1', 'mild2', 'custom2', 'custom8'):
-        rooms, changed, looks, extras, bad, xkinds, newx = {}, [], [], 0, [], {}, 0
+        rooms, changed, looks, extras, bad, xkinds, newx, mild = {}, [], [], 0, [], {}, 0, {}
         cur = None
         for line in open('%s/%s-%s/log.txt' % (out, seed, run), errors='replace'):
             line = re.sub(r'^\[ *[0-9.]+\] ', '', line.rstrip())
@@ -65,13 +65,15 @@ for seed in seeds:
                 # kinds: the type ids; the Hunter and the Sweeper (type 5 models 0, 1) are two
                 kinds = {(int(i), int(v) if i == '5' else 0) for i, v in (x.split(':')[1].split('.') for x in m.group(4).split())}
                 rooms[m.group(1)] = (ids, int(m.group(2)), bool(m.group(3)), {k for k in kinds if k[0] in KINDS})
-            m = re.match(r'enemies: extra .*?\(type (\d+) model (\d+), from record \d+.*: spawned', line)
+            m = re.match(r"enemies: room (\d+): Mild's kinds (\d+)\.(-?\d+) (\d+)\.(-?\d+)", line)
+            if m: mild[m.group(1)] = {(int(m.group(2)), max(int(m.group(3)), 0)), (int(m.group(4)), max(int(m.group(5)), 0))}
+            m = re.match(r'enemies: extra .*?\(type (\d+) model (\d+), extra \d+.*: spawned', line)
             if m and cur in rooms:
                 extras += 1
                 k = (int(m.group(1)), int(m.group(2)) if m.group(1) == '5' else 0)
                 if k[0] in KINDS: xkinds.setdefault(cur, set()).add(k)
                 newx += k[0] in KINDS and k not in rooms[cur][3]
-                if run.startswith('mild') and k[0] not in rooms[cur][0]: bad.append('%s extra of type %s' % (cur, m.group(1)))
+                if run.startswith('mild') and k[0] not in rooms[cur][0] and k not in mild.get(cur, set()): bad.append('%s extra of type %s' % (cur, m.group(1)))
         if run == 'rates':
             ground = [t for t in changed if t in GROUND]
             cer = sum(t == 4 for t in ground)

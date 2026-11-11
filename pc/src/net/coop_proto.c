@@ -389,7 +389,7 @@ int coop_check_event(const Event* e, int from_host)
     case EV_FLAGS:
         if (e->u.fl.n < 1 || e->u.fl.n > 6) return COOP_BAD_COUNT;
         for (k = 0; k < e->u.fl.n; k++)
-            if (e->u.fl.word[k] >= 120) return COOP_BAD_FIELD;
+            if (e->u.fl.word[k] >= 120 + ENEMY_XDEAD_WORDS) return COOP_BAD_FIELD;   /* (120..: the extras' dead flags) */
         return COOP_OK;
     case EV_PICKUP:   /* undo: the host settles a spot both took (shared loot) */
         if (e->u.pk.undo && !from_host) return COOP_BAD_DIR;
@@ -434,7 +434,7 @@ int coop_check_event(const Event* e, int from_host)
             if (!coop_item_word_ok(e->u.bx.w[k])) return COOP_BAD_FIELD;
         return COOP_OK;
     case EV_SPAWN:
-        if (e->idx >= COOP_ENE_SLOTS || e->u.sp.room > 9999 || (e->u.sp.dead && (e->u.sp.dead < 512 || e->u.sp.dead > 1023))) return COOP_BAD_FIELD;
+        if (e->idx >= COOP_ENE_SLOTS || e->u.sp.room > 9999 || (e->u.sp.dead && (e->u.sp.dead < ENEMY_XDEAD_BASE || e->u.sp.dead >= ENEMY_XDEAD_BASE + ENEMY_XDEAD_WORDS * 32))) return COOP_BAD_FIELD;
         return fin(e->u.sp.px) && fin(e->u.sp.py) && fin(e->u.sp.pz) ? COOP_OK : COOP_BAD_FLOAT;
     case EV_EOPTS:
         for (k = 0; k < ENEMY_RATE_N; k++)

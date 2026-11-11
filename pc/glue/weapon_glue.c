@@ -544,8 +544,8 @@ void wpn_menu_draw(void)
 }
 
 /* the wheel: the page's four slots around the d-pad, the equipped one framed, a missing one greyed */
-#define WX 500.0f
-#define WY 372.0f
+#define WX 450.0f                       /* (up and left of the HUD's corner: it spans x 318..582, y 235..385, above the HUD) */
+#define WY 310.0f
 #define WW 84.0f
 #define WH 50.0f                        /* (a name on two lines under the icon) */
 void wpn_draw(void)

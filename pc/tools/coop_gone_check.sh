@@ -1,7 +1,7 @@
 #!/bin/bash
 # Two-instance co-op check (docs/COOP.md "The shared world"): kills stay dead for both, whoever made them and wherever
-# the other player was. A new game in 0/6 (four zombie records, kill bits 12..15) with two extra enemies (host's
-# enemy_extra = 3: slots 30 and 31, dead flags 524 and 525); the guest plays with coop_follow = 0. Three runs at once:
+# the other player was. A new game in 0/6 (four zombie records, kill bits 12..15) with an extra enemy (host's
+# enemy_extra = 3: the barracks have a free spot for one, slot 30, dead flag 40); the guest plays with coop_follow = 0. Three runs at once:
 #   A  the host goes to 0/7; the guest kills record 1 and extra 30, then leaves for 0/7 too; the host comes back, then
 #      the guest. Before, only the host set an extra's dead flag: extra 30 was alive again for both.
 #   B  as A, but the guest stays in 0/6 until the host is back (EV_GONE): both see the same enemies in the same slots
@@ -45,12 +45,14 @@ pair C "$((port + 2))" 1:0:6:0,1800:0:7:0 1900:1,1910:30 1300:0:7:0,1000:0:6:0 "
 wait
 for r in A B C; do
     check "$r: neither side crashed" "[ \$(cat $out/$r/host/exit) = 0 ] && [ \$(cat $out/$r/guest/exit) = 0 ] && ! grep -q 'fatal signal' $out/$r/*/log.txt"
-    check "$r: 0/6 had records 0..2 and extras 30, 31 at first" "[ '$(alive $r host 1300)' = ' 0:1 1:1 2:1 30:1 31:1' ]"
+    check "$r: 0/6 had records 0..2 and extra 30 at first" "[ '$(alive $r host 1300)' = ' 0:1 1:1 2:1 30:1' ]"
 done
-check "A: the guest's kills (record 1 kill bit, extra 30 dead flag 524) reached the host" "grep -q 'enemies: the extra enemy in slot 30 died: ed_flg 524 set' $out/A/guest/log.txt"
-check "A: the host, back alone, does not bring extra 30 back" "grep -q 'dead flag 524) at .*: dead (killed before)' $out/A/host/log.txt && [ '$(alive A host 2850)' = ' 0:1 2:1 31:1' ]"
-check "A: then both see the same: record 1 and extra 30 dead" "[ '$(alive A host 3300)' = ' 0:1 2:1 31:1' ] && [ '$(alive A guest 3300)' = ' 0:1 2:1 31:1' ]"
+check "A: the guest's kills (record 1 kill bit, extra 30 dead flag 40) reached the host" "grep -q 'enemies: the extra enemy in slot 30 died: dead flag 40 set' $out/A/guest/log.txt"
+check "A: the host took the guest's dead flag 40 (EV_FLAGS, extras' word 1 bit 8)" "grep -q \"coop: the partner's extra enemy dead flags, word 1: set 00000100\" $out/A/host/log.txt"
+check "A: the host, back alone, does not bring extra 30 back" "grep -q 'dead flag 40) at .*: dead (killed before)' $out/A/host/log.txt && [ '$(alive A host 2850)' = ' 0:1 2:1' ]"
+check "A: then both see the same: record 1 and extra 30 dead" "[ '$(alive A host 3300)' = ' 0:1 2:1' ] && [ '$(alive A guest 3300)' = ' 0:1 2:1' ]"
 check "B: the host takes over the guest's room (EV_GONE)" "grep -q 'the host.s enemies take over' $out/B/guest/log.txt"
-check "B: both see the same enemies in the same slots" "[ '$(alive B host 3300)' = ' 0:1 2:1 31:1' ] && [ '$(alive B guest 3300)' = ' 0:1 2:1 31:1' ]"
+check "B: both see the same enemies in the same slots" "[ '$(alive B host 3300)' = ' 0:1 2:1' ] && [ '$(alive B guest 3300)' = ' 0:1 2:1' ]"
+check "C: the guest took the host's dead flag 40 of extra 30" "grep -q \"coop: the partner's extra enemy dead flags, word 1: set 00000100\" $out/C/guest/log.txt"
 check "C: the guest, back alone, finds record 1 dead (no extras without the host)" "[ '$(alive C guest 3300)' = ' 0:1 2:1' ]"
 exit $fail
