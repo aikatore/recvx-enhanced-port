@@ -895,6 +895,7 @@ static CoopSnapTx* stx;
 static CoopSnapRx* srx;
 static EneSnap (*run_snap)[2];
 static uint32_t hist_applied[PC_ENE_SLOTS];       /* the sender frame of the snapshot applied last */
+static uint32_t run_from[PC_ENE_SLOTS];           /* the partner's newest frame when we started running the slot (owners_sync) */
 static uint32_t shown_seq[PC_ENE_SLOTS];          /* the frame shown last, its position and turn as shown (the blend back) */
 static float shown_p[PC_ENE_SLOTS][3];
 static int32_t shown_ay[PC_ENE_SLOTS];
@@ -916,7 +917,7 @@ static int bufs_get(void)
 static void snaps_reset(void)
 {
     if (hist) memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist));
-    memset(hist_applied, 0, sizeof(hist_applied)); memset(shown_seq, 0, sizeof(shown_seq));
+    memset(hist_applied, 0, sizeof(hist_applied)); memset(shown_seq, 0, sizeof(shown_seq)); memset(run_from, 0, sizeof(run_from));
     memset(snap_cnt, 0, sizeof(snap_cnt));
     coop_playout_reset(&playout);
 }
@@ -1047,8 +1048,16 @@ static void owners_sync(void)
         int k;
         if (owned[i] == owned_was[i]) continue;
         owned_was[i] = owned[i];
-        memset(&hist[i], 0, sizeof(hist[i])); hist_applied[i] = 0; shown_seq[i] = 0; own_seed[i] = 0; own_win[i] = 0;
-        coop_snaptx_forget(stx, i); coop_snaprx_forget(srx, i);
+        hist_applied[i] = 0; shown_seq[i] = 0; own_seed[i] = 0; own_win[i] = 0;
+        coop_snaptx_forget(stx, i);
+        /* what we hold of the partner's records goes only when we start running it: one we stop running has had none
+           since (the partner sends the slots it runs) but the old runner's last ones still on their way when we took it,
+           which run_from tells apart; the rest is the new runner's, which receive() may have decoded before this (its
+           take-back and its first full record in one datagram): dropped, the records coded against it were lost too */
+        if (we_run(i)) { memset(&hist[i], 0, sizeof(hist[i])); coop_snaprx_forget(srx, i); run_from[i] = playout.newest; }
+        else
+            for (k = 0; k < COOP_HIST; k++)
+                if (hist[i].seq[k] && (int32_t)(hist[i].seq[k] - run_from[i]) <= 0) hist[i].seq[k] = 0;
         if (we_run(i) || !sys || i >= (int)sys->ewk_n || !(ene[i].flg & 0x1) || !playout.started || !P || frame_no - run_q[i][0] > 2) continue;
         own_win[i] = 1; win_st[2]++;
         for (k = 1; k >= 0; k--) {   /* the older one a frame before */
