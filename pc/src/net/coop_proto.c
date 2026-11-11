@@ -10,7 +10,6 @@
 _Static_assert(sizeof(Pose) == 112, "wire: Pose");
 _Static_assert(sizeof(PoseExt) == 108, "wire: PoseExt");
 _Static_assert(sizeof(Event) == 96, "wire: Event");
-_Static_assert(sizeof(EneSnap) == 100, "wire: EneSnap");
 _Static_assert(sizeof(AtrRec) == 36, "wire: AtrRec (ATR_WORK)");
 _Static_assert(sizeof(CoopHello) == sizeof(Pose), "wire: CoopHello (a build before protocol 28 must see a datagram of a Pose's size to report the version)");
 _Static_assert(COOP_CODE_LEN == RDV_CODE_LEN,"join codes are made and read as room codes (rdv_code_from, rdv_code_norm)");
@@ -40,11 +39,18 @@ int coop_check_dgram(const void* buf, int n, int* nev, int* nene, int* ext)
     if (p.magic != COOP_MAGIC) return COOP_BAD_HDR;
     if (p.version != COOP_VERSION) return COOP_BAD_VERSION;
     if (p.type < PKT_POSE || p.type > PKT_REJECT) return COOP_BAD_TYPE;
-    if (p.rsv) return COOP_BAD_FIELD;
     if (p.type != PKT_POSE) { *nev = *nene = *ext = 0; return n == (int)sizeof(Pose) ? COOP_OK : COOP_BAD_SIZE; }
-    if (p.nev > COOP_EV_FRAME || p.nene > COOP_SNAP_FRAME) return COOP_BAD_COUNT;
+    if (p.nev > COOP_EV_FRAME) return COOP_BAD_COUNT;
     x = (p.flags & PF_EXT) != 0;
-    if (n != (int)(sizeof(Pose) + p.nev * sizeof(Event) + p.nene * sizeof(EneSnap) + x * sizeof(PoseExt))) return COOP_BAD_SIZE;
+    {   /* the snapshot block's length is in its header (protocol 45) */
+        int at = (int)(sizeof(Pose) + p.nev * sizeof(Event)), sz = at + x * (int)sizeof(PoseExt);
+        if (p.nene) {
+            const unsigned char* h = (const unsigned char*)buf + at;
+            if (n < sz + COOP_SNAP_HDR) return COOP_BAD_SIZE;
+            sz += COOP_SNAP_HDR + (h[0] | h[1] << 8);
+        }
+        if (n != sz) return COOP_BAD_SIZE;
+    }
     if (x) {   /* the extension's enumerations */
         PoseExt e;
         memcpy(&e, (const unsigned char*)buf + n - sizeof(e), sizeof(e));
@@ -61,6 +67,168 @@ int coop_check_snap(const EneSnap* s)
     if (s->mtn_no < 0 || s->mtn_no >= COOP_MNW_MAX || s->frm_no < 0) return COOP_BAD_FIELD;
     if (!fin(s->px) || !fin(s->py) || !fin(s->pz) || !fins(s->watr, 7)) return COOP_BAD_FLOAT;
     return COOP_OK;
+}
+
+/* ---------------------------------------------------------------- snapshots, protocol 45 (coop_proto.h) */
+static int32_t qpos(float f)   /* 1/COOP_SNAP_Q unit; fin() bounds every position the receiver takes */
+{
+    float v = f * COOP_SNAP_Q;
+    return v == v ? (int32_t)lrintf(v > 1e9f ? 1e9f : v < -1e9f ? -1e9f : v) : 0;
+}
+void coop_snap_quant(const EneSnap* s, CoopSnapQ* q)
+{
+    int32_t* v = q->v;
+    int k;
+    v[SQ_PX] = qpos(s->px); v[SQ_PY] = qpos(s->py); v[SQ_PZ] = qpos(s->pz);
+    for (k = 0; k < 6; k++) v[SQ_C1X + k] = (int32_t)((uint32_t)qpos(s->watr[k]) - (uint32_t)v[k % 3 == 0 ? SQ_PX : k % 3 == 1 ? SQ_PY : SQ_PZ]);   /* the capsule from the enemy */
+    v[SQ_R] = qpos(s->watr[6]);
+    v[SQ_AX] = s->ax; v[SQ_AY] = s->ay; v[SQ_AZ] = s->az;
+    v[SQ_FRM] = s->frm_no >> 8; v[SQ_MFRM] = s->mtn_frm0 >> 8;   /* 1/256 frame: the whole frame stays exact */
+    v[SQ_MTN] = s->mtn_no; v[SQ_HOKC] = s->hokan_count; v[SQ_HOKR] = s->hokan_rate; v[SQ_MD] = s->mtn_md;
+    v[SQ_ADD] = s->mtn_add; v[SQ_MSEQ] = (int32_t)s->mtn_seq;
+    v[SQ_MODE] = (int32_t)((uint32_t)s->mode[0] | (uint32_t)s->mode[1] << 8 | (uint32_t)s->mode[2] << 16 | (uint32_t)s->mode[3] << 24);
+    v[SQ_FLG] = (int32_t)s->flg; v[SQ_FLG2] = (int32_t)s->flg2; v[SQ_STFLG] = (int32_t)s->stflg; v[SQ_MDFLG] = (int32_t)s->mdflg;
+    v[SQ_HP] = s->hp;
+    v[SQ_MDL] = (int32_t)((uint32_t)(uint8_t)s->mdl | (uint32_t)(uint16_t)s->mnw << 8);
+    v[SQ_ID] = s->id | s->root << 8;
+    v[SQ_NECK] = (int32_t)s->neck;
+}
+int coop_snap_dequant(const CoopSnapQ* q, int idx, EneSnap* s)
+{
+    const int32_t* v = q->v;
+    int k;
+    if ((uint32_t)v[SQ_MDL] >> 24 || (uint32_t)v[SQ_ID] >> 16 || v[SQ_HOKC] != (int16_t)v[SQ_HOKC] ||
+        v[SQ_FRM] < 0 || v[SQ_FRM] >= 1 << 23 || v[SQ_MFRM] < 0 || v[SQ_MFRM] >= 1 << 23) return 0;
+    memset(s, 0, sizeof(*s));
+    s->idx = (uint8_t)idx;
+    s->px = v[SQ_PX] / COOP_SNAP_Q; s->py = v[SQ_PY] / COOP_SNAP_Q; s->pz = v[SQ_PZ] / COOP_SNAP_Q;
+    for (k = 0; k < 6; k++) s->watr[k] = (int32_t)((uint32_t)v[SQ_C1X + k] + (uint32_t)v[k % 3 == 0 ? SQ_PX : k % 3 == 1 ? SQ_PY : SQ_PZ]) / COOP_SNAP_Q;
+    s->watr[6] = v[SQ_R] / COOP_SNAP_Q;
+    s->ax = v[SQ_AX]; s->ay = v[SQ_AY]; s->az = v[SQ_AZ];
+    s->frm_no = v[SQ_FRM] << 8; s->mtn_frm0 = v[SQ_MFRM] << 8;
+    s->mtn_no = v[SQ_MTN]; s->hokan_count = (int16_t)v[SQ_HOKC]; s->hokan_rate = v[SQ_HOKR]; s->mtn_md = v[SQ_MD];
+    s->mtn_add = v[SQ_ADD]; s->mtn_seq = (uint32_t)v[SQ_MSEQ];
+    for (k = 0; k < 4; k++) s->mode[k] = (uint8_t)((uint32_t)v[SQ_MODE] >> 8 * k);
+    s->flg = (uint32_t)v[SQ_FLG]; s->flg2 = (uint32_t)v[SQ_FLG2]; s->stflg = (uint32_t)v[SQ_STFLG]; s->mdflg = (uint32_t)v[SQ_MDFLG];
+    s->hp = v[SQ_HP];
+    s->mdl = (int8_t)(v[SQ_MDL] & 0xFF); s->mnw = (int16_t)(v[SQ_MDL] >> 8 & 0xFFFF);
+    s->id = (uint8_t)v[SQ_ID]; s->root = (uint8_t)(v[SQ_ID] >> 8);
+    s->neck = (uint32_t)v[SQ_NECK];
+    return 1;
+}
+
+static int vput(uint8_t* p, uint32_t x)
+{
+    int n = 0;
+    do { p[n++] = (uint8_t)(x & 0x7F) | (x > 0x7F ? 0x80 : 0); x >>= 7; } while (x);
+    return n;
+}
+static int vget(const uint8_t* p, int n, uint32_t* x)   /* bytes read, 0 bad (past n, more than 32 bits) */
+{
+    int k;
+    *x = 0;
+    for (k = 0; k < 5 && k < n; k++) {
+        if (k == 4 && p[k] > 0x0F) return 0;
+        *x |= (uint32_t)(p[k] & 0x7F) << 7 * k;
+        if (!(p[k] & 0x80)) return k + 1;
+    }
+    return 0;
+}
+/* one record: bytes read, 0 bad; d[] the deltas (0 where the mask has no bit) */
+static int rec_get(const uint8_t* p, int n, int* idx, int* age, uint32_t d[SQ_N])
+{
+    uint32_t mask;
+    int at = 2, k, r;
+    if (n < 3 || p[0] >= COOP_ENE_SLOTS) return 0;
+    *idx = p[0]; *age = p[1];
+    if (!(r = vget(p + at, n - at, &mask)) || mask >> SQ_N) return 0;
+    for (at += r, k = 0; k < SQ_N; k++) {
+        uint32_t z = 0;
+        if (mask >> k & 1) {
+            if (!(r = vget(p + at, n - at, &z))) return 0;
+            at += r;
+        }
+        d[k] = z >> 1 ^ (0u - (z & 1));   /* zigzag */
+    }
+    return at;
+}
+int coop_snap_check(const uint8_t* blk, int n, int nrec)
+{
+    uint32_t d[SQ_N];
+    int at = COOP_SNAP_HDR, k, idx, age, r;
+    if (n < COOP_SNAP_HDR || (blk[0] | blk[1] << 8) != n - COOP_SNAP_HDR || (blk[2] & 0x70)) return COOP_BAD_SIZE;
+    for (k = 0; k < nrec; k++, at += r)
+        if (!(r = rec_get(blk + at, n - at, &idx, &age, d))) return COOP_BAD_FIELD;
+    return at == n ? COOP_OK : COOP_BAD_SIZE;
+}
+
+void coop_snaptx_reset(CoopSnapTx* t) { memset(t, 0, sizeof(*t)); }
+void coop_snaptx_ack(CoopSnapTx* t, uint32_t ack)
+{
+    int i;
+    if (!ack || ack == t->ack) return;
+    t->ack = ack;
+    for (i = 0; i < COOP_ENE_SLOTS; i++)   /* the slots that frame had (a frame never sent has no entry) */
+        if (t->h[i][ack % COOP_SNAP_HIST].seq == ack && (!t->acked[i] || (int32_t)(ack - t->acked[i]) > 0)) t->acked[i] = ack;
+}
+int coop_snaptx_put(CoopSnapTx* t, uint32_t seq, const EneSnap* s, uint8_t* out, int cap, int* full)
+{
+    static const CoopSnapQ zero;
+    uint8_t tmp[COOP_SNAP_REC_MAX];
+    const CoopSnapQ* base = &zero;
+    CoopSnapQ q;
+    uint32_t a = t->acked[s->idx % COOP_ENE_SLOTS], mask = 0;
+    int i = s->idx % COOP_ENE_SLOTS, age = 0, n, k;
+    if (!seq) return 0;   /* (0 is "none" in acknowledgements) */
+    coop_snap_quant(s, &q);
+    if (a && seq - a < COOP_SNAP_HIST && seq != a && t->h[i][a % COOP_SNAP_HIST].seq == a) { base = &t->h[i][a % COOP_SNAP_HIST].q; age = (int)(seq - a); }
+    for (k = 0; k < SQ_N; k++) mask |= (uint32_t)(q.v[k] != base->v[k]) << k;
+    tmp[0] = (uint8_t)i; tmp[1] = (uint8_t)age;
+    n = 2 + vput(tmp + 2, mask);
+    for (k = 0; k < SQ_N; k++)
+        if (mask >> k & 1) {
+            uint32_t dd = (uint32_t)q.v[k] - (uint32_t)base->v[k];
+            n += vput(tmp + n, dd << 1 ^ (0u - (dd >> 31)));
+        }
+    if (n > cap) return 0;
+    memcpy(out, tmp, n);
+    t->h[i][seq % COOP_SNAP_HIST].seq = seq;
+    t->h[i][seq % COOP_SNAP_HIST].q = q;
+    if (full) *full = !age;
+    return n;
+}
+
+void coop_snaprx_reset(CoopSnapRx* r) { memset(r, 0, sizeof(*r)); }
+int coop_snaprx_take(CoopSnapRx* r, uint32_t seq, const uint8_t* blk, int n, int nrec, EneSnap* out)
+{
+    uint32_t d[SQ_N];
+    int at = COOP_SNAP_HDR, k, j, got = 0, idx, age, m;
+    __typeof__(&r->f[0]) fr;
+    if (!seq || coop_snap_check(blk, n, nrec)) return 0;
+    if (r->seq && (int32_t)(seq - r->seq) <= -COOP_SNAP_HIST) return 0;   /* too late: its entries hold newer frames */
+    if (!r->seq || (int32_t)(seq - r->seq) > 0) r->seq = seq;
+    fr = &r->f[seq % COOP_SNAP_HIST];
+    if (fr->seq != seq) { fr->seq = seq; fr->parts = 0; fr->last = -1; fr->bad = 0; }
+    fr->parts |= (uint16_t)(1u << (blk[2] & 15));
+    if (blk[2] & 0x80) fr->last = (int8_t)(blk[2] & 15);
+    for (k = 0; k < nrec; k++, at += m) {
+        CoopSnapBase* e;
+        const CoopSnapQ* base;
+        static const CoopSnapQ zero;
+        uint32_t b;
+        m = rec_get(blk + at, n - at, &idx, &age, d);
+        b = seq - (uint32_t)age;
+        e = &r->h[idx][seq % COOP_SNAP_HIST];
+        if (!age) base = &zero;
+        else if (b && age < COOP_SNAP_HIST && r->h[idx][b % COOP_SNAP_HIST].seq == b) base = &r->h[idx][b % COOP_SNAP_HIST].q;
+        else { fr->bad = 1; r->n_bad++; continue; }   /* not the base the sender meant: nothing from it */
+        for (j = 0; j < SQ_N; j++) e->q.v[j] = (int32_t)((uint32_t)base->v[j] + d[j]);
+        e->seq = seq;   /* (taken even when it fails its checks below: it is the sender's state, a base later; the entry
+                           held an older frame: a newer one in it would be COOP_SNAP_HIST past this, past the newest) */
+        if (got < nrec && coop_snap_dequant(&e->q, idx, &out[got]) && coop_check_snap(&out[got]) == COOP_OK) got++;
+    }
+    if (!fr->bad && fr->last >= 0 && fr->parts == (2u << fr->last) - 1 && (!r->ack || (int32_t)(seq - r->ack) > 0)) r->ack = seq;
+    return got;
 }
 
 static int xfer_fields_ok(const Event* e)
@@ -316,18 +484,14 @@ int coop_check_all(const void* buf, int n, int from_host, int* nev, int* nene, i
 {
     const unsigned char* b = buf;
     Event e;
-    EneSnap s;
-    int r = coop_check_dgram(buf, n, nev, nene, ext), k;
+    int r = coop_check_dgram(buf, n, nev, nene, ext), k, at;
     if (r) return r;
     for (k = 0; k < *nev; k++) {   /* copies: the buffer need not be aligned */
         memcpy(&e, b + sizeof(Pose) + k * sizeof(Event), sizeof(e));
         if ((r = coop_check_event(&e, from_host))) return r;
     }
-    for (k = 0; k < *nene; k++) {
-        memcpy(&s, b + sizeof(Pose) + *nev * sizeof(Event) + k * sizeof(EneSnap), sizeof(s));
-        if ((r = coop_check_snap(&s))) return r;
-    }
-    return COOP_OK;
+    at = (int)(sizeof(Pose) + *nev * sizeof(Event));   /* the snapshots' values are checked as they are decoded (coop_snaprx_take) */
+    return *nene ? coop_snap_check(b + at, n - at - *ext * (int)sizeof(PoseExt), *nene) : COOP_OK;
 }
 
 /* ---------------------------------------------------------------- event stream */

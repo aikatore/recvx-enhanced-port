@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 43                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 45               /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -49,10 +49,14 @@ extern "C" {
                                            42: the randomizer's Hunter and Sweeper two kinds in Wild and Mild too (other
                                                enemies from the same seed; nothing on the wire changed);
                                            43: EV_EOPTS cast_enemy, cast_enemy_off (the cutscene cast's "Enemy Models" and its
-                                               "Custom" list; Event 96 bytes) */
+                                               "Custom" list; Event 96 bytes);
+                                           45 (prototype, branch netexp-phase2): enemy snapshots quantized and delta-coded against
+                                               the frame the peer acknowledged (CoopSnapTx/Rx; Pose.snap_ack in the old rsv), with
+                                               the motion's anchor (mtn_seq, mtn_frm0), speed (mtn_add) and a zombie's neck; no
+                                               per-frame count cap: COOP_SNAP_BUDGET bytes in priority order */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
-#define COOP_SNAP_FRAME 48              /* enemy snapshots per frame */
+#define COOP_SNAP_BUDGET 2400           /* enemy snapshot bytes per frame (records past it wait, by priority) */
 #define COOP_GONE_MAX 26                /* EV_GONE: enemy slots per event */
 #define COOP_ENE_SLOTS 255              /* enemy slots 0..254 (pc_prelude.h PC_ENE_SLOTS); 255 in a slot byte: none */
 #define COOP_TRIG_OPS 48                /* actions of one world event block (retail: at most 33) */
@@ -91,7 +95,8 @@ typedef struct Pose {
     uint16_t version;
     uint8_t type, flags;
     uint32_t sid;                       /* sender's session: a new one restarts the event streams */
-    uint32_t rsv;                       /* zero (protocol 27 and before: a 32-bit join-code proof) */
+    uint32_t snap_ack;                  /* (protocol 45) the newest frame (seq) of the peer's snapshots we took whole; 0 none
+                                           (protocol 28..43: zero; 27 and before: a 32-bit join-code proof) */
     uint32_t seq;                       /* sender's frame counter: older poses are dropped */
     uint32_t t_ms, echo_ms, echo_age;   /* ping: our clock, last clock seen from the peer, ms held */
     int8_t chr, costume, stg, rom;
@@ -375,7 +380,10 @@ typedef struct Event {
 
 enum { SNAP_ROOT_STILL = 1,            /* the root node's x/z are 0 after the step: its motion's travel moved the enemy
                                            (bhEne_GetTranslateMtn), the puppet's root is put back as well */
-       SNAP_ROOT_ALL = 1 };
+       SNAP_NECK = 2,                   /* (protocol 45) a zombie's upper half: `neck` holds nodes 11 and 8's yaw (bhEne01_SearchNeck) */
+       SNAP_ROOT_ALL = 3 };
+/* An enemy slot's state. Since protocol 45 not on the wire as it is: CoopSnapTx codes it (coop_snap_quant: positions
+   to 1/COOP_SNAP_Q unit, frm_no and mtn_frm0 to 1/256 frame, the rest exact), CoopSnapRx gives it back so. */
 typedef struct EneSnap {
     uint8_t idx, mode[4];
     int8_t mdl;                         /* mlwP as an index into the enemy's own mdl[] */
@@ -386,10 +394,61 @@ typedef struct EneSnap {
     int32_t mtn_no, frm_no, mtn_md;
     int16_t hokan_count;
     uint8_t id;                         /* the enemy's type (BH_PWORK.id): applied only to a slot holding the same type */
-    uint8_t root;                       /* SNAP_ROOT_* (protocol 36) */
+    uint8_t root;                       /* SNAP_ROOT_*, SNAP_NECK (protocol 36, 45) */
     int32_t hokan_rate, hp;
-    float watr[7];                      /* hit capsule (NJS_CAPSULE) */
+    float watr[7];                      /* hit capsule (NJS_CAPSULE: c1, c2, r) */
+    /* protocol 45 */
+    int32_t mtn_add;                    /* the motion's speed as played (frames per step, 16.16): the game's mtn_add, 0 while it stands still */
+    uint32_t mtn_seq;                   /* the motion's anchor: at the sender's frame mtn_seq it was at mtn_frm0, and from there
+                                           frm_no = mtn_frm0 + (seq - mtn_seq) * mtn_add (modulo the motion's length; not for
+                                           mtn_md 1, back and forth): the sender re-anchors whenever that would not hold */
+    int32_t mtn_frm0;
+    uint32_t neck;                      /* SNAP_NECK: node 11's ang[1] | node 8's << 16 (16 bits each) */
 } EneSnap;
+
+/* ---------------------------------------------------------------- snapshots, protocol 45
+   A datagram with snapshots (Pose.nene records) has, after its events, a block: u16 length of the records, u8 part
+   (bits 0-3 its index among the frame's datagrams with snapshots, bit 7 the last one), then the records. A record:
+   u8 slot, u8 age, varint change mask (bit k: field k of CoopSnapQ follows), then per field set a zigzag varint of
+   (value - base value), 32-bit wrapping. age 0: the base is all zero (a full record); else the base is the slot's
+   state of the sender's frame seq - age, one the receiver took whole and acknowledged (Pose.snap_ack): the sender
+   codes against the newest such frame within COOP_SNAP_HIST frames, so a lost datagram or acknowledgement only makes
+   the next records larger (never wrong), and a receiver without that base (restarted) drops the record and stops
+   acknowledging until the bases age out into full records. */
+#define COOP_SNAP_Q 64.0f               /* positions and the capsule: 1/64 unit (units are 10 cm: 1.6 mm) */
+#define COOP_SNAP_HIST 16               /* frames a base may be old */
+#define COOP_SNAP_HDR 3
+enum { SQ_PX, SQ_PZ, SQ_FRM, SQ_AY, SQ_PY, SQ_C1X, SQ_C1Y, SQ_C1Z, SQ_C2X, SQ_C2Y, SQ_C2Z, SQ_R, SQ_AX, SQ_AZ,
+       SQ_MTN, SQ_HOKC, SQ_HOKR, SQ_MD, SQ_ADD, SQ_MSEQ, SQ_MFRM, SQ_MODE, SQ_FLG, SQ_FLG2, SQ_STFLG, SQ_MDFLG,
+       SQ_HP, SQ_MDL, SQ_ID, SQ_NECK, SQ_N };   /* the fields that change most first (the mask's first byte) */
+#define COOP_SNAP_REC_MAX (2 + 5 + SQ_N * 5)   /* bytes of a record at most */
+typedef struct { int32_t v[SQ_N]; } CoopSnapQ;
+typedef struct { uint32_t seq; CoopSnapQ q; } CoopSnapBase;
+void coop_snap_quant(const EneSnap* s, CoopSnapQ* q);
+int coop_snap_dequant(const CoopSnapQ* q, int idx, EneSnap* s);   /* 0: a field out of its range */
+typedef struct {                        /* sender: per slot what it sent in its last COOP_SNAP_HIST frames, the newest acknowledged */
+    CoopSnapBase h[COOP_ENE_SLOTS][COOP_SNAP_HIST];
+    uint32_t acked[COOP_ENE_SLOTS], ack;
+} CoopSnapTx;
+void coop_snaptx_reset(CoopSnapTx* t);
+void coop_snaptx_ack(CoopSnapTx* t, uint32_t ack);   /* the peer's Pose.snap_ack */
+/* one record of slot s->idx for our frame `seq` into out (cap bytes): its length, 0 when it does not fit (then nothing
+   is noted: a record coded must be sent). *full: coded against zero. */
+int coop_snaptx_put(CoopSnapTx* t, uint32_t seq, const EneSnap* s, uint8_t* out, int cap, int* full);
+typedef struct {                        /* receiver: per slot the states taken in the last COOP_SNAP_HIST frames */
+    CoopSnapBase h[COOP_ENE_SLOTS][COOP_SNAP_HIST];
+    struct { uint32_t seq; uint16_t parts; int8_t last; uint8_t bad; } f[COOP_SNAP_HIST];   /* per frame: its parts in, its
+                                           last part (-1 not yet), a record of it without its base */
+    uint32_t seq, ack;                  /* the newest frame seen, the newest taken whole (Pose.snap_ack) */
+    uint32_t n_bad;                     /* (stats) records dropped for a missing base */
+} CoopSnapRx;
+void coop_snaprx_reset(CoopSnapRx* r);
+/* the block (header and records, n bytes, nrec records) of a datagram of the sender's frame `seq`, in any order within
+   COOP_SNAP_HIST frames of the newest (a playout buffer takes late ones too): the valid snapshots (coop_check_snap)
+   decoded into out (nrec at most), their number */
+int coop_snaprx_take(CoopSnapRx* r, uint32_t seq, const uint8_t* blk, int n, int nrec, EneSnap* out);
+/* the block's syntax: its header, exactly nrec records within it, every mask bit a field (coop_check_all) */
+int coop_snap_check(const uint8_t* blk, int n, int nrec);
 
 /* ---------------------------------------------------------------- checks (0 = fine) */
 enum { COOP_OK, COOP_BAD_SIZE, COOP_BAD_HDR, COOP_BAD_VERSION, COOP_BAD_COUNT,

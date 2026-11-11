@@ -456,8 +456,8 @@ static void test_snaps(void)
     BADS(t.mdl = -2);
     BADS(t.mdl = 127);
     BADS(t.id = 100);          /* the enemy type: bhJumpEnemy[100] */
-    BADS(t.root = 2);
-    { EneSnap t = s; t.root = SNAP_ROOT_STILL; CHECK(coop_check_snap(&t) == COOP_OK); }
+    BADS(t.root = 4);          /* SNAP_ROOT_STILL, SNAP_NECK (protocol 45) */
+    { EneSnap t = s; t.root = SNAP_ROOT_STILL | SNAP_NECK; CHECK(coop_check_snap(&t) == COOP_OK); }
     BADS(t.mnw = 512);         /* B4: motion sets only as offsets 0..511 */
     BADS(t.mnw = -1);
     BADS(t.mnw = 0x7000);
@@ -478,7 +478,14 @@ static int dgram(unsigned char* buf, int nev, int nene, int ext, uint32_t sid)
     p.nev = nev; p.nene = nene; p.flags = ext ? PF_EXT : 0; p.mset = MSET_OWN;
     memcpy(buf, &p, sizeof(p));
     for (k = 0; k < nev; k++) { Event e = ev(EV_FLAGS); e.id = k + 1; memcpy(buf + n, &e, sizeof(e)); n += sizeof(e); }
-    for (k = 0; k < nene; k++) { EneSnap s; memset(&s, 0, sizeof(s)); s.idx = k; s.mdl = -1; s.mnw = MNW_KEEP; memcpy(buf + n, &s, sizeof(s)); n += sizeof(s); }
+    if (nene) {   /* protocol 45: a block of full records */
+        static CoopSnapTx t;
+        int at = n;
+        coop_snaptx_reset(&t);
+        n += COOP_SNAP_HDR;
+        for (k = 0; k < nene; k++) { EneSnap s; memset(&s, 0, sizeof(s)); s.idx = k; s.mdl = -1; s.mnw = MNW_KEEP; n += coop_snaptx_put(&t, 1, &s, buf + n, 256, NULL); }
+        buf[at] = (unsigned char)(n - at - COOP_SNAP_HDR); buf[at + 1] = (unsigned char)((n - at - COOP_SNAP_HDR) >> 8); buf[at + 2] = 0x80;
+    }
     if (ext) { memset(buf + n, 0, sizeof(PoseExt)); n += sizeof(PoseExt); }
     return n;
 }
@@ -499,10 +506,11 @@ static void test_dgrams(void)
     BADP(q.magic = 1, COOP_BAD_HDR);
     BADP(q.version = 10, COOP_BAD_VERSION);
     BADP(q.type = 9, COOP_BAD_TYPE);
-    BADP(q.rsv = 1, COOP_BAD_FIELD);              /* protocol 28: no proof here (the seal is the proof), zero */
+    BADP(q.snap_ack = 12345, COOP_OK);            /* protocol 45: the old rsv acknowledges snapshots (any frame) */
     BADP(q.sid = 78, COOP_OK);
     BADP(q.nev = 17, COOP_BAD_COUNT);             /* oversized counts */
-    BADP(q.nene = COOP_SNAP_FRAME + 1, COOP_BAD_COUNT);
+    BADP(q.nene = 5, COOP_BAD_FIELD);             /* protocol 45: more records than the block has */
+    BADP(q.nene = 3, COOP_BAD_SIZE);              /* ... or fewer */
     BADP(q.nev = 255, COOP_BAD_COUNT);
     BADP(q.nev = 2, COOP_BAD_SIZE);               /* counts that do not match the size */
     BADP(q.flags = 0, COOP_BAD_SIZE);             /* no PoseExt flagged, one there */
@@ -576,12 +584,13 @@ static void test_dgrams(void)
         CHECK(coop_check_all(b, n, 0, &nev, &nene, &ext) == COOP_BAD_FIELD);
         n = dgram(b, 3, 4, 1, 77);
     }
-    {   /* one bad snapshot too */
-        EneSnap s;
-        memcpy(&s, b + sizeof(Pose) + 3 * sizeof(Event), sizeof(s));
-        s.mdl = 40;
-        memcpy(b + sizeof(Pose) + 3 * sizeof(Event), &s, sizeof(s));
-        CHECK(coop_check_all(b, n, 1, &nev, &nene, &ext) == COOP_BAD_FIELD);
+    {   /* one bad snapshot record too: slot 255, a mask bit past the fields, a block length that is not the datagram's */
+        unsigned char* r = b + sizeof(Pose) + 3 * sizeof(Event);
+        CHECK(coop_check_all(b, n, 1, &nev, &nene, &ext) == COOP_OK);
+        r[COOP_SNAP_HDR] = 255; CHECK(coop_check_all(b, n, 1, &nev, &nene, &ext) == COOP_BAD_FIELD); r[COOP_SNAP_HDR] = 0;
+        r[2] = 0x90; CHECK(coop_check_all(b, n, 1, &nev, &nene, &ext) == COOP_BAD_SIZE); r[2] = 0x80;
+        r[0]++; CHECK(coop_check_all(b, n, 1, &nev, &nene, &ext) == COOP_BAD_SIZE); r[0]--;
+        CHECK(coop_check_all(b, n, 1, &nev, &nene, &ext) == COOP_OK);
     }
     {   /* a goodbye and a rejection are bare poses; the handshake's types never get here */
         Pose q = p;
@@ -600,7 +609,7 @@ static void test_dgrams(void)
         CHECK(coop_check_all(b, sizeof(Pose), 1, &nev, &nene, &ext) == COOP_BAD_TYPE);
     }
     /* B10: the largest frame part still fits a datagram */
-    CHECK(sizeof(Pose) + sizeof(PoseExt) + sizeof(Event) <= COOP_DGRAM_MAX && sizeof(Pose) + sizeof(EneSnap) <= COOP_DGRAM_MAX);
+    CHECK(sizeof(Pose) + sizeof(PoseExt) + sizeof(Event) <= COOP_DGRAM_MAX && sizeof(Pose) + COOP_SNAP_HDR + COOP_SNAP_REC_MAX <= COOP_DGRAM_MAX);
 }
 
 /* ---------------------------------------------------------------- transfers */
@@ -1011,7 +1020,7 @@ static void fuzz(int iters)
         if (i % 3 == 0) {   /* random bytes after a valid header */
             n = sizeof(Pose) + rnd() % (COOP_DGRAM_MAX - sizeof(Pose));
             for (k = 0; k < n; k++) b[k] = rnd();
-            if (i % 2) { Pose p; memcpy(&p, b, sizeof(p)); p.magic = COOP_MAGIC; p.version = COOP_VERSION; p.type = PKT_POSE; p.rsv = 0; memcpy(b, &p, sizeof(p)); }
+            if (i % 2) { Pose p; memcpy(&p, b, sizeof(p)); p.magic = COOP_MAGIC; p.version = COOP_VERSION; p.type = PKT_POSE; memcpy(b, &p, sizeof(p)); }
         } else {            /* a valid datagram, a few bytes or fields changed */
             int ne = rnd() % 9, ns = rnd() % 4;
             n = dgram(b, ne, ns, rnd() & 1, rnd());
@@ -1042,6 +1051,222 @@ static void fuzz(int iters)
         }
     }
     printf("fuzz: %d datagrams, %d accepted (%d events), no crash\n", iters, accepted, evs);
+}
+
+/* ---------------------------------------------------------------- snapshots, protocol 45 (CoopSnapTx / CoopSnapRx) */
+static float frnd(float lo, float hi) { return lo + (hi - lo) * (rnd() % 100000) / 100000.0f; }
+static void snap_new(EneSnap* s, int idx)   /* a valid enemy state */
+{
+    int k;
+    memset(s, 0, sizeof(*s));
+    s->idx = idx; s->id = 1 + rnd() % 60; s->mdl = rnd() % 3; s->mnw = rnd() % 512; s->mtn_no = rnd() % 40;
+    s->mode[0] = 1; s->flg = 0x1 | (rnd() & 0x80); s->hp = 200; s->hokan_rate = 0x4000; s->mtn_add = 0x10000;
+    s->px = frnd(-3000, 3000); s->py = frnd(-50, 50); s->pz = frnd(-3000, 3000); s->ay = rnd() & 0xFFFF;
+    for (k = 0; k < 6; k++) s->watr[k] = (&s->px)[k % 3] + frnd(-8, 8);
+    s->watr[6] = 2.0f; s->root = rnd() % 4;
+}
+static void snap_step(EneSnap* s, uint32_t seq)   /* a frame of it: walks, turns, animates; now and then a new motion or a hit */
+{
+    int k;
+    float dx = frnd(-1.2f, 1.2f), dz = frnd(-1.2f, 1.2f);
+    s->px += dx; s->pz += dz;
+    for (k = 0; k < 6; k++) s->watr[k] += k % 3 == 0 ? dx : k % 3 == 2 ? dz : frnd(-0.1f, 0.1f);
+    s->ay += (int)(rnd() % 400) - 200;
+    s->frm_no += s->mtn_add;
+    s->neck = ((s->neck + rnd() % 64) & 0xFFFF) | (s->neck & 0xFFFF0000u);   /* the head turning */
+    if (rnd() % 40 == 0) { s->mtn_no = rnd() % 40; s->frm_no = 0; s->hokan_count = 6; s->mtn_seq = seq; s->mtn_frm0 = 0; s->mtn_add = 0x8000 + rnd() % 0x10000; }
+    if (rnd() % 60 == 0) { s->hp -= 10; s->mode[0] = 2; s->flg ^= 0x4; }
+    if (s->hokan_count) s->hokan_count--;
+}
+static void snap_expect(const EneSnap* s, EneSnap* want)   /* what the receiver must give back */
+{
+    CoopSnapQ q;
+    coop_snap_quant(s, &q);
+    CHECK(coop_snap_dequant(&q, s->idx, want));
+}
+
+#define SIM_SLOTS 60
+typedef struct { double bytes, recs, full; int taken, lost_dg, max_gap, frames, all_frames; uint32_t bad; } SimOut;
+/* frames of SIM_SLOTS moving enemies through a channel: datagrams of `dg` bytes lost at loss %, acknowledgements
+   `delay` frames late and lost at ack_loss %; the receiver restarted at frame `restart` (0 never). Every snapshot
+   taken must be the sender's state, quantized, exactly. */
+static int sim_reorder;                 /* % of datagrams held back until after the next frame's */
+static void snap_sim(int loss, int ack_loss, int delay, int frames, int restart, int dg, SimOut* o)
+{
+    static uint8_t held[COOP_DGRAM_MAX];
+    int held_n = 0, held_rec = 0;
+    uint32_t held_seq = 0;
+    static CoopSnapTx t;
+    static CoopSnapRx r;
+    static EneSnap truth[SIM_SLOTS], out[SIM_SLOTS], truth_at[2][SIM_SLOTS];
+    static uint8_t recs[COOP_ENE_SLOTS * COOP_SNAP_REC_MAX], blk[COOP_DGRAM_MAX];
+    uint32_t acks[64] = { 0 }, seq;
+    int last[SIM_SLOTS], k, rl[SIM_SLOTS];
+    memset(o, 0, sizeof(*o));
+    coop_snaptx_reset(&t); coop_snaprx_reset(&r);
+    for (k = 0; k < SIM_SLOTS; k++) { snap_new(&truth[k], k * 4); last[k] = 0; }
+    for (seq = 1; seq <= (uint32_t)frames; seq++) {
+        int used = 0, i = 0, ro = 0, part = 0, got_all = 1, got[SIM_SLOTS] = { 0 };
+        for (k = 0; k < SIM_SLOTS; k++) {
+            int full;
+            snap_step(&truth[k], seq);
+            rl[k] = coop_snaptx_put(&t, seq, &truth[k], recs + used, (int)sizeof(recs) - used, &full);
+            CHECK(rl[k] > 0 && rl[k] <= COOP_SNAP_REC_MAX);
+            used += rl[k]; o->full += full;
+        }
+        o->bytes += used; o->recs += SIM_SLOTS;
+        while (i < SIM_SLOTS) {   /* datagrams as send_frame lays them out */
+            int b = 0, bl = 0, n;
+            while (i + b < SIM_SLOTS && COOP_SNAP_HDR + bl + rl[i + b] <= dg) bl += rl[i + b++];
+            blk[0] = (uint8_t)bl; blk[1] = (uint8_t)(bl >> 8); blk[2] = (uint8_t)(part++ | (i + b == SIM_SLOTS ? 0x80 : 0));
+            memcpy(blk + COOP_SNAP_HDR, recs + ro, bl);
+            CHECK(coop_snap_check(blk, COOP_SNAP_HDR + bl, b) == COOP_OK);
+            if (sim_reorder && !held_n && (int)(rnd() % 100) < sim_reorder) {   /* this one comes late */
+                memcpy(held, blk, COOP_SNAP_HDR + bl); held_n = COOP_SNAP_HDR + bl; held_rec = b; held_seq = seq;
+            } else if ((int)(rnd() % 100) >= loss) {
+                n = coop_snaprx_take(&r, seq, blk, COOP_SNAP_HDR + bl, b, out);
+                for (k = 0; k < n; k++) {
+                    EneSnap want;
+                    int s = out[k].idx / 4;
+                    snap_expect(&truth[s], &want);
+                    CHECK(s < SIM_SLOTS && !memcmp(&want, &out[k], sizeof(want)));
+                    got[s] = 1;
+                }
+                o->taken += n;
+            } else o->lost_dg++;
+            i += b; ro += bl;
+        }
+        if (held_n && held_seq != seq) {   /* the late one, after this frame's */
+            int n = coop_snaprx_take(&r, held_seq, held, held_n, held_rec, out);
+            for (k = 0; k < n; k++) {
+                EneSnap want;
+                snap_expect(&truth_at[held_seq % 2][out[k].idx / 4], &want);
+                CHECK(!memcmp(&want, &out[k], sizeof(want)));
+            }
+            held_n = 0;
+        }
+        memcpy(truth_at[seq % 2], truth, sizeof(truth));
+        for (k = 0; k < SIM_SLOTS; k++) {
+            if (got[k]) { if ((int)seq - last[k] - 1 > o->max_gap && seq > 1) o->max_gap = (int)seq - last[k] - 1; last[k] = (int)seq; }
+            else got_all = 0;
+        }
+        o->all_frames += got_all;
+        acks[(seq + delay) % 64] = (int)(rnd() % 100) >= ack_loss ? r.ack : 0;   /* our Pose.snap_ack on its way back */
+        if (acks[seq % 64]) coop_snaptx_ack(&t, acks[seq % 64]);
+        acks[seq % 64] = 0;
+        if (restart && seq == (uint32_t)restart) coop_snaprx_reset(&r);
+    }
+    o->frames = frames;
+    o->bad = r.n_bad;
+}
+
+static void test_snapcodec(void)
+{
+    SimOut o;
+    int i, k;
+    {   /* the quantization: positions and the capsule within half a step, frames within 1/256 (the whole frame exact), the rest exact */
+        double pe = 0, fe = 0;
+        for (i = 0; i < 20000; i++) {
+            EneSnap s, d;
+            CoopSnapQ q;
+            snap_new(&s, rnd() % COOP_ENE_SLOTS);
+            s.frm_no = rnd() & 0x7FFFFFF; s.mtn_frm0 = rnd() & 0x7FFFFF; s.ax = (int)rnd(); s.az = -(int)(rnd() & 0xFFFF); s.flg2 = rnd(); s.stflg = rnd();
+            s.mdflg = rnd(); s.hp = (int)rnd(); s.hokan_rate = (int)rnd(); s.mtn_md = rnd() & 3; s.mtn_seq = rnd(); s.neck = rnd();
+            s.mode[1] = rnd(); s.mode[3] = rnd(); s.mnw = i & 1 ? MNW_ROOM : MNW_KEEP; s.mdl = -1;
+            coop_snap_quant(&s, &q);
+            CHECK(coop_snap_dequant(&q, s.idx, &d));
+            CHECK(coop_check_snap(&d) == COOP_OK);
+            pe = fmax(pe, fabs(d.px - s.px)); pe = fmax(pe, fabs(d.pz - s.pz)); pe = fmax(pe, fabs(d.py - s.py));
+            for (k = 0; k < 7; k++) pe = fmax(pe, fabs(d.watr[k] - s.watr[k]));
+            fe = fmax(fe, (s.frm_no - d.frm_no) / 65536.0);
+            CHECK(d.frm_no >> 16 == s.frm_no >> 16 && d.frm_no <= s.frm_no && s.frm_no - d.frm_no < 256);
+            CHECK(d.idx == s.idx && d.ax == s.ax && d.ay == s.ay && d.az == s.az && d.mtn_no == s.mtn_no && d.mtn_md == s.mtn_md);
+            CHECK(d.flg == s.flg && d.flg2 == s.flg2 && d.stflg == s.stflg && d.mdflg == s.mdflg && d.hp == s.hp && d.hokan_rate == s.hokan_rate);
+            CHECK(d.hokan_count == s.hokan_count && d.id == s.id && d.root == s.root && d.mdl == s.mdl && d.mnw == s.mnw && !memcmp(d.mode, s.mode, 4));
+            CHECK(d.mtn_add == s.mtn_add && d.mtn_seq == s.mtn_seq && d.neck == s.neck && d.mtn_frm0 >> 8 == s.mtn_frm0 >> 8);
+        }
+        CHECK(pe <= 0.5 / COOP_SNAP_Q + 1e-3 && fe < 1.0 / 256);
+        printf("snapshots: quantization error at most %.5f units (1/%g unit steps), %.5f frames\n", pe, COOP_SNAP_Q, fe);
+    }
+    snap_sim(0, 0, 2, 600, 0, 1100, &o);   /* no loss: every slot every frame, small records */
+    CHECK(o.all_frames == o.frames && o.bad == 0 && o.max_gap == 0);
+    CHECK(o.bytes / o.recs < 20.0 && o.full <= 3 * SIM_SLOTS);   /* (full until the first acknowledgement is back) */
+    printf("snapshots, no loss: %.1f bytes per record, %.0f bytes per frame of %d moving enemies\n", o.bytes / o.recs, o.bytes / o.frames, SIM_SLOTS);
+    snap_sim(10, 10, 4, 3000, 0, 400, &o);   /* 10 % datagrams and acknowledgements lost, 4 frames back: never a wrong one, never a base missing */
+    CHECK(o.bad == 0 && o.max_gap <= 8 && o.taken > 0.8 * o.frames * SIM_SLOTS);
+    printf("snapshots, 10%% loss: %.1f bytes per record, %.2f full records per frame, longest gap %d frames, %.1f%% of frames whole\n",
+           o.bytes / o.recs, o.full / o.frames, o.max_gap, 100.0 * o.all_frames / o.frames);
+    snap_sim(50, 50, 6, 2000, 0, 300, &o);   /* half of everything lost: still never wrong */
+    CHECK(o.bad == 0 && o.taken > 0);
+    snap_sim(0, 100, 2, 200, 0, 1100, &o);   /* no acknowledgement ever: full records, all taken */
+    CHECK(o.bad == 0 && o.all_frames == o.frames && o.full == o.recs);
+    sim_reorder = 5;   /* 5 % of datagrams a frame late, 5 % lost: late ones are taken and exact */
+    snap_sim(5, 5, 3, 2000, 0, 400, &o);
+    CHECK(o.bad == 0 && o.max_gap <= 8);
+    sim_reorder = 0;
+    snap_sim(2, 2, 3, 600, 300, 600, &o);    /* the receiver restarts: records without their base until they age out, then whole again */
+    CHECK(o.bad > 0 && o.max_gap <= COOP_SNAP_HIST + 3 + 4 && o.all_frames > o.frames - COOP_SNAP_HIST - 40);
+    printf("snapshots, receiver restarted: %u records dropped, longest gap %d frames\n", o.bad, o.max_gap);
+    {   /* older frames are not taken; a frame is whole only with all its parts */
+        static CoopSnapTx t;
+        static CoopSnapRx r;
+        EneSnap s, out[2];
+        uint8_t b[256];
+        int n;
+        coop_snaptx_reset(&t); coop_snaprx_reset(&r);
+        snap_new(&s, 7);
+        n = coop_snaptx_put(&t, 10, &s, b + COOP_SNAP_HDR, 200, NULL);
+        b[0] = (uint8_t)n; b[1] = 0; b[2] = 1 | 0x80;   /* part 1, the last: part 0 missing */
+        CHECK(coop_snaprx_take(&r, 10, b, n + COOP_SNAP_HDR, 1, out) == 1 && r.ack == 0);
+        b[2] = 0;
+        CHECK(coop_snaprx_take(&r, 10, b, n + COOP_SNAP_HDR, 1, out) == 1 && r.ack == 10);
+        CHECK(coop_snaprx_take(&r, 9, b, n + COOP_SNAP_HDR, 1, out) == 1 && r.ack == 10);   /* a late frame (playout buffers take them) */
+        CHECK(coop_snaprx_take(&r, 10 - COOP_SNAP_HIST, b, n + COOP_SNAP_HDR, 1, out) == 0);   /* too late */
+        CHECK(coop_snaptx_put(&t, 0, &s, b, 200, NULL) == 0);
+        coop_snaptx_ack(&t, 10);
+        CHECK(t.acked[7] == 10);
+        coop_snaptx_ack(&t, 11);   /* a frame that never had slot 7 */
+        CHECK(t.acked[7] == 10);
+        n = coop_snaptx_put(&t, 11, &s, b + COOP_SNAP_HDR, 200, NULL);
+        CHECK(n == 3 && b[COOP_SNAP_HDR + 1] == 1);   /* unchanged: slot, age 1, an empty mask */
+        CHECK(coop_snaptx_put(&t, 12, &s, b, 2, NULL) == 0);   /* no room: nothing noted */
+        CHECK(t.h[7][12 % COOP_SNAP_HIST].seq != 12);
+    }
+}
+
+static void fuzz_snap(int iters)
+{
+    static CoopSnapTx t;
+    static CoopSnapRx r;
+    static EneSnap truth[8], out[COOP_ENE_SLOTS];
+    static uint8_t b[COOP_DGRAM_MAX];
+    uint32_t seq = 1;
+    int i, k, ok = 0, taken = 0;
+    coop_snaptx_reset(&t); coop_snaprx_reset(&r);
+    for (k = 0; k < 8; k++) snap_new(&truth[k], k);
+    for (i = 0; i < iters; i++, seq++) {
+        int n = COOP_SNAP_HDR, nrec, got;
+        if (i % 2) {   /* a valid frame (bases on both sides), then a few bytes changed */
+            for (k = 0; k < 8; k++) { snap_step(&truth[k], seq); n += coop_snaptx_put(&t, seq, &truth[k], b + n, (int)sizeof(b) - n, NULL); }
+            b[0] = (uint8_t)(n - COOP_SNAP_HDR); b[1] = (uint8_t)((n - COOP_SNAP_HDR) >> 8); b[2] = 0x80;
+            nrec = 8;
+            if (rnd() % 3) for (k = rnd() % 4; k >= 0; k--) b[rnd() % n] = rnd();
+            if (rnd() % 8 == 0) nrec = rnd() % 12;
+            if (rnd() % 8 == 0) n = rnd() % (n + 4);
+        } else {       /* random bytes, a random count */
+            n = rnd() % (int)sizeof(b);
+            for (k = 0; k < n; k++) b[k] = rnd();
+            if (rnd() & 1 && n >= 2) { b[0] = (uint8_t)(n - COOP_SNAP_HDR); b[1] = (uint8_t)((n - COOP_SNAP_HDR) >> 8); }
+            nrec = rnd() % 256;
+        }
+        ok += coop_snap_check(b, n, nrec) == COOP_OK;
+        got = coop_snaprx_take(&r, rnd() % 4 ? seq : rnd(), b, n, nrec, out);
+        CHECK(got >= 0 && got <= nrec);
+        for (k = 0; k < got; k++) CHECK(coop_check_snap(&out[k]) == COOP_OK);
+        taken += got;
+        coop_snaptx_ack(&t, rnd() % 3 ? r.ack : rnd());
+    }
+    printf("fuzz: %d snapshot blocks, %d well-formed, %d snapshots taken, no crash\n", iters, ok, taken);
 }
 
 /* ---------------------------------------------------------------- enemy targets (coop_pick_target) */
@@ -1251,6 +1476,8 @@ int main(int argc, char** argv)
     test_trig();
     test_wake();
     fuzz(iters);
+    test_snapcodec();
+    fuzz_snap(iters);
     printf("%d checks, %d failed\n", checks, fails);
     return fails != 0;
 }
