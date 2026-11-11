@@ -199,6 +199,13 @@ int coop_snaptx_put(CoopSnapTx* t, uint32_t seq, const EneSnap* s, uint8_t* out,
 }
 
 void coop_snaprx_reset(CoopSnapRx* r) { memset(r, 0, sizeof(*r)); }
+void coop_snaptx_forget(CoopSnapTx* t, int idx)
+{
+    if (idx < 0 || idx >= COOP_ENE_SLOTS) return;
+    memset(t->h[idx], 0, sizeof(t->h[idx]));
+    t->acked[idx] = 0;
+}
+void coop_snaprx_forget(CoopSnapRx* r, int idx) { if (idx >= 0 && idx < COOP_ENE_SLOTS) memset(r->h[idx], 0, sizeof(r->h[idx])); }
 int coop_snaprx_take(CoopSnapRx* r, uint32_t seq, const uint8_t* blk, int n, int nrec, EneSnap* out)
 {
     uint32_t d[SQ_N];
@@ -351,8 +358,10 @@ static int zero_or(const char* b, int n, const char* set)
 }
 
 /* events only the host sends (it runs the session and the enemies), and those only a guest sends */
-static int host_only(int t) { return t == EV_PLY_HIT || t == EV_BLOB || t == EV_GRAB || t == EV_BOXFIX || t == EV_SPAWN || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED || t == EV_CASTOFF; }
-static int guest_only(int t) { return t == EV_UNGRAB || t == EV_GONE || t == EV_OWN; }
+/* (protocol 46: EV_PLY_HIT, EV_GRAB and EV_UNGRAB go either way - with OPT2_OWNERSHIP the guest runs enemies too;
+   coop_glue.c takes them from the guest only under that rule) */
+static int host_only(int t) { return t == EV_BLOB || t == EV_BOXFIX || t == EV_SPAWN || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED || t == EV_CASTOFF; }
+static int guest_only(int t) { return t == EV_GONE || t == EV_OWN; }
 
 int coop_check_event(const Event* e, int from_host)
 {
@@ -389,7 +398,9 @@ int coop_check_event(const Event* e, int from_host)
         return e->u.lost.item > 0 && e->u.lost.item < 156 ? COOP_OK : COOP_BAD_FIELD;
     case EV_GRAB:
     case EV_UNGRAB:
-        if (e->idx >= COOP_ENE_SLOTS || e->u.gr.state > 1 || e->u.gr.pset > 1) return COOP_BAD_FIELD;
+    case EV_ENEOWN:   /* state: 1 with its state, 0 without (EV_ENEOWN: refused, run it on), 2 EV_UNGRAB: the grab is over and
+                         the runner keeps it / EV_ENEOWN: taken back */
+        if (e->idx >= COOP_ENE_SLOTS || e->u.gr.state > (e->type == EV_GRAB ? 1 : 2) || e->u.gr.pset > 1) return COOP_BAD_FIELD;
         if (e->u.gr.mdl < -1 || e->u.gr.mdl >= 16 || e->u.gr.cmdl < -1 || e->u.gr.cmdl >= 16) return COOP_BAD_FIELD;
         for (k = 0; k < 2; k++) {
             int m = k ? e->u.gr.cmnw : e->u.gr.mnw;
@@ -1063,6 +1074,17 @@ static int32_t ang_at(int32_t a0, int32_t a1, double t)   /* from a0 towards a1 
     return a0 >= 0 && a0 < 0x10000 ? r & 0xFFFF : r;
 }
 
+/* frm_no at sender frame P from a's anchor (not wrapped: the caller knows the motion's length), 0: none */
+static int anchor_at(const EneSnap* a, const EneSnap* s0, uint32_t P, int32_t* f)
+{
+    int64_t v;
+    if (!a->mtn_seq || (a->mtn_md & 0x1) || a->mtn_no != s0->mtn_no || a->mnw != s0->mnw || (int32_t)(P - a->mtn_seq) < 0) return 0;
+    v = (int64_t)a->mtn_frm0 + (int64_t)(int32_t)(P - a->mtn_seq) * a->mtn_add;
+    if (v > INT32_MAX || v < INT32_MIN) return 0;
+    *f = (int32_t)v;
+    return 1;
+}
+
 int coop_hist_at(const CoopSnapHist* h, uint32_t P, uint32_t applied, EneSnap* out, uint32_t* from)
 {
     int j, b = -1, o = -1, n = -1;   /* the newest at or before P, the one before that, the first after P */
@@ -1080,21 +1102,28 @@ int coop_hist_at(const CoopSnapHist* h, uint32_t P, uint32_t applied, EneSnap* o
     if ((int32_t)(P - h->seq[b]) > COOP_PO_EXTRA) return (int32_t)(h->seq[b] - applied) > 0 ? COOP_AT_OLD : COOP_AT_NONE;
     {
         const EneSnap* s0 = &h->s[b];
-        const EneSnap* s1;
+        const EneSnap* s1 = NULL;
+        const EneSnap* a;
         int interp = n >= 0 && (int32_t)(h->seq[n] - h->seq[b]) <= 2 * COOP_PO_EXTRA;
+        int32_t f;
         double gap, t;
-        if (!interp && (o < 0 || (int32_t)(h->seq[b] - h->seq[o]) > COOP_PO_EXTRA)) return COOP_AT_EXTRAP;   /* one snapshot: held */
-        s1 = interp ? &h->s[n] : &h->s[o];
-        gap = interp ? (double)(h->seq[n] - h->seq[b]) : (double)(h->seq[b] - h->seq[o]);
-        t = (double)(P - h->seq[b]) / gap * (interp ? 1 : -1);   /* P's place from s0 towards s1 (the older one: backwards) */
-        if (fabsf(s1->px - s0->px) + fabsf(s1->py - s0->py) + fabsf(s1->pz - s0->pz) < 20.0 * gap) {   /* (2 m a frame: a jump, not a move) */
-            out->px = (float)(s0->px + (s1->px - s0->px) * t);
-            out->py = (float)(s0->py + (s1->py - s0->py) * t);
-            out->pz = (float)(s0->pz + (s1->pz - s0->pz) * t);
-            out->ax = ang_at(s0->ax, s1->ax, t); out->ay = ang_at(s0->ay, s1->ay, t); out->az = ang_at(s0->az, s1->az, t);
+        if (interp || (o >= 0 && (int32_t)(h->seq[b] - h->seq[o]) <= COOP_PO_EXTRA)) {   /* (else one snapshot: its place held) */
+            s1 = interp ? &h->s[n] : &h->s[o];
+            gap = interp ? (double)(h->seq[n] - h->seq[b]) : (double)(h->seq[b] - h->seq[o]);
+            t = (double)(P - h->seq[b]) / gap * (interp ? 1 : -1);   /* P's place from s0 towards s1 (the older one: backwards) */
+            if (fabsf(s1->px - s0->px) + fabsf(s1->py - s0->py) + fabsf(s1->pz - s0->pz) < 20.0 * gap) {   /* (2 m a frame: a jump, not a move) */
+                out->px = (float)(s0->px + (s1->px - s0->px) * t);
+                out->py = (float)(s0->py + (s1->py - s0->py) * t);
+                out->pz = (float)(s0->pz + (s1->pz - s0->pz) * t);
+                out->ax = ang_at(s0->ax, s1->ax, t); out->ay = ang_at(s0->ay, s1->ay, t); out->az = ang_at(s0->az, s1->az, t);
+            }
+            if (s1->mtn_no == s0->mtn_no && s1->mnw == s0->mnw && s1->mdl == s0->mdl && (interp ? s1->frm_no >= s0->frm_no : s1->frm_no <= s0->frm_no))
+                out->frm_no = s0->frm_no + (int32_t)lround((double)(s1->frm_no - s0->frm_no) * t);   /* one motion, going forward */
         }
-        if (s1->mtn_no == s0->mtn_no && s1->mnw == s0->mnw && s1->mdl == s0->mdl && (interp ? s1->frm_no >= s0->frm_no : s1->frm_no <= s0->frm_no))
-            out->frm_no = s0->frm_no + (int32_t)lround((double)(s1->frm_no - s0->frm_no) * t);   /* one motion, going forward */
+        /* the motion's anchor (protocol 47) gives the frame exactly while the sender kept it: s0's, or from the next
+           snapshot's anchor frame on (between) that one's, in the same motion */
+        a = interp && s1->mtn_seq && (int32_t)(P - s1->mtn_seq) >= 0 ? s1 : s0;
+        if (anchor_at(a, s0, P, &f)) out->frm_no = f;
         return interp ? COOP_AT_INTERP : COOP_AT_EXTRAP;
     }
 }

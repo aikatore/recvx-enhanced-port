@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 45               /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 47                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -50,12 +50,15 @@ extern "C" {
                                                enemies from the same seed; nothing on the wire changed);
                                            43: EV_EOPTS cast_enemy, cast_enemy_off (the cutscene cast's "Enemy Models" and its
                                                "Custom" list; Event 96 bytes);
-                                           45 (prototype, branch netexp-phase2): enemy snapshots quantized and delta-coded against
-                                               the frame the peer acknowledged (CoopSnapTx/Rx; Pose.snap_ack in the old rsv), with
-                                               the motion's anchor (mtn_seq, mtn_frm0), speed (mtn_add) and a zombie's neck; no
-                                               per-frame count cap: COOP_SNAP_BUDGET bytes in priority order */
+                                           47 (prototype, branch netexp-combined; 44-46 were the separate phase prototypes):
+                                               enemy snapshots quantized and delta-coded against the frame the peer acknowledged
+                                               (CoopSnapTx/Rx; Pose.snap_ack in the old rsv), with the motion's anchor (mtn_seq,
+                                               mtn_frm0), speed (mtn_add) and a zombie's neck, no per-frame count cap:
+                                               COOP_SNAP_BUDGET bytes in priority order; OPT2_OWNERSHIP, EV_ENEOWN (an enemy
+                                               changes hands: the player it is engaged with runs it), EV_PLY_HIT / EV_GRAB /
+                                               EV_UNGRAB either way, EV_UNGRAB state 2 (the grab is over, the runner keeps it) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
-#define COOP_EV_FRAME 16                /* events per frame (over the frame's datagrams) */
+#define COOP_EV_FRAME 16                /* events per datagram (the receiver's check; a frame sends up to 96: coop_glue.c EV_BURST) */
 #define COOP_SNAP_BUDGET 2400           /* enemy snapshot bytes per frame (records past it wait, by priority) */
 #define COOP_GONE_MAX 26                /* EV_GONE: enemy slots per event */
 #define COOP_ENE_SLOTS 255              /* enemy slots 0..254 (pc_prelude.h PC_ENE_SLOTS); 255 in a slot byte: none */
@@ -79,7 +82,9 @@ enum { OPT_INDIVIDUAL = 1, OPT_TRADE_FREEZE = 2,   /* Pose.opts: the host's sess
        OPT_ALL = 255 };
 enum { OPT2_EXTRA_OBJECTS = 1,          /* Pose.opts2 (protocol 33): extra item boxes and blue herb planters (pc/glue/extras_glue.c) */
        OPT2_HEADSHOTS = 2,              /* (protocol 41) third person "Headshots & Piercing": rifle head damage, head bursts, piercing (tps_glue.c) */
-       OPT2_ALL = 3 };
+       OPT2_OWNERSHIP = 4,              /* (protocol 46, prototype) engaged-player enemy ownership: common enemies run in
+                                           the game of the player they are engaged with (coop_glue.c "Phase 3") */
+       OPT2_ALL = 7 };
 enum { BUSY_NONE, BUSY_EVENT, BUSY_MENU, BUSY_BOX, BUSY_TRADE };
 enum { MSET_OWN = -1, MSET_ROOM = -2, MSET_NONE = -3 };
 #define MNW_ROOM 0x7FFE
@@ -172,7 +177,7 @@ enum { REC_UNKNOWN, REC_NONE, REC_HAVE, REC_OFF };   /* PoseExt.rec: not known y
 enum { EV_ENE_HIT = 1, EV_PLY_HIT = 2, EV_BLOB = 3, EV_FLAGS = 4, EV_PICKUP = 5, EV_LOST = 6,
        EV_ESTATE = 7, EV_GRAB = 8, EV_UNGRAB = 9, EV_TRIG = 10, EV_TRADE = 11, EV_BOX = 12, EV_BOXFIX = 13,
        EV_SPAWN = 14, EV_EOPTS = 15, EV_ATR = 16, EV_FX = 17, EV_GRANT = 18, EV_TSCREEN = 19, EV_GONE = 20, EV_OWN = 21,
-       EV_SKIP = 22, EV_BRSEED = 23, EV_CASTOFF = 24, EV_TYPES };
+       EV_SKIP = 22, EV_BRSEED = 23, EV_CASTOFF = 24, EV_ENEOWN = 25, EV_TYPES };
 #define COOP_BR_STR 68                  /* EV_BRSEED: BioRand's seed string (biorand_opts.h BIORAND_SEED_LEN), no NUL */
 #define COOP_BR_DIG 12                  /*   and the first hex digits of the host's CLI archive's SHA-256 */
 #define COOP_CASTOFF_CHUNK 64           /* EV_CASTOFF: bytes per event */
@@ -443,6 +448,10 @@ typedef struct {                        /* receiver: per slot the states taken i
     uint32_t n_bad;                     /* (stats) records dropped for a missing base */
 } CoopSnapRx;
 void coop_snaprx_reset(CoopSnapRx* r);
+/* (protocol 47) a slot that changed hands: its bases go (the sender's next record of it is full; the receiver takes
+   only that) */
+void coop_snaptx_forget(CoopSnapTx* t, int idx);
+void coop_snaprx_forget(CoopSnapRx* r, int idx);
 /* the block (header and records, n bytes, nrec records) of a datagram of the sender's frame `seq`, in any order within
    COOP_SNAP_HIST frames of the newest (a playout buffer takes late ones too): the valid snapshots (coop_check_snap)
    decoded into out (nrec at most), their number */
@@ -638,7 +647,9 @@ static inline double coop_playout_margin_ms(const CoopPlayout* po) { return po->
    its frame), else carried on from the newest before it at the last two's rate for at most COOP_PO_EXTRA frames
    (COOP_AT_EXTRAP); older than that only once, if it was not applied yet (COOP_AT_OLD; `applied`: the frame of the
    snapshot applied last), else COOP_AT_NONE (the slot keeps what it shows). The other fields are the newest
-   snapshot's at or before P (*from: its frame). The caller checks the frame against its motion. */
+   snapshot's at or before P (*from: its frame). Between and carried on, a snapshot's motion anchor (mtn_seq, protocol
+   47) gives the frame: mtn_frm0 + (P - mtn_seq) * mtn_add, not wrapped. The caller wraps it in its motion's length
+   and checks the frame against its motion. */
 #define COOP_HIST 8
 typedef struct CoopSnapHist { uint32_t seq[COOP_HIST]; EneSnap s[COOP_HIST]; } CoopSnapHist;   /* seq 0: empty */
 enum { COOP_AT_NONE, COOP_AT_EXACT, COOP_AT_INTERP, COOP_AT_EXTRAP, COOP_AT_OLD };

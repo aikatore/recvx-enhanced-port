@@ -36,21 +36,23 @@ void coop_test_aids(CoopTest* t)
         if (bg && in > atoi(bg)) { bg = NULL; t->req = COOP_REQ_STOP; host_log("coop: test: disconnect while grabbed\n"); }
     }
     if (!t->on || t->echo) return;
-    {   /* test aid: RECVX_COOP_KILL="hostframe:slot[,...]": a lethal hit on our enemy in that slot, as a
-           shot leaves it (a puppet's goes to the host as EV_ENE_HIT, like our weapon's) */
+    {   /* test aid: RECVX_COOP_KILL="hostframe:slot[:damage][,...]": a lethal hit (or one of that damage) on our enemy in
+           that slot, as a shot leaves it (a puppet's goes to the side running it as EV_ENE_HIT, like our weapon's) */
         static const char* kl = (const char*)-1;
         unsigned int f;
-        int k, n;
+        int k, n, dam = 1000, m;
         if (kl == (const char*)-1) kl = getenv("RECVX_COOP_KILL");
         if (kl && sys && plp && t->in_game && sscanf(kl, "%u:%d%n", &f, &k, &n) == 2 && t->clock >= f) {
+            if (kl[n] == ':' && sscanf(kl + n + 1, "%d%n", &dam, &m) == 1) n += m + 1;
+            if (dam != 1000) host_log("coop: test: hit %d on enemy %d (%s) at host frame %u\n", dam, k, k >= 0 && k < PC_ENE_SLOTS && t->owned[k] != t->host ? "we run it" : "a puppet", t->clock);
             if (k >= 0 && k < PC_ENE_SLOTS && (ene[k].flg & 0x1) && ene[k].mlwP) {
-                ene[k].dam[1] += 1000;   /* (bhEne_CalcDamage skips joint 0) */
+                ene[k].dam[1] += dam;   /* (bhEne_CalcDamage skips joint 0) */
                 ene[k].flg |= 0x4;
                 ene[k].djnt_no = 1;
                 ene[k].wpnr_no = 3;      /* the handgun */
                 ene[k].dpx = ene[k].px; ene[k].dpy = ene[k].py + 10; ene[k].dpz = ene[k].pz;
             }
-            host_log("coop: test: lethal hit on enemy %d (hp %d, owned %d) at host frame %u\n", k, k >= 0 && k < PC_ENE_SLOTS ? ene[k].hp : 0, k >= 0 && k < PC_ENE_SLOTS ? t->owned[k] : 0, t->clock);
+            if (dam == 1000) host_log("coop: test: lethal hit on enemy %d (hp %d, owned %d) at host frame %u\n", k, k >= 0 && k < PC_ENE_SLOTS ? ene[k].hp : 0, k >= 0 && k < PC_ENE_SLOTS ? t->owned[k] : 0, t->clock);
             kl = kl[n] == ',' ? kl + n + 1 : NULL;
         }
     }

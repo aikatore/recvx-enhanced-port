@@ -1032,6 +1032,28 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   target rule leaves it for the partner), so none attacks the reading player.
 * **Kills while the joiner ran the room** (`EV_GONE`): when the host's enemies take over, the joiner
   names its dead enemies and the host hides its live copies of the same type and version.
+* **Engaged-player ownership** (prototype on branch `netexp-phase3`, protocol 46, the host's rule `OPT2_OWNERSHIP`;
+  `RECVX_COOP_OWNERSHIP=0` on the host turns it off): a zombie (its body with its upper half) runs in the game of the
+  player it is engaged with, and the other game shows it as a puppet of that game's snapshots, so that player's
+  shots react on its next frame and its grabs and bites are local. `owned[i]` keeps its meaning (the guest runs
+  slot i); either game runs the target rule with the partner's stand-in, sends `EV_PLY_HIT`, and hands a zombie
+  grab of the stand-in to the victim's game (`EV_GRAB` either way; `EV_UNGRAB` state 2: the grab is over, the runner
+  keeps the zombie).
+  * **Who**: the only player that shot it in the last 5 s (150 frames), unless it is within 1.5 m of the other player it
+    goes for; else its target. Only the runner hands it over, after 8 frames of that preference and at most once per
+    45 frames, between attacks: in its Move, alive, awake (hittable, not the waiting type 8), not driven by an event,
+    not the holder of the runner's busy flag, its upper half linked. Bosses, other types, event and script enemies
+    and the zombie's helper parts (31..38) stay as before.
+  * **How**: the enemy's and its upper half's state (`ene_pack`, 3168 bytes) as `EV_ESTATE` chunks plus `EV_ENEOWN`
+    (state 1) in the same frame: up to 96 events per frame (`COOP_EV_BURST`), an event sent once goes again only
+    after a round trip and a frame. The receiver takes it whole (same type and model in the slot, the same upper half,
+    the state plausible, no event of its own on it, not in a door) or refuses it (`EV_ENEOWN` state 0: it runs on in
+    the sender's game, as it was left there). The sender's copy stands still until the new runner's first snapshot
+    (a round trip and a frame).
+  * **Leaving**: the guest gives back what it runs, with the state, when it leaves the room, opens a menu or plays a
+    cutscene of its own; at its room change the host releases what is left. The host takes them back (`EV_ENEOWN`
+    state 2) when no snapshot of one came for 10 s while both play in the room, when an event of its own drives one,
+    and at the partner's time-out; the guest drops them when the host plays in another room.
 
 ### World events and records
 
@@ -1398,7 +1420,7 @@ interpolated with the in-between frames; it snaps on camera cuts and in vanilla 
 
 ## Protocol 42
 
-`COOP_VERSION` is **45** (the prototype branch netexp-phase2; main has 43); both players need builds with the same version (a mismatch is reported,
+`COOP_VERSION` is **47** (the prototype branch `netexp-combined`; main has 43); both players need builds with the same version (a mismatch is reported,
 e.g. "The host uses co-op compatibility version 38; yours is 40. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
@@ -1416,7 +1438,8 @@ and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid
 in the first of the pose's spare bytes (`OPT2_EXTRA_OBJECTS` 1, see "Extra item boxes and herbs"; unknown bits refused; the pose stays 112
 bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. 37 `Pose.legs` and `legs_frm` in the two spare bytes (third person "Move While Aiming": the legs walking under the aim, see "Pose"). 38 `EV_EOPTS` `voices`, "Randomize Voice Lines" ([ACTORS.md](ACTORS.md) "Voice lines"; the event stays 88 bytes). 39 `EV_EOPTS` fills the union's 80 bytes with `types` (the randomizer's Types per Room) and `rate[32]` (its Custom rates), `variety` 2 (Custom) and `extra` up to 8 (the event stays 88 bytes; [ENEMIES.md](ENEMIES.md) "Randomizer"). 40 `EV_FX` of `FX_REACT` (third person "Locational Hit Reactions": the region where the sender's shot hit a zombie and the shot's direction, see "Effects and voices"; the event is unchanged in size). 41 `OPT2_HEADSHOTS` 2 in `Pose.opts2`, the host's "Headshots & Piercing" (the rifles' head damage, head bursts on killing head hits, the sniper rifle's piercing; [THIRDPERSON.md](THIRDPERSON.md#headshots-and-piercing)); the pose is unchanged in size. 42 the randomizer makes the Hunter and the Sweeper two kinds in Wild and Mild too (as in Custom; [ENEMIES.md](ENEMIES.md) "Randomizer"), so the same seed places other enemies (nothing on the wire changed); 43 `EV_EOPTS` carries the cutscene cast's
 "Enemy Models" (`cast_enemy` 0..3) and its own "Custom" list (`cast_enemy_off`, 4 bytes: a bit per entry of the enemies'
-list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 45 (prototype) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (prototype, `netexp-combined`; 44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
+`EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1748,7 +1771,8 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_REJOIN="frame,..."` | Join again (new session). |
 | `RECVX_COOP_KICK=n` | Host: "Remove Partner" at frame n. |
 | `RECVX_COOP_BYE_GRABBED=n` | Joiner: Disconnect n frames into a zombie grab it runs. |
-| `RECVX_COOP_KILL="hostframe:slot,..."` | A lethal hit on our enemy in that slot. |
+| `RECVX_COOP_KILL="hostframe:slot[:damage],..."` | A lethal hit (or one of that damage) on our enemy in that slot, as the weapon code leaves it. |
+| `RECVX_COOP_OWNERSHIP=0` | (host, branch `netexp-phase3`) No engaged-player ownership: the host runs the enemies as before. |
 | `RECVX_COOP_WARP="hostframe:x:z,..."` | Both players to x/z at that host frame. |
 | `RECVX_COOP_VOMIT="hostframe,..."` | Host: the walking zombie nearest the partner vomits. |
 | `RECVX_COOP_CRAWL="hostframe,..."` | Host: its walking zombies become crawlers (as a knock-down with little health left), which crawl towards their target and grab its legs. |
