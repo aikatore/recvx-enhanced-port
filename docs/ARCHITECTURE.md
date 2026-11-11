@@ -146,7 +146,8 @@ point: the partial frame is executed and the game waits for the pixels.
   compression metadata; radeonsi draws a partial one like the sprite. Ryzen iGPU, RM_0060, 4x: an
   executed frame 9.81 -> 8.53 ms, an in-between image 9.34 -> 7.97 ms (`RECVX_AB=1`). With AA or
   Deband the draw buffer keeps the box clear (the filters reach 16 rows into the zeros).
-- StoreRenderTex captures (`gs_capture_rt`) reuse up to 8 textures: RM_4030 made and freed one of
+- StoreRenderTex captures (`gs_capture_rt`) reuse up to 8 textures (a free one unused for 120 frames,
+  or at a new scale or margin, is deleted): RM_4030 made and freed one of
   the target's size every frame (at 4x 4.8 ms of GPU time a frame, now 1.35).
 - The render thread's CPU side: CLUT loads read GS memory through a per-format offset table, the
   common texture formats (PSMT8/T4 block by block) and render-target reloads address GS memory
@@ -1400,6 +1401,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_PACE_FALLBACK=0`, `RECVX_PACE_GAP=n` | no own image of a frame for a GPU behind (by time); game-frame periods without an image before a frame whose successor is already waiting shows its own (default 1.5, 0 always) |
 | `RECVX_THREAD_PRIO=0` | Windows: game and render threads at normal priority |
 | `RECVX_FAST_CLEAR=0` | clears drawn as sprites (as before) |
+| `RECVX_ZROW_CHECK=1` (or `=2`) | before each whole-target clear and after a replay puts back a reload, read back the rows a target's (and its depth's) `zrow` say are 0 and log any that is not (`zrow: ... not 0`). `=2` also reloads the draw target from GS memory at the draw after each executed frame's whole-target clear (other pictures), so replays go through clear, reload put back, clear: `RECVX_ZROW_CHECK=2 MODES=enhanced pc/tools/layout_check.sh build/pc/recvx build/pc/recvx scratch/zrow` and `grep -c 'zrow: ' scratch/zrow/*/log.txt` must find none |
 | `RECVX_AB=mask` | with `RECVX_GPU_TIME`: the optimizations in mask (1 clear, 8 whole-target clear, 16 capture pool) off in every other 2-second interval (`gputime: ab 0/1`) |
 | `RECVX_MOVIE_TRACE=file` | one line per game frame of a movie: time, vblanks, frame shown, game-thread time, sound position and queue, sound minus picture (ms); at the end decode times and frames shown before they were decoded; when the movie opens, starts and ends a `#` line with its sound (open, rate, seconds queued, paused, gain, RMS at that gain) and the room's (BGM, background SE, playing MIDI ports) |
 | `RECVX_GPU_TIME=1` | every 2 s: frames and in-between images per second, render-thread CPU and GPU time; GL draws, GS-path sprites and other primitives, native triangles per frame and per in-between image |

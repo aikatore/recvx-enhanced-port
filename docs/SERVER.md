@@ -351,11 +351,19 @@ How it works:
 3. Under systemd it sends `MAINPID=<its pid>` to `$NOTIFY_SOCKET` (no libsystemd) and waits with
    `BARRIER=1` until systemd has it, then answers `ok`. The old process answers `bye` and exits 0;
    only then does the new one read the socket, send `READY=1`, and the `--take-over` launcher
-   returns 0 (which ends `ExecReload`). No answer within 10 s on either side also leaves the old
-   server running (and `MAINPID` goes back to it).
+   returns 0 (which ends `ExecReload`). `bye` decides: once the new process said `ok` it waits
+   for `bye` (then it serves) or for the old one to close the connection (then the old one goes
+   on), and the old one does either within its own time-out. The new process does not say `ok`
+   once its own time-out (from its connect) has passed. So exactly one of the two serves: no
+   answer within 3 s on either side leaves the old server running (and `MAINPID` goes back to
+   it).
 
 The pause is the time to copy the state between two processes: milliseconds for a few hundred
-rooms. Times inside the state are the system's monotonic clock, the same for both processes.
+rooms, and never more than the 3 s time-out (so the systemd barrier has to be answered within
+it too), well below `member_timeout` (at least 6 s). The pause does not count as anyone's
+silence: whichever process goes on moves the host and joiner time-outs on by it before the next
+check, so a slow or refused take-over drops no player whose keepalives waited in the socket
+buffer. Times inside the state are the system's monotonic clock, the same for both processes.
 The new process applies its own config file (like a reload) but keeps the running server's
 `port`, `listen` and `control`, and a `max_rooms` at least as large. The room ids in
 status-json stay, and so do `started_at` and `uptime_s`; `process_started_at` is the new process's and `handovers` goes up by one.
@@ -376,7 +384,7 @@ server user can write (its home, as in the layout above). A stale socket file (n
 it) is removed at start; a live one, or a path that is not a socket, makes the start fail. Nothing
 in the handover is reachable over the network: the UDP protocol has no command for it, and STATUS
 only reads. Every size is bounded (command lines 64 bytes, the state 64 MB, at most 8 sockets),
-one control connection at a time (others get `busy`, a silent one is closed after 10 s), and no
+one control connection at a time (others get `busy` at once, a silent one is closed after 3 s), and no
 code, token or key is logged.
 
 ## Connection flow
@@ -591,7 +599,7 @@ added without a protocol change. IPv6 would help players behind CGNAT who have n
 | ctest `rdv_fuzz` (`pc/tests/fuzz_rdv.c`, Linux) | parser, server and client state machines under AddressSanitizer + UBSan, 300,000 inputs; libFuzzer-ready with `clang -fsanitize=fuzzer -DRDV_LIBFUZZER` |
 | ctest `rdv_paths` (`pc/server/test_paths.sh`, Linux) | a local server and two `recvx-client`s: punched, Via server, relay fallback, passwords, loss, plaintext, sustained relay delivery |
 | ctest `rdv_nat` (`pc/server/test_nat.sh`, Linux) | cone/symmetric NATs, same router, netem, in rootless network namespaces (skipped without user namespaces) |
-| ctest `rdv_handover` (`pc/server/test_handover.sh`, Linux) | `--take-over` refused by a build that cannot read the state (the old server goes on), then done by a second binary during relayed and direct sessions (no drops, a code from before still joins, counters only grow, the old process exits 0, MAINPID / BARRIER / READY on a fake notify socket); status-json parsed by python3; `--drain`; the control socket (mode, stale, live) |
+| ctest `rdv_handover` (`pc/server/test_handover.sh`, Linux) | `--take-over` refused by a build that cannot read the state (the old server goes on), then done by a second binary during relayed and direct sessions (no drops, a code from before still joins, counters only grow, the old process exits 0, MAINPID / BARRIER / READY on a fake notify socket); status-json parsed by python3; `--drain`; the control socket (mode, stale, live); a second control connection gets `busy`; exactly one server after a take-over behind a silent control connection, with a systemd barrier slower than the time-out, or with the old server frozen after `ok` |
 
 Test aids in the game (environment variables):
 

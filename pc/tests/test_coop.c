@@ -1282,6 +1282,42 @@ static int pick(int cur, float d0, float d1, int b0, int b1, int f0, int f1, int
     CoopTgtIn in = { { d0, d1 }, { b0, b1 }, { f0, f1 }, commit };
     return coop_pick_target(cur, &in);
 }
+/* coop_ene_modes_ok: a partner's type and modes never index past the tables of the types that change hands
+   (en01 en01b en04 en05 en09 en26), nor a NULL entry; what the game itself runs passes */
+static void test_ene_modes(void)
+{
+    static const struct { int id, types, m2[4], brain; } T[] = {   /* the decomp's table sizes (Nage of en05: none) */
+        { 4, 3, { 13, 2, 3, 1 }, 12 }, { 5, 8, { 18, 1000, 14, 9 }, 0 }, { 9, 11, { 15, 2, 11, 1 }, 12 }, { 26, 1000, { 17, 1, 16, 1 }, 0 },
+    };
+    int k, type, m0, m1, m2, up, bad = 0;
+    for (type = 0; type < 256; type++)
+        for (m0 = 0; m0 < 256; m0++)
+            for (m1 = 0; m1 < 4; m1++)
+                for (m2 = 0; m2 < 256; m2++) {
+                    for (up = 0; up < 2; up++) {   /* the zombie: *Type[16], mode2 (+10 for types 2 3 6 7 9) in 17 / 4 / 17 / 4 */
+                        int ten = (m0 == 1 || m0 == 3) && (type == 2 || type == 3 || type == 6 || type == 7 || type == 9), i = m2 + 10 * ten;
+                        int nul = !up && ((m0 == 1 && i == 13) || (m0 == 2 && i == 3) || (m0 == 3 && (i == 12 || i == 13)));
+                        int n = m0 == 1 || m0 == 3 ? 17 : 4;
+                        if (coop_ene_modes_ok(1, type, m0, m1, m2, up) && (type >= 16 || m0 > 5 || (m0 >= 1 && m0 <= 4 && (i >= n || nul)) ||
+                                                                            (m0 == 4 && !m2 && m1 >= 3)))
+                            bad++;
+                    }
+                    for (k = 0; k < 4; k++)
+                        if (coop_ene_modes_ok(T[k].id, type, m0, m1, m2, 0) &&
+                            (type >= T[k].types || m0 > 5 || (m0 >= 1 && m0 <= 4 && m2 >= T[k].m2[m0 - 1]) || (m0 == 1 && m1 == 1 && T[k].brain && m2 >= T[k].brain)))
+                            bad++;
+                }
+    CHECK(bad == 0);
+    CHECK(coop_ene_modes_ok(1, 0, 1, 1, 16, 0) && !coop_ene_modes_ok(1, 0, 1, 1, 13, 0) && coop_ene_modes_ok(1, 0, 1, 1, 13, 1));
+    CHECK(coop_ene_modes_ok(1, 2, 1, 1, 6, 0) && !coop_ene_modes_ok(1, 2, 1, 1, 7, 0) && !coop_ene_modes_ok(1, 2, 1, 1, 3, 0));   /* a crawler */
+    CHECK(coop_ene_modes_ok(1, 15, 2, 0, 2, 0) && !coop_ene_modes_ok(1, 16, 1, 0, 0, 0) && !coop_ene_modes_ok(1, 0, 6, 0, 0, 0));
+    CHECK(coop_ene_modes_ok(1, 0, 4, 2, 0, 0) && !coop_ene_modes_ok(1, 0, 4, 3, 0, 0) && coop_ene_modes_ok(1, 0, 5, 9, 99, 0));
+    CHECK(coop_ene_modes_ok(4, 2, 1, 0, 12, 0) && !coop_ene_modes_ok(4, 2, 1, 1, 12, 0) && !coop_ene_modes_ok(4, 3, 1, 0, 0, 0));
+    CHECK(coop_ene_modes_ok(5, 7, 2, 0, 200, 0) && !coop_ene_modes_ok(5, 8, 1, 0, 0, 0) && !coop_ene_modes_ok(5, 0, 4, 0, 9, 0));
+    CHECK(coop_ene_modes_ok(9, 10, 1, 0, 14, 0) && !coop_ene_modes_ok(9, 11, 1, 0, 0, 0) && !coop_ene_modes_ok(26, 200, 3, 0, 16, 0));
+    CHECK(coop_ene_modes_ok(2, 255, 255, 255, 255, 0));   /* not a type that changes hands */
+}
+
 static void test_target(void)
 {
     float n = 10.0f * 10.0f, f = 13.0f * 13.0f;   /* 1 m and 1.3 m, squared */
@@ -1409,6 +1445,37 @@ static PoRes po_run(const PoPath* p)
     return r;
 }
 
+/* 30 Hz, 20 ms one way, exact stamps; at 10 s for H ms either the path holds every datagram and delivers them in one
+   burst at its end (any OS), or the receiver stalls with no hand-off and reads them at its end, the first stamped
+   exact, the rest with the read time (Windows). Frames where P is older than the CoopSnapHist (every puppet frozen). */
+static int po_freeze(int H, int hitch)
+{
+    static CoopPlayout po;
+    double T = COOP_TICK_US, t0 = 1e6, fs = t0 + 300 * T, fe = fs + H * 1000.0;
+    uint32_t P, seq = 1, last = 0;
+    int f, out = 0;
+    coop_playout_reset(&po);
+    for (f = 0; f < 30 * 90; f++) {
+        double now = t0 + f * T + 5000;
+        if (hitch && now >= fs && now < fe) continue;
+        for (;;) {
+            double a = t0 + seq * T + 20000;
+            int ex = 1;
+            if (a >= fs && a < fe) {
+                if (!hitch) a = fe + (seq % 3) * 100;
+                else if (a - fs >= T) { a = now; ex = 0; }
+            }
+            if (a > now) break;
+            coop_playout_arrive(&po, seq++, (uint64_t)a, ex);
+        }
+        if (!coop_playout_frame(&po, (uint64_t)now, &P)) continue;
+        if ((int32_t)(P - last) < 0) out += 1000;
+        last = P;
+        out += (int32_t)(po.newest - P) >= COOP_HIST;
+    }
+    return out;
+}
+
 static void test_playout(void)
 {
     static const PoPath paths[] = {
@@ -1441,6 +1508,11 @@ static void test_playout(void)
         PoRes r = po_run(&p);
         CHECK(r.back == 0 && r.uneven_tail <= 1);
         CHECK(r.lag <= r.ow98 + COOP_TICK_US / 1000 + 4 + 1500.0 * 60 / 9000);
+    }
+    {   /* a burst after a path freeze, a Windows receiver hitch: the re-anchor stays under the cap, no freeze, no step back */
+        static const int H[] = { 300, 600, 1000, 2000, 3000 };
+        int k;
+        for (k = 0; k < 5; k++) { CHECK(po_freeze(H[k], 0) == 0); CHECK(po_freeze(H[k], 1) == 0); }
     }
     {   /* a slot's state at P: exact, between two (also a turn across 0), carried on (at most COOP_PO_EXTRA), held, once when old */
         static CoopSnapHist h;
@@ -1486,6 +1558,7 @@ int main(int argc, char** argv)
 {
     if (argc > 1 && !strcmp(argv[1], "playout")) { test_playout(); printf("%d checks, %d failed\n", checks, fails); return fails != 0; }
     test_target();
+    test_ene_modes();
     int iters = argc > 1 ? atoi(argv[1]) : 200000;
     test_events();
     test_snaps();

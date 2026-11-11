@@ -66,8 +66,8 @@ jobs:
           echo "newest glibc symbol: $max"
           [ "$(printf '%s\n' "$max" GLIBC_2.34 | sort -V | tail -n 1)" = GLIBC_2.34 ]
       - name: Test
-        # tests needing the disc image skip themselves; rdv_paths/rdv_nat run in the server job
-        run: ctest --test-dir build --output-on-failure -j4 -E 'rdv_paths|rdv_nat'
+        # tests needing the disc image skip themselves; rdv_paths/rdv_nat/rdv_handover (timing) run in the server job
+        run: ctest --test-dir build --output-on-failure -j4 -E 'rdv_paths|rdv_nat|rdv_handover'
       - name: Package
         run: pc/tools/package.sh dist --linux build
       - uses: actions/upload-artifact@v7
@@ -128,7 +128,8 @@ jobs:
           cmake --build build-server
           build-server/recvx-server --version
       - name: Test
-        # rdv_paths: a local server and two clients; rdv_nat: NAT types in user namespaces (skips itself where not allowed)
+        # rdv_paths: a local server and two clients; rdv_nat: NAT types in user namespaces (skips itself where not allowed);
+        # rdv_handover: --take-over, --drain, the control socket (only here: it times the handover)
         run: ctest --test-dir build-server --output-on-failure
       - name: Package
         run: pc/tools/package.sh dist --server build-server

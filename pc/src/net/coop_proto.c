@@ -978,6 +978,32 @@ int coop_pick_target(int cur, const CoopTgtIn* in)
     return in->d[oth] * 1.5f < in->d[cur] ? oth : cur;
 }
 
+int coop_ene_modes_ok(int id, int type, int m0, int m1, int m2, int upper)
+{
+    /* per mode0 1..4 (Move, Nage, Damage, Die) the size of the table mode2 indexes (255: none); Init (0) and the event
+       (5) index none by mode2. brain: mode0 1 with mode1 1 runs the Brain first, its table by mode2 too */
+    static const struct { uint8_t id, types, m2[4], brain; } t[] = {
+        { 4, 3, { 13, 2, 3, 1 }, 12 },      /* en04: Move/Nage/Damage/DieType[3], BrainMode2[12], MoveMode2[13] ... */
+        { 5, 8, { 18, 255, 14, 9 }, 0 },    /* en05: BrainType[8] (mode1 1, by type), MoveMode2[18], DamageMode2[14], DeadMode2[9] */
+        { 9, 11, { 15, 2, 11, 1 }, 12 },    /* en09: MoveType[11], BrainMode2[12], MoveMode2[15] ... */
+        { 26, 255, { 17, 1, 16, 1 }, 0 },   /* en26: no type table */
+    };
+    unsigned int k;
+    for (k = 0; k < sizeof(t) / sizeof(t[0]) && t[k].id != id; k++) {}
+    if (id != 1 && k == sizeof(t) / sizeof(t[0])) return 1;
+    if (m0 < 0 || m0 > 5 || m1 < 0 || m2 < 0 || type < 0) return 0;
+    if (id == 1) {   /* en01: the *Type[16]; types 2 3 6 7 9 (MVType02, DGType02) add 10 to mode2 when moving or hit */
+        static const uint8_t n[4] = { 17, 4, 17, 4 };
+        static const uint32_t nul[4] = { 1u << 13, 1u << 3, 3u << 12, 0 };   /* MoveMode2W[13], NageMode2W[3], DamageMode2W[12..13] */
+        int i = m2 + ((m0 == 1 || m0 == 3) && type < 16 && (0x2CC >> type & 1) ? 10 : 0);
+        if (type >= 16) return 0;
+        if (m0 < 1 || m0 > 4) return 1;
+        return i < n[m0 - 1] && (upper || !(nul[m0 - 1] >> i & 1)) && (m0 != 4 || m2 || m1 < 3);   /* (DD00: mtn_tbl[9][2] by mode1 + 6) */
+    }
+    return (t[k].types == 255 || type < t[k].types) &&
+           (m0 < 1 || m0 > 4 || ((t[k].m2[m0 - 1] == 255 || m2 < t[k].m2[m0 - 1]) && (m0 != 1 || m1 != 1 || !t[k].brain || m2 < t[k].brain)));
+}
+
 int coop_atk_note(CoopAtk* a, unsigned int now)
 {
     if (!a->n || now - a->t0 > COOP_LOOP_WIN) { a->t0 = now; a->n = 0; }
@@ -1008,7 +1034,7 @@ void coop_playout_arrive(CoopPlayout* po, uint32_t seq, uint64_t arr_us, int exa
     if ((int32_t)(seq - po->newest) > 0) {
         /* every new frame over two frames above the margin, 8 in a row: the sender's grid moved (it stalled and
            re-phased): measured again from these */
-        po->high = po->started && o > po->delay + 2 * COOP_TICK_US ? po->high + 1 : 0;
+        if (exact) po->high = po->started && o > po->delay + 2 * COOP_TICK_US ? po->high + 1 : 0;   /* (a read-time stamp says nothing) */
         if (po->high >= 8) {
             int j;
             for (j = 0; j < COOP_PO_WIN; j++)
@@ -1044,6 +1070,7 @@ int coop_playout_frame(CoopPlayout* po, uint64_t now_us, uint32_t* P)
     po->fast = fast;
     if (!po->started || want > po->delay) po->delay = want;                                     /* up at once */
     else po->delay = want < po->delay - COOP_PO_FALL_US ? po->delay - COOP_PO_FALL_US : want;   /* down slowly */
+    if (po->delay > fast + COOP_PO_MAX * COOP_TICK_US) po->delay = fast + COOP_PO_MAX * COOP_TICK_US;   /* the cap holds for a re-anchor too */
     pf = ((double)now_us - (po->base + po->delay)) / COOP_TICK_US;   /* frame k is due once now >= base + k * T + delay */
     if (!po->started) {
         if (pf < 1) return 0;

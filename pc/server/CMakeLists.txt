@@ -51,7 +51,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_test(NAME rdv_nat COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/test_nat.sh $<TARGET_FILE_DIR:recvx-client>)
     set_tests_properties(rdv_nat PROPERTIES SKIP_RETURN_CODE 77)
     # ctest rdv_handover: --take-over (refused by an incompatible build, then done by a second
-    # binary while relay traffic flows), status-json, --drain, the control socket (~30 s)
+    # binary while relay traffic flows), status-json, --drain, the control socket, slow and queued
+    # take-overs leave exactly one server (~35 s)
     add_test(NAME rdv_handover COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/test_handover.sh $<TARGET_FILE_DIR:recvx-client>)
     set_tests_properties(rdv_handover PROPERTIES SKIP_RETURN_CODE 77)
 endif()
