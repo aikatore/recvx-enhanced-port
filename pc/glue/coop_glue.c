@@ -1990,8 +1990,10 @@ static void p3_frame(void)
             if (owned[i] && !own_grab[i]) { owned[i] = 0; p3_n[4]++; }
         return;
     }
-    /* the guest leaves (a door, a menu, a cutscene of its own) while the host stays: what it runs goes back with its state */
-    leaving = !is_host && same_room() && (!tx_in_game || (sys->cb_flg & 0x5));
+    /* we leave (a door, a menu, a cutscene of ours) or our game stops its enemies (the status screen) while the partner
+       plays on in the room: what we run goes to the partner's game with its state (the host's only to a partner that is
+       a target) */
+    leaving = same_room() && (!tx_in_game || (sys->cb_flg & 0x5) || frame_no - enemy_frame > 2) && (!is_host || proxy_ok);
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
         if (own_grab[i] && !we_run(i) && (!(ene[i].flg & 0x1) || (frame_no - own_t[i] > 90 && !ply_busy(&ply2)))) own_grab[i] = 0;   /* (no word of its end) */
         if (is_host && owned[i] && !own_grab[i] && (ene[i].flg & 0x1) && event_driven(&ene[i])) { p3_takeback(i, 0, "an event of ours drives it"); continue; }
@@ -2002,7 +2004,7 @@ static void p3_frame(void)
         if (!we_run(i) || !p3_movable(i)) { p3_want[i] = 0; continue; }
         if (leaving) {
             if (budget-- <= 0) continue;
-            ev_room = owned_room;   /* (in a door our room number may be the next one's already) */
+            ev_room = is_host ? -1 : owned_room;   /* (in a door our room number may be the next one's already) */
             p3_give(i, "leaving");
             ev_room = -1;
             continue;
