@@ -975,7 +975,7 @@ static unsigned int own_t[PC_ENE_SLOTS];         /* our frame of its last change
 static unsigned int own_ms[PC_ENE_SLOTS];        /* net_ms when we handed it over (until the new runner's first snapshot) */
 static unsigned int hit_t[PC_ENE_SLOTS][2];      /* our frame + 1 of the last hit on it: [0] ours, [1] the partner's */
 static unsigned int p3_n[8];                     /* stats: gave, took, refused, gave back (leaving), taken back, glitch ms sum, glitches */
-/* the host's rule "Shared Enemy Control" (g_coop.shared_enemies, off by default; locked during a session); test aid
+/* the host's rule "Shared Enemy Control" (g_coop.shared_enemies, off by default; locked once a session's game runs, settings.c); test aid
    RECVX_COOP_OWNERSHIP=0/1 on the host forces it off / on */
 static int p3_env(void)
 {
@@ -3027,6 +3027,7 @@ static unsigned char regroups, seen_regroup;   /* host: regroups so far; client:
 
 static unsigned int* flag_block(void) { return sys->ev_flg; }
 static int in_session_game(void) { return (sys->tk_flg & 0x80) && !(sys->ss_flg & 0x400000); }   /* game task, not the attract demo */
+int coop_session_game(void) { return g_coop.state != COOP_OFF && sys && in_session_game(); }   /* (coop.h) */
 
 /* "Game over: Both" (OPT_GAMEOVER_BOTH, docs/COOP.md "Game over"): one game over is both players'; the host's CONTINUE / NO
    decides. Each game sends PF_GAME_OVER while its game over runs. The host keeps the guest's items (EV_OWN) as they were at

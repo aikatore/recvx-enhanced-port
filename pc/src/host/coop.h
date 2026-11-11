@@ -89,6 +89,8 @@ int coop_extra_objects(void);
 int coop_headshots(void);
 /* the session's "Shared Enemy Control" rule (OPT2_OWNERSHIP): hosting our setting (or RECVX_COOP_OWNERSHIP), joining the host's */
 int coop_shared_enemies(void);
+/* a co-op session's game runs (not the title, the lobby or the attract demo): Shared Enemy Control is locked */
+int coop_session_game(void);
 /* Hide IP addresses: every address shown on screen goes through here. With hide_ip on, the
    text with its IPv4 addresses and the join and co-op server host names masked (net_mask_addrs),
    else text itself. A ring of 4 buffers per thread (lobby_io.c). Input fields mask as passwords. */

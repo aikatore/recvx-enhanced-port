@@ -270,6 +270,8 @@ static void import_card(void)
     host_log("saves: imported %d memory card save%s into %s (the card keeps them)\n", n, n == 1 ? "" : "s", save_native_dir());
 }
 static const char* in_session(void) { return g_coop.state != COOP_OFF ? "Not during a co-op session." : NULL; }
+/* at the title and in the lobby until the game starts; then enemies may run in either game (Shared Enemy Control) */
+static const char* in_session_game(void) { return coop_session_game() ? "Not during a co-op session." : NULL; }
 
 /* cheats (F2): the request bits are taken by the game thread at the frame hand-off */
 static void heal(void) { __atomic_or_fetch(&g_cheat.request, CHEAT_HEAL, __ATOMIC_ACQ_REL); }
@@ -564,7 +566,7 @@ const Setting g_settings[] = {
     { SP_COOP, "Quick Start", V(g_coop.quick_start), 0, 1, 1,
       .help = "Start with the manual read and a knife in both players' inventories. No effect with BioRand." },
     { SP_COOP, "Pause Enemies During Trades", V(g_coop.trade_freeze), 0, 1, 1, .help = "Pause enemies while both players are on the trade screen. The host decides." },
-    { SP_COOP, "Shared Enemy Control", V(g_coop.shared_enemies), 0, 1, 1, .locked = in_session,
+    { SP_COOP, "Shared Enemy Control", V(g_coop.shared_enemies), 0, 1, 1, .locked = in_session_game,
       .help = "Each enemy is run by the player fighting it, so hits and grabs react at once for both players. The host decides." },
     { SP_COOP, "Remember Partner Items", V(g_coop.remember), 0, 1, 1, .flags = SET_F1,
       .help = "Keep a partner's items for their next visit. After a crash, their items are restored automatically." },

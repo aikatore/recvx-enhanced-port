@@ -1002,7 +1002,8 @@ static int row_visible(int r)
 static int row_locked(int r)
 {
     switch (r) {
-    case R_MODE: case R_PORT: case R_LOOT: case R_IMP: case R_ENEMYCTL: case R_ADDR: case R_RELAY: case R_SERVER: case R_PW: return session_on();
+    case R_MODE: case R_PORT: case R_LOOT: case R_IMP: case R_ADDR: case R_RELAY: case R_SERVER: case R_PW: return session_on();
+    case R_ENEMYCTL: return lb.role != 0 || coop_session_game();   /* the host's; until its game starts */
     case R_HOSTSTEP: return joining();
     case R_JOINSTEP: return hosting();
     case R_GOVER: case R_HEADSHOT: case R_QUICK: case R_DETECTOR: case R_EXTRAOBJ: case R_EXTRA: case R_PLACE: case R_RAND: case R_VARIETY: case R_TYPES: case R_EVENTS: case R_SEED: case R_BIORAND:

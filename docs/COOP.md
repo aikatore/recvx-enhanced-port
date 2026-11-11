@@ -80,8 +80,8 @@ see "BioRand"), **LOOT** (Shared / Individual),
 **GEAR** (For both / Shared; only with shared loot, see "Loot modes"), **TRADING**, **CUTSCENE SKIP** (Together /
 Separately, see "Cutscenes"), **INK RIBBONS** (Needed / Not needed, see "Saving without ink
 ribbons"), **GAME OVER** (Each player / Both, see "Game over"), **HEADSHOTS** (On / Off: third person's "Headshots &
-Piercing", [THIRDPERSON.md](THIRDPERSON.md)), **SHARED ENEMY CONTROL** (On / Off, see "Shared enemy control"; set it
-before OPEN THE LOBBY, it is locked during a session), and two entries that open a page
+Piercing", [THIRDPERSON.md](THIRDPERSON.md)), **SHARED ENEMY CONTROL** (On / Off, see "Shared enemy control"; the
+host can change it until the game starts, the joiner sees each change), and two entries that open a page
 of their own (an arrow after them; RANDOMIZER also shows On or Off):
 
 | Entry | Its page |
@@ -283,8 +283,9 @@ loaded in a case it has (before, the load waited for a file that does not exist:
 ### Shared enemy control
 
 A host rule, off by default: **Shared Enemy Control** (lobby GAME RULES: SHARED ENEMY CONTROL, F3, ENHANCED
-SETTINGS CO-OP; ini `coop_shared_enemies`). It is locked during a session, and the joiner sees the host's
-choice. On, each common enemy (zombies, Cerberus, Hunter and Sweeper, Bandersnatch, anatomist) runs in the
+SETTINGS CO-OP; ini `coop_shared_enemies`). The host can change it at the title and in the lobby, also with the
+joiner already there, until the game starts; then it is locked until the session ends. The joiner sees the
+host's choice. On, each common enemy (zombies, Cerberus, Hunter and Sweeper, Bandersnatch, anatomist) runs in the
 game of the player fighting it: that player's hits and the enemy's grabs and bites react at once, without the
 round trip to the host, and the enemy changes hands between attacks. Off, the host's game runs the enemies of
 a shared room and only a zombie's grab of the joiner runs in the joiner's game for the grab (as before). It is
@@ -790,7 +791,7 @@ and the APPEARANCE page's Character Models (Same for Both / Per Character) with 
 | Metal Detector (host) | `coop_skip_detector` | 0 Original, 1 Skipped (1); see "Metal detector" |
 | Quick Start (host) | `coop_quick_start` | 0/1 (0); see "Quick start" |
 | Pause Enemies During Trades (host) | `coop_trade_freeze` | 0/1 (1) |
-| Shared Enemy Control (host), locked | `coop_shared_enemies` | 0/1 (0); see "Shared enemy control" |
+| Shared Enemy Control (host), locked in game | `coop_shared_enemies` | 0/1 (0); see "Shared enemy control" |
 | Remember Partner Items (host) | `coop_remember` | 0/1 (1) |
 | Connection, locked | `coop_conn` | 0 Automatic, 1 Direct, 2 Server Relay (0) |
 | Host Port, locked | `coop_port` | 1..65535 (7140) |
@@ -1054,8 +1055,9 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   host's entry script (`EneSetCk`) hid the record; `EV_GONE` covers the records without one, kills of the last
   frames, and extra enemies.
 * **Engaged-player ownership** (protocol 48; 47 had zombies only, 46 was the first prototype): the host's lobby rule
-  "Shared Enemy Control" (`g_coop.shared_enemies`, ini `coop_shared_enemies`, off by default, locked during a
-  session; `OPT2_OWNERSHIP` in `Pose.opts2`, the guest follows the host's bit; test aid `RECVX_COOP_OWNERSHIP=0/1` on
+  "Shared Enemy Control" (`g_coop.shared_enemies`, ini `coop_shared_enemies`, off by default, changeable at the title
+  and in the lobby, locked once the session's game runs (`coop_session_game`: not at the title, in the lobby or the attract demo; back at the title the session
+  ends); `OPT2_OWNERSHIP` in `Pose.opts2`, the guest follows the host's bit; test aid `RECVX_COOP_OWNERSHIP=0/1` on
   the host forces it off / on). Off, only the grab hand-over below runs (a host zombie's grab of the stand-in goes to
   the guest's game and back with its state at its end). On: a common enemy runs in the game of the player it is engaged with, and the other game shows it as a puppet of
   that game's snapshots, so that player's shots react on its next frame and its grabs and bites are local. `owned[i]`
