@@ -42,7 +42,8 @@ double render_present_hz(void) { return present_hz(); }   /* (gs_gl.c drs_update
 void render_loop(void)
 {
     Frame *prev = NULL, *cur = NULL;
-    uint64_t arrived = 0, pace_until = 0;
+    uint64_t arrived = 0, pace_until = 0, last_present = 0;
+    double pace_gap = SDL_getenv("RECVX_PACE_GAP") ? SDL_atof(SDL_getenv("RECVX_PACE_GAP")) : 1.5;   /* game-frame periods without an image before a waiting frame's own is shown (below) */
     double swap_avg = 0.0;   /* how long the buffer swap blocks, smoothed */
     double period = 1001.0 / 30000.0 * 1e9;   /* game frame period, measured below */
     int interp = 0, shown = 0;   /* refreshes presented since the frame arrived */
@@ -102,8 +103,16 @@ void render_loop(void)
             else if (g_config.vsync && n > 1.5 && fabs(n - floor(n + 0.5)) < 0.1) t = (float)((shown + 1) / floor(n + 0.5));
             else t = (float)((double)(now - arrived) / period);
             /* the next game frame is already waiting (the game runs below its rate): an
-               in-between image of this one would only delay it (a whole replay of the scene) */
-            if (t < 1.0f && fixed_t <= 0.0f && stream_queued()) continue;
+               in-between image of this one would only delay it (a whole replay of the scene).
+               Its own image (a copy) is shown, once, when none was for 1.5 game frames: skipped
+               too, a GPU that cannot execute 30 frames a second showed none for seconds
+               (llvmpipe, 2x: 1 thread 3.9 images a second, gaps up to 10.5 s; 2 threads 6.1 and
+               0.87 s, the game at 29.9 frames a second; now 15.8, 0.15 s, 28.6. Shown every
+               time, RECVX_PACE_GAP=0: 24.3 images, the game at 24.2) */
+            if (t < 1.0f && fixed_t <= 0.0f && stream_queued()) {
+                if (shown || now - last_present < (uint64_t)(period * pace_gap)) continue;
+                t = 1.0f;
+            }
             /* the GPU is still two frames or images behind most of a refresh later (a heavy
                scene at a high resolution and rate): this refresh gets no in-between image.
                Replays queued up behind each other would hold up the next game frame's execution,
@@ -118,6 +127,7 @@ void render_loop(void)
                 int fl = stream_point_at(interp ? prev : NULL, cur, t, &x, &y);
                 overlay_point(fl, x, y);            }
             swap = gs_present(cur, t);
+            last_present = now;
             shown++;
             if (trace) fprintf(trace, "%llu %.3f %llu %llu\n", (unsigned long long)gs_frame_count(), t, (unsigned long long)(now / 1000),
                                (unsigned long long)(swap / 1000));
