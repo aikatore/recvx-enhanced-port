@@ -37,6 +37,8 @@ static double present_hz(void)
     return lim && lim < hz ? lim : hz;
 }
 
+double render_present_hz(void) { return present_hz(); }   /* (gs_gl.c drs_update) */
+
 void render_loop(void)
 {
     Frame *prev = NULL, *cur = NULL;

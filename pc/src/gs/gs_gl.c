@@ -553,15 +553,23 @@ static RenderTarget* rt_get(uint32_t fbp, uint32_t fbw, uint32_t psm)
     return rt;
 }
 
-/* internal resolution: the configured multiplier, or (auto) enough to cover the window */
-float gs_wanted_scale(void)
+/* internal resolution: the configured multiplier, or (auto) enough to cover the window, with
+   dyn_res at most the dynamic resolution's cap (drs_update) */
+static float auto_scale(void)
 {
     int ww, wh;
     float s;
-    if (g_config.scale > 0) return (float)g_config.scale;
     SDL_GetWindowSizeInPixels(g_window, &ww, &wh);
     s = floorf((float)wh / 448.0f + 0.5f);
     return s < 1.0f ? 1.0f : s > 8.0f ? 8.0f : s;
+}
+static int drs_cap(void);
+float gs_wanted_scale(void)
+{
+    float s;
+    if (g_config.scale > 0) return (float)g_config.scale;
+    s = auto_scale();
+    return g_config.dyn_res && s > (float)drs_cap() ? (float)drs_cap() : s;
 }
 
 /* change the internal resolution; existing render targets are resampled, not lost */
@@ -939,7 +947,7 @@ typedef void (GLAPIENTRY *PFN_GetQueryObjectui64v)(GLuint, GLenum, uint64_t*);
 typedef void (GLAPIENTRY *PFN_GetQueryObjectiv)(GLuint, GLenum, GLint*);
 typedef void (GLAPIENTRY *PFN_GenQueries)(GLsizei, GLuint*);
 static struct {
-    int on;                     /* timing this slot (RECVX_GPU_TIME) */
+    int on;                     /* timing this slot: RECVX_GPU_TIME (log) or the dynamic resolution (drs) */
     int log, ok;                /* RECVX_GPU_TIME's level; the query functions exist */
     PFN_QueryCounter counter; PFN_GetQueryObjectui64v get64; PFN_GetQueryObjectiv geti; PFN_GenQueries gen;
     GLuint q[GT_RING][GT_N];
@@ -952,7 +960,11 @@ static struct {
     int n_cpu[3], n_gpu[3];
     uint64_t last_log;
 } gt;
-/* the slot's timing on (each slot keeps its choice) */
+static int drs_wanted(void);
+static void drs_sample(int exec, double ms);
+static void drs_exec(void);
+static void drs_update(uint64_t now);
+/* the slot's timing on: for the log, or for the dynamic resolution (each slot keeps its choice) */
 static void gt_init(void)
 {
     static int done;
@@ -965,7 +977,7 @@ static void gt_init(void)
         gt.ok = gt.counter && gt.get64 && gt.geti && gt.gen;
         if (gt.ok) for (int i = 0; i < GT_RING; i++) gt.gen(GT_N, gt.q[i]);
     }
-    gt.on = gt.ok && gt.log;
+    gt.on = gt.ok && (gt.log || drs_wanted());
 }
 #define GL_TIMESTAMP 0x8E28
 #define GL_QUERY_RESULT 0x8866
@@ -1059,8 +1071,9 @@ static void gt_collect(int s, int wait)
     for (int i = (k & 4) ? GT_EXEC0 : GT_PRES0; i < GT_N; i++)
         if ((k & 3) == 1 || i < GT_RB || i == GT_PRES1) gt.get64(gt.q[s][i], GL_QUERY_RESULT, &t[i]);
     if ((k & 3) == 1) for (int i = 0; i < 4; i++) gt.part[i] += (t[GT_RB + i] - t[GT_PRES0 + i]) / 1e6;
-    if (k & 4) { gt.sum_gpu[0] += (t[GT_EXEC1] - t[GT_EXEC0]) / 1e6; gt.n_gpu[0]++; }
+    if (k & 4) { gt.sum_gpu[0] += (t[GT_EXEC1] - t[GT_EXEC0]) / 1e6; gt.n_gpu[0]++; drs_sample(1, (t[GT_EXEC1] - t[GT_EXEC0]) / 1e6); }
     gt.sum_gpu[k & 3] += (t[GT_PRES1] - t[GT_PRES0]) / 1e6; gt.n_gpu[k & 3]++;
+    drs_sample(0, (t[GT_PRES1] - t[GT_PRES0]) / 1e6);
     gt.kind[s] = 0;
 }
 static void gt_exec_begin(void)
@@ -1080,6 +1093,7 @@ static void gt_exec_end(void)
     gt_mark(GT_EXEC1);
     for (int i = 0; i < 4; i++) gt.cnt[0][i] += gt_cnt[i];
     gt.kind[gt.slot] = 4;
+    drs_exec();
     gt.sum_cpu[0] += (SDL_GetTicksNS() - gt.cpu_exec0) / 1e6; gt.n_cpu[0]++;
 }
 static void gt_present_begin(void)
@@ -1102,6 +1116,7 @@ static void gt_present_end(int inbetween)
     if (inbetween) for (int i = 0; i < 4; i++) gt.cnt[1][i] += gt_cnt[i];
     gt.slot = (gt.slot + 1) % GT_RING;
     for (int i = 1; i < GT_RING / 2; i++) gt_collect((gt.slot + i) % GT_RING, 0);
+    drs_update(now);
     if (!gt.log) return;
     if (!gt.last_log) gt.last_log = now;
     if (now - gt.last_log >= 2000000000ull) {
@@ -1124,6 +1139,46 @@ static void gt_present_end(int inbetween)
         memset(gt.cnt, 0, sizeof(gt.cnt));
         gt.last_log = now;
     }
+}
+
+/* ---------------- dynamic resolution (dyn_res, with Internal Resolution Auto) ----------------
+   Auto's scale (enough to cover the window) is lowered while the GPU cannot keep up and raised
+   again when the next step up fits, measured with the timestamps above: the GPU milliseconds of
+   an executed frame and of a presented image, averaged over a second, give the share of the GPU
+   that 30 executed frames and the display's images (render.c present rate) need. Down after 2
+   seconds above 90 % in which images were also missing (below 95 % of the present rate, or the
+   game below 28.5 frames a second: on a GPU shared with other programs the timestamps also
+   count their work), up after 5 seconds in which the next scale would need below 70 % (its cost
+   taken as growing with the pixel count): no back and forth. A change resamples the render
+   targets (gs_set_scale) at a frame boundary. */
+static struct { int cap; double ms[2]; int n[2], over, under, skip, presents, execs; uint64_t t0; } drs = { 8 };
+static int drs_wanted(void) { return g_config.dyn_res && g_config.scale == 0; }
+static int drs_cap(void) { return drs.cap; }
+static void drs_sample(int exec, double ms) { drs.ms[exec] += ms; drs.n[exec]++; }
+static void drs_exec(void) { drs.execs++; }
+static float auto_scale(void);
+static void drs_update(uint64_t now)
+{
+    extern double render_present_hz(void);
+    double u, f;
+    int s, top, missing;
+    if (!drs_wanted()) { drs.cap = 8; drs.t0 = 0; return; }
+    drs.presents++;
+    if (!drs.t0) { drs.t0 = now; drs.ms[0] = drs.ms[1] = 0; drs.n[0] = drs.n[1] = 0; drs.presents = drs.execs = 0; return; }
+    if (now - drs.t0 < 1000000000ull) return;
+    missing = drs.presents < 0.95 * render_present_hz() * (now - drs.t0) / 1e9 || drs.execs < 28.5 * (now - drs.t0) / 1e9;
+    top = (int)auto_scale();
+    s = drs.cap < top ? drs.cap : top;
+    u = (30.0 * (drs.n[1] ? drs.ms[1] / drs.n[1] : 0.0) + render_present_hz() * (drs.n[0] ? drs.ms[0] / drs.n[0] : 0.0)) / 1000.0;
+    f = (double)(s + 1) * (s + 1) / ((double)s * s);
+    drs.t0 = now; drs.ms[0] = drs.ms[1] = 0; drs.n[0] = drs.n[1] = 0; drs.presents = drs.execs = 0;
+    if (drs.skip) { drs.skip--; return; }   /* the second after a change: resampled targets, new shaders' warm-up */
+    if (u > 0.9 && missing && s > 1) { drs.under = 0; if (++drs.over < 2) return; }
+    else if (s < top && u * f < 0.7) { drs.over = 0; if (++drs.under < 5) return; }
+    else { drs.over = drs.under = 0; return; }
+    drs.cap = drs.over ? s - 1 : s + 1;
+    host_log("gs: dynamic resolution %dx -> %dx (GPU %.0f %% at %dx)\n", s, drs.cap, u * 100.0, s);
+    drs.over = drs.under = 0; drs.skip = 1;
 }
 
 int gs_flush_blocked;

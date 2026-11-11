@@ -11,6 +11,7 @@ set(NOT_IN_TABLE
     biorand_appear_imports   # ... its Include Imported Models
     cast_custom_set    # ini only: the cutscene cast's Custom list was saved (config.c cast_default), never edited
     enemy_custom_set   # ini only: so was Enemy Models' list with its characters (config.c cast_default)
+    dyn_res            # ini only (prototype, branch perfexp-renderer-gpu): Internal Resolution Auto's dynamic resolution (gs_gl.c drs_update)
     borderless_extra   # ini only: the Windows borderless window's overhang past the monitor (settings.c), a driver workaround
 )
 file(READ "${SRC}/src/host/config.c" config)
