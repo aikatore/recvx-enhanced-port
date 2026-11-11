@@ -11,8 +11,11 @@ int coop_insn_len_raw(const unsigned char* p);   /* net/coop_proto.c */
 static int in(const int* p, int n, int v) { for (int i = 0; i < n; i++) if (p[i] == v) return 1; return 0; }
 static int line_ms(const VoiceLine* l) { return l->disc == 1 ? 3000 : 1000; }   /* (voice_pick: a 3 s line on disc 1, 1 s on disc 2) */
 static int line_ms_short(const VoiceLine* l) { return l->disc == 1 ? 3000 : 500; }
-static int used_first(const VoiceLine* l) { return l == voice_line(2, 0); }    /* (voice_pick: said already in the room) */
-static int used_second(const VoiceLine* l) { return l == voice_line(2, 1); }
+static int said_first(const VoiceLine* l) { return l == voice_line(2, 0) ? 0 : -1; }   /* (voice_pick: just said in the room) */
+static int said_second(const VoiceLine* l) { return l == voice_line(2, 1) ? 0 : -1; }
+static VoiceSaid hist;
+static int hist_age(const VoiceLine* l) { return voice_said_age(&hist, l); }
+static int len_var(const VoiceLine* l) { return 400 + (int)((l->vid * 7919u) % 9000u); }   /* (0.4 to 9.4 s) */
 
 int main(void)
 {
@@ -385,7 +388,7 @@ int main(void)
                                             61, 0, 0, 2, 255, 0 };                               /* a LipSet of a missing entry; EvtEnd */
         static const unsigned char lips[] = { 5, 0, 0, 0, 1, 10, 2, 20, 0xFF, 3, 0, 0, 0, 3, 30, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
         const VoiceLine *l, *a;
-        int rec = -1, k, n3, n1 = 0;
+        int rec = -1, k, n3, n1 = 0, n2 = 0;
         unsigned w[] = { 0x10, 0x100, 0x18, 0x200, 0x1C, 0x300, 0x108, 0x180, 0x188, 2, 0x210, 0x280, 0x300, 0x0C, 0x304, 0x0E, 0x308, 0x10 };
         for (k = 0; k < (int)(sizeof w / sizeof w[0]); k += 2) memcpy(d + w[k], &w[k + 1], 4);
         d[0x180 + 4] = 93; d[0x180 + 0x24 + 4] = 91;   /* record 0 Steve, 1 Claire */
@@ -432,20 +435,30 @@ int main(void)
             a = voice_pick((unsigned)s, 1020, 1, 40, 2, 0, 0, NULL, NULL, VOICE_PICK_ANY);
             CHECK(a && a->chr == 2 && a == voice_pick((unsigned)s, 1020, 1, 40, 2, 0, 0, NULL, NULL, VOICE_PICK_ANY));
             k |= 1 << (a->disc - 1);
-            /* one that ends in time: the 1 s one where 3 s is too long, the shortest where none fits; where both do, the one
-               filling a 3 s original likelier (16 to 2.66) */
-            CHECK(voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, NULL, VOICE_PICK_ANY) == voice_line(2, 1) && voice_pick((unsigned)s, 1020, 1, 40, 2, 300, 500, line_ms, NULL, VOICE_PICK_ANY) == voice_line(2, 1));
+            /* with VOICE_PICK_FIT one that ends in time: the 1 s one where 3 s is too long, the shortest where none fits; where
+               both do, the one filling a 3 s original likelier (6 to 1.6); without, the 3 s one too, less often (n2) */
+            CHECK(voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, NULL, VOICE_PICK_ANY | VOICE_PICK_FIT) == voice_line(2, 1) &&
+                  voice_pick((unsigned)s, 1020, 1, 40, 2, 300, 500, line_ms, NULL, VOICE_PICK_ANY | VOICE_PICK_FIT) == voice_line(2, 1));
+            n2 += voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, NULL, VOICE_PICK_ANY) == voice_line(2, 0);
             a = voice_pick((unsigned)s, 1020, 1, 40, 2, 3000, 4000, line_ms, NULL, VOICE_PICK_ANY);
             CHECK(a == voice_pick((unsigned)s, 1020, 1, 40, 2, 3000, 4000, line_ms, NULL, VOICE_PICK_ANY));
             n3 += a == voice_line(2, 0);
-            CHECK(voice_pick((unsigned)s, 1020, 1, 40, 2, 3000, 4000, line_ms, used_first, VOICE_PICK_ANY) == voice_line(2, 1) &&
-                  voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, used_second, VOICE_PICK_ANY) == voice_line(2, 1));   /* (the other, else the one that fits) */
+            /* the one not said, also where it is too long; with fit too, never the one just said (cast_glue.c: quiet) */
+            CHECK(voice_pick((unsigned)s, 1020, 1, 40, 2, 3000, 4000, line_ms, said_first, VOICE_PICK_ANY) == voice_line(2, 1) &&
+                  voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, said_second, VOICE_PICK_ANY) == voice_line(2, 0) &&
+                  voice_pick((unsigned)s, 1020, 1, 40, 2, 1000, 2000, line_ms, said_second, VOICE_PICK_ANY | VOICE_PICK_FIT) == voice_line(2, 0));
             n1 += voice_pick((unsigned)s, 1020, 1, 40, 2, 9000, 9000, line_ms_short, NULL, VOICE_PICK_ANY) == voice_line(2, 1);   /* (a 0.5 s gasp for a 9 s line) */
         }
-        CHECK(n1 > 0 && n1 < 256 / 10 && k == 3 && n3 > 256 * 3 / 4 && n3 < 256 && !voice_pick(1, 1020, 1, 40, 1, 0, 0, NULL, NULL, VOICE_PICK_ANY) && !voice_pick(1, 1020, 1, 40, 7, 0, 0, NULL, NULL, VOICE_PICK_ANY));
-        CHECK(voice_model_chr(3) == 2 && voice_model_chr(7) == 3 && voice_model_chr(13) == 6 && voice_model_chr(ACTOR_PART + 3) == 3 &&
+        CHECK(n1 > 0 && n1 < 256 / 10 && k == 3 && n3 > 256 * 3 / 4 && n3 < 256 && n2 > 0 && n2 < 256 / 4 && !voice_pick(1, 1020, 1, 40, 1, 0, 0, NULL, NULL, VOICE_PICK_ANY) && !voice_pick(1, 1020, 1, 40, 7, 0, 0, NULL, NULL, VOICE_PICK_ANY));
+        CHECK(voice_model_chr(3) == 2 && voice_model_chr(5) == 3 && voice_model_chr(6) == 3 && voice_model_chr(7) == 3 && voice_model_chr(8) == 4 &&
+              voice_model_chr(11) == 4 && voice_model_chr(12) == 5 && voice_model_chr(13) == 6 && voice_model_chr(ACTOR_PART + 3) == 3 &&
               voice_model_chr(ACTOR_PART + 4) == 0 && voice_model_chr(17) == -1 && voice_model_chr(14) == -1 && voice_model_chr(ACTOR_MODELS) == -1 &&
-              voice_model_chr(CAST_ZOMBIES) == -1);   /* Steve, Wesker's event model, Rodrigo, files, the Tyrant, the hazmat man, an import */
+              voice_model_chr(CAST_ZOMBIES) == -1);   /* Steve, Wesker's three, Alfred's, Alexia, Rodrigo, files, the Tyrant, the hazmat man, an import */
+        {   /* the voice tool's speakers (voice_curation.json "characters", its "speaker" an index into them; voice_curation.py
+               writes it as the table's character) are cast.h's characters in order */
+            static const char* tool[CAST_CHARACTERS] = { "Claire", "Chris", "Steve", "Wesker", "Alfred", "Alexia", "Rodrigo" };
+            for (k = 0; k < CAST_CHARACTERS; k++) CHECK(!strcmp(cast_name(k), tool[k]) && voice_model_chr(own[k]) == k);
+        }
         {   /* "Custom" as it starts: the models with lines and a moving mouth checked, and only those are cast */
             short ps[CAST_CUSTOM_MAX];
             int md[CAST_CUSTOM_MAX], n, on = 0, seen = 0;
@@ -514,7 +527,79 @@ int main(void)
             CHECK(voice_cache_load(b, n, 42) && voice_count(0) == 0 && voice_count(2) == 2 && voice_line(2, 1)->grunt && !voice_line(2, 1)->lip &&
                   voice_line(3, 0)->lip_n == 3 && voice_line(3, 0)->lip[0] == 3 && voice_sure_count() == 1);
             CHECK((b2 = voice_cache_save(42, &n2)) && n2 == n && !memcmp(b, b2, n));   /* (the same catalogue) */
+            {   /* the cache's key: another table (a speaker, a flag changed, a line more) is another key, its cache not taken */
+                VoiceCurated t2[sizeof t / sizeof t[0] + 1];
+                unsigned h0 = voice_cat_hash(), h;
+                unsigned char* b3;
+                size_t n3;
+                CHECK((b3 = voice_cache_save(h0, &n3)));   /* (as voices.cache for this table: the key teleport.c makes has voice_cat_hash) */
+                memcpy(t2, t, sizeof t);
+                voice_curation_use(t2);
+                CHECK(voice_cat_hash() == h0);
+                t2[0].chr = 5;   /* (Wesker's line now Alexia's) */
+                CHECK((h = voice_cat_hash()) != h0 && !voice_cache_load(b3, n3, h) && voice_cache_load(b3, n3, h0));
+                free(b3);
+                t2[0].chr = 3; t2[2].flags = VOICE_GRUNT;
+                CHECK(voice_cat_hash() != h0 && voice_cat_hash() != h);
+                t2[2].flags = VOICE_EXCLUDE;
+                memmove(t2 + 1, t2, sizeof t); t2[0] = (VoiceCurated){ 1, 3, 3, VOICE_CONFIRMED, 0xFFFF };
+                CHECK(voice_cat_hash() != h0);
+                voice_curation_use(none);
+                CHECK(voice_cat_hash() != h0);
+            }
             free(b); free(b2);
+            voice_curation_use(NULL);
+        }
+        {   /* the picks in a row (cast_glue.c: the lines said since the room load): those not said first; then none of the last
+               min(pool - 1, max(3, pool / 2)) again, so no line twice in a row and no A-B-A, across the rounds too; pools of
+               2, 3, 5, 14 (Alfred's) and 100 lines, lengths 0.4 to 9.4 s, originals 1.2 to 9 s (the length a soft preference) */
+            static const int pools[] = { 2, 3, 5, 14, 100 };
+            static VoiceCurated tp[101];
+            for (int q = 0; q < 5; q++) {
+                int P = pools[q], N = P - 1 < (P / 2 > 3 ? P / 2 : 3) ? P - 1 : (P / 2 > 3 ? P / 2 : 3), longer = 0;
+                for (k = 0; k < P; k++) tp[k] = (VoiceCurated){ 1, (unsigned short)(1000 + k), 4, VOICE_CONFIRMED, 0xFFFF };
+                tp[P] = (VoiceCurated){ 0 };
+                voice_curation_use(tp);
+                voice_scan_done();   /* (lines no script says: the table's alone) */
+                CHECK(voice_count(4) == P);
+                for (s = 1; s <= 3; s++) {
+                    const VoiceLine* seq[600];
+                    hist.n = 0;
+                    for (k = 0; k < 600; k++) {
+                        int ms = 1200 + (int)((k * 3571u + (unsigned)s * 977u) % 7800u), j;
+                        a = voice_pick((unsigned)s, 1020, 1, k, 4, ms, ms + 1000, len_var, hist_age, VOICE_PICK_SPOKEN);
+                        CHECK(a && a->chr == 4 && a == voice_pick((unsigned)s, 1020, 1, k, 4, ms, ms + 1000, len_var, hist_age, VOICE_PICK_SPOKEN));
+                        for (j = k - 1; j >= 0 && j >= k - N; j--) CHECK(seq[j] != a);   /* (none of the last N) */
+                        for (j = 0; k < P && j < k; j++) CHECK(seq[j] != a);            /* (the first round: each once) */
+                        longer += len_var(a) > ms + 1000;
+                        voice_said_add(&hist, a);
+                        seq[k] = a;
+                    }
+                }
+                CHECK(P < 5 || longer > 0);   /* (soft: also lines longer than the original's time) */
+                {   /* gasps (fit: only those that end in time) with one short line: once, then quiet while it is among the last N */
+                    int said = 0;
+                    hist.n = 0;
+                    for (k = 0; k < 40; k++) {
+                        int ms = k % 3 ? 900 : 4000;   /* (a gasp, a gasp, a line) */
+                        a = voice_pick(7, 1020, 1, k, 4, ms, ms + 1000, len_var, hist_age, VOICE_PICK_SPOKEN | (ms < VOICE_SHORT_MS ? VOICE_PICK_FIT : 0));
+                        CHECK(a && voice_said_age(&hist, a) != 0);
+                        if (ms < VOICE_SHORT_MS && len_var(a) > ms + 1000) continue;   /* (cast_glue.c: quiet, not said) */
+                        CHECK(voice_said_age(&hist, a) < 0 || voice_said_age(&hist, a) >= N);
+                        voice_said_add(&hist, a);
+                        said++;
+                    }
+                    CHECK(said > 40 / 3);
+                }
+            }
+            for (k = 0; k < VOICE_SAID_MAX + 5; k++) voice_said_add(&hist, voice_line(4, k % 100));   /* (full: the oldest go) */
+            {
+                VoiceLine other = *voice_line(4, 4);
+                other.chr = 3;   /* (another character's: not said) */
+                CHECK(hist.n == VOICE_SAID_MAX && hist.l[VOICE_SAID_MAX - 1] == voice_line(4, (VOICE_SAID_MAX + 4) % 100) &&
+                      voice_said_age(&hist, voice_line(4, 4)) == 56 &&   /* (last at 204 of 0..260) */
+                      voice_said_age(&hist, &other) == -1);
+            }
             voice_curation_use(NULL);
         }
     }

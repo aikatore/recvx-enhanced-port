@@ -6,6 +6,10 @@ src = sys.argv[1]
 out = sys.argv[2] if len(sys.argv) > 2 else __file__.rsplit("/", 2)[0] + "/src/host/voice_curation.inc"
 d = json.load(open(src, encoding="utf-8"))
 if d.get("version") != 1: sys.exit("voice_curation.py: format version %r, not 1" % d.get("version"))
+CHARS = ["Claire", "Chris", "Steve", "Wesker", "Alfred", "Alexia", "Rodrigo"]   # cast.h's characters in order (test_cast): "speaker" indexes them
+if d.get("characters") != CHARS: sys.exit("voice_curation.py: characters %r, not %r" % (d.get("characters"), CHARS))
+if any(e["speaker"] is not None and (e["speaker"] not in range(7) or e.get("speaker_name") != CHARS[e["speaker"]]) for e in d["lines"].values()):
+    sys.exit("voice_curation.py: a speaker index and its name disagree")
 lines = d["lines"]
 nxt, part = {}, set()
 for g in d.get("groups", []):

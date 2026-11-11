@@ -341,49 +341,77 @@ static unsigned fill_weight(int len, int ms)
     return 1000u + 5u * r * r / 1000u;
 }
 
-/* ... a line's: a gasp, grunt or shout (under VOICE_SHORT_MS) in place of a spoken line ten times less likely again */
-static unsigned line_weight(int len, int ms)
+/* ... a line's in place of one of ms that may run to max_ms (0: any, alike): a gasp, grunt or shout (under VOICE_SHORT_MS)
+   in place of a spoken line ten times less likely again; one that runs longer (faded out there) 1000 (max_ms / len)^2, a
+   sixth of a fitting one's at most and less the longer it is (soft: it is still picked; with fit never); 0 none */
+static unsigned line_weight(const VoiceLine* l, int ms, int max_ms, int (*ms_of)(const VoiceLine*), int fit)
 {
-    unsigned w = fill_weight(len, ms);
+    int len;
+    unsigned w;
+    if (!max_ms) return 1000u;
+    if ((len = ms_of(l)) <= 0) return 0;   /* (no length: only where none has one) */
+    if (len > max_ms) return fit ? 0 : (unsigned)(1000LL * max_ms / len * max_ms / len) + 1u;
+    w = fill_weight(len, ms);
     return ms >= VOICE_SHORT_MS && len < VOICE_SHORT_MS ? w / 10u : w;
 }
 
+void voice_said_add(VoiceSaid* s, const VoiceLine* l)
+{
+    if (s->n == VOICE_SAID_MAX) memmove(s->l, s->l + 1, sizeof s->l[0] * --s->n);   /* (the oldest goes: as if not said) */
+    s->l[s->n++] = l;
+}
+
+int voice_said_age(const VoiceSaid* s, const VoiceLine* l)
+{
+    for (int i = s->n - 1, k = 0; i >= 0; i--) {   /* (by file: a newer catalogue's line is the same line) */
+        if (s->l[i]->chr != l->chr) continue;
+        if (s->l[i]->disc == l->disc && s->l[i]->vid == l->vid) return k;
+        k++;
+    }
+    return -1;
+}
+
 const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr, int ms, int max_ms, int (*ms_of)(const VoiceLine*),
-                            int (*used)(const VoiceLine*), int grunts)
+                            int (*age)(const VoiceLine*), int grunts)
 {
     const Cat* c = cat_now();
     const VoiceLine* l = c && chr >= 0 && chr < CAST_CHARACTERS ? &c->lines[c->first[chr]] : NULL;
-    int n = l ? c->first[chr + 1] - c->first[chr] : 0, i, len, best = -1, best_ms = 0, pass;
-    unsigned h, sum = 0;
+    int n = l ? c->first[chr + 1] - c->first[chr] : 0, fit = grunts & VOICE_PICK_FIT, i, k, a, tier, pool = 0, cool, best = -1, best_ms = 0;
+    unsigned h, w, sum = 0;
     if (n <= 0) return NULL;
     h = mix(seed, room, disc, vid, (unsigned)chr);
+    grunts &= ~VOICE_PICK_FIT;
     if (ms <= 0 || max_ms <= 0 || !ms_of) max_ms = 0;   /* (any, alike) */
 #define SKIP(x) (grunts != VOICE_PICK_ANY && (x)->grunt != (grunts == VOICE_PICK_GRUNTS))   /* (a grunt for a grunt, a spoken line for one) */
-    for (i = 0; i < n && SKIP(&l[i]); i++);
-    if (i == n) return NULL;
-    for (pass = used ? 0 : 1; pass < 2 && !sum; pass++)   /* the ones not said yet in the room, else all */
+#define AGE(x) (age ? age(x) : -1)
+#define TAKE(x) (tier ? AGE(x) >= cool : AGE(x) < 0)   /* (tier 0: not said yet; 1: not among the last cool ones) */
+    for (i = 0; i < n; i++) pool += !SKIP(&l[i]) && line_weight(&l[i], ms, max_ms, ms_of, 0);   /* (the kind's lines with a length, also too long) */
+    if (!pool) {   /* none has a length: any; not the one just said while another is there */
+        for (k = 0, i = (int)(h % (unsigned)n); k < 2 * n; k++, i = (i + 1) % n)
+            if (!SKIP(&l[i]) && (k >= n || AGE(&l[i]) != 0)) return &l[i];
+        return NULL;
+    }
+    cool = pool / 2 > 3 ? pool / 2 : 3;   /* a line comes back only after this many others of the character: min(pool - 1, max(3, pool / 2)) */
+    if (cool > pool - 1) cool = pool > 1 ? pool - 1 : 1;   /* (fit too: a gasp whose short lines are all among them stays quiet; one line: never twice in a row) */
+    for (tier = 0; tier < 2 && !sum; tier++)   /* the lines not said yet in the room, else those not among the last cool ones; weighted */
+        for (i = 0; i < n; i++)
+            if (!SKIP(&l[i]) && (w = line_weight(&l[i], ms, max_ms, ms_of, fit)) && TAKE(&l[i])) sum += w;
+    if (!sum) {   /* (fit: none of those ends in time) the shortest of them (cast_glue.c keeps a gasp quiet then) */
         for (i = 0; i < n; i++) {
-            if (SKIP(&l[i]) || (!pass && used(&l[i]))) continue;
-            if (!max_ms) sum += 1000u;
-            else if ((len = ms_of(&l[i])) > 0 && len <= max_ms) sum += line_weight(len, ms);   /* (the ones that end in time, weighted) */
-            else if (len > 0 && (best < 0 || len < best_ms)) { best = i; best_ms = len; }
+            int len = !SKIP(&l[i]) && line_weight(&l[i], ms, max_ms, ms_of, 0) && ((a = AGE(&l[i])) < 0 || a >= cool) ? ms_of(&l[i]) : 0;
+            if (len > 0 && (best < 0 || len < best_ms)) { best = i; best_ms = len; }
         }
-    if (!sum) {   /* (none ends in time: the shortest; none with a length: any) */
-        if (best >= 0) return &l[best];
-        for (i = (int)(h % (unsigned)n); SKIP(&l[i]); i = (i + 1) % n);
-        return &l[i];
+        return best < 0 ? NULL : &l[best];
     }
     h %= sum;
-    for (pass--, i = 0; i < n; i++) {
-        unsigned w;
-        if (SKIP(&l[i]) || (!pass && used(&l[i]))) continue;
-        if (!max_ms) w = 1000u;
-        else if ((len = ms_of(&l[i])) > 0 && len <= max_ms) w = line_weight(len, ms);
-        else continue;
+    for (tier--, i = 0; i < n; i++) {
+        if (SKIP(&l[i]) || !(w = line_weight(&l[i], ms, max_ms, ms_of, fit)) || !TAKE(&l[i])) continue;
         if (h < w) break;
         h -= w;
     }
     return &l[i];
+#undef TAKE
+#undef AGE
 #undef SKIP
 }
 
