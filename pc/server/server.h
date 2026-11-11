@@ -78,6 +78,7 @@ void srv_reconfig(const SrvConfig* c);            /* SIGHUP: new limits and log 
 void srv_free(void);
 void srv_input(const RdvAddr* from, const uint8_t* buf, int n, uint64_t now_ms);
 void srv_tick(uint64_t now_ms);                   /* at least once a second: time-outs, rates */
+void srv_pause(uint64_t ms, uint64_t now_ms);     /* nothing was read for ms (a handover): not the players' silence */
 const SrvStats* srv_stats(void);
 int srv_status_text(char* out, int cap);          /* the metrics, "name value" lines (Prometheus text format) */
 int srv_summary(char* out, int cap);              /* the metrics in one log line */

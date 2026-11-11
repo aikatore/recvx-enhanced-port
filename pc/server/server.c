@@ -893,6 +893,16 @@ void srv_input(const RdvAddr* from, const uint8_t* buf, int n, uint64_t now)
     }
 }
 
+void srv_pause(uint64_t ms, uint64_t now)   /* the time-outs of hosts and joiners move by ms (at most to now) */
+{
+    int i, k;
+    for (i = 0; i < cfg.max_rooms; i++)
+        for (k = 0; k < 2 && rooms[i].id; k++) {
+            uint64_t* t = &rooms[i].m[k].last_ms;
+            *t = *t + ms < now ? *t + ms : now;
+        }
+}
+
 void srv_tick(uint64_t now)
 {
     uint64_t to = cfg.room_timeout_s * 1000ull;
@@ -1040,7 +1050,8 @@ int srv_state_import(const uint8_t* b, uint32_t n, SrvConfig* c, int nsocks)
     }
     io_globals(s);
     if (s->bad || !fin(all_req) || !fin(total_bytes) || !fin(total_dgrams) || !fin(log_tokens) || all_fails < 0 || !(srv_proc.cpu_user_s >= 0) || !(srv_proc.cpu_sys_s >= 0) ||
-        !fin(srv_proc.cpu_user_s + srv_proc.cpu_sys_s) || !fin(srv_proc.started_at)) return -1;
+        !fin(srv_proc.cpu_user_s + srv_proc.cpu_sys_s) || !fin(srv_proc.started_at) || !(st.req_rate >= 0) || !(st.relay_in_rate >= 0) ||
+        !(st.relay_out_rate >= 0) || !fin(st.req_rate + st.relay_in_rate + st.relay_out_rate)) return -1;
     draining = draining != 0;
     IO(cnt);
     if (s->bad || cnt > mr) return -1;

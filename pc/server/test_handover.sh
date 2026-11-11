@@ -8,7 +8,10 @@
 #     hears MAINPID / BARRIER / READY;
 #   - status-json parsed by python3 (no room codes or addresses in it);
 #   - drain: new rooms refused ("full or busy"), the open room goes on, the server stops after it;
-#   - the control socket: mode 0600, a stale one replaced, a live one refused.
+#   - the control socket: mode 0600, a stale one replaced, a live one refused;
+#   - exactly one server after a take-over that is slow or queued: behind a silent control
+#     connection, a systemd that answers the barrier after the time-out, the old server frozen
+#     after "ok" until the new one's time-out has passed.
 # usage: test_handover.sh DIR_WITH_BINARIES [PORT]
 bin=$1; port=${2:-17251}; tmp=$(mktemp -d); fails=0
 command -v python3 >/dev/null || { echo "python3 is missing"; exit 77; }
@@ -18,7 +21,8 @@ alive() { s=$(ps -o stat= -p "$1" 2>/dev/null); [ -n "$s" ] && [ "${s#Z}" = "$s"
 bad() { echo "FAIL $1"; fails=$((fails + 1)); }
 code_of() { for i in $(seq 1 25); do c=$(sed -n 's/.*rdv: room \([A-Z0-9-]*\).*/\1/p' "$1" | head -1); [ -n "$c" ] && { echo "$c"; return; }; sleep 0.2; done; }
 ctl=$tmp/control.sock
-cleanup() { kill $notifier $pids 2>/dev/null; pkill -f "recvx-server.*--port $port" 2>/dev/null; rm -rf "$tmp"; }
+p2=$((port + 2)); ctl_s=3   # main.c CTL_TIMEOUT_MS
+cleanup() { kill $notifier $pids 2>/dev/null; pkill -f "recvx-server.*--port ($port|$p2)" 2>/dev/null; rm -rf "$tmp"; }
 trap cleanup EXIT
 
 # a fake systemd: logs each notify message, closes what a BARRIER passes (that answers it)
@@ -142,4 +146,54 @@ r=$?
 kill $s4; wait $s4
 [ ! -e "$ctl" ] && ok "SIGTERM removes the control socket" || bad "control socket left after SIGTERM"
 if grep -E "$rcode|$dcode|$wcode" "$tmp/s1.txt" "$tmp/s2.txt"; then bad "a room code in the log"; else ok "no room codes in the logs"; fi
+
+# one server after a take-over, whatever is slow: a fake systemd on its own socket per take-over
+# that answers the BARRIER after $3 s, or (a pid in $4) at once but freezes that pid for $3 s
+slow_systemd() {
+    python3 -c '
+import os, signal, socket, sys, threading
+s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM); s.bind(sys.argv[1]); out = open(sys.argv[2], "a", buffering=1)
+wait, pid = float(sys.argv[3]), int(sys.argv[4])
+def answer(fds):
+    for f in fds: os.close(f)
+while True:   # (the log goes on meanwhile: a MAINPID back to the old one is seen)
+    msg, anc, flags, addr = s.recvmsg(4096, socket.CMSG_SPACE(64))
+    out.write(msg.decode() + "\n")
+    for lvl, typ, data in anc:
+        fds = [int.from_bytes(data[i:i + 4], "little") for i in range(0, len(data) - len(data) % 4, 4)]
+        if pid: os.kill(pid, signal.SIGSTOP); answer(fds); threading.Timer(wait, os.kill, (pid, signal.SIGCONT)).start()
+        else: threading.Timer(wait, answer, (fds,)).start()
+' "$1" "$2" "$3" "${4:-0}" &
+    pids="$pids $!"
+    sleep 0.3
+}
+# take_over NAME SLOW_SYSTEMD_ARGS: a take-over on port p2; then exactly one server: the new one
+# (exit 0) or the old one; the last MAINPID systemd heard (if any) is that one, and it answers
+take_over() {
+    t=$1; shift
+    slow_systemd "$tmp/$t.sock" "$tmp/$t.notify" "$@"
+    NOTIFY_SOCKET=$tmp/$t.sock "$bin/recvx-server" --take-over --port $p2 --control "$tmp/c2.sock" > "$tmp/$t.txt" 2>&1
+    r=$?
+    sleep 0.5
+    new2=$(pgrep -f "recvx-server --take-over --port $p2")
+    if [ $r -eq 0 ]; then want=$new2; alive $s6 && want=; else want=$s6; [ -n "$new2" ] && want=; fi
+    m=$(sed -n 's/^MAINPID=//p' "$tmp/$t.notify" | tail -1)
+    if [ -n "$want" ] && alive $want && { [ -z "$m" ] || [ "$m" = "$want" ]; } && "$bin/recvx-client" 127.0.0.1:$p2 status-json > /dev/null; then return 0; fi
+    echo "  take-over exit $r, old $s6 $(alive $s6 && echo alive || echo gone), new '$new2', MAINPID '$m'"; cat "$tmp/$t.txt"
+    return 1
+}
+"$bin/recvx-server" --port $p2 --control "$tmp/c2.sock" > "$tmp/s6.txt" 2>&1 & s6=$!
+sleep 0.3
+python3 -c 'import socket, sys, time; s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); time.sleep(30)' "$tmp/c2.sock" & holder=$!
+sleep 0.5
+"$bin/recvx-server" --drain --control "$tmp/c2.sock" > "$tmp/d2.txt" 2>&1 && bad "--drain behind a silent control connection succeeded" || \
+    { grep -q "busy" "$tmp/d2.txt" && ok "--drain behind a silent control connection: busy at once" || { bad "--drain behind a silent control connection"; cat "$tmp/d2.txt"; }; }
+take_over t1 1 && [ $r -eq 1 ] && grep -q "busy" "$tmp/t1.txt" && [ ! -s "$tmp/t1.notify" ] && ok "take-over behind a silent control connection: busy at once, one server" || bad "take-over behind a silent control connection"
+kill $holder; sleep 0.3
+"$bin/recvx-client" 127.0.0.1:$p2 status-json | grep -q '"draining":false' && ok "the busy --drain was not carried out later" || bad "a busy --drain was carried out"
+take_over t2 $((ctl_s + 1)) && [ $r -ne 0 ] && ok "systemd slower than the time-out: no \"ok\", the old server goes on" || bad "a slow systemd barrier"
+take_over t3 $((ctl_s + 1)) $s6 && [ $r -eq 0 ] && ok "the old server frozen after \"ok\" past the time-out: the new one serves" || bad "the old server frozen after ok"
+alive $s6 && { bad "the old server still runs"; kill $s6; }
+wait $s6; [ $? -eq 0 ] && ok "the old server exited 0" || bad "the old server's exit"
+kill $new2 2>/dev/null
 exit $fails

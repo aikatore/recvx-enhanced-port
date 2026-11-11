@@ -26,7 +26,7 @@
 #ifndef RECVX_RELEASE
 #define RECVX_RELEASE RECVX_VERSION
 #endif
-#define CTL_TIMEOUT_MS 10000
+#define CTL_TIMEOUT_MS 3000   /* a handover stops reading UDP for at most this: well below member_timeout (>= 6 s) */
 
 static int socks[SRV_LISTEN_MAX], nsocks;
 static int ctl = -1, conn = -1;     /* the control socket (listening); the one connection being read */
@@ -41,7 +41,9 @@ static double cpu_base[2];          /* the CPU time of the processes this one to
 /* the control protocol (one connection, lines): "drain" -> "draining, N rooms open";
    "takeover" -> CtlHdr with the UDP sockets and the control socket (SCM_RIGHTS), the state blob
    (CtlHdr.len bytes), then the new process answers "ok", "incompatible" or "invalid", and to
-   "ok" the old one says "bye" and exits: only then does the new one serve */
+   "ok" the old one says "bye" and exits. "bye" is the commit point: the new process, once it said
+   "ok", waits for "bye" (it serves) or the end of the connection (the old one goes on) without a
+   time-out of its own, as the old one always answers or closes within its own */
 typedef struct CtlHdr { char magic[4]; uint32_t nudp, len; char version[52]; } CtlHdr;   /* "RXHO" */
 
 static uint64_t now_ms(void)
@@ -209,14 +211,14 @@ static void proc_info(void)
 }
 
 /* ---------------------------------------------------------------- the control socket */
-static int wait_fd(int fd, short ev, uint64_t deadline)   /* 1: ready (or hung up), 0: time-out */
+static int wait_fd(int fd, short ev, uint64_t deadline)   /* 1: ready (or hung up), 0: time-out; deadline 0: none */
 {
     for (;;) {
         struct pollfd p = { fd, ev, 0 };
         uint64_t now = now_ms();
         int r;
-        if (now >= deadline) return 0;
-        r = poll(&p, 1, (int)(deadline - now));
+        if (deadline && now >= deadline) return 0;
+        r = poll(&p, 1, deadline ? (int)(deadline - now) : -1);
         if (r > 0) return 1;
         if (r < 0 && errno != EINTR) return 0;
     }
@@ -266,9 +268,10 @@ static int unix_addr(const char* path, struct sockaddr_un* a)
     return 1;
 }
 
-/* systemd's notify protocol, without libsystemd: a datagram to $NOTIFY_SOCKET. barrier: then
-   waits (up to 5 s) until systemd has handled it (BARRIER=1 with a pipe that it closes) */
-static void notify(const char* msg, int barrier)
+/* systemd's notify protocol, without libsystemd: a datagram to $NOTIFY_SOCKET. barrier (a
+   deadline, 0: none): then waits until systemd has handled it (BARRIER=1 with a pipe that it
+   closes), at most until then */
+static void notify(const char* msg, uint64_t barrier)
 {
     const char* e = getenv("NOTIFY_SOCKET");
     struct sockaddr_un a;
@@ -300,7 +303,7 @@ static void notify(const char* msg, int barrier)
         memcpy(CMSG_DATA(cm), &p[1], sizeof(int));
         ok = sendmsg(fd, &h, MSG_NOSIGNAL) >= 0;
         close(p[1]);
-        if (ok) wait_fd(p[0], POLLIN, now_ms() + 5000);   /* POLLHUP: systemd closed its end */
+        if (ok) wait_fd(p[0], POLLIN, barrier);   /* POLLHUP: systemd closed its end */
         close(p[0]);
     }
     close(fd);
@@ -487,7 +490,7 @@ static int take_over(SrvConfig* c)
 {
     CtlHdr h;
     pid_t old = 0;
-    int fd, i, r, nfd = 0, rc = 1, fds[SRV_LISTEN_MAX + 1];
+    int fd, i, r, w, nfd = 0, rc = 1, fds[SRV_LISTEN_MAX + 1];
     uint8_t* blob = NULL;
     uint32_t fmt = 0;
     char line[16], cb[CMSG_SPACE(sizeof(fds)) + 64];
@@ -504,7 +507,7 @@ static int take_over(SrvConfig* c)
     m.msg_iovlen = 1;
     m.msg_control = cb;
     m.msg_controllen = sizeof(cb);
-    if (!write_all(fd, "takeover\n", 9, deadline)) { fprintf(stderr, "--take-over: the server closed the connection\n"); goto out; }
+    w = write_all(fd, "takeover\n", 9, deadline);   /* (failed: "busy" may be there to read) */
     r = (int)recvmsg(fd, &m, MSG_WAITALL | MSG_CMSG_CLOEXEC);
     for (cm = CMSG_FIRSTHDR(&m); cm; cm = CMSG_NXTHDR(&m, cm))
         if (cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_RIGHTS)
@@ -515,6 +518,7 @@ static int take_over(SrvConfig* c)
                 else close(f);
             }
     if (r == 5 && !memcmp(&h, "busy\n", 5)) { fprintf(stderr, "--take-over: the server is busy with another control connection, try again\n"); goto out; }
+    if (!w) { fprintf(stderr, "--take-over: the server closed the connection\n"); goto out; }
     if (r != (int)sizeof(h) || (m.msg_flags & MSG_CTRUNC) || memcmp(h.magic, "RXHO", 4) || h.nudp < 1 || h.nudp > SRV_LISTEN_MAX ||
         nfd != (int)h.nudp + 1 || h.len < 8 || h.len > SRV_STATE_MAX) {
         fprintf(stderr, "--take-over: not a recvx-server handover (%d bytes, %d descriptors)\n", r, nfd);
@@ -550,8 +554,10 @@ static int take_over(SrvConfig* c)
     {
         char t[32];
         snprintf(t, sizeof(t), "MAINPID=%d", (int)getpid());
-        notify(t, 1);   /* systemd must know before the old main process exits */
-        if (!write_all(fd, "ok\n", 3, deadline) || !read_line(fd, line, sizeof(line), deadline) || strcmp(line, "bye")) {
+        notify(t, deadline);   /* systemd must know before the old main process exits */
+        /* past the deadline the old one may have given up: no "ok" then. After "ok" only "bye"
+           decides (no deadline: the old one answers or closes within its own) */
+        if (now_ms() >= deadline || !write_all(fd, "ok\n", 3, deadline) || !read_line(fd, line, sizeof(line), 0) || strcmp(line, "bye")) {
             snprintf(t, sizeof(t), "MAINPID=%d", (int)old);
             notify(t, 0);
             fprintf(stderr, "--take-over: the running server did not hand over (time-out?): nothing taken over\n");
@@ -576,6 +582,7 @@ static int take_over(SrvConfig* c)
     cpu_base[1] = srv_proc.cpu_sys_s;
     if (srv_proc.start_ms > now_ms()) srv_proc.start_ms = now_ms();   /* (a start ahead of the clock: invalid) */
     srv_proc.handovers++;
+    srv_pause(now_ms() - (deadline - CTL_TIMEOUT_MS), now_ms());   /* UDP was not read since (at most) the connect */
     notify("READY=1", 0);
     srv_logf("recvx-server: took over from pid %d (%s): %u rooms, state format %u", (int)old, h.version, srv_stats()->rooms, fmt);
     rc = 0;
@@ -592,12 +599,14 @@ static int ctl_drain(const SrvConfig* c)   /* --drain */
     int fd;
     if (!c->control[0]) { fprintf(stderr, "--drain: no control socket (control = PATH in the config, or --control PATH; or send SIGUSR1)\n"); return 1; }
     if ((fd = ctl_connect(c->control, NULL)) < 0) return 1;
-    if (!write_all(fd, "drain\n", 6, now_ms() + CTL_TIMEOUT_MS) || !read_line(fd, line, sizeof(line), now_ms() + CTL_TIMEOUT_MS)) {
+    write_all(fd, "drain\n", 6, now_ms() + CTL_TIMEOUT_MS);   /* (failed: "busy" may be there to read) */
+    if (!read_line(fd, line, sizeof(line), now_ms() + CTL_TIMEOUT_MS)) {
         fprintf(stderr, "--drain: no answer\n");
         close(fd);
         return 1;
     }
     close(fd);
+    if (!strcmp(line, "busy")) { fprintf(stderr, "--drain: the server is busy with another control connection, nothing changed: try again\n"); return 1; }
     puts(line);
     return strncmp(line, "draining", 8) != 0;
 }
@@ -658,9 +667,10 @@ int main(int argc, char** argv)
     while (!quit) {
         struct pollfd p[SRV_LISTEN_MAX + 2];
         uint64_t now;
-        int np = nsocks;
+        int np = nsocks, pc = -1, pl = -1;
         for (i = 0; i < nsocks; i++) { p[i].fd = socks[i]; p[i].events = POLLIN; p[i].revents = 0; }
-        if (ctl >= 0) { p[np].fd = conn >= 0 ? conn : ctl; p[np].events = POLLIN; p[np].revents = 0; np++; }   /* one connection at a time */
+        if (conn >= 0) { pc = np; p[np].fd = conn; p[np].events = POLLIN; p[np].revents = 0; np++; }
+        if (ctl >= 0) { pl = np; p[np].fd = ctl; p[np].events = POLLIN; p[np].revents = 0; np++; }   /* more while one is open: "busy" */
         if (poll(p, np, 1000) > 0) {
             for (i = 0; i < nsocks; i++) {
                 int k;
@@ -680,10 +690,12 @@ int main(int argc, char** argv)
                     srv_input(&from, buf, n > RDV_DGRAM_MAX ? RDV_DGRAM_MAX + 1 : n, now_ms());
                 }
             }
-            if (np > nsocks && p[nsocks].revents) {
-                if (conn >= 0) { if (ctl_input()) { handed = 1; break; } }
-                else ctl_accept();
+            if (pc >= 0 && p[pc].revents) {
+                uint64_t t = now_ms();
+                if (ctl_input()) { handed = 1; break; }
+                srv_pause(now_ms() - t, now_ms());   /* a refused handover: UDP was not read meanwhile */
             }
+            if (pl >= 0 && p[pl].revents) ctl_accept();
         }
         now = now_ms();
         if (conn >= 0 && now - conn_ms > CTL_TIMEOUT_MS) conn_close();   /* a silent client does not hold the socket */

@@ -430,27 +430,30 @@ static void attach_depth(GLuint fbo, GLuint dt)
     if (i == natt) { if (natt == 32) { natt = 0; i = 0; } natt++; }
     att[i].fbo = fbo; att[i].dt = dt;
 }
-static GLuint depth_for(uint32_t zbp, int pw, int ph)
+/* the depth texture for ZBP at this size, attached to fbo (bound, its colour target of the same size) */
+static void depth_for(uint32_t zbp, GLuint fbo, int pw, int ph)
 {
     int e = 0;
     dz_clock++;
-    for (int i = 0; i < 8; i++) if (dz[i].tex && dz[i].zbp == zbp && dz[i].pw == pw && dz[i].ph == ph) { dz[i].last = dz_clock; dz_cur = i; return dz[i].tex; }
+    for (int i = 0; i < 8; i++) if (dz[i].tex && dz[i].zbp == zbp && dz[i].pw == pw && dz[i].ph == ph) { dz[i].last = dz_clock; dz_cur = i; attach_depth(fbo, dz[i].tex); return; }
     for (int i = 0; i < 8; i++)   /* a free one, else the least recently used */
         if (!dz[i].tex) { e = i; break; }
         else if (dz[i].last < dz[e].last) e = i;
     if (dz[e].tex) { glDeleteTextures(1, &dz[e].tex); fb_forget(); }   /* (a depth of another size would cut the draws) */
     glGenTextures(1, &dz[e].tex);
     glBindTexture(GL_TEXTURE_2D, dz[e].tex);
-    {   /* created as depth 0 (was undefined), so fast_clear may clear all of it */
-        float* z = calloc((size_t)pw * ph, sizeof(float));
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, pw, ph, 0, GL_DEPTH_COMPONENT, GL_FLOAT, z);
-        free(z);
-    }
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, pw, ph, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    attach_depth(fbo, dz[e].tex);
+    /* cleared to depth 0 on the GPU (was undefined), so fast_clear may clear all of it. The scissor
+       and depth mask are left as gs_flush, the one caller, sets both for its draw right after;
+       the clear depth is fast_clear's too */
+    glDisable(GL_SCISSOR_TEST);
+    glDepthMask(GL_TRUE);
+    glClearDepth(0.0);
+    glClear(GL_DEPTH_BUFFER_BIT);
     dz[e].zbp = zbp; dz[e].pw = pw; dz[e].ph = ph; dz[e].last = dz_clock; dz[e].zrow = 0; dz_cur = e;
-    return dz[e].tex;
 }
 
 #define GL_RGBA16F 0x881A
@@ -507,6 +510,7 @@ static void rt_load_from_mem(RenderTarget* rt)
         glBindFramebuffer(GL_READ_FRAMEBUFFER, fb);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tmp, 0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, rt->fbo);
+        glDisable(GL_SCISSOR_TEST);   /* (the last draw's scissor would cut the blit; gs_flush sets its own) */
         glBlitFramebuffer(0, 0, w, h, (GLint)(g_margin_x * g_scale), 0, (GLint)((g_margin_x + w) * g_scale), (GLint)(h * g_scale),
                           GL_COLOR_BUFFER_BIT, GL_NEAREST);
         glDeleteFramebuffers(1, &fb); fb_forget();
@@ -546,6 +550,8 @@ static RenderTarget* rt_get(uint32_t fbp, uint32_t fbw, uint32_t psm)
     glGenFramebuffers(1, &rt->fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, rt->fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, rt->tex, 0);
+    glDisable(GL_SCISSOR_TEST);   /* all of it 0 (zrow): not the last draw's scissor and FBMSK (gs_flush sets its own) */
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT);
     rt_load_from_mem(rt);
@@ -572,11 +578,13 @@ float gs_wanted_scale(void)
     return g_config.dyn_res && s > (float)drs_cap() ? (float)drs_cap() : s;
 }
 
+static void cpool_trim(uint64_t age);
 /* change the internal resolution; existing render targets are resampled, not lost */
 void gs_set_scale(float scale)
 {
     if (scale == g_scale) return;
     gs_flush();
+    cpool_trim(0);
     for (int i = 0; i < MAX_RT; i++) {
         RenderTarget* rt = &rts[i];
         GLuint tex, fbo;
@@ -658,6 +666,7 @@ void gs_update_widescreen(void)
     }
     if (m == g_margin_x) return;
     gs_flush();
+    cpool_trim(0);
     for (int i = 0; i < MAX_RT; i++)   /* recreated (and reloaded from GS memory) at the new width */
         if (rts[i].used) { glDeleteTextures(1, &rts[i].tex); glDeleteFramebuffers(1, &rts[i].fbo); fb_forget(); rts[i].used = 0; }
     for (int i = 0; i < 8; i++) if (dz[i].tex) { glDeleteTextures(1, &dz[i].tex); dz[i].tex = 0; }
@@ -961,6 +970,7 @@ static struct {
     uint64_t last_log;
 } gt;
 static int drs_wanted(void);
+static void drs_reset(void);
 static void drs_sample(int exec, double ms);
 static void drs_exec(void);
 static void drs_update(uint64_t now);
@@ -978,6 +988,7 @@ static void gt_init(void)
         if (gt.ok) for (int i = 0; i < GT_RING; i++) gt.gen(GT_N, gt.q[i]);
     }
     gt.on = gt.ok && (gt.log || drs_wanted());
+    if (!drs_wanted()) drs_reset();   /* (drs_update does not run while gt.on is off) */
 }
 #define GL_TIMESTAMP 0x8E28
 #define GL_QUERY_RESULT 0x8866
@@ -1154,6 +1165,8 @@ static void gt_present_end(int inbetween)
 static struct { int cap; double ms[2]; int n[2], over, under, skip, presents, execs; uint64_t t0; } drs = { 8 };
 static int drs_wanted(void) { return g_config.dyn_res && g_config.scale == 0; }
 static int drs_cap(void) { return drs.cap; }
+/* off: back to the top, and on again the first interval starts fresh (no counts from before) */
+static void drs_reset(void) { memset(&drs, 0, sizeof(drs)); drs.cap = 8; }
 static void drs_sample(int exec, double ms) { drs.ms[exec] += ms; drs.n[exec]++; }
 static void drs_exec(void) { drs.execs++; }
 static float auto_scale(void);
@@ -1162,7 +1175,7 @@ static void drs_update(uint64_t now)
     extern double render_present_hz(void);
     double u, f;
     int s, top, missing;
-    if (!drs_wanted()) { drs.cap = 8; drs.t0 = 0; return; }
+    if (!drs_wanted()) { drs_reset(); return; }
     drs.presents++;
     if (!drs.t0) { drs.t0 = now; drs.ms[0] = drs.ms[1] = 0; drs.n[0] = drs.n[1] = 0; drs.presents = drs.execs = 0; return; }
     if (now - drs.t0 < 1000000000ull) return;
@@ -1199,7 +1212,7 @@ typedef struct { uint64_t tex0, texa; uint32_t epoch, gen; int rt; uint32_t fbp,
 static TexMemo memo[MEMO_SIZE];
 static uint32_t memo_gen = 1;
 #define MAX_RELOADS 8
-typedef struct { uint32_t epoch, fbp; int pw, ph, applied; GLuint tex, fbo; int tw, th; } Reload;
+typedef struct { uint32_t epoch, fbp; int pw, ph, applied, zrow; GLuint tex, fbo; int tw, th; } Reload;   /* zrow: the target's after the reload */
 static Reload reloads[MAX_RELOADS];
 static int nreloads;
 static void blit_color(GLuint src_fbo, GLuint dst_fbo, int w, int h);
@@ -1229,6 +1242,35 @@ static TexMemo* memo_slot(uint64_t tex0, uint64_t texa, uint32_t epoch, int crea
 }
 /* the memo's render target is still in its slot (not evicted and reused for another one) */
 static int memo_rt_ok(const TexMemo* m) { return rts[m->rt].used && rts[m->rt].fbp == m->fbp && rts[m->rt].fbw == m->fbw; }
+/* RECVX_ZROW_CHECK=1 (test aid): before each whole-target clear, and after a replay puts back a
+   reload, the rows that the target's (and before a clear its depth's) zrow say are 0 are read back;
+   a row holding anything else is logged ("zrow: ... not 0"). =2: also the draw target reloaded
+   from GS memory at the draw after each executed frame's whole-target clear (the pictures change),
+   so replays put back reloads (clear, reload, clear) */
+static int zrow_check(void)
+{
+    static int on = -1;
+    if (on < 0) on = SDL_getenv("RECVX_ZROW_CHECK") ? SDL_atoi(SDL_getenv("RECVX_ZROW_CHECK")) : 0;
+    return on;
+}
+static void zrow_verify(int depth)
+{
+    if (!zrow_check()) return;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, cur_rt->fbo);
+    for (int d = 0; d <= depth; d++) {
+        int z = d ? dz[dz_cur].zrow : cur_rt->zrow, y0 = (int)ceilf(z * g_scale), n = cur_rt->ph - y0, c = d ? 1 : 4;
+        size_t cnt = (size_t)cur_rt->pw * (n > 0 ? n : 0) * c, i = 0;
+        float* px;
+        if (!cnt || !(px = malloc(cnt * sizeof(float)))) continue;
+        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        glReadPixels(0, y0, cur_rt->pw, n, d ? GL_DEPTH_COMPONENT : GL_RGBA, GL_FLOAT, px);
+        while (i < cnt && px[i] == 0.0f) i++;
+        if (i < cnt)
+            host_log("zrow: FBP %u %s row %d not 0 (zrow %d, %s frame %llu)\n", cur_rt->fbp, d ? "depth" : "colour",
+                     y0 + (int)(i / c / (size_t)cur_rt->pw), z, gs_replaying ? "replay" : "executed", (unsigned long long)frame_no);
+        free(px);
+    }
+}
 /* executed frame: a render target was reloaded from GS memory for a draw in this epoch */
 static void reload_record(const RenderTarget* rt, uint32_t epoch)
 {
@@ -1237,7 +1279,7 @@ static void reload_record(const RenderTarget* rt, uint32_t epoch)
     r = &reloads[nreloads++];
     ensure_target(&r->tex, &r->fbo, &r->tw, &r->th, rt->pw, rt->ph);
     blit_color(rt->fbo, r->fbo, rt->pw, rt->ph);
-    r->epoch = epoch; r->fbp = rt->fbp; r->pw = rt->pw; r->ph = rt->ph; r->applied = 0;
+    r->epoch = epoch; r->fbp = rt->fbp; r->pw = rt->pw; r->ph = rt->ph; r->applied = 0; r->zrow = rt->zrow;
 }
 /* replay: put back what the executed frame reloaded up to this point */
 static void reload_replay(RenderTarget* rt, uint32_t epoch)
@@ -1246,7 +1288,9 @@ static void reload_replay(RenderTarget* rt, uint32_t epoch)
         Reload* r = &reloads[i];
         if (r->applied || r->fbp != rt->fbp || r->epoch > epoch || r->pw != rt->pw || r->ph != rt->ph) continue;
         blit_color(r->fbo, rt->fbo, rt->pw, rt->ph);
+        if (r->zrow > rt->zrow) rt->zrow = r->zrow;   /* (the image's rows above it are not known to be 0) */
         r->applied = 1;
+        zrow_verify(0);   /* (rt is cur_rt: gs_flush) */
     }
 }
 /* the display target as the frame found it: PS2_swap blends the new image over it, so a
@@ -1445,6 +1489,7 @@ static int fast_clear(const DrawState* st, int tme)
         if (keep1 > cur_rt->ph) keep1 = cur_rt->ph;
         full = bx0 == 0 && by0 == 0 && bx1 >= cur_rt->pw && keep1 - keep0 <= (int)(32 * g_scale) && !ab_off(8);
     }
+    if (full) zrow_verify(!zmsk);
     if (full && keep1 > keep0) {
         int kw = keep.pw, kh = keep.ph;
         ensure_target(&keep.tex, &keep.fbo, &keep.pw, &keep.ph, cur_rt->pw, (int)(32 * g_scale) + 1);
@@ -1477,6 +1522,7 @@ static int fast_clear(const DrawState* st, int tme)
         glEnable(GL_SCISSOR_TEST);
         if (fpsm != PSMCT24 && keep1 <= keep0) cur_rt->zrow = 0;   /* (alpha masked: only the rows that were 0 are known) */
         if (!zmsk && keep1 <= keep0) dz[dz_cur].zrow = 0;
+        if (zrow_check() == 2 && !gs_replaying) cur_rt->stale = 1;
     }
     gt_cnt[0]++;
     return 1;
@@ -1506,11 +1552,7 @@ void gs_flush(void)
     }
     if (!gs_replaying && first[cur_rt - rts].how == FIRST_NONE) rt_first_draw(cur_rt, st, fbw, fpsm);
     glBindFramebuffer(GL_FRAMEBUFFER, cur_rt->fbo);
-    {
-        uint32_t zbp = st->ctx.zbuf & 0x1FF;
-        GLuint dt = depth_for(zbp, cur_rt->pw, cur_rt->ph);
-        attach_depth(cur_rt->fbo, dt);
-    }
+    depth_for(st->ctx.zbuf & 0x1FF, cur_rt->fbo, cur_rt->pw, cur_rt->ph);
     glViewport(0, 0, cur_rt->pw, cur_rt->ph);
     {
         uint64_t sc = st->ctx.scissor;
@@ -2158,11 +2200,21 @@ static void capture_rt(GLuint* tex, GLuint* fbo, int* cw, int* ch, uint32_t fbp,
    deleted one of the target's size every frame: at 4x a 16F texture of up to 56 MB, which the
    driver allocated and cleared each time, and a framebuffer). Free again when deleted
    (gs_tex_delete: at the next frame, gs_frame_begin). RECVX_AB bit 16: made and deleted. */
-static struct { GLuint tex, fbo; int w, h, state; } cpool[8];   /* state: 0 none, 1 handed out, 2 free */
+static struct { GLuint tex, fbo; int w, h, state; uint64_t freed; } cpool[8];   /* state: 0 none, 1 handed out, 2 free (since frame_no freed) */
 static int cpool_release(GLuint tex)
 {
-    for (int i = 0; i < 8; i++) if (cpool[i].state == 1 && cpool[i].tex == tex) { cpool[i].state = 2; return 1; }
+    for (int i = 0; i < 8; i++) if (cpool[i].state == 1 && cpool[i].tex == tex) { cpool[i].state = 2; cpool[i].freed = frame_no; return 1; }
     return 0;
+}
+/* free textures not taken again for 120 frames (the room left), or all of them (age 0: a new scale
+   or margin, none of their sizes comes again) deleted: no peak VRAM kept for the session */
+static void cpool_trim(uint64_t age)
+{
+    for (int i = 0; i < 8; i++)
+        if (cpool[i].state == 2 && frame_no - cpool[i].freed >= age) {
+            glDeleteTextures(1, &cpool[i].tex); glDeleteFramebuffers(1, &cpool[i].fbo); fb_forget();
+            memset(&cpool[i], 0, sizeof(cpool[i]));
+        }
 }
 unsigned int gs_capture_rt(uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, int wide)
 {
@@ -2175,7 +2227,7 @@ unsigned int gs_capture_rt(uint32_t fbp, uint32_t fbw, uint32_t w, uint32_t h, i
             if (cpool[i].state != 1 && (k < 0 || (cpool[i].state == 2 && cpool[i].w == pw && cpool[i].h == ph))) k = i;
     if (k >= 0) { tex = cpool[k].tex; fbo = cpool[k].fbo; cw = cpool[k].w; ch = cpool[k].h; }
     capture_rt(&tex, &fbo, &cw, &ch, fbp, fbw, w, h, wide);
-    if (k >= 0) { cpool[k] = (typeof(cpool[k])){ tex, fbo, cw, ch, 1 }; return tex; }
+    if (k >= 0) { cpool[k] = (typeof(cpool[k])){ tex, fbo, cw, ch, 1, 0 }; return tex; }
     glDeleteFramebuffers(1, &fbo); fb_forget();
     return tex;
 }
@@ -2351,6 +2403,7 @@ void gs_frame_begin(void)
         if (n) glDeleteTextures((GLsizei)n, doomed);
         ndoomed = 0;
     }
+    cpool_trim(120);
     nreloads = 0;
     mv_tbp = UINT32_MAX;   /* a movie frame binds it again (EV_MOVIE) */
     snapshot_valid = 0;   /* no replays of the previous frame while this one is half executed (download) */
