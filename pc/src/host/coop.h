@@ -12,9 +12,10 @@ enum { COOP_OFF, COOP_HOSTING, COOP_JOINING, COOP_CONNECTED, COOP_LOST };
 enum { COOP_TRADE_OFFER = 1, COOP_TRADE_ACCEPT, COOP_TRADE_DECLINE, COOP_TRADE_CANCEL };
 
 #define COOP_DEFAULT_PORT 7140
-/* the co-op server (docs/SERVER.md) filled in when recvx.ini has none: self-hosted servers
-   only for now, so empty (Automatic then behaves exactly as Direct). host or host:port, UDP 7141. */
-#define COOP_DEFAULT_SERVER ""
+/* the co-op server (docs/SERVER.md) of a first start, and of a recvx.ini from before it whose coop_server
+   is empty (config.c, coop_server_version); one cleared since stays empty (Automatic then behaves exactly
+   as Direct). host or host:port, UDP 7141. Nothing contacts it until a session is hosted or joined. */
+#define COOP_DEFAULT_SERVER "eu.cvxenhanced.de"
 #define COOP_E2E 1                      /* hosting through the server: encrypt end to end (the joiner follows the host) */
 enum { COOP_CONN_AUTO, COOP_CONN_DIRECT, COOP_CONN_SERVER };   /* ini coop_conn */
 #define COOP_NAME_MAX 16                /* a player name, with its terminator */
@@ -92,8 +93,8 @@ int coop_shared_enemies(void);
 /* a co-op session's game runs (not the title, the lobby or the attract demo): Shared Enemy Control is locked */
 int coop_session_game(void);
 /* Hide IP addresses: every address shown on screen goes through here. With hide_ip on, the
-   text with its IPv4 addresses and the join and co-op server host names masked (net_mask_addrs),
-   else text itself. A ring of 4 buffers per thread (lobby_io.c). Input fields mask as passwords. */
+   text with its IPv4 addresses and the join host name masked (net_mask_addrs), the co-op server's
+   name or address never (it is public), else text itself. A ring of 4 buffers per thread (lobby_io.c). Input fields mask as passwords. */
 const char* coop_shown(const char* text);
 /* joining: where our inventory comes from (g_coop.items; 0..14 is a save slot) */
 enum { COOP_ITEMS_CURRENT = -3,     /* our game in progress (F3 in game); at the title the new-game items */

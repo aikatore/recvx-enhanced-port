@@ -551,48 +551,49 @@ int main(void)
             free(b); free(b2);
             voice_curation_use(NULL);
         }
-        {   /* the picks in a row (cast_glue.c: the lines said since the room load): those not said first; then none of the last
-               min(pool - 1, max(3, pool / 2)) again, so no line twice in a row and no A-B-A, across the rounds too; pools of
-               2, 3, 5, 14 (Alfred's) and 100 lines, lengths 0.4 to 9.4 s, originals 1.2 to 9 s. Each original gets one line that
-               ends by its end and grace (ms + 1 s) whenever the character has one that is not the last; the cooldown gives way
-               only to that (never a longer line while one ends in time), and the length is a preference among those */
+        {   /* the picks in a row (cast_glue.c: the lines said with the seed): none of the last min(pool - 1, max(3, pool / 2))
+               again, so no line twice in a row and no A-B-A, across the rounds too, and no line more than 1 / (that + 1) of
+               the picks; pools of 2, 3, 5, 14 (Alfred's) and 100 lines, lengths 0.4 to 9.4 s, originals 1.2 to 9 s, and
+               (short) 1.2 to 2.5 s, where only a few of the lines end in time. In order: one that ends by its end and grace
+               (ms + 1 s) not said yet, else out of the cooldown; else one out of the cooldown that runs longer (cast_glue.c
+               cuts it); only where all are in the cooldown (a pool of one) none */
             static const int pools[] = { 2, 3, 5, 14, 100 };
             static VoiceCurated tp[101];
-            for (int q = 0; q < 5; q++) {
-                int P = pools[q], N = P - 1 < (P / 2 > 3 ? P / 2 : 3) ? P - 1 : (P / 2 > 3 ? P / 2 : 3), longer = 0, eased = 0;
+            for (int q = 0; q < 10; q++) {
+                int P = pools[q % 5], N = P - 1 < (P / 2 > 3 ? P / 2 : 3) ? P - 1 : (P / 2 > 3 ? P / 2 : 3), longer = 0, shrt = q >= 5;
                 for (k = 0; k < P; k++) tp[k] = (VoiceCurated){ 1, (unsigned short)(1000 + k), 4, VOICE_CONFIRMED, 0xFFFF };
                 tp[P] = (VoiceCurated){ 0 };
                 voice_curation_use(tp);
                 voice_scan_done();   /* (lines no script says: the table's alone) */
                 CHECK(voice_count(4) == P);
                 for (s = 1; s <= 3; s++) {
-                    const VoiceLine* seq[600];
+                    int times[100] = { 0 }, top = 0;
                     hist.n = 0;
                     for (k = 0; k < 600; k++) {
-                        int ms = 1200 + (int)((k * 3571u + (unsigned)s * 977u) % 7800u), j;
+                        int ms = shrt ? 1200 + (int)((k * 3571u + (unsigned)s * 977u) % 1300u) : 1200 + (int)((k * 3571u + (unsigned)s * 977u) % 7800u), j;
                         a = voice_pick((unsigned)s, 1020, 1, k, 4, ms, ms + 1000, len_var, hist_age, VOICE_PICK_SPOKEN);
                         CHECK(a && a->chr == 4 && a == voice_pick((unsigned)s, 1020, 1, k, 4, ms, ms + 1000, len_var, hist_age, VOICE_PICK_SPOKEN));
-                        int fresh = 0, cool = 0, other = 0, ag, shortest = -1;   /* (lines that end in time: not said, not among the last N, not the last) */
+                        int fresh = 0, cool = 0, out = 0, ag;   /* (not said and in time, out of the cooldown and in time, out of it) */
                         for (j = 0; j < P; j++) {
                             const VoiceLine* x = voice_line(4, j);
                             ag = voice_said_age(&hist, x);
-                            if (ag != 0 && (shortest < 0 || len_var(x) < len_var(voice_line(4, shortest)))) shortest = j;
+                            out += ag < 0 || ag >= N;
                             if (len_var(x) > ms + 1000) continue;
-                            fresh += ag < 0; cool += ag < 0 || ag >= N; other += ag != 0;
+                            fresh += ag < 0; cool += ag < 0 || ag >= N;
                         }
                         ag = voice_said_age(&hist, a);
-                        CHECK(!k || a != seq[k - 1]);                                            /* (never twice in a row) */
-                        if (fresh) CHECK(ag < 0 && len_var(a) <= ms + 1000);                     /* (not said first) */
-                        else if (cool) CHECK((ag < 0 || ag >= N) && len_var(a) <= ms + 1000);   /* (none of the last N) */
-                        else if (other) CHECK(len_var(a) <= ms + 1000);                          /* (the cooldown eased: still in time) */
-                        else CHECK(a == voice_line(4, shortest));                                /* (none in time: the shortest, faded out) */
-                        eased += !cool && other;
+                        CHECK(out > 0 && (ag < 0 || ag >= N));                                  /* (always one out of the cooldown) */
+                        if (fresh) CHECK(ag < 0 && len_var(a) <= ms + 1000);                     /* (in time, not said first) */
+                        else if (cool) CHECK(len_var(a) <= ms + 1000);                           /* (in time, out of the cooldown) */
+                        else CHECK(len_var(a) > ms + 1000);                                      /* (none: a longer one, cut) */
                         longer += len_var(a) > ms + 1000;
                         voice_said_add(&hist, a);
-                        seq[k] = a;
+                        j = (int)(a - voice_line(4, 0));
+                        if (++times[j] > top) top = times[j];
                     }
+                    CHECK(top <= 600 / (N + 1) + 1 && (P < 10 || top <= 600 / 5));   /* (the share: at most 1 / (N + 1), so under 20 % from 10 lines) */
                 }
-                CHECK((P < 14 || longer == 0) && (P < 100 || eased == 0));   /* (Alfred's 14 or more: always one in time; 100: the cooldown kept too) */
+                CHECK((P < 100 || shrt || longer == 0) && (!shrt || P < 14 || longer > 0));   /* (100: always one in time; 14 for short lines: longer ones too) */
                 {   /* gasps (fit: only those that end in time) with one short line: once, then quiet while it is among the last N */
                     int said = 0;
                     hist.n = 0;

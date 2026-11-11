@@ -150,23 +150,24 @@ int voices_want(void);
 void voices_frame(void);
 unsigned char* voice_cache_save(unsigned key, size_t* size);
 int voice_cache_load(const unsigned char* d, size_t n, unsigned key);
-/* the lines said in the room, the latest last (cast_glue.c: since the room load, in the scene's order: the same in every
-   run): voice_said_add one (the oldest goes when full); voice_said_age, how many other lines of l's character were said
-   since l, -1 not said */
+/* the lines said, the latest last (cast_glue.c: with this seed, across room loads, in the scenes' order: the same scenes
+   in the same order say the same lines): voice_said_add one (the oldest goes when full); voice_said_age, how many other
+   lines of l's character were said since l, -1 not said */
 #define VOICE_SAID_MAX 256
 typedef struct { const VoiceLine* l[VOICE_SAID_MAX]; int n; } VoiceSaid;
 void voice_said_add(VoiceSaid* s, const VoiceLine* l);
 int voice_said_age(const VoiceSaid* s, const VoiceLine* l);
 /* the line of character chr said in place of file vid of disc's archive in room file room for seed, a line of ms
-   milliseconds (NULL: chr has none): always one that ends by max_ms (ms_of: a line's length, 0 unknown) while the
-   character has one. Of those, the ones not said yet in the room (age, NULL: none said; voice_said_age) before the
-   others; once all were said, one not among the last min(pool - 1, max(3, pool / 2)) of the character's (the pool: its
-   lines of the kind asked for, spoken or grunts), so no line twice in a row and no A-B-A; only where none of those ends
-   in time, one that is not the last (VOICE_PICK_FIT: never). Within them the length a soft preference: the ones filling
-   more of the ms the likelier (1 + 5 r^2, r the part filled; a gasp or shout, under VOICE_SHORT_MS, a tenth of that in
-   place of a line as long or longer). None ends in time: the shortest (cast_glue.c fades it out at max_ms; a gasp's,
-   VOICE_PICK_FIT, of those not among the last few: it keeps quiet), not the last while another has a length; ms or
-   max_ms 0: any, alike. grunts: VOICE_PICK_* (the lines checked by hand as grunts: none, only those, any), |
+   milliseconds (NULL: chr has none). The cooldown: a line comes back only after min(pool - 1, max(3, pool / 2)) other
+   lines of the character (age, NULL: none said; voice_said_age; the pool: its lines of the kind asked for, spoken or
+   grunts, with a length), so no line twice in a row and no A-B-A, and no line takes much more than 1 / (cooldown + 1) of
+   a character's lines. In this order: 1. one that ends by max_ms (ms_of: a line's length, 0 unknown), not said yet, else
+   out of the cooldown, the length a soft preference (the ones filling more of the ms the likelier: 1 + 5 r^2, r the
+   part filled; a gasp or shout, under VOICE_SHORT_MS, a tenth of that in place of a line as long or longer); 2. not
+   VOICE_PICK_FIT: one out of the cooldown that runs longer, the shorter the likelier ((max_ms / len)^2; cast_glue.c
+   cuts it at the original's end); 3. the least recently said but the last (only a pool of one has none out of the
+   cooldown: none); VOICE_PICK_FIT (a gasp) none of 1: the shortest out of the cooldown (cast_glue.c keeps it quiet).
+   ms or max_ms 0: any, alike. grunts: VOICE_PICK_* (the lines checked by hand as grunts: none, only those, any), |
    VOICE_PICK_FIT */
 #define VOICE_SHORT_MS 1200   /* gasps, grunts, shouts: the short sounds (cast_glue.c: a line this short gets one of them) */
 enum { VOICE_PICK_SPOKEN, VOICE_PICK_GRUNTS, VOICE_PICK_ANY, VOICE_PICK_FIT = 4 };

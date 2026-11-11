@@ -21,7 +21,7 @@ run() {   # run DIR exitframe args...
     printf "show_fps = 0\ncoop_follow = 0\n" > "$d/save/recvx.ini"
     SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy RECVX_SKIP_MOVIES=1 RECVX_UPDATE_CHECK=0 RECVX_MODS="$d/mods" \
     RECVX_EXIT_FRAME=$x RECVX_COOP_TRACE=1 RECVX_INF_HEALTH=1 \
-    timeout -s KILL 600 "$bin" "$iso" --skip-intro --size 320x240 --vanilla --save-dir "$d/save" "$@" > "$d/log.txt" 2>&1
+    timeout -s KILL 600 "$bin" "$iso" --skip-intro --size 320x240 --vanilla --save-dir "$d/save" --coop-conn direct "$@" > "$d/log.txt" 2>&1
 }
 # the watcher examines trigger 1 at game frame 900; the other is halfway up the passage, then at the foot of the stairs
 # (z 24, facing the trigger) from host frame 1800, pressing the action button

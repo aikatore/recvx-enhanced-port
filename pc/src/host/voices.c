@@ -342,14 +342,15 @@ static unsigned fill_weight(int len, int ms)
 }
 
 /* ... a line's in place of one of ms that may run to max_ms (0: any, alike): a gasp, grunt or shout (under VOICE_SHORT_MS)
-   in place of a spoken line ten times less likely again; 0 one that runs longer (never while one ends in time) or has no
-   length */
-static unsigned line_weight(const VoiceLine* l, int ms, int max_ms, int (*ms_of)(const VoiceLine*))
+   in place of a spoken line ten times less likely again; 0 one that runs longer or has no length. longer: only those that
+   run longer, the shorter the likelier, (max_ms / len)^2 (cast_glue.c cuts them at the original's end) */
+static unsigned line_weight(const VoiceLine* l, int ms, int max_ms, int (*ms_of)(const VoiceLine*), int longer)
 {
     int len;
     unsigned w;
-    if (!max_ms) return 1000u;
-    if ((len = ms_of(l)) <= 0 || len > max_ms) return 0;
+    if (!max_ms) return longer ? 0u : 1000u;
+    if ((len = ms_of(l)) <= 0 || (len > max_ms) != longer) return 0;
+    if (longer) return w = (unsigned)(1000LL * max_ms / len), w * w / 1000u + 1u;
     w = fill_weight(len, ms);
     return ms >= VOICE_SHORT_MS && len < VOICE_SHORT_MS ? w / 10u : w;
 }
@@ -375,7 +376,7 @@ const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr,
 {
     const Cat* c = cat_now();
     const VoiceLine* l = c && chr >= 0 && chr < CAST_CHARACTERS ? &c->lines[c->first[chr]] : NULL;
-    int n = l ? c->first[chr + 1] - c->first[chr] : 0, fit = grunts & VOICE_PICK_FIT, i, k, a, tier, pool = 0, cool, best = -1, best_ms = 0;
+    int n = l ? c->first[chr + 1] - c->first[chr] : 0, fit = grunts & VOICE_PICK_FIT, i, k, a, tier, pool = 0, cool, best = -1, best_v = 0;
     unsigned h, w, sum = 0;
     if (n <= 0) return NULL;
     h = mix(seed, room, disc, vid, (unsigned)chr);
@@ -383,7 +384,8 @@ const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr,
     if (ms <= 0 || max_ms <= 0 || !ms_of) max_ms = 0;   /* (any, alike) */
 #define SKIP(x) (grunts != VOICE_PICK_ANY && (x)->grunt != (grunts == VOICE_PICK_GRUNTS))   /* (a grunt for a grunt, a spoken line for one) */
 #define AGE(x) (age ? age(x) : -1)
-#define TAKE(x) (tier == 2 ? AGE(x) != 0 : tier ? AGE(x) >= cool : AGE(x) < 0)   /* (0: not said yet; 1: not among the last cool ones; 2: not the last) */
+#define TAKE(x) (tier ? (a = AGE(x)) < 0 || a >= cool : AGE(x) < 0)   /* (0: not said yet; 1, 2: out of the cooldown) */
+#define WEIGHT(x) line_weight(x, ms, max_ms, ms_of, tier == 2)      /* (0, 1: those that end in time; 2: those that run longer) */
     for (i = 0; i < n; i++) pool += !SKIP(&l[i]) && (!max_ms || ms_of(&l[i]) > 0);   /* (the kind's lines with a length, also too long) */
     if (!pool) {   /* none has a length: any; not the one just said while another is there */
         for (k = 0, i = (int)(h % (unsigned)n); k < 2 * n; k++, i = (i + 1) % n)
@@ -392,25 +394,29 @@ const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr,
     }
     cool = pool / 2 > 3 ? pool / 2 : 3;   /* a line comes back only after this many others of the character: min(pool - 1, max(3, pool / 2)) */
     if (cool > pool - 1) cool = pool > 1 ? pool - 1 : 1;   /* (fit too: a gasp whose short lines are all among them stays quiet; one line: never twice in a row) */
-    for (tier = 0; tier < (fit ? 2 : 3) && !sum; tier++)   /* of those that end in time: not said yet in the room, else not among the
-                                                                last cool ones, else (a spoken line) not the last; weighted */
+    for (tier = 0; tier < (fit ? 2 : 3) && !sum; tier++)   /* of those that end in time: not said yet, else out of the cooldown; else
+                                                                (not a gasp) one out of the cooldown that runs longer; weighted */
         for (i = 0; i < n; i++)
-            if (!SKIP(&l[i]) && (w = line_weight(&l[i], ms, max_ms, ms_of)) && TAKE(&l[i])) sum += w;
-    if (!sum) {   /* none of those ends in time: the shortest, the closest to fitting, that is not the last (cast_glue.c fades it out
-                     at the original's end and grace); a gasp's of those not among the last cool ones (cast_glue.c keeps it quiet) */
+            if (!SKIP(&l[i]) && (w = WEIGHT(&l[i])) && TAKE(&l[i])) sum += w;
+    if (!sum) {   /* none out of the cooldown: the least recently said, never the last; a gasp's the shortest out of the cooldown,
+                     too long then (cast_glue.c keeps it quiet) */
         for (i = 0; i < n; i++) {
-            int len = !SKIP(&l[i]) && (a = AGE(&l[i]), fit ? a < 0 || a >= cool : a != 0) ? ms_of(&l[i]) : 0;
-            if (len > 0 && (best < 0 || len < best_ms)) { best = i; best_ms = len; }
+            int len = SKIP(&l[i]) ? 0 : max_ms ? ms_of(&l[i]) : 1, v;
+            a = AGE(&l[i]);
+            if (len <= 0 || (fit ? a >= 0 && a < cool : a == 0)) continue;
+            v = fit ? -len : a < 0 ? 1 << 30 : a;
+            if (best < 0 || v > best_v) { best = i; best_v = v; }
         }
         return best < 0 ? NULL : &l[best];
     }
     h %= sum;
     for (tier--, i = 0; i < n; i++) {
-        if (SKIP(&l[i]) || !(w = line_weight(&l[i], ms, max_ms, ms_of)) || !TAKE(&l[i])) continue;
+        if (SKIP(&l[i]) || !(w = WEIGHT(&l[i])) || !TAKE(&l[i])) continue;
         if (h < w) break;
         h -= w;
     }
     return &l[i];
+#undef WEIGHT
 #undef TAKE
 #undef AGE
 #undef SKIP

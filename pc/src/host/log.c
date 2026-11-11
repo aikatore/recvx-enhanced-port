@@ -22,6 +22,7 @@
 #endif
 #include "../ps2_platform.h"
 #include <SDL3/SDL.h>
+#include "coop.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,14 +35,17 @@ static const char crash_path[] = "recvx-crash.log";
 static char crash_head[128];
 
 /* host.c host_log: every message, also with --quiet (best effort across threads: each takes a slot of its own);
-   IPv4 addresses masked, so the report can be posted publicly (pc/src/net/net.c) */
-const char* net_mask_addrs(const char* text, const char* const* hosts, char* out, int cap);
+   IPv4 addresses masked, so the report can be posted publicly (pc/src/net/net.c); the co-op server's kept */
+const char* net_mask_addrs(const char* text, const char* const* hosts, const char* const* keep, char* out, int cap);
 void log_keep(const char* fmt, va_list ap)
 {
-    char t[LAST_W];
+    char t[LAST_W], srv[sizeof(g_coop.server)];
+    const char* keep[] = { srv, NULL };
     int i = SDL_AddAtomicInt(&last_n, 1) % LAST_N;
+    memcpy(srv, (const void*)g_coop.server, sizeof(srv));   /* another thread may be editing it: a bounded copy */
+    srv[sizeof(srv) - 1] = 0;
     SDL_vsnprintf(t, sizeof(t), fmt, ap);
-    net_mask_addrs(t, NULL, last[i], LAST_W);
+    net_mask_addrs(t, NULL, keep, last[i], LAST_W);
 }
 
 /* test aid, game thread: RECVX_TEST_CRASH="stack" (a stack overflow) or "null" (a write through a null

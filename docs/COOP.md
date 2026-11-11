@@ -154,7 +154,7 @@ at the title is pulled into that game.
 
 | Mode (`coop_conn`) | What it does |
 |---|---|
-| **Automatic** (0, default; lobby RELAY *Only if needed*) | With a server set: tries a direct path first (UDP hole punching, about 2 s), then the server's relay; a direct path found later is taken over without reconnecting. Without a server: exactly Direct. |
+| **Automatic** (0, default; lobby RELAY *Only if needed*) | With a server set (the default, eu.cvxenhanced.de): the host opens a room on the server and still takes direct joins; a joiner with a room code tries a direct path first (UDP hole punching, about 2 s), then the server's relay; a direct path found later is taken over without reconnecting. A joiner with an address connects directly. Without a server (the field cleared): exactly Direct. |
 | **Direct** (1) | Address and join code only; never contacts a server. |
 | **Server Relay** (2; RELAY *Always*) | Always through the relay: predictable, slower. |
 
@@ -210,9 +210,16 @@ network).
 ## Playing through a co-op server
 
 When neither player can open a port, a co-op server introduces the two games by a room code and,
-only if no direct path is found, relays their traffic. There is no official server: one of you (or
-a friend with a small Linux server or VPS) runs `recvx-server` ([SERVER.md](SERVER.md)), and both
-enter its address.
+only if no direct path is found, relays their traffic. The game comes with **eu.cvxenhanced.de**
+filled in as the server, so nothing has to be set up. One of you (or a friend with a small Linux
+server or VPS) can also run `recvx-server` ([SERVER.md](SERVER.md)); both then enter its address.
+The game contacts the server only while hosting or joining through it, never at startup or at the
+title screen, and Direct never does.
+
+The default and older settings files: a first start gets the default; a `recvx.ini` from before it
+(no `coop_server_version` line) with an empty `coop_server` gets it once, in place of the empty
+value; a server you entered stays. Clear the field to use no server: from then on it stays empty
+(Automatic then works as Direct).
 
 1. Both: lobby **CONNECT** *Via server*, HOST A GAME or JOIN A GAME, **SERVER** the server's
    address (`host` or `host:port`). Without a server address, opening or joining is refused
@@ -407,16 +414,19 @@ screenshots. With it on, no IP address shows on screen, yours or the partner's:
 * The lobby's status and info lines (ADDRESS) and F3 (status, "Local address", the join address
   next to **Copy Join Address**) show each address as
   `xxx.xxx.xxx.xxx`. Ports, the join code and the room code stay visible, e.g.
-  `xxx.xxx.xxx.xxx:7140#ABCDEFGH`. A host name typed as the join address or co-op server is
-  masked the same way.
-* The address fields (lobby ADDRESS / CODE and SERVER, F3 Join address / Room code and Co-op Server)
-  show stars, also while you type or paste. In F3, **Show Addresses** reveals them until
-  the window closes; in the lobby turn the option off to see them.
+  `xxx.xxx.xxx.xxx:7140#ABCDEFGH`. A host name typed as the join address is masked the same way.
+* The co-op server's address (lobby SERVER, F3 Co-op Server, and the server's name or address in
+  status lines such as "Contacting co-op server ...") is never masked: it is a public server, not
+  a player's address.
+* The join address fields (lobby ADDRESS / CODE, F3 Join address / Room code) show stars, also
+  while you type or paste. In F3, **Show Addresses** reveals them until the window closes; in the
+  lobby turn the option off to see them.
 * Only the display changes: **COPY JOIN ADDRESS** / **Copy Join Address** put the real address on the
   clipboard, and joining uses what you typed.
 
 `recvx.log` (and the console) still contain the addresses, for troubleshooting: do not show the
-console window on stream or post the log publicly. The crash report `recvx-crash.log` masks them.
+console window on stream or post the log publicly. The crash report `recvx-crash.log` masks them
+(all but the co-op server's).
 
 ### Sounds
 
@@ -803,7 +813,7 @@ and the APPEARANCE page's Character Models (Same for Both / Per Character) with 
 | Headshots & Piercing (THIRD PERSON page; co-op: host) | `tps_headshots` | 0/1 (1); see [THIRDPERSON.md](THIRDPERSON.md#headshots-and-piercing) |
 
 Kept in `recvx.ini` without a menu row of their own: `coop_join` (last address or room code),
-`coop_server`, `coop_name`, `coop_items` (-3.., a save as in the ITEMS table), `coop_start` (0..2
+`coop_server` (eu.cvxenhanced.de; with `coop_server_version`, see "Playing through a co-op server"), `coop_name`, `coop_items` (-3.., a save as in the ITEMS table), `coop_start` (0..2
 new game normal/easy/very easy, 3 + n save n: native number - 1 or card slot), `coop_player_id`, `coop_player_key`. The room password is never saved.
 
 ---

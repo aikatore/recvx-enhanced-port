@@ -276,11 +276,12 @@ const char* coop_shown(const char* text)
     static __thread char ring[4][512];
     static __thread int k;
     char join[sizeof(g_coop.join)], srv[sizeof(g_coop.server)];
-    const char* hosts[] = { join, srv, NULL };
+    const char* hosts[] = { join, NULL };
+    const char* keep[] = { srv, NULL };   /* the co-op server is public: never masked */
     if (!g_coop.hide_ip || !text) return text;
     memcpy(join, (const void*)g_coop.join, sizeof(join));   /* another thread may be editing them: bounded copies */
     memcpy(srv, (const void*)g_coop.server, sizeof(srv));
     join[sizeof(join) - 1] = srv[sizeof(srv) - 1] = 0;
     k = (k + 1) & 3;
-    return net_mask_addrs(text, hosts, ring[k], sizeof(ring[k]));
+    return net_mask_addrs(text, hosts, keep, ring[k], sizeof(ring[k]));
 }

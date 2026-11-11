@@ -25,7 +25,7 @@ run() {   # run DIR INI exitframe args... (the caller exports the test aids)
     printf "show_fps = 0\n$ini" > "$d/save/recvx.ini"
     SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy RECVX_SKIP_MOVIES=1 RECVX_UPDATE_CHECK=0 RECVX_MODS="$out/mods" \
     RECVX_EXIT_FRAME=$x RECVX_INF_HEALTH=1 \
-    timeout -s KILL 600 "$bin" "$iso" --skip-intro --size 320x240 --vanilla --save-dir "$d/save" "$@" > "$d/log.txt" 2>&1
+    timeout -s KILL 600 "$bin" "$iso" --skip-intro --size 320x240 --vanilla --save-dir "$d/save" --coop-conn direct "$@" > "$d/log.txt" 2>&1
     echo $? > "$d/exit"
 }
 pair() {   # pair NAME PORT HOST_TELEPORT HOST_KILL GUEST_TELEPORT GUEST_KILL (RECVX_TELEPORT steps after the first are relative)
