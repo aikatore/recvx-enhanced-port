@@ -526,17 +526,19 @@ static int ground_record(int id) { return id == 1 || id == 3 || id == 4 || id ==
 static int look_ok(const ActorModel* m, int id) { return m->id == id && !(id == 9 && m->mdlver == 1); }   /* (Bandersnatch 2 is an event's arm) */
 static int kind_of(const Kind* kt, int id, int ver) { for (int i = 0; i < KINDS; i++) if (kt[i].id == id && (kt[i].look < 0 || kt[i].look == ver)) return i; return -1; }
 
-/* directions (of 8) with no wall within `len` units of (x, z) on floor flr, at waist height */
-static int open_dirs(float x, float y, float z, int flr, float len)
+/* directions (of 8) with no wall within `len` units of (x, z) on floor flr, `h` units above y (`mask` bhCollisionCheckLine2's:
+   0x4400 skips the odd wall types, the knee-high lips along ledges and the line walls) */
+static int open_dirs_m(float x, float y, float z, int flr, float len, unsigned mask, float h)
 {
     int k, n = 0;
     for (k = 0; k < 8; k++) {
         float a = (float)k * (6.2831853f / 8.0f);
-        NJS_POINT3 p1 = { x, y + 10.0f, z }, p2 = { x + len * sinf(a), y + 10.0f, z + len * cosf(a) };
-        n += !bhCollisionCheckLine2(&p1, &p2, 0x4400, (char)flr);
+        NJS_POINT3 p1 = { x, y + h, z }, p2 = { x + len * sinf(a), y + h, z + len * cosf(a) };
+        n += !bhCollisionCheckLine2(&p1, &p2, mask, (char)flr);
     }
     return n;
 }
+static int open_dirs(float x, float y, float z, int flr, float len) { return open_dirs_m(x, y, z, flr, len, 0x4400, 10.0f); }   /* (waist height) */
 
 /* kind i's weight for a record of type id at (x, y, z) on floor flr, with `cost` slots taken by the rest of the room and
    `heavy` heavy variants in it, `counted` where the doors count its kill (0: it does not fit there); *big: open_dirs
@@ -890,10 +892,11 @@ static int extra_away(float x, float z)   /* (the earlier extras: extra_spot) */
 /* The room's walkable floor as a grid (once per room load; extra_spot draws from it): from the anchors - the records that
    stand on the ground (as the room file has them after "Rearranged") and the entry positions - a flood fill in steps of
    one cell (XG_STEP units; more in big rooms) where an enemy can walk: no wall between the cells' centres
-   (bhCollisionCheckLine2 at waist height), ground within a unit of the last cell's on the same floor and no slope (stairs,
+   (bhCollisionCheckLine2 at waist height, the odd wall types too: lips along ledges, line walls), ground within a unit of the last cell's on the same floor and no slope (stairs,
    ramps), or no ground where the last had none (the lowest floor of a room without floor slabs). Spots are the walkable
    cells away from doors, entries, triggers, items and records (extra_away), with no drop nor rising ground within 6 units
-   (no_drop) and no wall within 6 units all round (not in an object, nor against a wall). Only the room file and the
+   (no_drop) and no wall within 6 units all round at the waist and at the feet (not in an object, nor against a wall or
+   on a line wall: an enemy put there is pushed off it). Only the room file and the
    options decide it (the same on every visit). ponytail: one height per cell; where two floors overlap (a balcony over
    the floor) the first one reached has it. */
 #define XG_MAX 16384
@@ -914,7 +917,8 @@ static int xg_step(float x, float y, float z, int flr, int gnone, int c, unsigne
     if (xg_st[c]) return 0;
     g = ground_at(cx, y, cz, &hp);
     if (g > -999.0f ? slope(hp) || fabsf(g - y) > 1.0f || bhCheckFloorNum(g + 0.5f) != flr : !gnone) return 0;
-    if (bhCollisionCheckLine2(&p1, &p2, 0x4400, (char)flr)) return 0;
+    if (bhCollisionCheckLine2(&p1, &p2, 0x4000, (char)flr)) return 0;   /* (the odd types too: an enemy put on a line wall is pushed
+                                                                          through it, RM_8010's catwalk) */
     xg_st[c] = g > -999.0f ? 1 : 2;
     xg_y[c] = g > -999.0f ? g : y;
     xg_flr[c] = (signed char)flr;
@@ -968,7 +972,8 @@ static void extra_grid(void)
         float x, z;
         c = q[k];
         x = cell_x(c); z = cell_z(c);
-        if (extra_away(x, z) && no_drop(x, xg_y[c], z, xg_st[c] == 2 ? -1000.0f : xg_y[c], 1) && open_dirs(x, xg_y[c], z, xg_flr[c], 6.0f) == 8)
+        if (extra_away(x, z) && no_drop(x, xg_y[c], z, xg_st[c] == 2 ? -1000.0f : xg_y[c], 1) && open_dirs_m(x, xg_y[c], z, xg_flr[c], 6.0f, 0x4000, 10.0f) == 8 &&
+            open_dirs_m(x, xg_y[c], z, xg_flr[c], 6.0f, 0x4000, 0.5f) == 8)   /* (and at the feet: RM_7050's lines a unit high) */
             xg_spot[xg.n++] = (unsigned short)c;
     }
 }
