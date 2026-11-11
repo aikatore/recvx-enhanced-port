@@ -5,6 +5,7 @@
    file and flags (valid, invalid, unknown keys, overrides), the metrics, STATUS and the log. */
 #include "../server/server.h"
 #include "monocypher.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -940,6 +941,17 @@ static void test_state(void)
     }
     free(bad);
     free(blob);
+    {   /* a rate that is not a finite number >= 0 (NaN in status-json until the next tick) is not valid */
+        double* rates[] = { &((SrvStats*)srv_stats())->req_rate, &((SrvStats*)srv_stats())->relay_in_rate, &((SrvStats*)srv_stats())->relay_out_rate };
+        for (i = 0; i < 6; i++) {
+            CHECK(srv_init(&c, cap));
+            *rates[i % 3] = i < 3 ? NAN : -1;
+            CHECK(srv_state_export(&blob, &n));
+            CHECK(srv_init(&c, cap));
+            CHECK(srv_state_import(blob, n, &c, 1) == -1);
+            free(blob);
+        }
+    }
 }
 
 int main(void)
