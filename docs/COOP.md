@@ -1070,7 +1070,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
 
     | type | changes hands | when (in its Move, between attacks) |
     |---|---|---|
-    | zombie (1) | yes, with its upper half | not the waiting type 8; its parts (31..38) follow their body |
+    | zombie (1) | yes, with its upper half | not the waiting type 8, not on stairs (MV08, `flg2` 1, its stair mark `exp0` 0x40 0x400000: the mark and the stair record at 0x74 stay in the game that set them); its parts (31..38) follow their body |
     | Cerberus (4) | yes | idle, wandering, chasing or searching with its Brain on (`mode1` 1), awake (type 0), on the ground and not on stairs, airborne, biting or linked to a player (`exp0` 0x10) |
     | Hunter, Sweeper (5) | yes | walking or running, its Brain on, type 0/1, no attack, chained damage or beheading under way, not in a jump; its helper (31) stays where it is |
     | Bandersnatch (9) | yes | idle or walking, its Brain on, types 0..8 (9 drops in, 10 sleeps), its arm in, no climb, jump or grab (`exp0` 0x18); the receiver puts the arm back to its rest lengths |
@@ -1103,15 +1103,19 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   * **How**: the enemy's and (a zombie) its upper half's state (`ene_pack`, 3168 bytes) as `EV_ESTATE` chunks plus
     `EV_ENEOWN` (state 1) in the same frame: the event burst ("Datagrams": every new event in its frame, up to 96). The
     receiver takes it whole (same type and model in the slot, the same upper half, the state plausible, no event of its
-    own on it, not a script record, not in a door) or refuses it (`EV_ENEOWN` state 0: it runs on in the sender's game,
-    as it was left there). Until the new runner's first snapshot (a round trip and a frame, then the playout's margin)
+    own on it, not a script record, not in a door, its type and modes within the tables its code calls through,
+    `coop_ene_modes_ok`) or refuses it (`EV_ENEOWN` state 0: it runs on in the sender's game, as it was left there; state 2
+    when the receiver runs it already, a take-back that crossed the give: the sender's copy stays a puppet). A sender
+    refused while it leaves tries again only after 45 frames. Until the new runner's first snapshot (a round trip and a frame, then the playout's margin)
     the sender's copy is carried on from its own last two states (the enemy playout, at most 4 frames; before, it stood
     still).
   * **Leaving**: the guest gives back what it runs, with the state, when it leaves the room, opens a menu or plays a
     cutscene of its own; one caught mid-action then (a Hunter getting up after a hit: its status screen stops it) goes
     back after 15 frames without its state (`EV_UNGRAB` state 0), and the host lets it go from its puppet (a zombie stands,
     another type starts its Move again: its work is as it last ran on the host), so it does not stand still in both
-    games through the screen; at its room change the host releases what is left the same way. The host takes them back (`EV_ENEOWN` state 2) when no snapshot of
+    games through the screen. A door is one frame of leaving: in it the guest gives as many as three quarters of the
+    event ring hold with their state, and in the next room hands the rest back without it (stamped with the room they
+    are in), which the host lets go from its puppet the same way. The host takes them back (`EV_ENEOWN` state 2) when no snapshot of
     one came for 10 s while both play in the room, when an event of its own drives one, and at the partner's time-out;
     the guest drops them when the host plays in another room.
   * **What differs from single player**: a Cerberus that lunges alerts only the dogs its own game runs (the pack's
@@ -1513,8 +1517,8 @@ and `OPT_SKIP_DETECTOR`, `PF_GAME_OVER`, `EV_BLOB` `pad` 2 and the `EV_OWN` `tid
 in the first of the pose's spare bytes (`OPT2_EXTRA_OBJECTS` 1, see "Extra item boxes and herbs"; unknown bits refused; the pose stays 112
 bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows them with its own player's look, [ACTORS.md](ACTORS.md) "Cutscene cast"), so the same seed picks other models for the other characters (nothing on the wire changed); 35 the cutscene cast also draws the creatures only cutscenes show (Nosferatu breaking out, 6040; [ACTORS.md](ACTORS.md) "Creatures"): a build before it would show them as themselves (nothing on the wire changed); 36 `EneSnap.root` in the snapshot's zero byte (`SNAP_ROOT_STILL` 1: the enemy's motion moves its position and its root node stays put, see "Puppets"; other bits refused; the snapshot stays 100 bytes), and the joiner poses a zombie's upper half. 37 `Pose.legs` and `legs_frm` in the two spare bytes (third person "Move While Aiming": the legs walking under the aim, see "Pose"). 38 `EV_EOPTS` `voices`, "Randomize Voice Lines" ([ACTORS.md](ACTORS.md) "Voice lines"; the event stays 88 bytes). 39 `EV_EOPTS` fills the union's 80 bytes with `types` (the randomizer's Types per Room) and `rate[32]` (its Custom rates), `variety` 2 (Custom) and `extra` up to 8 (the event stays 88 bytes; [ENEMIES.md](ENEMIES.md) "Randomizer"). 40 `EV_FX` of `FX_REACT` (third person "Locational Hit Reactions": the region where the sender's shot hit a zombie and the shot's direction, see "Effects and voices"; the event is unchanged in size). 41 `OPT2_HEADSHOTS` 2 in `Pose.opts2`, the host's "Headshots & Piercing" (the rifles' head damage, head bursts on killing head hits, the sniper rifle's piercing; [THIRDPERSON.md](THIRDPERSON.md#headshots-and-piercing)); the pose is unchanged in size. 42 the randomizer makes the Hunter and the Sweeper two kinds in Wild and Mild too (as in Custom; [ENEMIES.md](ENEMIES.md) "Randomizer"), so the same seed places other enemies (nothing on the wire changed); 43 `EV_EOPTS` carries the cutscene cast's
 "Enemy Models" (`cast_enemy` 0..3) and its own "Custom" list (`cast_enemy_off`, 4 bytes: a bit per entry of the enemies'
-list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (prototype, `netexp-combined`; 44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
-`EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 (prototype, `netexp-combined-types`) `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
+list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
+`EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
 the Bandersnatch and the anatomist too (each type's `exp0` with its pointer words kept, the `type` field taken), never for a
 record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not

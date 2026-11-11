@@ -542,16 +542,12 @@ static int voice_gap(const unsigned char* p)
     return ticks * 1000 / 30;
 }
 
-/* the lines said since the room was loaded (voice_pick: not again while others fit; when all that fit were said, that
-   character's start a new round), in the scene's order: the same in every run; a room load starts afresh (cast_room). For the cast's characters only theirs count, so both co-op screens,
-   which show Claire and Chris each with its own player's look, still pick alike for them (used_cast) */
-static struct { const VoiceLine* l; int cast; } used[128];
-static int used_n, used_cast;
-static int line_used(const VoiceLine* l)
-{
-    for (int i = 0; i < used_n; i++) if (used[i].l == l && (used[i].cast || !used_cast)) return 1;
-    return 0;
-}
+/* the lines said since the room was loaded (voice_pick: the ones not said first; then none of the character's last few, never
+   one twice in a row), in the scene's order: the same in every run; a room load starts afresh (cast_room). Also those said
+   in place of Claire's and Chris's, which each co-op screen shows with its own player's look: the two screens pick alike
+   but where one shows them as the character another role is shown as (that one's lines then do not repeat theirs) */
+static VoiceSaid said;
+static int line_age(const VoiceLine* l) { return voice_said_age(&said, l); }
 
 /* a line not replaced: the speaker shown as another character (or as an enemy) says nothing of its own; quiet, and the
    script waits the original line's time as for an inserted one */
@@ -608,13 +604,13 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
             part[d] = ADXF_GetPtStat(VOICE_PT + d) == 3 ? 1 : -1;   /* (ADXF_STAT_READEND) */
         }
     if (cv && cv->flags & VOICE_PART) return quiet(sp, ms);   /* (a group's later part: the line in place of its first takes all their time) */
-    used_cast = own >= 2;   /* (Claire, Chris: each screen's own look) */
     fit = cv && cv->next != 0xFFFF ? group_ms(disc, vid) : ms;
     grunts = cv && cv->flags & VOICE_GRUNT ? VOICE_PICK_GRUNTS : VOICE_PICK_ANY;   /* (a grunt for a grunt) */
     if (grunts != VOICE_PICK_GRUNTS && ms > 0 && ms < VOICE_SHORT_MS && (gap = voice_gap(next)) - 300 > ms + VOICE_GRACE_MS)   /* a gasp before a pause: a line in it */
         fit = (gap - 300 < VOICE_GAP_MS ? gap - 300 : VOICE_GAP_MS) - VOICE_GRACE_MS, paused = 1;
     if (grunts != VOICE_PICK_GRUNTS && (fit <= 0 || fit >= VOICE_SHORT_MS)) grunts = VOICE_PICK_SPOKEN;   /* (a spoken line for one: never a grunt) */
-    if (!(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr, fit, fit > 0 ? fit + VOICE_GRACE_MS : 0, line_ms, line_used, grunts))) {
+    if (!(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr, fit, fit > 0 ? fit + VOICE_GRACE_MS : 0, line_ms, line_age,
+                         grunts | (ms > 0 && ms < VOICE_SHORT_MS ? VOICE_PICK_FIT : 0)))) {   /* (a gasp: one that ends in time, else quiet below) */
         if (grunts != VOICE_PICK_GRUNTS) KEEP("no line picked");
         host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a grunt and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr));
         return quiet(sp, ms);
@@ -625,12 +621,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
         host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a short sound and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr));
         return quiet(sp, ms);
     }
-    if (line_used(l)) {   /* (all that fit were said: a new round of that character's, this one first) */
-        int i, n = 0;
-        for (i = 0; i < used_n; i++) if (used[i].l->chr != l->chr || (used_cast && !used[i].cast)) used[n++] = used[i];
-        used_n = n;
-    }
-    if (used_n < (int)(sizeof used / sizeof used[0])) { used[used_n].l = l; used[used_n++].cast = own >= 2; }   /* (said in this room: not again while others are left) */
+    voice_said_add(&said, l);   /* (said in this room: back only after others of that character) */
     why = lip < 0 ? mouth_add(sp, vid, l->lip, sure) : NULL;   /* (the catalogue lines have lips, but some checked by hand) */
     lc = voice_curated(l->disc, l->vid);
     snprintf(from, sizeof from, l->room != VOICE_NO_ROOM ? "RM_%04d" : "no scene", l->room);
@@ -638,7 +629,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
              cast_name(own), disc, vid, ms, sure ? ", speaker checked" : "", grunts == VOICE_PICK_GRUNTS ? ", a grunt" : "",
              m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?", cast_name(chr), l->disc, l->vid,
              lms, l->grunt ? ", a grunt" : "", lc && lc->next != 0xFFFF ? ", a group" : "",
-             ms > 0 && lms > fit + VOICE_GRACE_MS ? ", none shorter: faded out" : paused ? ", in the pause after it" : "", from,
+             ms > 0 && lms > fit + VOICE_GRACE_MS ? ", longer: faded out" : paused ? ", in the pause after it" : "", from,
              lip >= 0 ? "with its lips" : sure ? "the speaker checked by hand: " : "no lips in the script (the speaker is the VoiceOn's record): ",
              lip >= 0 ? (l->lip ? "" : " (none: the script's)") : why ? "a still mouth, " : "Talking Mouths: its lips added", why ? why : "");
     vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = lip >= 0 ? l->lip : NULL; vl.t0 = SDL_GetTicks();
@@ -688,7 +679,7 @@ static void voice_end(void)
     if (cr.n) { cr.n = 0; StopSe(CR_SLOT); }   /* (an enemy's sound stops as the line would) */
 }
 
-static void voice_room(void) { used_n = 0; cr.last = -1; }
+static void voice_room(void) { said.n = 0; cr.last = -1; }
 
 /* StopVoice (sdfunc.c): VoiceOff, a skip, the line before an enemy's sounds; the slot stops or fades as the game asks */
 void pc_voice_stop(void)

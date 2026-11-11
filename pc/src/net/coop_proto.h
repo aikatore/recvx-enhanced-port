@@ -50,14 +50,14 @@ extern "C" {
                                                enemies from the same seed; nothing on the wire changed);
                                            43: EV_EOPTS cast_enemy, cast_enemy_off (the cutscene cast's "Enemy Models" and its
                                                "Custom" list; Event 96 bytes);
-                                           47 (prototype, branch netexp-combined; 44-46 were the separate phase prototypes):
+                                           47 (44-46 were the separate phase prototypes):
                                                enemy snapshots quantized and delta-coded against the frame the peer acknowledged
                                                (CoopSnapTx/Rx; Pose.snap_ack in the old rsv), with the motion's anchor (mtn_seq,
                                                mtn_frm0), speed (mtn_add) and a zombie's neck, no per-frame count cap:
                                                COOP_SNAP_BUDGET bytes in priority order; OPT2_OWNERSHIP, EV_ENEOWN (an enemy
                                                changes hands: the player it is engaged with runs it), EV_PLY_HIT / EV_GRAB /
                                                EV_UNGRAB either way, EV_UNGRAB state 2 (the grab is over, the runner keeps it);
-                                           48 (prototype, branch netexp-combined-types): EV_ENEOWN and EV_ESTATE also for the
+                                           48: EV_ENEOWN and EV_ESTATE also for the
                                                Cerberus, the Hunter/Sweeper, the Bandersnatch and the anatomist (exp0 per type,
                                                its pointer words kept; the type field taken), never for a record the room's
                                                scripts act on (a 47 peer would copy a zombie's exp0 into theirs);
@@ -689,6 +689,12 @@ int coop_wake_scan(const uint8_t* d, int size, int scd1, int scd1_end, const uin
 typedef struct AtrSet { uint8_t kind, ix, type, prm[4]; uint32_t attr; } AtrSet;
 int coop_atr_set(const uint8_t* insn, AtrSet* out);   /* 1: the instruction is such a write (out: what it writes) */
 void coop_atr_merge(AtrRec* rec, const AtrRec* in, int kind, int ix, const AtrSet* sets, int n);
+/* A partner's enemy state that our game would run (EV_ENEOWN, EV_GRAB/UNGRAB, a snapshot's modes): the types that change
+   hands call through tables by their type, mode0 and mode2 (bhEne01_MoveTypeW[type], bhEne04_Mode0[mode0],
+   bhEne05_MoveMode2[mode2], bhEne09_BrainMode2[mode2] ...) and a few by mode1. 1: every index within its table and not
+   one of its NULL entries; id 1 `upper`: the zombie's upper half (en01b's tables, exp0 0x40 bit 31). Other ids: 1 (not
+   known here). */
+int coop_ene_modes_ok(int id, int type, int mode0, int mode1, int mode2, int upper);
 
 #ifdef __cplusplus
 }
