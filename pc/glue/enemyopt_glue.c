@@ -978,6 +978,19 @@ static void extra_grid(void)
     }
 }
 
+/* the ground at 8 points r units around (x, z) within a unit of y (no ground: only where there is none at (x, z) either): a
+   big kind's body reaches that far (a Giant Black Widow on RM_1000's raised walk stood over its edge, 8 units up) */
+static int flat_around(float x, float y, float z, float r)
+{
+    int k;
+    float g0 = ground_at(x, y, z, NULL);
+    for (k = 0; k < 8; k++) {
+        float a = (float)k * (6.2831853f / 8.0f), g = ground_at(x + r * sinf(a), y, z + r * cosf(a), NULL);
+        if (g > -999.0f ? fabsf(g - y) > 1.0f : g0 > -999.0f) return 0;
+    }
+    return 1;
+}
+
 /* a random spot for an extra enemy (the next draws): one of the room's spots (extra_grid) at least XR_ENEMY units from the
    earlier extras (xs, nx), XS_TRIES draws; 1 = found */
 #define XS_TRIES 32
@@ -1166,6 +1179,7 @@ static int plan_extras(const EnemyOpts* o, XPlan* x, int dry)
             }
             kd = draw_kind(o, kt, nk, &rk, 1, -1, n->px, n->py, n->pz, flr, rk.cost, 0, &m, &v);
             if (!m) { x[i].why = "no kind fits its spot"; continue; }
+            if ((kt[kd].flags & K_BIG) && !flat_around(n->px, n->py, n->pz, 12.0f)) { x[i].why = "a big kind with a drop near its spot"; continue; }
             x[i].am = *m;
             n->variant = v ? v->id : 0;
             for (k = 0; k < spawn_base_count() && spawn_entry(k) != m; k++);
