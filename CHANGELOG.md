@@ -25,7 +25,8 @@
 
 ### Fixes
 
-- Characters swapped in cutscenes no longer lose their hands.
+- Characters swapped in cutscenes no longer lose their hands, and their hands no longer spin while something is
+  being examined.
 - Randomize Voice Lines picks far more varied lines, never the same one twice in a row, and a replaced line no longer
   runs on past the original.
 - More rooms take part in the enemy randomizer, such as the palace's outer courtyard on later visits.
