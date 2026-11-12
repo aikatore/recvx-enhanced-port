@@ -53,7 +53,7 @@ int enemy_room_gen;                     /* room loads so far */
 __attribute__((constructor)) static void opts_env(void)
 {
     const char* e;
-    if ((e = getenv("RECVX_ENEMY_EXTRA"))) g_enemy_opts.extra = atoi(e);
+    if ((e = getenv("RECVX_ENEMY_EXTRA"))) g_enemy_opts.extra = atoi(e) < 0 ? 0 : atoi(e) > ENEMY_EXTRA_MAX ? ENEMY_EXTRA_MAX : atoi(e);
     if ((e = getenv("RECVX_ENEMY_PLACE"))) g_enemy_opts.place = atoi(e);
     if ((e = getenv("RECVX_ENEMY_RANDOM"))) g_enemy_opts.rand = atoi(e);
     if ((e = getenv("RECVX_ENEMY_SEED"))) g_enemy_opts.seed = atoi(e);
@@ -1217,7 +1217,7 @@ void enemy_extra_note(int slot, const SpawnNote* n)
    room fewer. */
 static int extra_count(const EnemyOpts* o)
 {
-    unsigned n = (unsigned)(o->extra < ENEMY_EXTRA_MAX ? o->extra : ENEMY_EXTRA_MAX);
+    unsigned n = (unsigned)(o->extra < 0 ? 0 : o->extra < ENEMY_EXTRA_MAX ? o->extra : ENEMY_EXTRA_MAX);   /* (0..ENEMY_EXTRA_MAX whatever set it) */
     rnd_seed((unsigned)o->seed, (unsigned)room_file_now() * 13u + 0x7F00u);
     return (int)(((rnd() & 0xFFFF) * (n + 1)) >> 16);
 }
