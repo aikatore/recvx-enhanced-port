@@ -2,14 +2,6 @@
 
 ## 0.7.7 (2026-11-12)
 
-> [!IMPORTANT]
-> This update changes parts of the renderer to make it faster. If anything looks different or broken, such as
-> missing or flickering parts of the picture, wrong colours or black areas, please report it together with the room and
-> the display settings used.
->
-> A relay server in the EU is now available for testing co-op at eu.cvxenhanced.de. It is filled in under "Via server"
-> by default. Feedback on how it works, such as lag, dropped sessions or trouble connecting, is very welcome.
-
 ### Changes
 
 - **Smoother co-op enemies**: in direct and relay co-op, enemies move and animate evenly for both players even with
