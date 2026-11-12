@@ -564,7 +564,12 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     m = shown_model(sp);
     chr = voice_model_chr(m);
     if (own >= 0 && chr < 0 && creature_line((unsigned)o->seed, m, disc, vid, sp, own)) return -1;   /* (bhVoiceOn plays nothing) */
-    if (own < 0 || chr < 0 || chr == own) KEEP(own < 0 ? "not a story character" : chr < 0 ? "shown as a model without lines" : "shown as its own character");
+    if (own >= 0 && chr == own) {   /* the real character says it: in the history too (another role shown as them does not repeat it at once) */
+        for (d = 0; d < voice_count(own); d++)
+            if (voice_line(own, d)->disc == disc && voice_line(own, d)->vid == vid) { voice_said_add(&said, voice_line(own, d)); break; }
+        KEEP("shown as its own character");
+    }
+    if (own < 0 || chr < 0) KEEP(own < 0 ? "not a story character" : "shown as a model without lines");
     ms = adx_length_ms(PatId[1], vid);
     if (voice_count(0) < 0) {   /* (the room files are being read: cast_room started it) */
         voices_want();
