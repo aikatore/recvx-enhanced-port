@@ -600,7 +600,7 @@ co-op guest as added enemies).
   not: a room of bats gets no walkers past it). A spot where nothing fits (every kind that would fit
   at Off) is replaced by another (up to 4). A type the room did not load comes as the F2 spawner's do (its model,
   textures and sounds from its own room file). With the randomizer off: a copy of a random record of the roaming types
-  zombie, Black Widow, Cerberus, Hunter, Bandersnatch, albinoid adult, anatomist (its own type and model: no upload); a
+  zombie, Black Widow, Cerberus, Hunter, Bandersnatch (not Bandersnatch 2, an event's arm), albinoid adult, anatomist (its own type and model: no upload); a
   room with none of those (bats only) gets none.
 * **The same on every visit** (per room and story state): the count, and extra i's spot, angle and kind come from draws
   of their own (seed, room file, i) and from the extras before it, never from which are dead or where the player is. The

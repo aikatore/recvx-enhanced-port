@@ -825,7 +825,8 @@ void enemy_room_finished(void)
 
 /* ---------------------------------------------------------------- (a) extra enemies */
 /* types an extra enemy copies when the randomizer is off: they roam freely and die like any enemy */
-static int extra_type(int id) { return id == 1 || id == 3 || id == 4 || id == 5 || id == 9 || id == 22 || id == 26; }
+static int extra_type(int id, int ver) { return (id == 1 || id == 3 || id == 4 || id == 5 || id == 9 || id == 22 || id == 26) && !(id == 9 && ver == 1); }   /* (not the
+                                                                                    Bandersnatch's arm: look_ok) */
 
 /* The room files that get extra enemies (docs/ENEMIES.md "Extra enemies"): the retail rooms with enemy records (ids 1..30,
    event ones too) but the boss arenas (boss_arena: their scripts wait for the boss), the Battle Game's (5510..5710: its
@@ -1236,7 +1237,7 @@ static int plan_extras(const EnemyOpts* o, XPlan* x, int cnt, int dry)
     RoomKinds keep = rk;
     float xs[ENEMY_EXTRA_MAX][3];
     int nk = make_kinds(kt), room = room_file_now(), i, k, src[128], ns = 0, nx = 0, planned = 0, rz = o->rand && rk.gen == enemy_room_gen;
-    for (k = 0; k < rom->ene_n && k < 128; k++) if (extra_type(rom->enep[k].id)) src[ns++] = k;
+    for (k = 0; k < rom->ene_n && k < 128; k++) if (extra_type(rom->enep[k].id, rom->enep[k].mdlver)) src[ns++] = k;
     if (rz && !o->variety && rk.mild[0] < 0) mild_kinds(o, kt, nk, rk.mild);   /* (a room whose records all keep their kind) */
     for (i = 0; i < cnt && i < ENEMY_EXTRA_MAX; i++) {
         SpawnNote* n = &x[i].n;
