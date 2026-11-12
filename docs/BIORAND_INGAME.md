@@ -752,7 +752,8 @@ and a new session id; staying is simpler. Ceiling: a machine that swaps for more
 asked (and downloading), "BioRand: generating..." while the CLI runs (coop_glue.c fills it from `br_offer`).
 
 **Tests (2026-10-26, Linux; job dir `biorand-ui/s5b/`, not committed).** `co.sh` runs a host (pack A, seed 123456,
-id ed803757, BioRand on, `--coop-host`) and a guest (`--coop-join`, or the lobby), both `--dev`, ports 476xx;
+id ed803757, BioRand on, `--coop-host`) and a guest (`--coop-join`, or the lobby), both `--dev`, ports 476xx
+(rerun them with `--coop-conn direct` or a local `recvx-server`: the default co-op server is the public one);
 `scen.sh` has the cases; the host teleports into 0/6 so it gets control.
 
 - `nopack` (no pack): the prompt, YES, the real nightly CLI generates seed 123456 (id ed803757 = the host's),
@@ -1038,8 +1039,9 @@ Generate:
 
 Co-op and the rest:
 
-- [ ] Two machines (or Windows and Linux), both `--dev`: the host has a pack, and the guest has none.
-      Expect the guest to be asked at the title or in the lobby, to generate, and to join. The host's
+- [ ] Two machines (or Windows and Linux), both `--dev --coop-conn direct` (the guest joins by the host's
+      address; or run a local `recvx-server` and enter it as the co-op server: a test never goes through the
+      public server): the host has a pack, and the guest has none. Expect the guest to be asked at the title or in the lobby, to generate, and to join. The host's
       lobby shows "BioRand: generating...".
 - [ ] `test_biorand_dl.exe --live C:\Temp\brtest`: the downloader on its own. Expect "check newer",
       "installed", "current".
