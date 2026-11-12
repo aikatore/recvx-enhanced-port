@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- In co-op, a guest entering a room alone now gets the same randomized enemies and extra enemies as the host right
+  away, instead of them appearing only once the host arrives.
+- In co-op, enemies no longer jump back to their starting points when the host enters a room the guest is already
+  fighting in.
+
 ## 0.7.7 (2026-11-12)
 
 ### Changes
