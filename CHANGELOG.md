@@ -13,13 +13,26 @@
   lag, zombies' heads follow their target, grabs by enemies work reliably, and co-op needs far less bandwidth.
 - **Shared Enemy Control**: a new co-op host rule, off by default. Each enemy is run by the player fighting it, so
   hits and grabs react at once for both players.
-- **Performance**: rendering is lighter and entering a room hitches less, and on slow graphics cards the picture no
-  longer freezes or drops frames.
+- **Performance**: rendering is lighter, especially in rooms with many see-through details such as the exhibition
+  hall, entering a room hitches less, and on slow graphics cards the picture no longer freezes or drops frames.
+- **Extra Enemies**: adds a random number of enemies, up to the setting, to each room with enemies, anywhere the
+  player can walk and away from the doors. They follow the enemy rates and count toward Types per Room.
+- **Types per Room**: the randomizer now aims for that many different enemy types in a room where its enemies allow
+  it, instead of only capping them.
+- **Default co-op server**: "Via server" now comes filled in with eu.cvxenhanced.de, and the server address is
+  never hidden.
+- **Weapon shortcut wheel**: it sits higher and nearer the middle of the screen, clear of the HUD.
+- **Bats and moths**: easier to hit in the over-the-shoulder camera.
 - **Co-op server**: updates can now be applied without dropping running sessions, and a machine-readable status is
   available for monitoring.
 
 ### Fixes
 
+- Characters swapped in cutscenes no longer lose their hands.
+- Randomize Voice Lines picks far more varied lines, never the same one twice in a row, and a replaced line no longer
+  runs on past the original.
+- More rooms take part in the enemy randomizer, such as the palace's outer courtyard on later visits.
+- A movement key pressed while the inventory, map or files close now walks as soon as control returns.
 - In co-op, an extra enemy killed by the partner in another room no longer comes back to life, and extra enemies
   stay in the same place for both players.
 - In the over-the-shoulder camera with Free Camera, mashing the movement keys breaks free of a grab as quickly as
