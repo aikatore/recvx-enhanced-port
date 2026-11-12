@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.7 (2026-11-12)
 
 > [!IMPORTANT]
 > This update changes parts of the renderer to make it faster. If anything looks different or broken, such as
