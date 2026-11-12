@@ -56,7 +56,12 @@ int main(void)
         uint32_t bp = rnd() & 0x3FFF, bw = rnd() % 64, w = 1 + rnd() % 200, h = 1 + rnd() % 200;
         gs_read_rect(psm, bp, bw, w, h, b);
         for (uint32_t y = 0; y < h; y++)
-            for (uint32_t x = 0; x < w; x++) CHECK(b[y * w + x] == gs_read_pixel(psm, bp, bw, x, y));
+            for (uint32_t x = 0; x < w; x++)
+                if (b[y * w + x] != gs_read_pixel(psm, bp, bw, x, y)) {
+                    printf("FAIL rect psm %d bp %u bw %u %ux%u at %u,%u: %08x, pixel %08x addr %06x\n", psm, bp, bw, w, h, x, y,
+                           b[y * w + x], gs_read_pixel(psm, bp, bw, x, y), gs_pixel_addr(psm, bp, bw, x, y));
+                    return 1;
+                }
     }
     for (int n = 0; n < 2000; n++) {   /* CLD 1 loads: entries at CSA from CBP; the batch flushed only if the CLUT changes */
         static const uint32_t cpsms[] = { 0, 2, 10 };
