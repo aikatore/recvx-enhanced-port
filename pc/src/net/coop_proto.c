@@ -994,11 +994,27 @@ int coop_ene_modes_ok(int id, int type, int m0, int m1, int m2, int upper)
         { 5, 8, { 18, 255, 14, 9 }, 0 },    /* en05: BrainType[8] (mode1 1, by type), MoveMode2[18], DamageMode2[14], DeadMode2[9] */
         { 9, 11, { 15, 2, 11, 1 }, 12 },    /* en09: MoveType[11], BrainMode2[12], MoveMode2[15] ... */
         { 26, 255, { 17, 1, 16, 1 }, 0 },   /* en26: no type table */
+        /* protocol 54, the hand-in's types (docs/COOP.md "The hand-in") */
+        { 3, 2, { 20, 2, 13, 6 }, 0 },      /* en03: BrainType[3] by type (2 for its cocoon flag), action_table[2][6] by type; Move[20] ... */
+        { 6, 1, { 11, 1, 2, 5 }, 0 },       /* en06: BrainType[1] by type */
+        { 7, 2, { 9, 2, 255, 7 }, 0 },      /* en07: BrainType[2] by type; its Damage has no table */
+        { 8, 255, { 3, 255, 255, 255 }, 0 },   /* en08 */
+        { 10, 255, { 3, 255, 255, 255 }, 0 },  /* en10 */
+        { 11, 5, { 10, 255, 255, 255 }, 0 },   /* en11: its aim by type 0..4 */
+        { 15, 255, { 255, 255, 255, 255 }, 0 },   /* en15: Move_func[5] by mode1 (coop_glue.c ene_modes_ok) */
+        { 19, 3, { 255, 255, 255, 255 }, 0 },  /* en19: BrainType[3], CheckDmgLvl[3] ... by type; Mode0[4] is NULL (below) */
+        { 20, 255, { 8, 255, 255, 255 }, 0 },  /* en20 */
+        { 21, 255, { 9, 1, 255, 1 }, 0 },      /* en21: its Damage has no table */
+        { 22, 1, { 7, 255, 3, 2 }, 6 },        /* en22: InitType[1] ... by type, BrainMode2[6] */
+        { 23, 2, { 13, 1, 8, 4 }, 0 },         /* en23: BrainType[2] by type */
+        { 24, 1, { 6, 255, 255, 255 }, 0 },    /* en24: BrainType[1] by type; mode0 6 (in its mother) is past the check's 5 */
+        { 25, 255, { 4, 255, 255, 255 }, 0 },  /* en25 */
+        { 71, 255, { 255, 255, 255, 255 }, 0 },   /* en71: all empty (its flipbook: coop_glue.c) */
     };
     unsigned int k;
     for (k = 0; k < sizeof(t) / sizeof(t[0]) && t[k].id != id; k++) {}
     if (id != 1 && k == sizeof(t) / sizeof(t[0])) return 1;
-    if (m0 < 0 || m0 > 5 || m1 < 0 || m2 < 0 || type < 0) return 0;
+    if (m0 < 0 || m0 > 5 || m1 < 0 || m2 < 0 || type < 0 || (id == 19 && m0 == 4)) return 0;
     if (id == 1) {   /* en01: the *Type[16]; types 2 3 6 7 9 (MVType02, DGType02) add 10 to mode2 when moving or hit */
         static const uint8_t n[4] = { 17, 4, 17, 4 };
         static const uint32_t nul[4] = { 1u << 13, 1u << 3, 3u << 12, 0 };   /* MoveMode2W[13], NageMode2W[3], DamageMode2W[12..13] */

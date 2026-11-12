@@ -474,7 +474,7 @@ void spawn_pending(int run)
 /* guest: an EV_SPAWN of the host (always taken: 1) */
 int spawn_note_apply(int slot, const SpawnNote* n, int stg, int rom_no)
 {
-    if (n->pad == SPAWN_NOTE_DONE) { enemy_rand_result_begin(n->room, n->rec); return 1; }   /* (also at the title: before the game state) */
+    if (n->pad == SPAWN_NOTE_DONE) { enemy_rand_result_begin(n->room, n->rec, n->variant | (unsigned int)n->id << 16 | (unsigned int)n->mdlver << 24); return 1; }   /* (also at the title: before the game state) */
     if (n->pad == SPAWN_NOTE_RAND) { enemy_rand_result_add(slot, n); return 1; }
     if (!sys || !plp || (sys->tk_flg & 0x8)) return 1;   /* title: superseded by the next join */
     if (!ready() || pend_n) {

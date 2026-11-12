@@ -217,7 +217,9 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   `SPAWN_XDONE_NONE` when its extras are the host's). The host that comes in while the guest is still there makes the
   guest's result and the guest's extras in the same slots (`gx_follow`), but an extra whose dead flag is set by then;
   then the guest hands its enemies in with their state (COOP.md "The hand-in"). Before, the guest had no extras until
-  the host came, and then they popped in at their spots while every other enemy went back to the room's start.
+  the host came, and then they popped in at their spots while every other enemy went back to the room's start. An extra
+  the guest killed meanwhile the host makes too (protocol 54), dead and hidden until the guest hands in its corpse, which
+  then lies on the host where it lies on the guest (before: not made, nothing there on the host).
 * **The host's enemy options** go to the guest as `EV_EOPTS` (session start, before the game
   state, on change) and replace the guest's: with protocol 39 also Types per Room and Custom's
   32 rates, which fill the event's 80 bytes (`EnemyOpts`; the lobby shows the guest the host's
@@ -233,8 +235,9 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   `EV_GRAB`. A zombie grab on the guest makes the slot the guest's until handed back (~10 s
   timeout).
 * **Kills while the guest runs the room** (`EV_GONE`): at the take-over the guest names its dead
-  enemies; the host hides its matching copies for that visit. The living ones of the types that can
-  change hands go to the host with their state (protocol 53, COOP.md "The hand-in").
+  enemies; the host hides its matching copies for that visit. The others go to the host with their state, living and
+  dead (protocol 53 the Shared Enemy Control types, 54 every type but the bosses' and the moth's larva: COOP.md "The
+  hand-in", its table says in which states each type goes).
 
 ## Head blow-offs
 

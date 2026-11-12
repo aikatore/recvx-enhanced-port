@@ -1064,25 +1064,76 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   names its dead enemies and the host hides its live copies of the same type and version. A record with a
   kill bit is usually hidden already by then: the joiner's `DieCk` set the bit, `EV_FLAGS` brought it, and the
   host's entry script (`EneSetCk`) hid the record; `EV_GONE` covers the records without one, kills of the last
-  frames, and extra enemies.
-* **The hand-in** (protocol 53, `coop_glue.c` `hin_*`): the host's fresh load of a room the joiner has been in alone
-  made the host's enemies take over at the room's start positions, so everything the joiner had moved went back, and
-  the extra enemies (only the host drew them) popped in. Now a joiner that loads a room with the host elsewhere draws
-  its randomizer result and extras itself and sends them ([ENEMIES.md](ENEMIES.md) "A guest there first"); the host
-  that comes in while the joiner is there makes the joiner's. At the take-over the joiner keeps running each living
-  enemy it ran alone of the types whose state can change hands (zombie with its upper half, Cerberus, Hunter/Sweeper,
-  Bandersnatch, anatomist; not one an event drives) and claims it (`EV_ENEOWN` state 3: slot, child, type and look).
-  The host, once its copy in that slot is there (an extra comes at the room's first frame: it waits up to 150 frames),
-  answers 4 (it shows its copy as a puppet of the joiner's snapshots) or 2 (not the same enemy: the host's runs, the
-  joiner's takes its state as before). Then the joiner hands it in with its whole state as a grab ends (`EV_UNGRAB`
-  state 1, `ene_unpack`): at once in its Move (walking, standing, lying), after 90 frames in any other mode, never
-  during a grab or on stairs (their pointers are the game's that set them; it goes when they end, or without its state
-  when the joiner leaves). The host's snapshots of its fresh copy from before its answer are dropped (`run_from`), so
-  the joiner's copy never shows them. Records the room's scripts act on are handed in too (the scripts run on the
-  host); with Shared Enemy Control the others stay the joiner's until that rule's own hand-overs. The other types (bats,
-  spiders, moths, ...) still take the host's state, and the dead ones are `EV_GONE`'s. Not after the host's menu (its
-  enemies were not reloaded: the joiner ran the room only while the host was in another one). Logged: "the host comes
-  into the room we ran alone: N of our enemies go on as they are (hand-in)", "hand-in: enemy N ... with its state".
+  frames, and extra enemies. Since protocol 54 the hand-in claims the joiner's dead first (its corpse then lies on the
+  host too, also an extra: the host makes the joiner's killed extras dead, `coop_extra_corpse`); `EV_GONE` names the
+  rest (hidden ones, and what a claim leaves out).
+* **The hand-in** (protocol 53, every type since 54, `coop_glue.c` `hin_*`): the host's fresh load of a room the joiner has
+  been in alone made the host's enemies take over at the room's start positions, so everything the joiner had moved went
+  back, and the extra enemies (only the host drew them) popped in. Now a joiner that loads a room with the host elsewhere
+  draws its randomizer result and extras itself and sends them ([ENEMIES.md](ENEMIES.md) "A guest there first"); the
+  host that comes in while the joiner is there makes the joiner's. At the take-over the joiner keeps running each enemy
+  it ran alone and claims it (`EV_ENEOWN` state 3: slot, child, type and look; `stflg_b` 1: it lies there dead), the
+  living and the dead (not hidden ones, not one an event drives, not what the host's fresh copy is too: a bat asleep, a
+  baby spider inside its mother, nor the Tyrant of a fight, type 1, whose room script talks to it through `rm_flg`). Before
+  protocol 54 only the Shared Enemy Control types (zombie, Cerberus, Hunter/Sweeper, Bandersnatch, anatomist) were
+  claimed, and only living ones; every other type jumped to the host's start position and fresh state (old: Black
+  Widows 66-72 units, a Giant Black Widow 130, Tyrants 63, fish 30, bats 23, ants 13 in 5 frames), and the joiner's dead
+  were hidden on the host (`EV_GONE`), an extra the joiner killed not made at all. The host, once its copy in that slot is
+  there and set up (an extra comes at the room's first frame: it waits up to 150 frames), answers 4 (it shows its copy as
+  a puppet of the joiner's snapshots; a dead one also when its copy is hidden or dead already, so the corpse shows) or 2
+  (not the same enemy: the host's runs, the joiner's takes its state as before). Then the joiner hands it in with its
+  whole state as a grab ends (`EV_UNGRAB` state 1, `ene_unpack`) once it can go:
+  * a Shared Enemy Control type: at once in its Move (walking, standing, lying), after 90 frames in any other mode, never
+    during a grab or on stairs (their pointers are the game's that set them);
+  * any other type: in the states of the table below (from the type's `en*.c`); in any other it runs on in the joiner's
+    game, as a zombie grab does (with the rule off its target is the joiner alone meanwhile), however long that takes; in
+    the common event mode (`mode0` 5: hidden moths, ants and Spotters waiting for their event) after 90 frames. While the
+    joiner's menu stops its enemies, one that cannot go now goes back after 15 frames without its state (the host lets
+    it go from its puppet), and leaving the room gives back what is left without it (`grab_check`), as before.
+
+  The state is `ene_pack`'s: the enemy's `BH_PWORK` (pointers kept) and its `exp0` work but the ranges of `own_types`'
+  `keep` (its pointers: children, `eff[]` entries, the other Hunter; and what belongs to its own game's player: a grab, the
+  Tyrant's blow `ply_act`, a baby spider's view of the player's feet, the ceiling trap's crush), the room collision
+  pointers of `atr` going as their table and index (`atr_enc`: `rom->walp`, `etcp`, `flrp`, `rutp`, `sys->mwalp`,
+  `metcp`, `mflrp`; the same room file and Inits make the same records), the Tyrant's action code (`FW_WORK.prgP`) as its
+  `En19ActTbl` row. Up to 0x204 bytes of `exp0` (the Tyrant's); an enemy without a child sends its own size (protocol
+  54: 1408 + its `exp0`, a zombie with its upper half 2 x 1924), at most half the event ring per frame (a room of 72 ants
+  goes over a few frames). The receiver takes it only within its type's tables (`coop_ene_modes_ok`, and `ene_modes_ok`'s
+  checks of the work: a spider's surface, a bat's place on the player, the ants' flipbook frames). The host's snapshots
+  of its fresh copy from before its answer are dropped (`run_from`), so the joiner's copy never shows them. Records the
+  room's scripts act on are handed in too (the scripts run on the host: in 0/2 with `ev_flg` 104 the host's kill of a
+  handed-in walking zombie sets its `ed_flg` through the room's `DieCk` in both games); with Shared Enemy Control the p3
+  types stay the joiner's until that rule's own hand-overs. Not after the host's menu (its enemies were not reloaded: the
+  joiner ran the room only while the host was in another one), nor while a rejoin's session starts (the host's pose
+  must say it plays in another room; its game state reloads the joiner's room anyway, and a reload drops the claims).
+  Logged: "the host comes into the room we ran alone: N of our enemies go on as they are (hand-in), D of them dead",
+  "hand-in: enemy N ... with its state", "... still runs here after F frames: not in a state to go".
+
+  | type | goes with its state | stays the joiner's meanwhile |
+  |---|---|---|
+  | Black Widow (3) | on the floor or the ceiling (also one that started there, `flg` 0x2000000), idle, walking, turning, chasing (Brain on); dead | a dive, jump, attack, grab or change of surface; once a leg is shot off (its legs are its own game's children: the host's would be whole) |
+  | moth (6) | perched, flying, closing in; dead | its grab (no moth may hold the player: `exp1`), take-off, landing, crawling wingless |
+  | bat (7) | hanging awake, chasing, hovering, circling; dead | latched on (`flg` 0x1000), dropping, knocked back, going up to hang; the swarm's leader while its pause runs (`exp1[6]`, `[7]`: only it counts down). Asleep (type 1): not claimed |
+  | fish (8), ants B (20) and C (71) | always | - |
+  | ant A (10) | in its Move; dead | - |
+  | Spotter (11) | patrolling (Move 1, 2, 4..6), not alarmed, no event motion | alarmed, turning, re-attaching after an event; its light (an `eff[]`) stays each game's |
+  | Nosferatu (15) | standing, turning, keeping away, chasing (`Move_func` by `mode1` 0..3), holding nobody | holding a player |
+  | Tyrant (19) | waiting, walking, turning (`br_mde0` NORMAL, `br_mde1` 0..2, action 0/4/8), no blow on its game's player, no hit frame | attacks, dashes, damage, down, dying. Type 1 (the room script's fight): not claimed |
+  | albinoid infant (21), adult (22) | infant: Move, dead, not holding its player; adult: idle, walking, chasing, no discharge and its light off (`exp0` 0x08 & 0x81000; those bits stay the receiver's) | infant's grab; adult's discharge |
+  | Giant Black Widow (23) | waiting, walking (also to its nest, MV02), on the ground or the ceiling, no leg shot off, its game's player not caught | climbing, dropping, attacking, damage, its burst |
+  | baby spider (24) | out of its mother, on the ground (Move 1..3) | jumping, released mid-air. Inside its mother (`mode0` 6): not claimed |
+  | ceiling trap (25) | up (Move 0), type 1, or done | coming down (its moving wall's height is room state) |
+  | moth larva (27) | never: it rides on the player of the game that made it (`lkwkp` = that `plp`) | - |
+  | bosses (Gulp Worm 2, Alexia 12..14 with tentacles 18 and babies 30, Alfred 16, Monster Steve 17 and the knights 54/55, tentacles 29, Nosferatu's core 53, the crane 56) | never: the host's entry runs the room's entry script, which re-arms the fight (clears `rm_flg`, in 9280/9301/9302/9321 also the fight's shared flags, a `CineSet`); their phases are the script's flags and `rm_flg`, their work a web of children (Alexia 2's 992 bytes) | they take the host's state as before |
+
+* **Room files that differ** (protocol 54): `SPAWN_NOTE_DONE` (now sent for every room load, without the randomizer too)
+  carries a hash of the room's records (`enemy_room_hash`: the enemy records - type, look, floor, place, angle - and how many
+  walls, triggers, floors and routes; `SpawnNote.variant` and `id << 8 | mdlver`). Where the partner's differs from ours
+  for the same room file (a mod in one player's mods folder), both log "room file RM_0020 differs between the players
+  (... a mod in one mods folder?): its enemies may not match", and the hand-in takes the same type in another look too
+  (each game shows its own look; `ene_unpack` checks its model and motions), instead of the joiner's zombie jumping 136
+  units back to the host's start position. Records that differ in type stay apart as before (the snapshots skip a slot
+  holding another type). Not yet shown in the lobby or on screen (a translated message).
 * **Engaged-player ownership** (protocol 48; 47 had zombies only, 46 was the first prototype): the host's lobby rule
   "Shared Enemy Control" (`g_coop.shared_enemies`, ini `coop_shared_enemies`, off by default, changeable at the title
   and in the lobby, locked once the session's game runs (`coop_session_game`: not at the title, in the lobby or the attract demo; back at the title the session
@@ -1095,7 +1146,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   2: the grab is over, the runner keeps the zombie). Other types' grabs and bites of the stand-in go as hits, as the
   host's always did.
   * **Which types** (`own_types` in `coop_glue.c`: each type's `exp0` size and its pointer words, which stay the
-    receiver's own; the `type` field goes along; the conditions are `own_movable`'s, from the type's `en*.c` code):
+    receiver's own; the `type` field goes along; the conditions are `own_movable`'s, from the type's `en*.c` code; "no" is this rule's: since protocol 54 the hand-in takes those types too, in the states of its table):
 
     | type | changes hands | when (in its Move, between attacks) |
     |---|---|---|
@@ -1129,7 +1180,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
     dead flag in both games (the snapshot's `flg` 2), and both scripts count it. "Randomize Event Enemies" keeps those
     records their type (another look), so they stay with the host too. Extra and added enemies are never script
     records (a record is always in the slot of its number).
-  * **How**: the enemy's and (a zombie) its upper half's state (`ene_pack`, 3168 bytes) as `EV_ESTATE` chunks plus
+  * **How**: the enemy's and (a zombie) its upper half's state (`ene_pack`, 3848 bytes; 3168 before protocol 54) as `EV_ESTATE` chunks plus
     `EV_ENEOWN` (state 1) in the same frame: the event burst ("Datagrams": every new event in its frame, up to 96). The
     receiver takes it whole (same type and model in the slot, the same upper half, the state plausible, no event of its
     own on it, not a script record, not in a door, its type and modes within the tables its code calls through,
@@ -1552,7 +1603,7 @@ bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows t
 list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
 `EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
 the Bandersnatch and the anatomist too (each type's `exp0` with its pointer words kept, the `type` field taken), never for a
-record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). 54: every type outside the boss fights is handed in, the dead ones too (`EV_ENEOWN` state 3 `stflg_b` 1), with up to 0x204 bytes of `exp0` (an enemy without a child its own size, `ATR_WORK` pointers as table and index); the extras the joiner killed are made dead on the host; `SPAWN_NOTE_DONE` carries the room's records' hash ("Room files that differ"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1959,13 +2010,18 @@ stays until the host is back (`EV_GONE`). C: the host kills them while the joine
 alone (it draws the extras itself, protocol 53: the dead one stays away). It fails unless the killed ones stay dead on both sides, each side logs the other's extra dead flag arriving
 (`EV_FLAGS`), and both see the same enemies in the same slots.
 
-`pc/tools/coop_handin_check.sh OUT [PORT]` (the same needs, about two minutes): the joiner is in a room from ~1000
-host frames with the host in 0/1 ("Extra Enemies" 5, the randomizer, seed 88119), the host comes in at ~3000; three pairs at once:
-A 0/2 (the joiner kills record 3), B 0/6 (it kills record 1), C 0/6 (it kills the extra). It fails unless the joiner has
-the randomized enemies and the extras before the host comes, the host makes the joiner's extras (no second set) but
-the dead one, afterwards both sides list the same enemies, HP and dead ones within 6 units, and no enemy moves more
-than 12 units in 5 frames on the joiner while the host comes in (`RECVX_COOP_ENEPOS` every 5 frames). Main before
-protocol 53: B and C jump 70-77 units (a Hunter back at its start), and no extras on the joiner until the host comes.
+`pc/tools/coop_handin_check.sh OUT [PORT]` (the same needs, about four minutes, 18 instances at once): the joiner is in a
+room from ~1000 host frames with the host in 0/1 ("Extra Enemies" 5, the randomizer, seed 88119), the host comes in at
+~3000; nine pairs at once: A 0/2 (the joiner kills record 3), B 0/6 (it kills record 1), C 0/6 (it kills the extra), D 0/2
+with `ev_flg` 104 (walking zombies; the host kills a handed-in one), M as D without the randomizer and the joiner with a
+modded RM_0020 (made from the disc image into OUT), T1..T4 bats and Spotters (0/13), ants (9/17), Black Widows (6/9),
+Tyrants (1/0, Custom rates). It fails unless the joiner has the randomized enemies and the extras before the host comes,
+the host makes the joiner's extras (no second set; the one it killed dead, its corpse then lying on both sides),
+afterwards both sides list the same enemies, HP and dead ones within 6 units, no enemy moves more than 12 units in 5
+frames on the joiner while the host comes in (`RECVX_COOP_ENEPOS` every 5 frames), the host's kill counts in both games'
+`ed_flg`, both warn of the different room file, and each type of T1..T4 goes over with its state. Main before protocol 53:
+B and C jump 70-77 units (a Hunter back at its start), and no extras on the joiner until the host comes; before 54: T3
+jumps 72 (Black Widows), T1 23, T2 13, C leaves the host without the corpse, M jumps 136.
 
 `pc/tools/coop_passage_check.sh OUT [PORT] [host|guest]` (the same needs, about two minutes): in the palace's passage
 to the residence (1/10) the watcher (default the host) examines the trigger at the foot of the stairs, whose scene

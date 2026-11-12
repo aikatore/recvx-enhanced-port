@@ -1300,12 +1300,18 @@ static int pick(int cur, float d0, float d1, int b0, int b1, int f0, int f1, int
     return coop_pick_target(cur, &in);
 }
 /* coop_ene_modes_ok: a partner's type and modes never index past the tables of the types that change hands
-   (en01 en01b en04 en05 en09 en26), nor a NULL entry; what the game itself runs passes */
+   (en01 en01b en04 en05 en09 en26; protocol 54 the hand-in's en03 en06 en07 en08 en10 en11 en19 en20 en21 en22 en23 en24 en25), nor a
+   NULL entry (en19's Mode0[4]); what the game itself runs passes */
 static void test_ene_modes(void)
 {
     static const struct { int id, types, m2[4], brain; } T[] = {   /* the decomp's table sizes (Nage of en05: none) */
         { 4, 3, { 13, 2, 3, 1 }, 12 }, { 5, 8, { 18, 1000, 14, 9 }, 0 }, { 9, 11, { 15, 2, 11, 1 }, 12 }, { 26, 1000, { 17, 1, 16, 1 }, 0 },
+        { 3, 2, { 20, 2, 13, 6 }, 0 }, { 6, 1, { 11, 1, 2, 5 }, 0 }, { 7, 2, { 9, 2, 1000, 7 }, 0 }, { 8, 1000, { 3, 1000, 1000, 1000 }, 0 },
+        { 10, 1000, { 3, 1000, 1000, 1000 }, 0 }, { 11, 5, { 10, 1000, 1000, 1000 }, 0 }, { 19, 3, { 1000, 1000, 1000, 1000 }, 0 },
+        { 20, 1000, { 8, 1000, 1000, 1000 }, 0 }, { 21, 1000, { 9, 1, 1000, 1 }, 0 }, { 22, 1, { 7, 1000, 3, 2 }, 6 },
+        { 23, 2, { 13, 1, 8, 4 }, 0 }, { 24, 1, { 6, 1000, 1000, 1000 }, 0 }, { 25, 1000, { 4, 1000, 1000, 1000 }, 0 },
     };
+    const int nt = (int)(sizeof(T) / sizeof(T[0]));
     int k, type, m0, m1, m2, up, bad = 0;
     for (type = 0; type < 256; type++)
         for (m0 = 0; m0 < 256; m0++)
@@ -1319,9 +1325,10 @@ static void test_ene_modes(void)
                                                                             (m0 == 4 && !m2 && m1 >= 3)))
                             bad++;
                     }
-                    for (k = 0; k < 4; k++)
+                    for (k = 0; k < nt; k++)
                         if (coop_ene_modes_ok(T[k].id, type, m0, m1, m2, 0) &&
-                            (type >= T[k].types || m0 > 5 || (m0 >= 1 && m0 <= 4 && m2 >= T[k].m2[m0 - 1]) || (m0 == 1 && m1 == 1 && T[k].brain && m2 >= T[k].brain)))
+                            (type >= T[k].types || m0 > 5 || (m0 >= 1 && m0 <= 4 && m2 >= T[k].m2[m0 - 1]) || (m0 == 1 && m1 == 1 && T[k].brain && m2 >= T[k].brain) ||
+                             (T[k].id == 19 && m0 == 4)))
                             bad++;
                 }
     CHECK(bad == 0);
@@ -1332,6 +1339,9 @@ static void test_ene_modes(void)
     CHECK(coop_ene_modes_ok(4, 2, 1, 0, 12, 0) && !coop_ene_modes_ok(4, 2, 1, 1, 12, 0) && !coop_ene_modes_ok(4, 3, 1, 0, 0, 0));
     CHECK(coop_ene_modes_ok(5, 7, 2, 0, 200, 0) && !coop_ene_modes_ok(5, 8, 1, 0, 0, 0) && !coop_ene_modes_ok(5, 0, 4, 0, 9, 0));
     CHECK(coop_ene_modes_ok(9, 10, 1, 0, 14, 0) && !coop_ene_modes_ok(9, 11, 1, 0, 0, 0) && !coop_ene_modes_ok(26, 200, 3, 0, 16, 0));
+    CHECK(coop_ene_modes_ok(7, 1, 1, 1, 8, 0) && !coop_ene_modes_ok(7, 1, 1, 1, 9, 0) && coop_ene_modes_ok(7, 1, 3, 0, 200, 0));   /* a bat: Damage has no table */
+    CHECK(coop_ene_modes_ok(19, 2, 5, 0, 0, 0) && !coop_ene_modes_ok(19, 0, 4, 0, 0, 0) && !coop_ene_modes_ok(19, 3, 1, 0, 0, 0));   /* the Tyrant: NULL Mode0[4] */
+    CHECK(!coop_ene_modes_ok(24, 0, 6, 0, 0, 0));   /* a baby spider inside its mother (Mode0[6]) never takes a partner's state */
     CHECK(coop_ene_modes_ok(2, 255, 255, 255, 255, 0));   /* not a type that changes hands */
 }
 

@@ -51,7 +51,7 @@ check "A: the guest's kills (record 1 kill bit, extra 30 dead flag 40) reached t
 check "A: the host took the guest's dead flag 40 (EV_FLAGS, extras' word 1 bit 8)" "grep -q \"coop: the partner's extra enemy dead flags, word 1: set 00000100\" $out/A/host/log.txt"
 check "A: the host, back alone, does not bring extra 30 back" "grep -q 'dead flag 40) at .*: dead (killed before)' $out/A/host/log.txt && [ '$(alive A host 2850)' = ' 0:1 2:1' ]"
 check "A: then both see the same: record 1 and extra 30 dead" "[ '$(alive A host 3300)' = ' 0:1 2:1' ] && [ '$(alive A guest 3300)' = ' 0:1 2:1' ]"
-check "B: the host takes over the guest's room (EV_GONE)" "grep -q 'the host.s enemies take over' $out/B/guest/log.txt"
+check "B: the host takes over the guest's room, its dead lie there too (the hand-in's dead: protocol 54; EV_GONE)" "grep -q 'the host.s enemies take over\|go on as they are (hand-in), [1-9] of them dead' $out/B/guest/log.txt"
 check "B: both see the same enemies in the same slots" "[ '$(alive B host 3300)' = ' 0:1 2:1' ] && [ '$(alive B guest 3300)' = ' 0:1 2:1' ]"
 check "C: the guest took the host's dead flag 40 of extra 30" "grep -q \"coop: the partner's extra enemy dead flags, word 1: set 00000100\" $out/C/guest/log.txt"
 check "C: the guest, back alone, finds record 1 and extra 30 dead" "[ '$(alive C guest 3300)' = ' 0:1 2:1' ]"

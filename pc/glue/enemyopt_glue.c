@@ -408,7 +408,7 @@ static void place(const EnemyOpts* o)
    enemies and their state carry on, coop_glue.c "hand-in"). A load with the partner elsewhere draws on its own, as
    single player does. Kept here until the partner's next result for that room or the session's end. */
 #define HRES_MAX 4
-static struct { short room1; unsigned char want, n, rec[128]; SpawnNote note[128]; } hres[HRES_MAX];   /* room1: the room file + 1, 0 none */
+static struct { short room1; unsigned char want, n, rec[128]; SpawnNote note[128]; unsigned int hash; } hres[HRES_MAX];   /* room1: the room file + 1, 0 none */
 static int hres_cur = -1, hres_next;
 static void gx_forget(void);
 static void hres_forget(void) { memset(hres, 0, sizeof(hres)); hres_cur = -1; gx_forget(); }
@@ -418,16 +418,65 @@ static unsigned char res_rec[128];      /* this room load's changes (coop_rand_r
 static SpawnNote res_note[128];
 static int res_n;
 
-void enemy_rand_result_begin(int room, int count)
+/* the room's records as its file has them (protocol 54): its enemy records (what they are and where) and how many walls, triggers,
+   floors and routes it has, FNV-1a. A partner's that differs for the same room file has another file (a mod in one mods folder):
+   its records are not ours, so its enemies may not match (another look, type or place). Logged once per room and partner load. */
+static unsigned int room_hash, room_hash_gen = (unsigned int)-1;
+static int room_hash_room = -1;         /* the room file it is of (in a door room_file_now is the next one's already) */
+static int hash_said = -1;
+unsigned int enemy_room_hash(void)
+{
+    unsigned int h = 2166136261u;
+    int k;
+    if (!rom || !sys) return 0;
+    if (room_hash_gen == (unsigned int)enemy_room_gen) return room_hash;
+#define MIX(v) do { unsigned int v_ = (unsigned int)(v); int b_; for (b_ = 0; b_ < 4; b_++) { h ^= v_ & 0xFF; h *= 16777619u; v_ >>= 8; } } while (0)
+    MIX(rom->ene_n); MIX(rom->wal_n); MIX(rom->etc_n); MIX(rom->flr_n); MIX(rom->rut_n);
+    for (k = 0; rom->enep && k < rom->ene_n && k < 256; k++) {
+        const ETTY_WORK* r = &rom->enep[k];
+        float f[3] = { r->px, r->py, r->pz };
+        unsigned int w[3];
+        memcpy(w, f, sizeof(w));
+        MIX(r->id | (unsigned int)r->type << 16); MIX((unsigned char)r->flr_no | r->mdlver << 8 | r->wrk_no << 16); MIX(w[0]); MIX(w[1]); MIX(w[2]); MIX((unsigned short)r->ay);
+    }
+#undef MIX
+    room_hash = h ? h : 1;
+    room_hash_gen = (unsigned int)enemy_room_gen;
+    room_hash_room = room_file_now();
+    return room_hash;
+}
+static void hash_check(int h)
+{
+    int room = hres[h].room1 - 1;
+    if (!hres[h].hash || !sys || !rom || room != room_hash_room || room != room_file_now() || room_hash_gen != (unsigned int)enemy_room_gen ||
+        hres[h].hash == room_hash)
+        return;
+    if (hash_said == room * 64 + (enemy_room_gen & 63)) return;
+    hash_said = room * 64 + (enemy_room_gen & 63);
+    host_log("enemies: room file RM_%04d differs between the players (its records %08x here, %08x the %s's: a mod in one mods folder?): "
+             "its enemies may not match\n", room, room_hash, hres[h].hash, partner());
+}
+int enemy_room_differs(void)
+{
+    int h, room = sys && rom ? room_file_now() : -1;
+    if (room != room_hash_room || room_hash_gen != (unsigned int)enemy_room_gen) return 0;
+    for (h = 0; room >= 0 && h < HRES_MAX; h++)
+        if (hres[h].room1 == room + 1 && hres[h].hash && room_hash_gen == (unsigned int)enemy_room_gen && hres[h].hash != room_hash) return 1;
+    return 0;
+}
+void enemy_rand_result_begin(int room, int count, unsigned int hash)
 {
     int h;
     if (count < 0 || count > 128) { hres_cur = -1; return; }
     for (h = 0; h < HRES_MAX && hres[h].room1 != room + 1; h++);
     if (h == HRES_MAX) { h = hres_next; hres_next = (hres_next + 1) % HRES_MAX; }
-    hres[h].room1 = (short)(room + 1); hres[h].want = (unsigned char)count; hres[h].n = 0;
+    hres[h].room1 = (short)(room + 1); hres[h].want = (unsigned char)count; hres[h].n = 0; hres[h].hash = hash;
     hres_cur = h;
-    if (sys && rom && (sys->tk_flg & 0x80) && room == room_file_now())
-        host_log("enemies: the %s's randomizer result for room %04d came after our load of it (%d changes): ours may differ\n", partner(), room, count);
+    if (sys && rom && (sys->tk_flg & 0x80) && room == room_file_now()) {
+        hash_check(h);
+        if (enemy_opts()->rand)
+            host_log("enemies: the %s's randomizer result for room %04d came after our load of it (%d changes): ours may differ\n", partner(), room, count);
+    }
 }
 void enemy_rand_result_add(int rec, const SpawnNote* n)
 {
@@ -864,13 +913,21 @@ void enemy_room_finished(void)
     if (!rom || !sys) return;
     o = enemy_opts();
     scan_script();   /* (it only reads the script: co-op ownership, the test aids) */
+    enemy_room_hash();
+    {   /* the partner's of this room file, if it came before our load */
+        int h;
+        for (h = 0; h < HRES_MAX; h++)
+            if (hres[h].room1 == room_file_now() + 1) hash_check(h);
+    }
+    res_n = 0;
+    if (!o->rand) coop_rand_result(room_file_now(), res_rec, res_note, 0, room_hash);   /* (no changes: the partner gets our records' hash) */
     if (o->place || o->rand || o->extra) {
         memset(rand_src, 0, sizeof(rand_src));
         memset(rand_var, 0, sizeof(rand_var));
         memset(moved_rec, 0, sizeof(moved_rec));
         if (o->rand) {
             randomize(o);
-            coop_rand_result(room_file_now(), res_rec, res_note, res_n);   /* (every load, none changed too: the partner follows it) */
+            coop_rand_result(room_file_now(), res_rec, res_note, res_n, room_hash);   /* (every load, none changed too: the partner follows it) */
         }
         if (o->place) place(o);
     }
@@ -1300,13 +1357,17 @@ static int gx_follow(int room)
         ActorModel am = { "guest's extra enemy", n->room, n->rec, n->id, n->mdlver, 0, 0 };
         const char* why = NULL;
         int slot = -1, bit = n->dead >= ENEMY_XDEAD_BASE ? n->dead - ENEMY_XDEAD_BASE : -1;
-        if (bit >= 0 && bit < ENEMY_XDEAD_WORDS * 32 && xdead(bit)) why = "dead (the guest killed it)";
-        else if ((ene[gx[h].slot[k]].flg & 0x1)) why = "its slot is taken here";
-        else if (!(why = spawn_add(&am, n, gx[h].slot[k], &slot)) && xtra_n < ENEMY_EXTRA_MAX) {
-            xtra[xtra_n].slot = (unsigned char)slot; xtra[xtra_n].id = n->id; xtra[xtra_n].died = 0; xtra[xtra_n++].bit = (short)bit;
+        int dead = bit >= 0 && bit < ENEMY_XDEAD_WORDS * 32 && xdead(bit);
+        /* one the guest killed comes too (protocol 54): dead and hidden here until the guest hands in its corpse, which then
+           lies here as there (before: not made, nothing where the guest's corpse lay) */
+        if ((ene[gx[h].slot[k]].flg & 0x1)) why = "its slot is taken here";
+        else if (!(why = spawn_add(&am, n, gx[h].slot[k], &slot))) {
+            if (xtra_n < ENEMY_EXTRA_MAX) { xtra[xtra_n].slot = (unsigned char)slot; xtra[xtra_n].id = n->id; xtra[xtra_n].died = (unsigned char)dead; xtra[xtra_n++].bit = (short)bit; }
+            if (dead) coop_extra_corpse(slot);
             made++;
         }
-        host_log("enemies: the guest's extra type %d model %d (dead flag %d) into slot %d: %s\n", n->id, n->mdlver, bit, gx[h].slot[k], why ? why : "spawned");
+        host_log("enemies: the guest's extra type %d model %d (dead flag %d) into slot %d: %s\n", n->id, n->mdlver, bit, gx[h].slot[k],
+                 why ? why : dead ? "spawned dead (the guest killed it: its corpse comes with the hand-in)" : "spawned");
     }
     host_log("enemies: room %04d: %d of the guest's %d extra enemies made (the guest was here first)\n", room, made, gx[h].n);
     return 1;
@@ -1571,11 +1632,14 @@ void enemy_extras_frame(void)
         if (want >= PC_ENE_SLOTS || (ene[want].flg & 0x1)) want = -1;
         dx = n->px - plp->px; dz = n->pz - plp->pz;
         door_dist(n->px, n->pz, &door, &entry);
-        if (xdead(bit)) why = "dead (killed before)";
+        /* the guest killed it while it was here alone (the host's own extras of an earlier visit): made dead too, its corpse comes
+           with the hand-in (protocol 54, coop_extra_corpse); with the guest elsewhere, not made */
+        if (xdead(bit) && !(coop_partner_in_room() && !coop_is_guest() && want >= 0)) why = "dead (killed before)";
         else if (dx * dx + dz * dz < XR_DOOR * XR_DOOR) why = "not now: the player stands there (a loaded save, a retry)";
         else if ((why = spawn_add(&x[k].am, n, want, &slot))) refused = 1;
-        else if (xtra_n < ENEMY_EXTRA_MAX) {
-            xtra[xtra_n].slot = (unsigned char)slot; xtra[xtra_n].id = (unsigned char)x[k].am.id; xtra[xtra_n].died = 0; xtra[xtra_n++].bit = (short)bit;
+        else {
+            if (xtra_n < ENEMY_EXTRA_MAX) { xtra[xtra_n].slot = (unsigned char)slot; xtra[xtra_n].id = (unsigned char)x[k].am.id; xtra[xtra_n].died = (unsigned char)xdead(bit); xtra[xtra_n++].bit = (short)bit; }
+            if (xdead(bit)) { coop_extra_corpse(slot); why = "spawned dead (the guest killed it: its corpse comes with the hand-in)"; }
             made++;
         }
         host_log("enemies: extra %s (type %d model %d, extra %d, dead flag %d) at %.0f %.0f (door %.0f, entry %.0f): %s\n", x[k].am.name, x[k].am.id, x[k].am.mdlver, k,
