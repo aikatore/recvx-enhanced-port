@@ -587,7 +587,10 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     if (grunts != VOICE_PICK_GRUNTS && (fit <= 0 || fit >= VOICE_SHORT_MS)) grunts = VOICE_PICK_SPOKEN;   /* (a spoken line for one: never a grunt) */
     if (!(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr, fit, fit > 0 ? fit + VOICE_GRACE_MS : 0, line_ms, line_age,
                          grunts | (ms > 0 && ms < VOICE_SHORT_MS ? VOICE_PICK_FIT : 0)))) {   /* (a gasp: one that ends in time, else quiet below) */
-        if (grunts != VOICE_PICK_GRUNTS) KEEP("no line picked");
+        if (grunts != VOICE_PICK_GRUNTS) {   /* (latent: voice_pick always finds one for a character with lines) not the original's voice */
+            host_log("voices: room %04d record %d: %s's line %d/%d (%d ms): no line of %s picked: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr));
+            return quiet(sp, ms);
+        }
         host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a grunt and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr));
         return quiet(sp, ms);
     }
