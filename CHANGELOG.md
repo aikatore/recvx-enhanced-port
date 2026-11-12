@@ -39,6 +39,8 @@
 - The HUD shows the right colour and spare count for gas rounds.
 - In co-op, both players get the same randomized enemies in every room.
 - Randomize Voice Lines starts its variety over on a new game, a load or a retry.
+- With the fixed cameras, a mouse button bound to the action button now moves on through a description text, such
+  as when examining a wall panel or a manhole, instead of getting stuck on it.
 
 ## 0.7.6 (2026-11-09)
 
