@@ -7,11 +7,14 @@
 #define CHECK(x) do { if (!(x)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); return 1; } } while (0)
 
 GsState gs;
-void gs_flush(void) {}
+static int flushes;
+void gs_flush(void) { flushes++; }
 void gs_notify_mem_write(uint32_t bp, uint32_t bw, int psm, uint32_t x, uint32_t y, uint32_t w, uint32_t h) { (void)bp; (void)bw; (void)psm; (void)x; (void)y; (void)w; (void)h; }
 void gs_notify_pages(const uint64_t* pages, int changed) { (void)pages; (void)changed; }
 void gs_rt_to_mem(uint32_t bp, uint32_t bw, uint32_t psm, uint32_t x, uint32_t y, uint32_t w, uint32_t h) { (void)bp; (void)bw; (void)psm; (void)x; (void)y; (void)w; (void)h; }
 void ntex_before_access(uint32_t p0, uint32_t p1) { (void)p0; (void)p1; }
+int ntex_pending(uint32_t p0, uint32_t p1) { (void)p0; (void)p1; return 0; }
+int gs_ab_off(int bit) { (void)bit; return 0; }
 void stream_note_upload(const uint64_t* pages) { (void)pages; }
 
 static uint32_t rng = 12345;
@@ -55,7 +58,7 @@ int main(void)
         for (uint32_t y = 0; y < h; y++)
             for (uint32_t x = 0; x < w; x++) CHECK(b[y * w + x] == gs_read_pixel(psm, bp, bw, x, y));
     }
-    for (int n = 0; n < 2000; n++) {   /* CLD 1 loads: entries at CSA from CBP */
+    for (int n = 0; n < 2000; n++) {   /* CLD 1 loads: entries at CSA from CBP; the batch flushed only if the CLUT changes */
         static const uint32_t cpsms[] = { 0, 2, 10 };
         uint16_t want[512];
         uint32_t psm = n & 1 ? PSMT8 : PSMT4, cbp = rnd() & 0x3FFF, cpsm = cpsms[rnd() % 3], csa = rnd() & 31, entries = psm == PSMT8 ? 256 : 16;
@@ -68,8 +71,14 @@ int main(void)
                 want[e] = (uint16_t)c; want[256 + e] = (uint16_t)(c >> 16);
             } else want[(csa * 16 + i) & 511] = (uint16_t)gs_read_pixel(cpsm == 2 ? PSMCT16 : PSMCT16S, cbp, 1, x, y);
         }
-        gs_clut_load((uint64_t)psm << 20 | (uint64_t)cbp << 37 | (uint64_t)cpsm << 51 | (uint64_t)csa << 56 | 1ull << 61);
+        int changed = memcmp(want, clut_buf, sizeof(want)) != 0;
+        uint64_t tex0 = (uint64_t)psm << 20 | (uint64_t)cbp << 37 | (uint64_t)cpsm << 51 | (uint64_t)csa << 56 | 1ull << 61;
+        flushes = 0;
+        gs_clut_load(tex0);
         if (memcmp(want, clut_buf, sizeof(want))) { printf("FAIL clut cbp %u cpsm %u csa %u\n", cbp, cpsm, csa); return 1; }
+        CHECK(flushes == changed);
+        gs_clut_load(tex0);   /* the same CLUT again */
+        CHECK(flushes == changed && !memcmp(want, clut_buf, sizeof(want)));
     }
     printf("ok\n");
     return 0;

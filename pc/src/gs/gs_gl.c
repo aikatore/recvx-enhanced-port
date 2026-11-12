@@ -62,14 +62,16 @@ enum { GP_OTHER, GP_3D_OPAQUE, GP_3D_BLEND, GP_GS_RTREAD, GP_GS_TEX, GP_GS_FLAT,
        GP_RELOAD, GP_AA, GP_PRESENT, GP_OVERLAY, GP_CLEAR, GP_N };
 void gp_mark(int cat);
 /* RECVX_AB=mask (test aid, with RECVX_GPU_TIME): the optimizations in mask (1 fast clear, 8 the
-   whole-target clear, 16 the capture pool) are off in every other 2-second log interval
-   ("gputime: ab 0" on, "ab 1" off), so one run compares both under the same load */
+   whole-target clear, 16 the capture pool, 32 same-value rewrites kept in the batch) are off in
+   every other 2-second log interval ("gputime: ab 0" on, "ab 1" off), so one run compares both
+   under the same load */
 static int ab_mask = -1, ab_phase;
 static int ab_off(int bit)
 {
     if (ab_mask < 0) ab_mask = SDL_getenv("RECVX_AB") ? SDL_atoi(SDL_getenv("RECVX_AB")) : 0;
     return (ab_mask & bit) && ab_phase;
 }
+int gs_ab_off(int bit) { return ab_off(bit); }
 uint64_t gs_frame_count(void) { extern uint64_t stream_game_frames(void); return stream_game_frames(); }
 
 /* ---------------- texture cache ---------------- */
@@ -127,6 +129,8 @@ static int vbo_first;
    start..start+count-1 (vbuf has a gap there), static vertex first */
 typedef struct { int start, count, first; } StaticRun;
 static StaticRun* sruns; static int nsruns, csruns;
+/* a two-pass batch's groups (gs_batch_rewrite): batch positions where the next one starts */
+static int* pgrp; static int npgrp, cpgrp;
 static GLenum batch_mode = GL_TRIANGLES;
 static int batch_full_cover; /* batch is a single opaque sprite covering x 0..fbw*64, y 0..>=448 */
 static int batch_sprite_first; /* batch starts with a sprite, no alpha test, no FBMSK (rt_first_draw) */
@@ -922,26 +926,41 @@ static void uni4i(GLint l, int a, int b, int c, int d) { int v[4] = { a, b, c, d
 
 /* the pending batch is drawn in two passes (alpha test with a fail mode that still writes) */
 static int two_pass(uint64_t test) { return (test & 1) && ((test >> 12) & 3) != 0 && ((test >> 1) & 7) != 1; }
-int gs_batch_two_pass(void) { return batch_valid && vcount && two_pass(batch_state.ctx.test); }
 
 /* the batch: vbuf's vertices from vbo_first on, with the static runs in their places (one draw
    call each part, in order: the same primitives in the same order as one call) */
 static uint32_t gt_cnt[4];   /* RECVX_GPU_TIME: GL draws (at most), GS-path sprites, other GS-path primitives, native triangles */
-static void draw_batch(int afail_pass)
+/* batch positions v0..v1-1 (whole primitives): the uploaded parts and the static runs among them */
+static void draw_batch(int afail_pass, int v0, int v1)
 {
-    int at = 0;
+    int at = v0;
     uni1i(pcur->afail_pass, afail_pass);
     gt_cnt[0] += 1 + 2 * (uint32_t)nsruns;
-    if (!nsruns) { glDrawArrays(batch_mode, vbo_first, vcount); return; }
-    for (int r = 0; r <= nsruns; r++) {
-        int end = r < nsruns ? sruns[r].start : vcount;
+    if (!nsruns) { glDrawArrays(batch_mode, vbo_first + v0, v1 - v0); return; }
+    for (int r = 0; r <= nsruns && at < v1; r++) {
+        int end = r < nsruns && sruns[r].start < v1 ? sruns[r].start : v1, s0, s1;
         if (end > at) { glBindVertexArray(vao); glDrawArrays(batch_mode, vbo_first + at, end - at); }
         if (r == nsruns) break;
-        glBindVertexArray(svao);
-        glDrawArrays(batch_mode, sruns[r].first, sruns[r].count);
-        at = sruns[r].start + sruns[r].count;
+        s0 = sruns[r].start > at ? sruns[r].start : at;
+        s1 = sruns[r].start + sruns[r].count < v1 ? sruns[r].start + sruns[r].count : v1;
+        if (s1 > s0) { glBindVertexArray(svao); glDrawArrays(batch_mode, sruns[r].first + (s0 - sruns[r].start), s1 - s0); }
+        if (s1 > at) at = s1;
     }
     glBindVertexArray(vao);
+}
+
+/* gs.c: a draw-state register written with the value it has. The batch goes on (the game rewrites
+   TEX0, CLAMP, ALPHA, TEST before most strips: over the exhibition hall's water hundreds of
+   blended strips a frame, each its own batch before); a two-pass alpha-test batch starts a group
+   there instead, and draws each group's two passes before the next group's: the order of the
+   separate batches it had, the same picture. RECVX_AB bit 32: a batch each. */
+void gs_batch_rewrite(void)
+{
+    if (!batch_valid || !vcount || !two_pass(batch_state.ctx.test)) return;
+    if (ab_off(32)) { gs_flush(); return; }
+    if (npgrp && pgrp[npgrp - 1] == vcount) return;
+    GROW_TO(pgrp, (size_t)npgrp + 1, cpgrp);
+    pgrp[npgrp++] = vcount;
 }
 
 /* ---------------- RECVX_GPU_TIME (test aid) ----------------
@@ -1534,9 +1553,10 @@ void gs_flush(void)
     TexMemo *replay_memo = NULL, *record_memo = NULL;
     uint32_t fbp, fbw, fpsm, fbmsk;
     int premul = 0, tme, afail, from_rt = 0, pv, draw_y1;
+    GLboolean dmask, cmask[4];
     if (gs_flush_blocked) return;
     uint64_t test;
-    if (!batch_valid || vcount == 0) { vcount = 0; nsruns = 0; return; }
+    if (!batch_valid || vcount == 0) { vcount = 0; nsruns = 0; npgrp = 0; return; }
     stat_flushes++;
 
     fbp = st->ctx.frame & 0x1FF; fbw = (st->ctx.frame >> 16) & 0x3F; fpsm = (st->ctx.frame >> 24) & 0x3F;
@@ -1608,11 +1628,13 @@ void gs_flush(void)
         static const GLenum zf[4] = { GL_NEVER, GL_ALWAYS, GL_GEQUAL, GL_GREATER };
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(zte ? zf[ztst] : GL_ALWAYS);
-        glDepthMask(zmsk ? GL_FALSE : GL_TRUE);
+        dmask = zmsk ? GL_FALSE : GL_TRUE;
+        glDepthMask(dmask);
     }
     /* color mask from FBMSK (whole channels only) */
-    glColorMask((fbmsk & 0xFF) != 0xFF, (fbmsk & 0xFF00) != 0xFF00, (fbmsk & 0xFF0000) != 0xFF0000,
-                ((fbmsk >> 24) != 0xFF) && fpsm != PSMCT24);
+    cmask[0] = (fbmsk & 0xFF) != 0xFF; cmask[1] = (fbmsk & 0xFF00) != 0xFF00; cmask[2] = (fbmsk & 0xFF0000) != 0xFF0000;
+    cmask[3] = ((fbmsk >> 24) != 0xFF) && fpsm != PSMCT24;
+    glColorMask(cmask[0], cmask[1], cmask[2], cmask[3]);
 
     apply_blend(st, &premul);
 
@@ -1634,7 +1656,7 @@ void gs_flush(void)
         dbg_tex0 = tex0;
         {   /* replay resources: the executed frame resolves, its replays reuse */
             TexMemo* m = memo_slot(tex0, st->texa, st->epoch, !gs_replaying);
-            if (gs_replaying && (!m || (m->rt >= 0 ? !memo_rt_ok(m) : !m->tex))) { vcount = 0; nsruns = 0; return; }
+            if (gs_replaying && (!m || (m->rt >= 0 ? !memo_rt_ok(m) : !m->tex))) { vcount = 0; nsruns = 0; npgrp = 0; return; }
                 /* the executed frame did not draw this (or what it sampled is gone): neither does its
                    replay (it would resolve against the state the frame left; replays load no CLUT) */
             if (gs_replaying && m) {
@@ -1695,7 +1717,7 @@ void gs_flush(void)
     uni1i(pcur->atst, (int)((test >> 1) & 7));
     uni1f(pcur->aref, (float)((test >> 4) & 0xFF));
 
-    if (fast_clear(st, tme)) { vcount = 0; nsruns = 0; return; }   /* (it writes 0: the zero rows stay) */
+    if (fast_clear(st, tme)) { vcount = 0; nsruns = 0; npgrp = 0; return; }   /* (it writes 0: the zero rows stay) */
     if (draw_y1 > cur_rt->zrow) cur_rt->zrow = draw_y1;   /* rows the draw may write are no longer known to be 0 */
     if ((!((st->ctx.zbuf >> 32) & 1) || (two_pass(test) && ((test >> 12) & 3) == 2)) && draw_y1 > dz[dz_cur].zrow)
         dz[dz_cur].zrow = draw_y1;   /* (with ZMSK only an alpha-fail pass ZB_ONLY writes depth) */
@@ -1721,18 +1743,24 @@ void gs_flush(void)
     gp_mark(vbuf[0].w != 1.0f || nsruns ? (((st->prim >> 6) & 1) ? GP_3D_BLEND : GP_3D_OPAQUE) :
             from_rt ? GP_GS_RTREAD : tme ? GP_GS_TEX : GP_GS_FLAT);
     if (two_pass(test)) {
-        /* alpha-test fail still writes some buffers: second pass for failing pixels */
-        draw_batch(0);
-        glDepthMask(GL_FALSE);
-        if (afail == 2) glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-        if (afail == 3) glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
-        if (afail == 2) glDepthMask(GL_TRUE);
-        draw_batch(1);
+        /* alpha-test fail still writes some buffers: second pass for failing pixels, group by group */
+        for (int g = 0, v0 = 0, v1; g <= npgrp; g++, v0 = v1) {
+            v1 = g < npgrp ? pgrp[g] : vcount;
+            if (v1 <= v0) continue;
+            if (v0) { glDepthMask(dmask); glColorMask(cmask[0], cmask[1], cmask[2], cmask[3]); }
+            draw_batch(0, v0, v1);
+            glDepthMask(GL_FALSE);
+            if (afail == 2) glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+            if (afail == 3) glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+            if (afail == 2) glDepthMask(GL_TRUE);
+            draw_batch(1, v0, v1);
+        }
     } else {
-        draw_batch(0);
+        draw_batch(0, 0, vcount);
     }
     vcount = 0;
     nsruns = 0;
+    npgrp = 0;
 }
 
 /* ---------------- primitive intake ---------------- */

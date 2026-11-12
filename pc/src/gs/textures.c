@@ -273,6 +273,13 @@ static void execute_pending(int i)
     }
 }
 
+int ntex_pending(uint32_t page0, uint32_t page1)
+{
+    if (executing || gs_memp != gs_mem || gs_replaying) return 0;   /* (as ntex_before_access) */
+    for (int i = 0; i < npending; i++) if (overlaps(pending[i].page0, pending[i].page1, page0, page1)) return 1;
+    return 0;
+}
+
 void ntex_before_access(uint32_t page0, uint32_t page1)
 {
     if (executing || gs_memp != gs_mem || gs_replaying) return;   /* a replay writes no GS memory */
