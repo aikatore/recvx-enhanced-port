@@ -2269,6 +2269,10 @@ void tps_frame(void)
     g_tps.kb_play = on && pc_in_game() && !pc_options_up();
     g_tps.pad_play = on && g_tps.pad_modern && (tps_cam_active || in_scope()) && sys && (sys->sp_flg & 0x40) && !(sys->ss_flg & 0x400000);
     /* with or without third person: the player has control, so no menu has the mouse (menu_mouse.c);
-       the co-op trade screen is open in play */
-    g_menu_mouse.play = pc_in_game() && plp && pc_in_play(plp, 1) && !pc_trade_screen();   /* (the scope too: its mouse aim) */
+       the co-op trade screen is open in play. Also a message without choices (st_flg 0x200; an examined
+       panel or manhole, its camera): its pages turn with Cross, so a mouse button bound to it plays there
+       (the fixed cameras take mouse presses only in play, tps_input.c) */
+    g_menu_mouse.play = pc_in_game() && plp && !pc_trade_screen() &&
+                        (pc_in_play(plp, 1) ||   /* (the scope too: its mouse aim) */
+                         (sys && (sys->st_flg & 0x200) && !((sys->st_flg & 0x8000) && sys->mes_seln > 0) && !(sys->ts_flg & 0x80)));
 }
