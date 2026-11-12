@@ -6,8 +6,8 @@
 
 - In co-op, a guest entering a room alone now gets the same randomized enemies and extra enemies as the host right
   away, instead of them appearing only once the host arrives.
-- In co-op, enemies no longer jump back to their starting points when the host enters a room the guest is already
-  fighting in.
+- In co-op, enemies of every kind no longer jump back to their starting points when the host enters a room the guest
+  is already fighting in, and enemies the guest killed lie in the same place for both players.
 
 ## 0.7.7 (2026-11-12)
 
