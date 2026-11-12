@@ -1065,6 +1065,24 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   kill bit is usually hidden already by then: the joiner's `DieCk` set the bit, `EV_FLAGS` brought it, and the
   host's entry script (`EneSetCk`) hid the record; `EV_GONE` covers the records without one, kills of the last
   frames, and extra enemies.
+* **The hand-in** (protocol 53, `coop_glue.c` `hin_*`): the host's fresh load of a room the joiner has been in alone
+  made the host's enemies take over at the room's start positions, so everything the joiner had moved went back, and
+  the extra enemies (only the host drew them) popped in. Now a joiner that loads a room with the host elsewhere draws
+  its randomizer result and extras itself and sends them ([ENEMIES.md](ENEMIES.md) "A guest there first"); the host
+  that comes in while the joiner is there makes the joiner's. At the take-over the joiner keeps running each living
+  enemy it ran alone of the types whose state can change hands (zombie with its upper half, Cerberus, Hunter/Sweeper,
+  Bandersnatch, anatomist; not one an event drives) and claims it (`EV_ENEOWN` state 3: slot, child, type and look).
+  The host, once its copy in that slot is there (an extra comes at the room's first frame: it waits up to 150 frames),
+  answers 4 (it shows its copy as a puppet of the joiner's snapshots) or 2 (not the same enemy: the host's runs, the
+  joiner's takes its state as before). Then the joiner hands it in with its whole state as a grab ends (`EV_UNGRAB`
+  state 1, `ene_unpack`): at once in its Move (walking, standing, lying), after 90 frames in any other mode, never
+  during a grab or on stairs (their pointers are the game's that set them; it goes when they end, or without its state
+  when the joiner leaves). The host's snapshots of its fresh copy from before its answer are dropped (`run_from`), so
+  the joiner's copy never shows them. Records the room's scripts act on are handed in too (the scripts run on the
+  host); with Shared Enemy Control the others stay the joiner's until that rule's own hand-overs. The other types (bats,
+  spiders, moths, ...) still take the host's state, and the dead ones are `EV_GONE`'s. Not after the host's menu (its
+  enemies were not reloaded: the joiner ran the room only while the host was in another one). Logged: "the host comes
+  into the room we ran alone: N of our enemies go on as they are (hand-in)", "hand-in: enemy N ... with its state".
 * **Engaged-player ownership** (protocol 48; 47 had zombies only, 46 was the first prototype): the host's lobby rule
   "Shared Enemy Control" (`g_coop.shared_enemies`, ini `coop_shared_enemies`, off by default, changeable at the title
   and in the lobby, locked once the session's game runs (`coop_session_game`: not at the title, in the lobby or the attract demo; back at the title the session
@@ -1513,7 +1531,7 @@ interpolated with the in-between frames; it snaps on camera cuts and in vanilla 
 
 ## Protocol 42
 
-`COOP_VERSION` is **52**; both players need builds with the same version (a mismatch is reported,
+`COOP_VERSION` is **53**; both players need builds with the same version (a mismatch is reported,
 e.g. "The host uses co-op compatibility version 38; yours is 40. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
@@ -1534,7 +1552,7 @@ bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows t
 list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
 `EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
 the Bandersnatch and the anatomist too (each type's `exp0` with its pointer words kept, the `type` field taken), never for a
-record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1653,7 +1671,7 @@ enemy's (`mode[0]` 0) to one whose own Init ran.
 | `EV_TRADE` | 11 | either | F3 trade: `TD_OFFER`, `TD_ANSWER`, `TD_CANCEL`, `TD_QUERY`; transaction id, item word |
 | `EV_BOX` | 12 | either | Shared item box: words taken out and put in (up to 16) |
 | `EV_BOXFIX` | 13 | host | Box correction: items the joiner could not have |
-| `EV_SPAWN` | 14 | host | An added enemy (`SpawnNote`), or a randomizer record the host kept |
+| `EV_SPAWN` | 14 | either | An added enemy (`SpawnNote`), the randomizer result of a room load (`SPAWN_NOTE_DONE`, `SPAWN_NOTE_RAND`); from the joiner (protocol 53) its own result and extras of a room it was in first, then `SPAWN_NOTE_XDONE` |
 | `EV_EOPTS` | 15 | host | Enemy options: extra 0..3, placements, randomizer, seed, variety 0..1, event enemies 0..1, cutscene cast 0..1, its models 0..1, assignment 0..1, imported models 0..1, its enemy models 0..3 and their unchecked entries (4 bytes) |
 | `EV_ATR` | 16 | either | 1..2 room records (wall, trigger, floor, object) after a world event |
 | `EV_FX` | 17 | either | An effect started here (`FX_BURST` 308, `FX_PARTICLE` 302, `FX_ARM`, `FX_REACT`, or a generic entry). What it follows (`idx`), its model's owner and `exp0` are each an enemy slot or, with their bit in `refs` (`FXR_IDX` 1, `FXR_OWNER` 2, `FXR_EXP0` 4), `FX_RECEIVER` 0, `FX_SENDER` 1 or `FX_NONE` 2 |
@@ -1786,9 +1804,9 @@ the session's code. A takeover needs a non-zero tag that matches.
 * Only explicit fields travel. Room memory layout is deterministic per room load, but depends on
   what was loaded before, so raw structs are sent only where needed (grab state, save region) and
   then through allowlists and checks.
-* Placements and the randomizer depend only on the room file and the seed; a joiner that loads a
-  room in the same moment as the host (following it through the door) may decide a randomized
-  record before the host's "kept" note arrives (logged).
+* Placements and the randomizer depend only on the room file, the seed and the story flags; a joiner that loads a
+  room in the same moment as the host (following it through the door) may draw its own before the host's result
+  arrives (logged: "came after our load of it").
 * Bandwidth (two instances, 30 frames/s): a pose-only datagram ~164 bytes; a host in a room with 30
   enemy slots ~3.4 KB per frame in 3 datagrams; effects add at most a few percent. The joiner sends
   ~170 bytes per frame.
@@ -1869,6 +1887,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_KILL="hostframe:slot[:damage],..."` | A lethal hit (or one of that damage) on our enemy in that slot, as the weapon code leaves it. |
 | `RECVX_COOP_OWNERSHIP=0\|1` | Host: forces "Shared Enemy Control" (engaged-player ownership) off (0: the host runs the enemies, only zombie grabs of the joiner go over) or on (1), whatever the setting says; the joiner follows the host's rule either way. |
 | `RECVX_COOP_ALIVE="hostframe,..."` | Log the room's living, shown enemies (slot:type), how many `ed_flg` bits are set, and `rm_flg` (a kill-count door's bit). |
+| `RECVX_COOP_ENEPOS="hostframe,..."` | Log the room's enemies (not linked parts): slot:type.look@x,z,hp,mode0, `D` dead, `H` hidden (`coop_handin_check.sh`). |
 | `RECVX_COOP_WARP="hostframe:x:z,..."` | Both players to x/z at that host frame. |
 | `RECVX_COOP_VOMIT="hostframe,..."` | Host: the walking zombie nearest the partner vomits. |
 | `RECVX_COOP_CRAWL="hostframe,..."` | Host: its walking zombies become crawlers (as a knock-down with little health left), which crawl towards their target and grab its legs. |
@@ -1937,8 +1956,16 @@ with its read held, and the joiner's entry block of 7/24 waits for the host's ro
 (the host's `enemy_extra`), the joiner with `coop_follow = 0`; three pairs at once. A: the host goes to 0/7, the joiner
 kills a zombie record and an extra, then leaves too; the host comes back, then the joiner. B: the same, but the joiner
 stays until the host is back (`EV_GONE`). C: the host kills them while the joiner is in 0/7, and the joiner comes back
-alone. It fails unless the killed ones stay dead on both sides, each side logs the other's extra dead flag arriving
+alone (it draws the extras itself, protocol 53: the dead one stays away). It fails unless the killed ones stay dead on both sides, each side logs the other's extra dead flag arriving
 (`EV_FLAGS`), and both see the same enemies in the same slots.
+
+`pc/tools/coop_handin_check.sh OUT [PORT]` (the same needs, about two minutes): the joiner is in a room from ~1000
+host frames with the host in 0/1 ("Extra Enemies" 5, the randomizer, seed 88119), the host comes in at ~3000; three pairs at once:
+A 0/2 (the joiner kills record 3), B 0/6 (it kills record 1), C 0/6 (it kills the extra). It fails unless the joiner has
+the randomized enemies and the extras before the host comes, the host makes the joiner's extras (no second set) but
+the dead one, afterwards both sides list the same enemies, HP and dead ones within 6 units, and no enemy moves more
+than 12 units in 5 frames on the joiner while the host comes in (`RECVX_COOP_ENEPOS` every 5 frames). Main before
+protocol 53: B and C jump 70-77 units (a Hunter back at its start), and no extras on the joiner until the host comes.
 
 `pc/tools/coop_passage_check.sh OUT [PORT] [host|guest]` (the same needs, about two minutes): in the palace's passage
 to the residence (1/10) the watcher (default the host) examines the trigger at the foot of the stairs, whose scene

@@ -50,8 +50,8 @@ typedef struct SpawnNote {
     unsigned short room;        /* source room file RM_<room>.RDX and its record */
     unsigned char rec, id, mdlver, type;
     signed char flr;
-    unsigned char pad;          /* 0: an added enemy. The host's randomizer result of a room load (protocol 52, enemyopt_glue.c
-                                   follow_host): SPAWN_NOTE_DONE, room file `room` (stg * 1000 + rom * 10 + case), `rec` notes
+    unsigned char pad;          /* 0: an added enemy. The randomizer result of a room load (protocol 52, the guest's too since
+                                   53; enemyopt_glue.c follow_host): SPAWN_NOTE_DONE, room file `room` (stg * 1000 + rom * 10 + case), `rec` notes
                                    follow; then SPAWN_NOTE_RAND each: record `idx` became this (room, rec: its entry; id,
                                    mdlver, type, variant) */
     float px, py, pz;
@@ -62,6 +62,9 @@ typedef struct SpawnNote {
 } SpawnNote;
 #define SPAWN_NOTE_RAND 2
 #define SPAWN_NOTE_DONE 3
+#define SPAWN_NOTE_XDONE 4          /* (protocol 53, guest -> host) the guest's extra enemies of its load of room file `room`:
+                                       the `rec` notes before it (pad 0, idx the slot), or SPAWN_XDONE_NONE: the host's, not its own */
+#define SPAWN_XDONE_NONE 255
 
 /* spawn_at's `mode` (pc/glue/spawn_glue.c) */
 #define SPAWN_LOADING 1             /* from the room load (the randomizer): no readiness checks */
@@ -87,7 +90,12 @@ void enemy_extra_note(int slot, const SpawnNote* n);   /* guest: the host's adde
 unsigned int* enemy_xdead_word(int i);          /* word i (< ENEMY_XDEAD_WORDS) of the extras' dead flags (co-op: EV_FLAGS 120 + i) */
 int  enemy_rec_scripted(int slot);           /* the room's scripts act on that record (co-op: never the guest's to run) */
 void spawn_replay(void);                        /* host: every added enemy of the room again (coop_spawn_note) */
-void coop_spawn_note(int slot, const SpawnNote* n);   /* coop_glue.c: host -> guest, if it is in our room */
+void coop_spawn_note(int slot, const SpawnNote* n);   /* coop_glue.c: host -> guest, if it is in our room; guest -> host: its own extras */
+void coop_extras_done(int room, int count);     /* coop_glue.c, guest: its extras of this load sent (SPAWN_NOTE_XDONE) */
+int  coop_partner_in_room(void);                /* coop_glue.c: the co-op partner plays in our room (its copy of it runs) */
+void enemy_xres_note(int slot, const SpawnNote* n);   /* host: one of the guest's own extras (then SPAWN_NOTE_XDONE) */
+void enemy_xres_done(int room, int count);      /* host: the guest's extras of its load of that room file */
+void enemy_partner_forget(void);                /* a new co-op partner session: its randomizer results and extras go */
 int  coop_insn_len(const unsigned char* p);     /* coop_glue.c: a room script instruction's length (0: unknown) */
 
 #ifdef __cplusplus

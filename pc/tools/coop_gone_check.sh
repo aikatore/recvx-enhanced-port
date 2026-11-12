@@ -7,7 +7,7 @@
 #   B  as A, but the guest stays in 0/6 until the host is back (EV_GONE): both see the same enemies in the same slots
 #      (before the fix's first half alone, the host's extra 31 took the dead one's slot 30 and the guest's 31 ran on).
 #   C  the other way: the guest is in 0/7 while the host kills record 1 and extra 30 and leaves; the guest comes back
-#      alone (no extras: only the host adds them).
+#      alone (it draws the room's extras itself since protocol 53: extra 30 stays away, its dead flag set).
 # RECVX_COOP_ALIVE logs the living enemies; each check compares them. About 3 minutes.
 #   pc/tools/coop_gone_check.sh OUT [PORT]
 # Environment: RECVX_ISO (disc image), RECVX_BIN (binary, default build/pc/recvx).
@@ -54,5 +54,5 @@ check "A: then both see the same: record 1 and extra 30 dead" "[ '$(alive A host
 check "B: the host takes over the guest's room (EV_GONE)" "grep -q 'the host.s enemies take over' $out/B/guest/log.txt"
 check "B: both see the same enemies in the same slots" "[ '$(alive B host 3300)' = ' 0:1 2:1' ] && [ '$(alive B guest 3300)' = ' 0:1 2:1' ]"
 check "C: the guest took the host's dead flag 40 of extra 30" "grep -q \"coop: the partner's extra enemy dead flags, word 1: set 00000100\" $out/C/guest/log.txt"
-check "C: the guest, back alone, finds record 1 dead (no extras without the host)" "[ '$(alive C guest 3300)' = ' 0:1 2:1' ]"
+check "C: the guest, back alone, finds record 1 and extra 30 dead" "[ '$(alive C guest 3300)' = ' 0:1 2:1' ]"
 exit $fail

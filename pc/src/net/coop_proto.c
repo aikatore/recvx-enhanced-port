@@ -360,7 +360,7 @@ static int zero_or(const char* b, int n, const char* set)
 /* events only the host sends (it runs the session and the enemies), and those only a guest sends */
 /* (protocol 46: EV_PLY_HIT, EV_GRAB and EV_UNGRAB go either way - with OPT2_OWNERSHIP the guest runs enemies too;
    coop_glue.c takes them from the guest only under that rule) */
-static int host_only(int t) { return t == EV_BLOB || t == EV_BOXFIX || t == EV_SPAWN || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED || t == EV_CASTOFF; }
+static int host_only(int t) { return t == EV_BLOB || t == EV_BOXFIX || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED || t == EV_CASTOFF; }
 static int guest_only(int t) { return t == EV_GONE || t == EV_OWN; }
 
 int coop_check_event(const Event* e, int from_host)
@@ -399,8 +399,10 @@ int coop_check_event(const Event* e, int from_host)
     case EV_GRAB:
     case EV_UNGRAB:
     case EV_ENEOWN:   /* state: 1 with its state, 0 without (EV_ENEOWN: refused, run it on), 2 EV_UNGRAB: the grab is over and
-                         the runner keeps it / EV_ENEOWN: taken back */
-        if (e->idx >= COOP_ENE_SLOTS || e->u.gr.state > (e->type == EV_GRAB ? 1 : 2) || e->u.gr.pset > 1) return COOP_BAD_FIELD;
+                         the runner keeps it / EV_ENEOWN: taken back; EV_ENEOWN 3 the guest ran it alone and keeps running it
+                         (the hand-in, guest -> host), 4 the host shows it as the guest's until the guest hands it in (host -> guest) */
+        if (e->idx >= COOP_ENE_SLOTS || e->u.gr.state > (e->type == EV_GRAB ? 1 : e->type == EV_ENEOWN ? 4 : 2) || e->u.gr.pset > 1) return COOP_BAD_FIELD;
+        if (e->type == EV_ENEOWN && (e->u.gr.state == 3 ? from_host : e->u.gr.state == 4 && !from_host)) return COOP_BAD_DIR;
         if (e->u.gr.mdl < -1 || e->u.gr.mdl >= 16 || e->u.gr.cmdl < -1 || e->u.gr.cmdl >= 16) return COOP_BAD_FIELD;
         for (k = 0; k < 2; k++) {
             int m = k ? e->u.gr.cmnw : e->u.gr.mnw;
@@ -435,8 +437,11 @@ int coop_check_event(const Event* e, int from_host)
         return COOP_OK;
     case EV_SPAWN:
         if (e->idx >= COOP_ENE_SLOTS || e->u.sp.room > 9999 || (e->u.sp.dead && (e->u.sp.dead < ENEMY_XDEAD_BASE || e->u.sp.dead >= ENEMY_XDEAD_BASE + ENEMY_XDEAD_WORDS * 32))) return COOP_BAD_FIELD;
-        if (e->u.sp.pad == 1 || e->u.sp.pad > SPAWN_NOTE_DONE || (e->u.sp.pad == SPAWN_NOTE_RAND && e->idx >= 128) ||
-            (e->u.sp.pad == SPAWN_NOTE_DONE && e->u.sp.rec > 128)) return COOP_BAD_FIELD;   /* (1: before protocol 52, SPAWN_NOTE_KEPT) */
+        if (e->u.sp.pad == 1 || e->u.sp.pad > SPAWN_NOTE_XDONE || (e->u.sp.pad == SPAWN_NOTE_RAND && e->idx >= 128) ||
+            (e->u.sp.pad == SPAWN_NOTE_DONE && e->u.sp.rec > 128) ||
+            (e->u.sp.pad == SPAWN_NOTE_XDONE && e->u.sp.rec > ENEMY_EXTRA_MAX && e->u.sp.rec != SPAWN_XDONE_NONE)) return COOP_BAD_FIELD;   /* (1: before protocol 52,
+                                                                                                      SPAWN_NOTE_KEPT) */
+        if (from_host && e->u.sp.pad == SPAWN_NOTE_XDONE) return COOP_BAD_DIR;   /* (protocol 53: the guest's randomizer results and its own extras) */
         return fin(e->u.sp.px) && fin(e->u.sp.py) && fin(e->u.sp.pz) ? COOP_OK : COOP_BAD_FLOAT;
     case EV_EOPTS:
         for (k = 0; k < ENEMY_RATE_N; k++)

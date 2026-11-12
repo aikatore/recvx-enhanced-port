@@ -74,6 +74,24 @@ void coop_test_aids(CoopTest* t)
             al = al[n] == ',' ? al + n + 1 : NULL;
         }
     }
+    {   /* test aid: RECVX_COOP_ENEPOS="hostframe[,...]": the room's enemies (not linked parts) with where they stand, their
+           HP and mode, and whether they are dead or hidden (slot:type.model@x,z hp mode0 [D][H]): pc/tools/coop_handin_check.sh
+           compares the two sides */
+        static const char* ep = (const char*)-1;
+        unsigned int f;
+        int k, n;
+        char line[1200];
+        if (ep == (const char*)-1) ep = getenv("RECVX_COOP_ENEPOS");
+        if (ep && sys && plp && t->in_game && sscanf(ep, "%u%n", &f, &n) == 1 && t->clock >= f) {
+            int ln = snprintf(line, sizeof(line), "coop: test: enemies in %d/%d at host frame %u:", sys->stg_no, sys->rom_no, t->clock);
+            for (k = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS && ln < (int)sizeof(line) - 48; k++)
+                if ((ene[k].flg & 0x81) == 0x1 && ene[k].id >= 1 && ene[k].id <= 30)
+                    ln += snprintf(line + ln, sizeof(line) - ln, " %d:%d.%d@%.0f,%.0f,%d,%d%s%s", k, ene[k].id, ene[k].mdlver, ene[k].px, ene[k].pz, ene[k].hp, ene[k].mode0,
+                                   ene[k].flg & 0x2 ? ",D" : "", ene[k].stflg & 0x1000000 ? ",H" : "");
+            host_log("%s\n", line);
+            ep = ep[n] == ',' ? ep + n + 1 : NULL;
+        }
+    }
     {   /* test aid: RECVX_COOP_WARP="hostframe:x:z[,...]": both players at once (host frames) */
         static const char* wp = (const char*)-1;
         unsigned int f;

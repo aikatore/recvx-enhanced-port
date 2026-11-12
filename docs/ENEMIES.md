@@ -207,11 +207,17 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   -> `spawn_at`, skipping lower free slots if needed); its Init creates the same children, and
   from then on it is an ordinary puppet. Notes arriving during a door, event or menu wait in
   `spawn_pending` (at most 900 frames). The host resends them when the guest (re)enters the room
-  (`spawn_replay`); a door clears them on both sides. The host's randomizer result of each room
-  load goes along as notes too (protocol 52): `SPAWN_NOTE_DONE` (the room file, how many follow), then
-  a `SPAWN_NOTE_RAND` per record it changed; the guest's load of that room makes exactly those changes
-  and keeps every other record (`follow_host`), whatever its own story flags would classify. A guest
-  that loads the room before the host draws on its own and logs it.
+  (`spawn_replay`); a door clears them on both sides. The randomizer result of each room
+  load goes along as notes too (protocol 52; the guest's too since 53): `SPAWN_NOTE_DONE` (the room file, how many
+  follow), then a `SPAWN_NOTE_RAND` per record it changed; a load of that room while the partner plays in it makes
+  exactly those changes and keeps every other record (`follow_host`), whatever its own story flags would classify.
+* **A guest there first** (protocol 53): a guest that loads a room with the host elsewhere draws the room's randomizer
+  result and its extra enemies itself, as the host would (the same seed, room file and story state), and sends both
+  (its extras as `EV_SPAWN` notes with their slots, then `SPAWN_NOTE_XDONE` with the room file and their count;
+  `SPAWN_XDONE_NONE` when its extras are the host's). The host that comes in while the guest is still there makes the
+  guest's result and the guest's extras in the same slots (`gx_follow`), but an extra whose dead flag is set by then;
+  then the guest hands its enemies in with their state (COOP.md "The hand-in"). Before, the guest had no extras until
+  the host came, and then they popped in at their spots while every other enemy went back to the room's start.
 * **The host's enemy options** go to the guest as `EV_EOPTS` (session start, before the game
   state, on change) and replace the guest's: with protocol 39 also Types per Room and Custom's
   32 rates, which fill the event's 80 bytes (`EnemyOpts`; the lobby shows the guest the host's
@@ -227,7 +233,8 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   `EV_GRAB`. A zombie grab on the guest makes the slot the guest's until handed back (~10 s
   timeout).
 * **Kills while the guest runs the room** (`EV_GONE`): at the take-over the guest names its dead
-  enemies; the host hides its matching copies for that visit.
+  enemies; the host hides its matching copies for that visit. The living ones of the types that can
+  change hands go to the host with their state (protocol 53, COOP.md "The hand-in").
 
 ## Head blow-offs
 
@@ -554,7 +561,7 @@ co-op guest as added enemies).
   "all dead" counts ignore them, so they never hold a door shut. A mod's or BioRand's room that has enemies where the
   disc has none gets none either (each extra needs a dead flag, below, and those are per listed room).
 * **How many** (`extra_count`): a number of the room's own, 0..N, every value equally likely (a draw of the seed and the
-  room file: the same on every visit; only the host draws it), so N / 2 on average and none in one room of N + 1. The
+  room file: the same on every visit; the host draws it, or a co-op guest in the room before the host), so N / 2 on average and none in one room of N + 1. The
   draw is one fraction per room scaled by N: raising N never gives a room fewer. Before (protocol 50) it was N whenever
   the room had the spots, which filled every room to the setting. Fewer only where the room has no more free spots
   (below) or the spawner refuses one (its budgets: enemy slots with 6 left free of 255, room memory, the 32 MB spawn
@@ -775,7 +782,7 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
   look. A room can only go over when a record fits none of its kinds (a bat record among ground
   kinds: fliers stay fliers), logged as `over it` on the room's line. No Limit draws as before the
   target (Wild's unused kinds first, Custom's rates alone: the same enemies per seed). It depends
-  only on the options, the room file and the draws (the same on every visit; a co-op guest makes the host's result).
+  only on the options, the room file and the draws (the same on every visit; a co-op load with the partner in the room makes the partner's result).
   The price of variety: in a room with few records each takes another kind, so a kind with a high
   rate takes fewer records than its share ("Types per Room as a target" below).
 * **Variants**: a record that keeps its type (another look) keeps its variant (an event's pose, a

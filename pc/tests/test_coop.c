@@ -49,7 +49,7 @@ static Event ev(int type)
     return e;
 }
 static int host_sends(int t) { return t != EV_GONE && t != EV_OWN; }
-static int guest_sends(int t) { return t != EV_BLOB && t != EV_BOXFIX && t != EV_SPAWN && t != EV_EOPTS && t != EV_SKIP && t != EV_BRSEED && t != EV_CASTOFF; }
+static int guest_sends(int t) { return t != EV_BLOB && t != EV_BOXFIX && t != EV_EOPTS && t != EV_SKIP && t != EV_BRSEED && t != EV_CASTOFF; }
 
 /* a generic EV_FX of effect `id` as its FxRule allows it (any rule's for an id without one) */
 static Event fx_sample(int id)
@@ -149,7 +149,10 @@ static void test_events(void)
     BAD(EV_GRAB, 1, e->u.gr.mnw = -100);
     BAD(EV_GRAB, 1, e->u.gr.state = 2);
     BAD(EV_UNGRAB, 0, e->u.gr.state = 3);
-    BAD(EV_ENEOWN, 1, e->u.gr.state = 3);
+    BAD(EV_ENEOWN, 1, e->u.gr.state = 3);   /* (53) the hand-in: the guest claims (3), the host answers (4) */
+    BAD(EV_ENEOWN, 0, e->u.gr.state = 4);
+    BAD(EV_ENEOWN, 0, e->u.gr.state = 5);
+    { Event e = ev(EV_ENEOWN); e.u.gr.state = 3; CHECK(coop_check_event(&e, 0) == COOP_OK); e.u.gr.state = 4; CHECK(coop_check_event(&e, 1) == COOP_OK); }
     BAD(EV_ENEOWN, 0, e->idx = 255);
     { Event e = ev(EV_UNGRAB); e.u.gr.state = 2; CHECK(coop_check_event(&e, 1) == COOP_OK); }   /* (46) the grab is over, kept */
     BAD(EV_UNGRAB, 0, e->u.gr.cmnw = 0x7000);
@@ -273,6 +276,12 @@ static void test_events(void)
     BAD(EV_SPAWN, 1, (e->u.sp.pad = SPAWN_NOTE_RAND, e->idx = 128));
     { Event e = ev(EV_SPAWN); e.u.sp.pad = SPAWN_NOTE_DONE; e.u.sp.rec = 128; CHECK(coop_check_event(&e, 1) == COOP_OK); }
     { Event e = ev(EV_SPAWN); e.u.sp.pad = SPAWN_NOTE_RAND; e.idx = 127; CHECK(coop_check_event(&e, 1) == COOP_OK); }
+    /* (53) the guest's own extras of a room load: SPAWN_NOTE_XDONE with 0..ENEMY_EXTRA_MAX or SPAWN_XDONE_NONE, only from the guest */
+    BAD(EV_SPAWN, 1, (e->u.sp.pad = SPAWN_NOTE_XDONE, e->u.sp.rec = 2));
+    BAD(EV_SPAWN, 0, (e->u.sp.pad = SPAWN_NOTE_XDONE, e->u.sp.rec = ENEMY_EXTRA_MAX + 1));
+    BAD(EV_SPAWN, 0, e->u.sp.pad = SPAWN_NOTE_XDONE + 1);
+    { Event e = ev(EV_SPAWN); e.u.sp.pad = SPAWN_NOTE_XDONE; e.u.sp.rec = SPAWN_XDONE_NONE; CHECK(coop_check_event(&e, 0) == COOP_OK);
+      e.u.sp.rec = ENEMY_EXTRA_MAX; CHECK(coop_check_event(&e, 0) == COOP_OK); }
     BAD(EV_EOPTS, 1, e->u.eo.extra = ENEMY_EXTRA_MAX + 1);
     BAD(EV_EOPTS, 1, e->u.eo.seed = -1);
     BAD(EV_EOPTS, 1, e->u.eo.rand = 2);
