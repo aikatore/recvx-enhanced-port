@@ -39,6 +39,8 @@ void bhCheckEneWorkNum(void);   /* eneset.h */
 void bhStFlg(unsigned int* flg, unsigned int bit);   /* flag.h */
 int bhCkFlg(unsigned int* flg, unsigned int bit);
 int bhCheckFloorNum(float py);   /* pwksub.h */
+int bhCheckCutArea(float px, float pz, char flr_no);   /* cut.h */
+int bhCheckCutAreaInnerTriangle(float px, float pz, CUT_WRK* ct);
 
 EnemyOpts g_enemy_opts = { .variety = 1, .events = 1, .cast_enemy = CAST_ENEMY_ALL };   /* settings (F1, recvx.ini) */
 _Static_assert(sizeof(g_enemy_opts.cast_enemy_off) == CAST_ENEMY_BYTES, "EnemyOpts.cast_enemy_off");
@@ -280,6 +282,20 @@ static float ground_at(float x, float y, float z, const ATR_WORK** hit)
     if (hit) *hit = sys->htp;
     sys->htp = htp;
     return g;
+}
+/* the player's body at (x, y, z) on floor flr touches no wall as the player's own wall check sees it (player.c: bhCheckWallEx
+   with PlyInfo's radius and height, the taller characters'; flg 0x100 as the walking player has it, not 0x400 nor 0x4000: the
+   odd wall types and the lips along ledges count; stflg 0: the walls only enemies pass, attr 0x4, count too, and the check
+   touches nothing); o: where the step comes from (NULL: standing there) */
+static int player_fits(float x, float y, float z, int flr, const NJS_POINT3* o)
+{
+    static BH_PWORK pw;
+    NJS_POINT3 np = { x, y, z }, op = o ? *o : np;
+    pw.flg = 0x100;
+    pw.stflg = 0;
+    pw.flr_no = (char)flr;
+    pw.px = x; pw.py = y; pw.pz = z;
+    return !bhCheckWallEx(&pw, &np, &op, 3.5f, 17.5f);
 }
 /* a slope (type 6 box: stairs, ramps), where an enemy's wall check pushes it along the slope at its own height (seen with a
    Cerberus) */
@@ -893,16 +909,20 @@ static int extra_away(float x, float z)   /* (the earlier extras: extra_spot) */
     return 1;
 }
 
-/* The room's walkable floor as a grid (once per room load; extra_spot draws from it): from the anchors - the records that
-   stand on the ground (as the room file has them after "Rearranged") and the entry positions - a flood fill in steps of
-   one cell (XG_STEP units; more in big rooms) where an enemy can walk: no wall between the cells' centres
-   (bhCollisionCheckLine2 at waist height, the odd wall types too: lips along ledges, line walls), ground within a unit of the last cell's on the same floor and no slope (stairs,
-   ramps), or no ground where the last had none (the lowest floor of a room without floor slabs). Spots are the walkable
-   cells away from doors, entries, triggers, items and records (extra_away), with no drop nor rising ground within 6 units
-   (no_drop) and no wall within 6 units all round at the waist and at the feet (not in an object, nor against a wall or
-   on a line wall: an enemy put there is pushed off it). Only the room file and the
-   options decide it (the same on every visit). ponytail: one height per cell; where two floors overlap (a balcony over
-   the floor) the first one reached has it. */
+/* The room's walkable floor as a grid (once per room load; extra_spot draws from it): the floor the player can walk to from
+   the entry positions (the cells within 8 units of each, with no wall in between) - a flood fill in steps of one cell
+   (XG_STEP units; more in big rooms) where the player and an enemy can walk: no wall between the cells' centres
+   (bhCollisionCheckLine2 at waist height, every wall type the player's check takes: lips along ledges, line walls), the
+   player's body fits in the cell (player_fits), a camera zone shows it (in_view), ground within a unit of the last cell's
+   on the same floor and no slope (stairs, ramps), or no ground where the last had none (the lowest floor of a room without
+   floor slabs). Before (protocol 50) the records that stand on the ground were anchors too and the body and the camera
+   zones did not count: the fill leaked through gaps a body does not pass, over lips, out of the camera zones (RM_0030's
+   street: 5500 cells outside it) and into the scenery records stand in for an event. Spots are the walkable cells with
+   the 4 cells beside them walkable at their height (xg_inner: a margin from the floor's edges), not in water, away from
+   doors, entries, triggers, items and records (extra_away), with no drop nor rising ground within 6 units (no_drop) and no
+   wall within 6 units all round at the waist and at the feet (not in an object, nor against a wall or on a line wall: an
+   enemy put there is pushed off it). Only the room file and the options decide it (the same on every visit). ponytail:
+   one height per cell; where two floors overlap (a balcony over the floor) the first one reached has it. */
 #define XG_MAX 16384
 #define XG_STEP 4.0f
 static struct { int gen, nx, nz, walk, n; float x0, z0, s; } xg = { -1 };
@@ -912,7 +932,21 @@ static unsigned char xg_st[XG_MAX];      /* 0 not reached, 1 on the ground, 2 no
 static unsigned short xg_spot[XG_MAX];   /* the spot cells (xg.n) */
 static float cell_x(int c) { return xg.x0 + ((float)(c % xg.nx) + 0.5f) * xg.s; }
 static float cell_z(int c) { return xg.z0 + ((float)(c / xg.nx) + 0.5f) * xg.s; }
-/* a step from (x, y, z) on floor flr (gnone: no ground there) into cell c: 1 if an enemy walks there (c marked, queued) */
+/* (x, z) is in a camera zone of floor flr: cut.c bhCheckCutArea's test, of every zone the room file has (also those its
+   script turns on later: the same on every visit). Where no camera shows the floor, the player never stands. */
+static int in_view(float x, float z, int flr)
+{
+    int i, j;
+    for (i = 0; i < rom->cut_n; i++)
+        for (j = 0; j < rom->cutp[i].ctab_n; j++) {
+            CUT_WRK* ct = &rom->cutp[i].cuttp[j];
+            if (ct->flr_no == flr && (ct->atr_tp ? bhCheckCutAreaInnerTriangle(x, z, ct) : ct->minx <= x && ct->maxx > x && ct->minz <= z && ct->maxz > z)) return 1;
+        }
+    return 0;
+}
+
+/* a step from (x, y, z) on floor flr (gnone: no ground there) into cell c: 1 if the player and an enemy walk there (c
+   marked, queued) */
 static int xg_step(float x, float y, float z, int flr, int gnone, int c, unsigned short* q, int* tail)
 {
     const ATR_WORK* hp;
@@ -921,12 +955,27 @@ static int xg_step(float x, float y, float z, int flr, int gnone, int c, unsigne
     if (xg_st[c]) return 0;
     g = ground_at(cx, y, cz, &hp);
     if (g > -999.0f ? slope(hp) || fabsf(g - y) > 1.0f || bhCheckFloorNum(g + 0.5f) != flr : !gnone) return 0;
-    if (bhCollisionCheckLine2(&p1, &p2, 0x4000, (char)flr)) return 0;   /* (the odd types too: an enemy put on a line wall is pushed
-                                                                          through it, RM_8010's catwalk) */
+    if (bhCollisionCheckLine2(&p1, &p2, 0, (char)flr)) return 0;   /* (every type the player's check takes: the odd ones, an enemy put on a
+                                                                     line wall is pushed through it, RM_8010's catwalk; the lips) */
+    if (!in_view(cx, cz, flr) || !player_fits(cx, g > -999.0f ? g : y, cz, flr, NULL)) return 0;
     xg_st[c] = g > -999.0f ? 1 : 2;
     xg_y[c] = g > -999.0f ? g : y;
     xg_flr[c] = (signed char)flr;
     q[(*tail)++] = (unsigned short)c;
+    return 1;
+}
+/* the 4 cells beside c were reached on its floor at its height: a spot's margin from the edges of the walkable floor (walls,
+   the camera zones' edges, drops) */
+static int xg_inner(int c)
+{
+    int dx, dz, ix = c % xg.nx, iz = c / xg.nx, e;
+    for (dz = -1; dz <= 1; dz++)
+        for (dx = -1; dx <= 1; dx++) {
+            if (dx && dz) continue;
+            if (ix + dx < 0 || iz + dz < 0 || ix + dx >= xg.nx || iz + dz >= xg.nz) return 0;
+            e = c + dz * xg.nx + dx;
+            if (!xg_st[e] || xg_flr[e] != xg_flr[c] || fabsf(xg_y[e] - xg_y[c]) > 1.0f) return 0;
+        }
     return 1;
 }
 static void extra_grid(void)
@@ -948,19 +997,18 @@ static void extra_grid(void)
     for (xg.s = XG_STEP; ceilf((x1 - xg.x0) / xg.s) * ceilf((z1 - xg.z0) / xg.s) > XG_MAX; xg.s += 1.0f);
     xg.nx = (int)ceilf((x1 - xg.x0) / xg.s); xg.nz = (int)ceilf((z1 - xg.z0) / xg.s);
     memset(xg_st, 0, sizeof(xg_st));
-    for (k = 0; k < rom->ene_n + rom->pos_n; k++) {   /* the anchors */
+    for (k = 0; k < rom->pos_n; k++) {   /* the anchors: the entry positions (records stand where the player may never come:
+                                            behind the scenery for an event) */
         const ATR_WORK* hp;
-        int ix, iz;
-        float x = k < rom->ene_n ? rom->enep[k].px : rom->posp[k - rom->ene_n].px, y = k < rom->ene_n ? rom->enep[k].py : rom->posp[k - rom->ene_n].py,
-              z = k < rom->ene_n ? rom->enep[k].pz : rom->posp[k - rom->ene_n].pz, g;
-        if (k < rom->ene_n && (rom->enep[k].id < 1 || rom->enep[k].id > 30 || rom->enep[k].flr_no < 0)) continue;   /* (floor -1: parked
-                                                                                                                  below the room for an event, RM_1121) */
-        g = ground_at(x, y, z, &hp);
+        int ix, iz, dx, dz;
+        float x = rom->posp[k].px, y = rom->posp[k].py, z = rom->posp[k].pz, g = ground_at(x, y, z, &hp);
         if (g > -999.0f && (fabsf(g - y) > 1.0f || slope(hp))) continue;   /* off the ground (an event's), or on stairs */
         ix = (int)((x - xg.x0) / xg.s); iz = (int)((z - xg.z0) / xg.s);
-        if (ix < 0 || iz < 0 || ix >= xg.nx || iz >= xg.nz) continue;
         if (g > -999.0f) y = g;
-        xg_step(x, y, z, bhCheckFloorNum(y + 0.5f), g <= -999.0f, iz * xg.nx + ix, q, &tail);
+        for (dz = -2; dz <= 2; dz++)   /* (the cells round it: by a door, the one it is in may touch the frame) */
+            for (dx = -2; dx <= 2; dx++)
+                if (ix + dx >= 0 && iz + dz >= 0 && ix + dx < xg.nx && iz + dz < xg.nz)
+                    xg_step(x, y, z, bhCheckFloorNum(y + 0.5f), g <= -999.0f, (iz + dz) * xg.nx + ix + dx, q, &tail);
     }
     while (head < tail) {   /* the flood fill */
         int d;
@@ -974,10 +1022,13 @@ static void extra_grid(void)
     xg.walk = tail;
     for (k = 0; k < tail; k++) {   /* in cell order (as reached): the spots */
         float x, z;
+        NJS_POINT3 w;
         c = q[k];
         x = cell_x(c); z = cell_z(c);
-        if (extra_away(x, z) && no_drop(x, xg_y[c], z, xg_st[c] == 2 ? -1000.0f : xg_y[c], 1) && open_dirs_m(x, xg_y[c], z, xg_flr[c], 6.0f, 0x4000, 10.0f) == 8 &&
-            open_dirs_m(x, xg_y[c], z, xg_flr[c], 6.0f, 0x4000, 0.5f) == 8)   /* (and at the feet: RM_7050's lines a unit high) */
+        w.x = x; w.y = xg_y[c] + 1.0f; w.z = z;
+        if (!xg_inner(c) || bhCheckWater(&w)) continue;
+        if (extra_away(x, z) && no_drop(x, xg_y[c], z, xg_st[c] == 2 ? -1000.0f : xg_y[c], 1) && open_dirs_m(x, xg_y[c], z, xg_flr[c], 6.0f, 0, 10.0f) == 8 &&
+            open_dirs_m(x, xg_y[c], z, xg_flr[c], 6.0f, 0, 0.5f) == 8)   /* (and at the feet: RM_7050's lines a unit high) */
             xg_spot[xg.n++] = (unsigned short)c;
     }
 }
@@ -1144,15 +1195,26 @@ void enemy_extra_note(int slot, const SpawnNote* n)
     if (xtra_n < ENEMY_EXTRA_MAX) { xtra[xtra_n].slot = (unsigned char)slot; xtra[xtra_n].id = n->id; xtra[xtra_n].died = 0; xtra[xtra_n++].bit = (short)(n->dead - ENEMY_XDEAD_BASE); }
 }
 
-/* The room's extra enemies as they come on every visit (docs/ENEMIES.md "Extra enemies"): extra i (0..o->extra - 1) has
+/* How many extra enemies the room gets: 0..o->extra, all equally likely, a draw of its own (seed, room file), so the same
+   on every visit (and only the host draws it). One fraction per room scaled by the option: a higher option never gives a
+   room fewer. */
+static int extra_count(const EnemyOpts* o)
+{
+    unsigned n = (unsigned)(o->extra < ENEMY_EXTRA_MAX ? o->extra : ENEMY_EXTRA_MAX);
+    rnd_seed((unsigned)o->seed, (unsigned)room_file_now() * 13u + 0x7F00u);
+    return (int)(((rnd() & 0xFFFF) * (n + 1)) >> 16);
+}
+
+/* The room's extra enemies as they come on every visit (docs/ENEMIES.md "Extra enemies"): extra i (0..cnt - 1) has
    draws of its own (seed, room file, i) and takes its spot (extra_spot, away from those before it), then its kind: with
    the randomizer as a free walker record at that spot (draw_kind on the room's kinds after the records, rk; it counts
    for the next ones), else a copy of a random record of the extra types. A spot where no kind fits is tried again (up to
    4 spots). Nothing depends on which are dead or where the player is, so the extras before one are the same on every
-   visit. Fills x[]: 1 = planned (its spot, floor, angle, type, variant), 0 = no spot or no kind (its reason in why[]).
+   visit; the count only cuts the list short (extra i is the same, with the same dead flag, whatever the count). Fills
+   x[0..cnt - 1]: 1 = planned (its spot, floor, angle, type, variant), 0 = no spot or no kind (its reason in why[]).
    `dry` (test aid): rk is left as it was. */
 typedef struct { int ok; const char* why; ActorModel am; SpawnNote n; } XPlan;
-static int plan_extras(const EnemyOpts* o, XPlan* x, int dry)
+static int plan_extras(const EnemyOpts* o, XPlan* x, int cnt, int dry)
 {
     static const ActorModel none = { "extra enemy", 0, 0, 0, 0, 0, 0 };
     Kind kt[KINDS + VARIANT_MAX];
@@ -1161,7 +1223,7 @@ static int plan_extras(const EnemyOpts* o, XPlan* x, int dry)
     int nk = make_kinds(kt), room = room_file_now(), i, k, src[128], ns = 0, nx = 0, planned = 0, rz = o->rand && rk.gen == enemy_room_gen;
     for (k = 0; k < rom->ene_n && k < 128; k++) if (extra_type(rom->enep[k].id)) src[ns++] = k;
     if (rz && !o->variety && rk.mild[0] < 0) mild_kinds(o, kt, nk, rk.mild);   /* (a room whose records all keep their kind) */
-    for (i = 0; i < o->extra && i < ENEMY_EXTRA_MAX; i++) {
+    for (i = 0; i < cnt && i < ENEMY_EXTRA_MAX; i++) {
         SpawnNote* n = &x[i].n;
         int tries, kd = -1, flr = 0;
         memset(&x[i], 0, sizeof(x[i]));
@@ -1222,7 +1284,7 @@ static void spots_test(void)
     for (s = 1; s <= n; s++) {
         EnemyOpts o = { .extra = ENEMY_EXTRA_MAX, .seed = s };
         XPlan x[ENEMY_EXTRA_MAX];
-        int got = plan_extras(&o, x, 1);
+        int got = plan_extras(&o, x, ENEMY_EXTRA_MAX, 1);
         ln = snprintf(line, sizeof(line), "test: spots room %04d seed %d: %d of %d", room_file_now(), s, got, ENEMY_EXTRA_MAX);
         for (i = 0; i < ENEMY_EXTRA_MAX && ln < (int)sizeof(line) - 40; i++) {
             float d, e;
@@ -1235,17 +1297,120 @@ static void spots_test(void)
     printf("test: spots room %04d: grid %dx%d of %.0f units, %d cells walkable, %d spots\n", room_file_now(), xg.nx, xg.nz, xg.s, xg.walk, xg.n);
 }
 
+/* Test aid RECVX_ENEMY_OOB=seeds (pc/tools/enemy_bounds_check.sh): at the first frame each room runs, an out-of-bounds check
+   of the extras' spots apart from extra_grid's rules: a flood fill of 2-unit cells from where the player stands and the
+   entry positions in a camera zone, by the player's own wall check (bhCheckWallEx with the player's body, from the last
+   cell; stairs and ramps too, a step up or down of up to 2 units). Each spot of the grid (every one, and those the
+   extras of seeds 1..seeds take) is flagged when that fill does not reach it ("reach"), when it is in no camera zone of
+   its floor (bhCheckCutArea: "cam"), when the player's body there touches a wall ("wall") or when it is in water. */
+#define OB_MAX 65536
+static int ob_nx, ob_nz;
+static float ob_x0, ob_z0, ob_s, ob_y[OB_MAX];
+static unsigned char ob_st[OB_MAX];
+static int ob_flags(float x, float y, float z, int flr)
+{
+    int f = 0, ix = (int)floorf((x - ob_x0) / ob_s - 0.5f), iz = (int)floorf((z - ob_z0) / ob_s - 0.5f), a, b, r = 0;
+    NJS_POINT3 w = { x, y + 1.0f, z };
+    for (a = 0; a < 2; a++) for (b = 0; b < 2; b++) {   /* (the fine cells round it) */
+        int cx = ix + a, cz = iz + b, c = cz * ob_nx + cx;
+        if (cx >= 0 && cz >= 0 && cx < ob_nx && cz < ob_nz && ob_st[c] && fabsf(ob_y[c] - y) <= 2.0f) r = 1;
+    }
+    if (!r) f |= 1;
+    if (bhCheckCutArea(x, z, (char)flr) < 0) f |= 2;
+    if (!player_fits(x, y, z, flr, NULL)) f |= 4;
+    if (bhCheckWater(&w)) f |= 8;
+    return f;
+}
+static const char* ob_why(int f, char* t)
+{
+    snprintf(t, 40, "%s%s%s%s", f & 1 ? " reach" : "", f & 2 ? " cam" : "", f & 4 ? " wall" : "", f & 8 ? " water" : "");
+    return t;
+}
+static void oob_test(void)
+{
+    static int n = -2, gen = -1;
+    static int q[OB_MAX];
+    int s, i, k, head = 0, tail = 0, xi, tot = 0, nflag = 0, bad[4] = { 0 }, nsp = 0, nbad = 0, f, hist[ENEMY_EXTRA_MAX + 1] = { 0 };
+    char t[40];
+    if (n == -2) n = getenv("RECVX_ENEMY_OOB") ? atoi(getenv("RECVX_ENEMY_OOB")) : -1;
+    if (n < 0 || gen == enemy_room_gen || !sys || !plp || !rom || !(sys->tk_flg & 0x80) || !(sys->sp_flg & 0x2) || (sys->gm_flg & 0x9) || (sys->cb_flg & 0x1)) return;
+    gen = enemy_room_gen;
+    if (extra_room(&xi)) return;
+    extra_grid();
+    if (!xg.nx) return;
+    for (ob_s = 2.0f; ceilf(xg.nx * xg.s / ob_s) * ceilf(xg.nz * xg.s / ob_s) > OB_MAX; ob_s += 1.0f);
+    ob_x0 = xg.x0; ob_z0 = xg.z0; ob_nx = (int)ceilf(xg.nx * xg.s / ob_s); ob_nz = (int)ceilf(xg.nz * xg.s / ob_s);
+    memset(ob_st, 0, sizeof(ob_st));
+    for (k = -1; k < rom->pos_n; k++) {   /* the anchors: the player (-1), the entries in a camera zone; the cells within 4 units
+                                             the player's body fits in with no wall between (an entry by a door touches its frame) */
+        float x = k < 0 ? plp->px : rom->posp[k].px, y = k < 0 ? plp->py : rom->posp[k].py, z = k < 0 ? plp->pz : rom->posp[k].pz, g = ground_at(x, y, z, NULL);
+        int ix = (int)((x - ob_x0) / ob_s), iz = (int)((z - ob_z0) / ob_s), dx, dz, flr;
+        if (g > -999.0f && fabsf(g - y) <= 2.0f) y = g;
+        flr = bhCheckFloorNum(y + 0.5f);
+        if (k >= 0 && bhCheckCutArea(x, z, (char)flr) < 0) continue;
+        for (dz = -2; dz <= 2; dz++)
+            for (dx = -2; dx <= 2; dx++) {
+                int c = (iz + dz) * ob_nx + ix + dx;
+                NJS_POINT3 p1 = { x, y + 1.0f, z }, p2 = { ob_x0 + (ix + dx + 0.5f) * ob_s, y + 1.0f, ob_z0 + (iz + dz + 0.5f) * ob_s };
+                if (ix + dx < 0 || iz + dz < 0 || ix + dx >= ob_nx || iz + dz >= ob_nz || ob_st[c] || bhCollisionCheckLine2(&p1, &p2, 0, (char)flr) ||
+                    !player_fits(p2.x, y, p2.z, flr, NULL)) continue;
+                ob_st[c] = g > -999.0f ? 1 : 2; ob_y[c] = y; q[tail++] = c;
+            }
+    }
+    while (head < tail) {
+        int c = q[head++], d;
+        float x = ob_x0 + (c % ob_nx + 0.5f) * ob_s, z = ob_z0 + (c / ob_nx + 0.5f) * ob_s, y = ob_y[c];
+        NJS_POINT3 o = { x, y, z };
+        for (d = 0; d < 4; d++) {
+            int ix = c % ob_nx + (d == 0) - (d == 1), iz = c / ob_nx + (d == 2) - (d == 3), e = iz * ob_nx + ix;
+            float bx = ob_x0 + (ix + 0.5f) * ob_s, bz = ob_z0 + (iz + 0.5f) * ob_s, g;
+            int none;
+            if (ix < 0 || iz < 0 || ix >= ob_nx || iz >= ob_nz || ob_st[e]) continue;
+            g = ground_at(bx, y, bz, NULL);
+            if (g > -999.0f ? fabsf(g - y) > 2.0f : ob_st[c] != 2) continue;
+            if ((none = g <= -999.0f)) g = y;
+            if (!player_fits(bx, g, bz, bhCheckFloorNum(g + 0.5f), &o)) continue;
+            ob_st[e] = none ? 2 : 1; ob_y[e] = g; q[tail++] = e;
+        }
+    }
+    for (i = 0; i < xg.n; i++) {   /* every spot of the grid */
+        int c = xg_spot[i];
+        f = ob_flags(cell_x(c), xg_y[c], cell_z(c), xg_flr[c]);
+        tot++;
+        nflag += f != 0;
+        for (k = 0; k < 4; k++) bad[k] += f >> k & 1;
+        if (f && n == 0) printf("test: oob room %04d cell %.0f %.0f %.0f:%s\n", room_file_now(), cell_x(c), xg_y[c], cell_z(c), ob_why(f, t));
+    }
+    for (s = 1; s <= n; s++) {   /* the seeds' extras */
+        EnemyOpts o = { .extra = ENEMY_EXTRA_MAX, .seed = s };
+        XPlan x[ENEMY_EXTRA_MAX];
+        plan_extras(&o, x, ENEMY_EXTRA_MAX, 1);
+        hist[extra_count(&o)]++;
+        for (i = 0; i < ENEMY_EXTRA_MAX; i++) {
+            if (!x[i].ok) continue;
+            nsp++;
+            if (!(f = ob_flags(x[i].n.px, x[i].n.py, x[i].n.pz, x[i].n.flr))) continue;
+            nbad++;
+            printf("test: oob room %04d seed %d extra %d at %.0f %.0f %.0f flr %d:%s\n", room_file_now(), s, i, x[i].n.px, x[i].n.py, x[i].n.pz, x[i].n.flr, ob_why(f, t));
+        }
+    }
+    printf("test: oob room %04d: %d of %d grid spots flagged (reach %d, cam %d, wall %d, water %d); %d of %d extras' spots of %d seeds; player fill %d cells of %.0f, "
+           "grid %d walkable; counts of 8 over the seeds (0..8): %d %d %d %d %d %d %d %d %d\n", room_file_now(), nflag, tot, bad[0], bad[1], bad[2], bad[3], nbad, nsp, n,
+           tail, ob_s, xg.walk, hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7], hist[8]);
+}
+
 void enemy_extras_frame(void)
 {
     static int done_gen = -1;
     const EnemyOpts* o;
     XPlan x[ENEMY_EXTRA_MAX];
-    int k, made = 0, planned, room, base, xi, refused = 0;
+    int k, made = 0, planned, room, base, xi, refused = 0, cnt;
     const char* why;
     kill_test();
     headshot_test();
     floor_test();
     spots_test();
+    oob_test();
     if (!sys || !plp || !rom) return;
     if (xtra_gen == enemy_room_gen)   /* (also a guest's: one that dies while the host is elsewhere, the guest's game runs it) */
         for (k = 0; k < xtra_n; k++) {
@@ -1267,8 +1432,9 @@ void enemy_extras_frame(void)
     room = room_file_now();
     if ((why = extra_room(&xi))) { host_log("enemies: room %04d: no extra enemies (%s)\n", room, why); return; }
     for (base = 0; base < PC_ENE_SLOTS && (ene[base].flg & 0x1); base++);
-    planned = plan_extras(o, x, 0);
-    for (k = 0; k < o->extra && k < ENEMY_EXTRA_MAX; k++) {
+    cnt = extra_count(o);
+    planned = plan_extras(o, x, cnt, 0);
+    for (k = 0; k < cnt; k++) {
         SpawnNote* n = &x[k].n;
         int bit = xi * ENEMY_EXTRA_MAX + k, slot = -1, want;
         float dx, dz, door, entry;
@@ -1292,5 +1458,5 @@ void enemy_extras_frame(void)
                  bit, n->px, n->pz, door, entry, why ? why : "spawned");
         if (refused) break;   /* (slots, memory, textures): the room is full */
     }
-    host_log("enemies: room %04d: %d extra enemies spawned, %d planned (option %d)\n", room, made, planned, o->extra);
+    host_log("enemies: room %04d: %d extra enemies spawned, %d planned (option %d: %d here)\n", room, made, planned, o->extra, cnt);
 }
