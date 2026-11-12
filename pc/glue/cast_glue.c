@@ -513,10 +513,11 @@ static int line_ms(const VoiceLine* l) { return group_ms(l->disc, l->vid); }   /
 
 /* the lines said with this seed (voice_pick: the ones not said first; then none of the character's last few, never one
    twice in a row), in the order the scenes said them: across room loads, so a character's few short lines do not open
-   every scene; another seed starts afresh (voice_room). The same scenes in the same order with the same seed say the same
+   every scene; another seed, a game (re)start or a co-op session starts afresh (voice_room, voice_said_frame). The same scenes in the same order with the same seed say the same
    lines. Also those said in place of Claire's and Chris's, which each co-op screen shows with its own player's look: the
    two screens pick alike but where one shows them as the character another role is shown as (that one's lines then do
    not repeat theirs), or one screen said lines in a scene the other did not see */
+extern int coop_session_gen;   /* coop_glue.c */
 static VoiceSaid said;
 static int said_seed;
 static int line_age(const VoiceLine* l) { return voice_said_age(&said, l); }
@@ -652,6 +653,20 @@ static void voice_end(void)
 }
 
 static void voice_room(int seed) { if (seed != said_seed) said.n = 0; said_seed = seed; cr.last = -1; }
+void voice_said_frame(void)
+{
+    static int sess, was;
+    /* a game (re)start: bhFirstGameStart's task (a continue sets it in one frame and the task runs in the next), then the game
+       task's start-up (mode 1: memory, the player's files, the save region; a new game or a load from the title gets there in
+       the frame the title ends) */
+    int start = sys && ((sys->tk_flg & 0x20) || sys->mn_md0 == 1);
+    if ((start && !was) || sess != coop_session_gen) {   /* (a reload then says the same lines again) */
+        if (said.n || getenv("RECVX_CAST_TRACE")) host_log("voices: the lines said start afresh (%s, %d said)\n", start ? "a game (re)start" : "a co-op session", said.n);
+        said.n = 0;
+    }
+    was = start;
+    sess = coop_session_gen;
+}
 
 /* StopVoice (sdfunc.c): VoiceOff, a skip, the line before an enemy's sounds; the slot stops or fades as the game asks */
 void pc_voice_stop(void)

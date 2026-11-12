@@ -148,10 +148,13 @@ unsigned voice_cat_hash(void);
    title, whenever the option is turned on or BioRand's choice changes); 0: not now (a build runs, the disc not open yet) */
 int voices_want(void);
 void voices_frame(void);
+/* cast_glue.c, at the frame hand-off: the lines said start afresh when a game (re)starts (a new game, a load, a game
+   over's continue: sys->tk_flg 0x20, bhFirstGameStart) and when a co-op session starts (both sides) */
+void voice_said_frame(void);
 unsigned char* voice_cache_save(unsigned key, size_t* size);
 int voice_cache_load(const unsigned char* d, size_t n, unsigned key);
-/* the lines said, the latest last (cast_glue.c: with this seed, across room loads, in the scenes' order: the same scenes
-   in the same order say the same lines): voice_said_add one (the oldest goes when full); voice_said_age, how many other
+/* the lines said, the latest last (cast_glue.c: with this seed, across room loads, in the scenes' order, from the game's
+   (re)start or the co-op session's: the same scenes in the same order say the same lines, a reload too): voice_said_add one (the oldest goes when full); voice_said_age, how many other
    lines of l's character were said since l, -1 not said */
 #define VOICE_SAID_MAX 256
 typedef struct { const VoiceLine* l[VOICE_SAID_MAX]; int n; } VoiceSaid;

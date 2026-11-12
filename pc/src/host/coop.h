@@ -92,6 +92,7 @@ int coop_headshots(void);
 int coop_shared_enemies(void);
 /* a co-op session's game runs (not the title, the lobby or the attract demo): Shared Enemy Control is locked */
 int coop_session_game(void);
+extern int coop_session_gen;   /* a new partner session (or ours restarted) adds one: both sides alike */
 /* Hide IP addresses: every address shown on screen goes through here. With hide_ip on, the
    text with its IPv4 addresses and the join host name masked (net_mask_addrs), the co-op server's
    name never (it is public; a numeric server address is masked as any), else text itself. A ring of 4 buffers per thread (lobby_io.c). Input fields mask as passwords. */
