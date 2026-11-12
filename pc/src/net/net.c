@@ -44,6 +44,9 @@ static int net_startup(void) { return 1; }
 static sock_t sock = BAD_SOCK;
 static uint64_t rx_us;                  /* net_rx_us */
 static int rx_exact;                    /* net_rx_exact */
+#ifndef _WIN32
+static int rx_first;                    /* the socket's first datagram is next (its stamp may be the read's) */
+#endif
 
 #ifdef _WIN32
 /* Arrival times on Windows: a thread waits for the socket's FD_READ event and notes when data came;
@@ -127,6 +130,7 @@ int net_open(int port)
     {   /* the kernel's receive time of every datagram (net_rx_us) */
         int on = 1;
         setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPNS, &on, sizeof(on));
+        rx_first = 1;
     }
 #endif
     return 1;
@@ -408,13 +412,16 @@ int net_recv(NetAddr* from, void* buf, int cap)
         rx_exact = 0;
         for (c = CMSG_FIRSTHDR(&mh); c; c = CMSG_NXTHDR(&mh, c))
             if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_TIMESTAMPNS) memcpy(&ts, CMSG_DATA(c), sizeof(ts));
-        if (ts.tv_sec) {   /* a wall-clock time: how long ago, taken off our monotonic clock */
+        /* (the first datagram after timestamping is switched on can come stamped when it is read: Linux turns the
+           stamps on for the system in deferred work, when no socket had them on yet) */
+        if (ts.tv_sec && !rx_first) {   /* a wall-clock time: how long ago, taken off our monotonic clock */
             struct timespec now;
             int64_t ago;
             clock_gettime(CLOCK_REALTIME, &now);
             ago = ((int64_t)now.tv_sec - ts.tv_sec) * 1000000 + (now.tv_nsec - ts.tv_nsec) / 1000;
             if ((rx_exact = ago >= 0 && ago < 60000000)) rx_us -= (uint64_t)ago;   /* (a slow frame waits seconds; else the clock was set: when it was read) */
         }
+        rx_first = 0;
     }
 #endif
     from->ip = a.sin_addr.s_addr;

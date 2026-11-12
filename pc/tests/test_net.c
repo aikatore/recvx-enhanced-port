@@ -34,18 +34,22 @@ int main(void)
     CHECK(net_open(port) == NET_IN_USE);
     CHECK(net_recv(&(NetAddr){ 0 }, &k, sizeof(k)) == -1);   /* nothing left open */
     CHECK(net_open(0) == 1);   /* a retry on another port */
-    {   /* arrival time: a datagram to ourselves read 50 ms after it came is stamped when it came */
+    {   /* arrival time: a datagram to ourselves read 50 ms after it came is stamped when it came (the socket's first
+           may not be: net_rx_exact says so, and the second is) */
         NetAddr me;
         char b[8];
-        uint64_t sent, age;
+        uint64_t sent = 0, age = 0;
         CHECK(net_resolve("127.0.0.1", net_local_port(), &me));
-        sent = net_us();
-        CHECK(net_send(&me, "ping", 4));
-        SDL_Delay(50);
-        CHECK(net_recv(&me, b, sizeof(b)) == 4);
-        age = net_us() - net_rx_us();
-        printf("net: arrival %.2f ms after sending, read %.2f ms later\n", (net_rx_us() - sent) / 1000.0, age / 1000.0);
-        CHECK(net_rx_us() >= sent && age >= 45000 && age < 1000000);
+        for (k = 0; k < 2; k++) {
+            sent = net_us();
+            CHECK(net_send(&me, "ping", 4));
+            SDL_Delay(50);
+            CHECK(net_recv(&me, b, sizeof(b)) == 4);
+            age = net_us() - net_rx_us();
+            printf("net: arrival %.2f ms after sending, read %.2f ms later%s\n", (net_rx_us() - sent) / 1000.0, age / 1000.0, net_rx_exact() ? "" : " (not exact)");
+            if (net_rx_exact()) break;
+        }
+        CHECK(net_rx_exact() && net_rx_us() >= sent && age >= 45000 && age < 1000000);
         /* a datagram bigger than the buffer does not stop the read loop (Windows: WSAEMSGSIZE is
            skipped; elsewhere it comes truncated): the one behind it is read */
         {
