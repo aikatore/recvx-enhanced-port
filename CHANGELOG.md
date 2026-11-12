@@ -6,6 +6,9 @@
 > This update changes parts of the renderer to make it faster. If anything looks different or broken, such as
 > missing or flickering parts of the picture, wrong colours or black areas, please report it together with the room and
 > the display settings used.
+>
+> A relay server in the EU is now available for testing co-op at eu.cvxenhanced.de. It is filled in under "Via server"
+> by default. Feedback on how it works, such as lag, dropped sessions or trouble connecting, is very welcome.
 
 ### Changes
 
