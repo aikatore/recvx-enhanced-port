@@ -82,13 +82,17 @@ int main(void)
         CHECK(!strcmp(net_mask_addrs("my.host.example:7140#ABCD-EFGH", hosts, NULL, o, sizeof(o)), "xxx.xxx.xxx.xxx:7140#ABCD-EFGH"));
         CHECK(!strcmp(net_mask_addrs("localhost:1 version 0.6.4 room 1234.5", hosts, NULL, o, sizeof(o)), "localhost:1 version 0.6.4 room 1234.5"));
         CHECK(!strcmp(net_mask_addrs("1.2.3.4", NULL, NULL, t, sizeof(t)), "xxx.xxx"));   /* cut to the buffer */
-        {   /* the co-op server is kept, by name or address, alone; the partner's addresses still masked */
-            const char* keep[] = { "eu.cvxenhanced.de", "5.6.7.8:7141", NULL };
+        {   /* the co-op server is kept by name, alone; a numeric one (a home's, self-hosted) masked as any; the partner's addresses masked */
+            const char* keep[] = { "eu.cvxenhanced.de", "5.6.7.8:7141", "my-server.example:7141", NULL };
             CHECK(!strcmp(net_mask_addrs("No reply from co-op server eu.cvxenhanced.de. Peer 9.9.9.9:7140", hosts, keep, o, sizeof(o)),
                           "No reply from co-op server eu.cvxenhanced.de. Peer xxx.xxx.xxx.xxx:7140"));
             CHECK(!strcmp(net_mask_addrs("server 5.6.7.8:7141 peer 5.6.7.80:7140 15.6.7.8", NULL, keep, o, sizeof(o)),
-                          "server 5.6.7.8:7141 peer xxx.xxx.xxx.xxx:7140 xxx.xxx.xxx.xxx"));
-            CHECK(!strcmp(net_mask_addrs("5.6.7.8:7141", NULL, keep, t, sizeof(t)), "5.6.7.8"));   /* cut to the buffer */
+                          "server xxx.xxx.xxx.xxx:7141 peer xxx.xxx.xxx.xxx:7140 xxx.xxx.xxx.xxx"));
+            CHECK(!strcmp(net_mask_addrs("Contacting co-op server my-server.example:7141...", NULL, keep, o, sizeof(o)),
+                          "Contacting co-op server my-server.example:7141..."));
+            CHECK(!strcmp(net_mask_addrs("eu.cvxenhanced.de:7141", NULL, keep, t, sizeof(t)), "eu.cvxe"));   /* cut to the buffer */
+            CHECK(net_numeric_host("5.6.7.8:7141") && net_numeric_host("5.6.") && !net_numeric_host("eu.cvxenhanced.de") && !net_numeric_host("")
+                  && !net_numeric_host("5.6.7.8a"));
         }
     }
     printf("net: ok\n");

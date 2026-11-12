@@ -35,7 +35,7 @@ static const char crash_path[] = "recvx-crash.log";
 static char crash_head[128];
 
 /* host.c host_log: every message, also with --quiet (best effort across threads: each takes a slot of its own);
-   IPv4 addresses masked, so the report can be posted publicly (pc/src/net/net.c); the co-op server's kept */
+   IPv4 addresses masked, so the report can be posted publicly (pc/src/net/net.c); the co-op server's name kept */
 const char* net_mask_addrs(const char* text, const char* const* hosts, const char* const* keep, char* out, int cap);
 void log_keep(const char* fmt, va_list ap)
 {

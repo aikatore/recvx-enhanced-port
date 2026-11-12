@@ -445,6 +445,12 @@ static int ipv4_at(const char* s)
     return s[n] >= '0' && s[n] <= '9' ? 0 : n;
 }
 
+int net_numeric_host(const char* s)
+{
+    int k = (int)strcspn(s, ":# ");
+    return k > 0 && (int)strspn(s, "0123456789.") >= k;
+}
+
 /* part of a host name or address: a kept one stands alone (1.2.3.4 is not the start of 1.2.3.45) */
 static int host_ch(char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '.' || c == '-'; }
 
@@ -457,8 +463,8 @@ const char* net_mask_addrs(const char* text, const char* const* hosts, const cha
         k = (int)strcspn(*hosts, ":# ");
         if (k > 2 && memchr(*hosts, '.', k)) { name[nn] = *hosts; len[nn++] = k; }
     }
-    for (; keep && *keep && nk < 4; keep++)   /* the host part, whatever it is */
-        if ((k = (int)strcspn(*keep, ":# ")) > 0) { kname[nk] = *keep; klen[nk++] = k; }
+    for (; keep && *keep && nk < 4; keep++)   /* the host part, a name (a bare IPv4 address may be a home's: masked as any) */
+        if ((k = (int)strcspn(*keep, ":# ")) > 0 && !net_numeric_host(*keep)) { kname[nk] = *keep; klen[nk++] = k; }
     while (*text && o < cap - 1) {
         k = kept = 0;
         if (o == 0 || !host_ch(out[o - 1]))

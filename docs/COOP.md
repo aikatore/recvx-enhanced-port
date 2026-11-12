@@ -415,18 +415,19 @@ screenshots. With it on, no IP address shows on screen, yours or the partner's:
   next to **Copy Join Address**) show each address as
   `xxx.xxx.xxx.xxx`. Ports, the join code and the room code stay visible, e.g.
   `xxx.xxx.xxx.xxx:7140#ABCDEFGH`. A host name typed as the join address is masked the same way.
-* The co-op server's address (lobby SERVER, F3 Co-op Server, and the server's name or address in
-  status lines such as "Contacting co-op server ...") is never masked: it is a public server, not
-  a player's address.
-* The join address fields (lobby ADDRESS / CODE, F3 Join address / Room code) show stars, also
-  while you type or paste. In F3, **Show Addresses** reveals them until the window closes; in the
+* The co-op server's name (lobby SERVER, F3 Co-op Server, and status lines such as "Contacting
+  co-op server ...") is never masked: it is a public server, not a player's address. A server
+  entered as a bare IPv4 address (a self-hosted one may be a home's) is masked like any address
+  there.
+* The join address fields (lobby ADDRESS / CODE, F3 Join address / Room code), and the server
+  field while it holds a numeric address, show stars, also while you type or paste. In F3, **Show Addresses** reveals them until the window closes; in the
   lobby turn the option off to see them.
 * Only the display changes: **COPY JOIN ADDRESS** / **Copy Join Address** put the real address on the
   clipboard, and joining uses what you typed.
 
 `recvx.log` (and the console) still contain the addresses, for troubleshooting: do not show the
 console window on stream or post the log publicly. The crash report `recvx-crash.log` masks them
-(all but the co-op server's).
+(all but the co-op server's name).
 
 ### Sounds
 

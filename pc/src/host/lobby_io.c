@@ -277,7 +277,7 @@ const char* coop_shown(const char* text)
     static __thread int k;
     char join[sizeof(g_coop.join)], srv[sizeof(g_coop.server)];
     const char* hosts[] = { join, NULL };
-    const char* keep[] = { srv, NULL };   /* the co-op server is public: never masked */
+    const char* keep[] = { srv, NULL };   /* the co-op server's name is public: never masked (a numeric one is) */
     if (!g_coop.hide_ip || !text) return text;
     memcpy(join, (const void*)g_coop.join, sizeof(join));   /* another thread may be editing them: bounded copies */
     memcpy(srv, (const void*)g_coop.server, sizeof(srv));

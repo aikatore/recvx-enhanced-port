@@ -94,7 +94,7 @@ int coop_shared_enemies(void);
 int coop_session_game(void);
 /* Hide IP addresses: every address shown on screen goes through here. With hide_ip on, the
    text with its IPv4 addresses and the join host name masked (net_mask_addrs), the co-op server's
-   name or address never (it is public), else text itself. A ring of 4 buffers per thread (lobby_io.c). Input fields mask as passwords. */
+   name never (it is public; a numeric server address is masked as any), else text itself. A ring of 4 buffers per thread (lobby_io.c). Input fields mask as passwords. */
 const char* coop_shown(const char* text);
 /* joining: where our inventory comes from (g_coop.items; 0..14 is a save slot) */
 enum { COOP_ITEMS_CURRENT = -3,     /* our game in progress (F3 in game); at the title the new-game items */

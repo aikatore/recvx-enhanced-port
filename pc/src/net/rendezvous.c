@@ -180,7 +180,7 @@ static int fresh_keys(void)
     return 1;
 }
 
-/* the server as the player entered it (shown unmasked: coop_shown keeps g_coop.server), else its address */
+/* the server as the player entered it (coop_shown keeps g_coop.server if it is a name; a numeric one is masked), else its address */
 static const char* server_shown(void) { return cfg.server_name[0] ? cfg.server_name : net_addr_str(&cfg.server); }
 
 /* from the top: HELLO, CREATE / JOIN (also after the server lost our room) */
