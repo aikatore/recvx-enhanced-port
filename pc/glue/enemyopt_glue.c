@@ -125,6 +125,11 @@ static const ActorModel* rand_src[128];   /* randomized records: where their new
 static unsigned short rand_var[128];    /* and which enemy variant they became (0: none) */
 static unsigned char moved_rec[128];    /* records "Rearranged Enemies" moved (RECVX_ENEMY_FLOORS) */
 static int all_dead_check;              /* the script counts kills (DieEventCk): "all dead" doors */
+static unsigned char die_rec[1024];     /* ed_flg bit -> 1 + the record whose kill sets it (DieCk) */
+static unsigned char ed_set_ck[128];    /* ed_flg bits a Ck tests for set (code that waits for that kill) */
+static unsigned char kill_gated[128];   /* records whose kill some code waits for (the Battle Game's exits: RM_5520's
+                                           IfelCk over "ed_flg bit n is set" for each record, then etc 0 a door) */
+static int any_kill_gated;
 static int rm_flg_used;                 /* the script tests or sets rm_flg bits 29..31 (= 0x4, 0x2, 0x1), which some types write */
 static unsigned char etc_door[256];     /* triggers the script makes doors (EtcAtariSet2 type 0; a SetDoorCall where the player is at
                                            it) or item spots (ItmSetCk): 1 door, 2 item */
@@ -210,6 +215,7 @@ static void walk(int pass)
             switch (op) {   /* (all code in pass 0: "all dead" doors, rm_flg bits and door triggers anywhere count) */
             case 20: ev_started[p[3]] |= pass ? 2 : 1; break;   /* EvtOn */
             case 33: all_dead_check = 1; break;   /* DieEventCk */
+            case 13: if (!pass) die_rec[(p[2] | p[3] << 8) & 0x3FF] = (unsigned char)((p[1] & 127) + 1); break;   /* DieCk record, ed_flg bit */
             case 37: if (p[8] == 0) etc_door[p[1]] = 1; break;   /* EtcAtariSet2 etc := type 0 */
             case 35: if (!etc_door[p[4]]) etc_door[p[4]] = 2; break;   /* ItmSetCk item, etc */
             case 51: if (at_etc >= 0) etc_door[at_etc] = 1; break;   /* SetDoorCall, the player at a trigger */
@@ -218,6 +224,7 @@ static void walk(int pass)
                 if (p[1] == 4 && b >= 29 && b <= 31) rm_flg_used = 1;
                 if (op == 5 && p[5] && (p[1] == 1 || p[1] == 2)) flg_cleared[p[1] - 1][b >> 3] |= (unsigned char)(1 << (b & 7));
                 if (op == 4 && p[1] == 10 && b == 23) at_etc = p[4];
+                if (op == 4 && p[1] == 3 && !p[5] && !pass) ed_set_ck[b >> 3] |= (unsigned char)(1 << (b & 7));   /* Ck ed_flg bit b is set */
                 break;
             }
             case 1:   /* IfelCk; one that cannot pass on this visit: on to its else part or behind its Endif, as the interpreter goes */
@@ -254,9 +261,14 @@ static void scan_script(void)
     memset(etc_door, 0, sizeof(etc_door));
     memset(flg_cleared, 0, sizeof(flg_cleared));
     memset(ev_started, 0, sizeof(ev_started));
-    all_dead_check = rm_flg_used = 0;
+    memset(die_rec, 0, sizeof(die_rec));
+    memset(ed_set_ck, 0, sizeof(ed_set_ck));
+    memset(kill_gated, 0, sizeof(kill_gated));
+    all_dead_check = rm_flg_used = any_kill_gated = 0;
     if (!rom->evtp) return;
     walk(0);
+    for (k = 0; k < 1024; k++)   /* (the DieCk may come after the test) */
+        if (die_rec[k] && (ed_set_ck[k >> 3] >> (k & 7) & 1)) kill_gated[die_rec[k] - 1] = 1, any_kill_gated = 1;
     for (k = 0; k < 8; k++) { memcpy(was, ev_started, sizeof(was)); walk(1); if (!memcmp(was, ev_started, sizeof(was))) break; }
     walk(2);
 }
@@ -621,9 +633,9 @@ static void mild_kinds(const EnemyOpts* o, const Kind* kt, int nk, int* mk)
     mk[0] = mk[1] = -1;
     rnd_seed((unsigned)o->seed, (unsigned)room_file_now() * 977u + 0x3000u);
     for (j = 0; j < 2; j++) {
-        for (t = 0, k = 0; k < nk; k++) t += k != mk[0] && !(kt[k].flags & K_NOCOUNT && all_dead_check) ? kt[k].w[0] : 0;
+        for (t = 0, k = 0; k < nk; k++) t += k != mk[0] && !(kt[k].flags & K_NOCOUNT && (all_dead_check || any_kill_gated)) ? kt[k].w[0] : 0;
         for (r = (int)(rnd() % (unsigned)t), k = 0; k < nk; k++) {
-            w = k != mk[0] && !(kt[k].flags & K_NOCOUNT && all_dead_check) ? kt[k].w[0] : 0;
+            w = k != mk[0] && !(kt[k].flags & K_NOCOUNT && (all_dead_check || any_kill_gated)) ? kt[k].w[0] : 0;
             if (r < w) break;
             r -= w;
         }
@@ -725,7 +737,7 @@ static void randomize(const EnemyOpts* o)
             int pk = save.flr_no < 0;
             float sx = pk ? rec_spot[k][0] : save.px, sy = pk ? rec_spot[k][1] : save.py, sz = pk ? rec_spot[k][2] : save.pz;
             kd = draw_kind(o, kt, nk, &st, save.id, save.mdlver, sx, sy, sz, pk ? bhCheckFloorNum(sy + 0.5f) : save.flr_no, st.cost - slot_cost(save.id),
-                           all_dead_check, &m, &v);
+                           all_dead_check || kill_gated[k], &m, &v);
         }
         if (!m) {   /* its own kind drawn, without another look (Cerberus, bat), or nothing else fits */
             if (kd >= 0 && kd < nk) st.kused[kd] = 1;

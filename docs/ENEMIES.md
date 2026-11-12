@@ -738,7 +738,9 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
   collision has no ceilings to test against): fliers only replace fliers, at their own heights.
 * **Kill-count rooms** (`DieEventCk`: doors that open when everything is dead, e.g. the prison's
   5550..5710, 4012) are randomized with the kinds that stay on the floor and die there: zombies,
-  Cerberus, Bandersnatches, anatomists. Each dies with `flg & 2` (each has a `DieCk` in its own
+  Cerberus, Bandersnatches, anatomists. So is a record whose kill some code waits for (a `Ck` of its
+  `DieCk` bit for set, anywhere in the room's scripts: the Battle Game's 5520, 5530, 5540 and 5650 open
+  their exit only once each record's bit is set), and Mild's two kinds of such a room are of those kinds. Each dies with `flg & 2` (each has a `DieCk` in its own
   rooms, and `RECVX_ENEMY_KILL` kills them all in these rooms), so the record's kill bit is set as before.
 * **Variety**: *Wild* (default) draws each record's kind from all kinds that fit, a kind not yet
   drawn in this room first, then a look not yet used in this room. *Mild* draws two kinds per
