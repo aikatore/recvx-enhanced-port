@@ -12,6 +12,7 @@
 #   - exactly one server after a take-over that is slow or queued: behind a silent control
 #     connection, a systemd that answers the barrier after the time-out, the old server frozen
 #     after "ok" until the new one's time-out has passed.
+#   - a SIGHUP to every process of the unit during a take-over: the new server survives it.
 # usage: test_handover.sh DIR_WITH_BINARIES [PORT]
 bin=$1; port=${2:-17251}; tmp=$(mktemp -d); fails=0
 command -v python3 >/dev/null || { echo "python3 is missing"; exit 77; }
@@ -195,5 +196,19 @@ take_over t2 $((ctl_s + 1)) && [ $r -ne 0 ] && ok "systemd slower than the time-
 take_over t3 $((ctl_s + 1)) $s6 && [ $r -eq 0 ] && ok "the old server frozen after \"ok\" past the time-out: the new one serves" || bad "the old server frozen after ok"
 alive $s6 && { bad "the old server still runs"; kill $s6; }
 wait $s6; [ $? -eq 0 ] && ok "the old server exited 0" || bad "the old server's exit"
-kill $new2 2>/dev/null
+# SIGHUP to every process of the unit during a take-over (`systemctl kill -s HUP` without --kill-whom=main):
+# nobody dies, the new server serves and is the last MAINPID
+old3=$new2
+slow_systemd "$tmp/t4.sock" "$tmp/t4.notify" 1.5
+NOTIFY_SOCKET=$tmp/t4.sock "$bin/recvx-server" --take-over --port $p2 --control "$tmp/c2.sock" > "$tmp/t4.txt" 2>&1 & launcher=$!
+sleep 0.5
+child=$(pgrep -f "recvx-server --take-over --port $p2" | grep -vx -e "$launcher" -e "$old3")
+kill -HUP $launcher $child $old3
+wait $launcher; r=$?
+sleep 2
+m=$(sed -n 's/^MAINPID=//p' "$tmp/t4.notify" | tail -1)
+if [ $r -eq 0 ] && [ -n "$child" ] && alive $child && ! alive $old3 && [ "$m" = "$child" ] && "$bin/recvx-client" 127.0.0.1:$p2 status-json > /dev/null
+then ok "SIGHUP to every process during a take-over: the new server serves (MAINPID=$child)"
+else bad "SIGHUP during a take-over: exit $r, child '$child' $(alive "$child" && echo alive || echo gone), old $(alive $old3 && echo alive || echo gone), MAINPID '$m'"; cat "$tmp/t4.txt"; fi
+kill $child $old3 2>/dev/null
 exit $fails

@@ -627,6 +627,12 @@ int main(int argc, char** argv)
     signal(SIGPIPE, SIG_IGN);
     if (getenv("RECVX_SERVER_TEST_STATE_FORMAT")) srv_state_format = atoi(getenv("RECVX_SERVER_TEST_STATE_FORMAT"));   /* test_handover.sh */
     if (drain_cmd) return ctl_drain(&c);
+    /* before the take-over: `systemctl kill -s HUP` (every process of the unit) or a USR1 during a reload
+       must not kill the launcher or the new server after MAINPID=<new>; the flags wait for the main loop */
+    signal(SIGTERM, on_signal);
+    signal(SIGINT, on_signal);
+    signal(SIGHUP, on_signal);
+    signal(SIGUSR1, on_signal);
     if (takeover) {
         /* the launcher waits for the result and returns it (systemd's ExecReload must end); the
            server goes on in the child, in the same service */
@@ -655,10 +661,6 @@ int main(int argc, char** argv)
     srv_proc.process_started_at = (double)wall.tv_sec;
     if (!takeover) { srv_proc.started_at = (double)wall.tv_sec; srv_proc.start_ms = start; }   /* else: from the state */
     srv_proc.handover_capable = ctl >= 0;
-    signal(SIGTERM, on_signal);
-    signal(SIGINT, on_signal);
-    signal(SIGHUP, on_signal);
-    signal(SIGUSR1, on_signal);
     describe(&c, path, takeover ? "took over" : "started");
     if (!takeover) notify("READY=1", 0);
     flush_log();

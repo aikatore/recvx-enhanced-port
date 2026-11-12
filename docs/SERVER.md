@@ -156,8 +156,9 @@ sessions](#updating-without-dropping-sessions)). It applies the whole config fil
 allowed to create them): a system call filter, no new privileges, IPv4/IPv6/unix sockets only,
 64 MB of memory.
 
-For changing only limits or the log level, SIGHUP still works (`systemctl --user kill -s HUP
-recvx-server`).
+For changing only limits or the log level, SIGHUP still works (`systemctl --user kill
+--kill-whom=main -s HUP recvx-server`: only the main process; without `--kill-whom=main` systemd
+signals every process of the unit, a running `--take-over` included).
 
 ### Docker
 
