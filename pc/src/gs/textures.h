@@ -23,6 +23,7 @@ void ntex_note_upload(const uint64_t* pages);   /* GS memory uploads: unbind ove
 /* GS memory pages page0..page1 are about to be read or written other than through
    ntex_lookup: bound slots there are written into GS memory first */
 void ntex_before_access(uint32_t page0, uint32_t page1);
+int ntex_pending(uint32_t page0, uint32_t page1);   /* ntex_before_access would write some */
 void ntex_forget(uint32_t id);   /* the game thread dropped a definition */
 /* definition id is a texture captured from a render target (gs_capture_rt, RGBA16F as the
    render targets); replaces an earlier capture of the same id */

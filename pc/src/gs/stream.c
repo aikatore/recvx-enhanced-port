@@ -88,6 +88,18 @@ static int tex_event(const Ev* e)
     }
 }
 
+/* tex_event, and not a TEX0 write of the value the previous texture event wrote to it: the game
+   writes the same TEX0 (with a CLUT load) before each strip, nothing about the texture changed
+   since (gs_clut_load flushes only if the CLUT did), so its strips may share a batch. The executed
+   frame and its replays alike (their resources are found by epoch). */
+static int tex_epoch_event(const Ev* e, const Ev** last)
+{
+    const Ev* l = *last;
+    if (!tex_event(e)) return 0;
+    *last = e;
+    return !(l && e->kind == EV_REG && (e->reg == 0x06 || e->reg == 0x07) && l->kind == EV_REG && l->reg == e->reg && l->v == e->v);
+}
+
 static void* xrealloc(void* p, size_t n)
 {
     void* q = realloc(p, n);
@@ -508,6 +520,7 @@ void stream_exec(Frame* f)
     f->start = gs;
     gs_clut_state_save(f->clut_start);
     ntex_state_save(f->ntex_start);
+    const Ev* last_tex = NULL;
     gs_tex_epoch = 0;
     hdpack_frame(f->fade);
     aa_split(f);
@@ -515,7 +528,7 @@ void stream_exec(Frame* f)
     for (size_t i = 0; i < f->nev; i++) {
         const Ev* e = &f->ev[i];
         if (i == f->aa_ev) gs_scene_aa(f->aa_fbp, f->aa_fbw);
-        if (tex_event(e)) gs_tex_epoch = (uint32_t)i + 1;
+        if (tex_epoch_event(e, &last_tex)) gs_tex_epoch = (uint32_t)i + 1;
         if (ntex_defining()) {   /* texture definition: recorded, not executed */
             if (e->kind == EV_REG) { ntex_define_reg(e->reg, e->v); continue; }
             if (e->kind == EV_IMAGE) { ntex_define_image(f->pool + e->v, e->len); continue; }
@@ -1162,12 +1175,13 @@ void stream_replay(const Frame* r, float t)
     gs_replaying = 1;
     gs_replay_begin();
     int in_def = 0;
+    const Ev* last_tex = NULL;
     gs_tex_epoch = 0;
     gs_scene_begin(r->aa_ev != NOEV);
     for (size_t i = 0; i < r->nev; i++) {
         const Ev* e = &r->ev[i];
         if (i == r->aa_ev) gs_scene_aa(r->aa_fbp, r->aa_fbw);   /* where the executed frame ran it */
-        if (tex_event(e)) gs_tex_epoch = (uint32_t)i + 1;
+        if (tex_epoch_event(e, &last_tex)) gs_tex_epoch = (uint32_t)i + 1;
         uint64_t v;
         if (e->kind == EV_TEXDEF) { in_def = 1; continue; }
         if (e->kind == EV_TEXDEF_END) { in_def = 0; continue; }

@@ -148,9 +148,9 @@ void gs_upload_image(const uint8_t* src, uint32_t bytes) { stream_image(src, byt
 
 /* A write of a draw-state register ends the batch, unless it writes the value the register
    has (the game rewrites the same TEST, ALPHA, TEX1, ... before most primitives): the batch
-   goes on, the same primitives in the same order. Not for a two-pass alpha-test batch, whose
-   passes would interleave differently. */
-static void flush_for(uint64_t old, uint64_t v) { if (old != v || gs_batch_two_pass()) gs_flush(); }
+   goes on, the same primitives in the same order (a two-pass alpha-test batch in groups whose
+   passes do not interleave: gs_batch_rewrite). */
+static void flush_for(uint64_t old, uint64_t v) { if (old != v) gs_flush(); else gs_batch_rewrite(); }
 
 /* render thread: the GS register file */
 void gs_exec_reg(int reg, uint64_t v)
