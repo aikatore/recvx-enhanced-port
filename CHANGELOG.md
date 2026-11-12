@@ -19,8 +19,8 @@
   player can walk and away from the doors. They follow the enemy rates and count toward Types per Room.
 - **Types per Room**: the randomizer now aims for that many different enemy types in a room where its enemies allow
   it, instead of only capping them.
-- **Default co-op server**: "Via server" now comes filled in with eu.cvxenhanced.de, and the server address is
-  never hidden.
+- **Default co-op server**: "Via server" now comes filled in with eu.cvxenhanced.de, and a server name is never
+  hidden (a numeric address still is).
 - **Weapon shortcut wheel**: it sits higher and nearer the middle of the screen, clear of the HUD.
 - **Bats and moths**: easier to hit in the over-the-shoulder camera.
 - **Co-op server**: updates can now be applied without dropping running sessions, and a machine-readable status is
@@ -37,6 +37,11 @@
   stay in the same place for both players.
 - In the over-the-shoulder camera with Free Camera, mashing the movement keys breaks free of a grab as quickly as
   with the fixed cameras.
+- In the Battle Game, the enemy randomizer no longer places enemies that do not count as kills in rooms that need
+  every enemy dead to open the exit.
+- The HUD shows the right colour and spare count for gas rounds.
+- In co-op, both players get the same randomized enemies in every room.
+- Randomize Voice Lines starts its variety over on a new game, a load or a retry.
 
 ## 0.7.6 (2026-11-09)
 
