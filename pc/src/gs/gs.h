@@ -95,7 +95,8 @@ void gs_notify_mem_write(uint32_t bp, uint32_t bw, int psm, uint32_t x, uint32_t
 /* exact set of written pages (bit per 8 KB page); changed = 0 if the data was identical */
 void gs_notify_pages(const uint64_t* pages, int changed);
 void gs_flush(void);
-int  gs_batch_two_pass(void);   /* the pending batch draws in two passes */
+void gs_batch_rewrite(void);   /* a draw-state register written with the value it has (gs.c flush_for) */
+int  gs_ab_off(int bit);       /* RECVX_AB (gs_gl.c): that optimization off in this interval */
 struct Frame;
 void gs_frame_begin(void);
 void gs_frame_executed(int interpolate);

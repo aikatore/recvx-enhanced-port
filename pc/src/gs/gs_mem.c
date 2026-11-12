@@ -415,21 +415,27 @@ void gs_clut_load(uint64_t tex0)
     case 5: load = cbp != cbp1; cbp1 = cbp; break;
     }
     if (!load) return;
-    gs_flush();
+    /* the pending batch decodes its texture with the CLUT it had: flushed before a load that
+       changes it (the game reloads the same CLUT before each strip: no flush; RECVX_AB bit 32:
+       before each load), and before slots are written into GS memory under it */
+    if (gs_ab_off(32) || ntex_pending(cbp / 32, cbp / 32 + 1)) gs_flush();
     ntex_before_access(cbp / 32, cbp / 32 + 1);
     {   /* gs_read_pixel(fmt, cbp, 1, clut_pos(i)) through the offset table: the address is cbp * 256 + clut_off */
         const uint16_t* off = clut_off[cpsm == 0 ? 0 : cpsm == 2 ? 1 : 2][entries == 256];
         uint32_t base = cbp * 256;
+        uint16_t nb[512];
         if (!clut_off[0][1][1]) clut_off_init();   /* (entry 1 is 4 bytes in) */
+        memcpy(nb, clut_buf, sizeof(nb));
         if (cpsm == 0)
             for (uint32_t i = 0; i < (uint32_t)entries; i++) {
                 uint32_t c, e = (csa * 16 + i) & 255;
                 memcpy(&c, gs_memp + ((base + off[i]) & (GS_MEM_SIZE - 1)), 4);
-                clut_buf[e] = (uint16_t)c; clut_buf[256 + e] = (uint16_t)(c >> 16);
+                nb[e] = (uint16_t)c; nb[256 + e] = (uint16_t)(c >> 16);
             }
         else
             for (uint32_t i = 0; i < (uint32_t)entries; i++)
-                memcpy(&clut_buf[(csa * 16 + i) & 511], gs_memp + ((base + off[i]) & (GS_MEM_SIZE - 1)), 2);
+                memcpy(&nb[(csa * 16 + i) & 511], gs_memp + ((base + off[i]) & (GS_MEM_SIZE - 1)), 2);
+        if (memcmp(nb, clut_buf, sizeof(nb))) { gs_flush(); memcpy(clut_buf, nb, sizeof(nb)); }
     }
 }
 
