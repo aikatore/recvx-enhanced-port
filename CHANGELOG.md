@@ -22,8 +22,6 @@
   it, instead of only capping them.
 - **Weapon shortcut wheel**: it sits higher and nearer the middle of the screen, clear of the HUD.
 - **Bats and moths**: easier to hit in the over-the-shoulder camera.
-- **Co-op server**: updates can now be applied without dropping running sessions, and a machine-readable status is
-  available for monitoring.
 
 ### Fixes
 
