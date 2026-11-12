@@ -116,7 +116,7 @@ void hud_frame(void)
 {
     const unsigned int* iv;
     unsigned int w;
-    int id, kind, wpn, i, tex, u, v, cells, any = 0, spare = 0, inf;
+    int id, kind, r, wpn, i, tex, u, v, cells, any = 0, spare = 0, inf;
     int on = g_tps.hud != 2 && pc_in_game() && plp && (g_tps.hud == 1 || (g_tps.on && tps_cam_active)) && in_play();
     static int trace = -1, was;
     if (trace < 0) trace = getenv("RECVX_HUD_TRACE") != NULL;   /* test aid: when it shows or hides, and what it shows */
@@ -142,7 +142,8 @@ void hud_frame(void)
     inf = (kind & 0x800) || (plp->at_flg & 0x40000000) || pc_inf_ammo();   /* bhCheckBullet's unlimited */
     g_hud.rounds = !id || !counts(id) ? HUD_NONE : inf ? HUD_INF : shown(id, (int)(w & 0xFFFF));
     g_hud.rounds_pct = (itemdata[id].type & 0x1000) != 0;
-    wpn = id == 6 && (kind & 0x7000) ? 151 + ((kind & 0x7000) >> 12) : id == 7 && (kind & 0x2000) ? 155 : id;   /* 152..154: acid, flame, gas rounds */
+    r = kind & 0x7000;   /* one bit per round type (sub1.c): 0x1000 acid 152, 0x2000 flame 153, 0x4000 gas 154 */
+    wpn = id == 6 ? (r == 0x1000 ? 152 : r == 0x2000 ? 153 : r == 0x4000 ? 154 : id) : id == 7 && r == 0x2000 ? 155 : id;
     g_hud.round_kind = wpn >= 152 && wpn <= 155 ? wpn - 151 : 0;
     cells = (sys->gm_flg & 0x8000000) ? 10 : 8;   /* the side pack */
     for (i = 2; i < 2 + cells && g_hud.rounds >= 0; i++) {
