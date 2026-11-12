@@ -481,7 +481,8 @@ void enemy_rate_preset(unsigned char* rate, int variety)
 }
 
 /* recvx.ini enemy_rates: "id:rate" per base kind (its type id; "id.look:rate" for one look: 5.0 Hunter, 5.1 Sweeper; a pair
-   without the look, as before they were split, sets every look's), "vID:rate" per variant; a kind the line lacks (new, or a
+   without the look, as saved before they were split: the Hunter that rate, the Sweeper half of it, as the presets halve
+   it, not both at the old single kind's rate, which doubled the type), "vID:rate" per variant; a kind the line lacks (new, or a
    mods file changed) keeps the preset of the file's Enemy Selection. Read before the variants are loaded, applied after. */
 static int rates_ready;
 void enemy_rates_ini(const char* text) { snprintf(rates_ini, sizeof(rates_ini), "%s", text); }
@@ -495,7 +496,8 @@ static void rates_apply(const char* t)
         t += v + n;
         t += strspn(t, " ");
         if (r < 0 || r > ENEMY_RATE_MAX) continue;
-        for (i = 0; !v && i < KINDS; i++) if (kinds[i].id == id && (look < 0 || kinds[i].look == look)) g_enemy_opts.rate[i] = (unsigned char)r;
+        for (i = 0; !v && i < KINDS; i++)
+            if (kinds[i].id == id && (look < 0 || kinds[i].look == look)) g_enemy_opts.rate[i] = (unsigned char)(look < 0 && kinds[i].look > 0 ? r / 2 : r);
         for (i = 0; v && i < variant_count() && vrate(i) >= 0; i++) if (variant_at(i)->id == id) g_enemy_opts.rate[vrate(i)] = (unsigned char)r;
     }
 }
