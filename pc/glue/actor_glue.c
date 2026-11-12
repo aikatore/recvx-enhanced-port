@@ -1778,6 +1778,23 @@ void actor_weapon_hands(int who, O_WRK* wpn, int n)
     }
 }
 
+/* The double's and the cast's source hand nodes as the game computed them, and as actor_pose put them at the model's
+   hands. Posed again before the game computes the source again (a message up or the game paused: bhControlEnemy does
+   not move the enemies, actor_double_tick still poses them), the pose read our own hands back as the source's: the
+   model's hands turned by the rig's offset once more every tick, spinning until the message closed. Put back first. */
+static struct { const BH_PWORK* src; int node[2]; float was[2][16], put[2][16]; } lent[ACTOR_SLOTS];
+
+static void lent_back(int who, BH_PWORK* src)
+{
+    int k;
+    if (lent[who].src != src) return;
+    for (k = 0; k < 2; k++) {
+        float* h = lent[who].node[k] >= 0 && lent[who].node[k] < (int)src->mlwP->obj_num ? src->mlwP->owP[lent[who].node[k]].mtx : NULL;
+        if (h && !memcmp(h, lent[who].put[k], sizeof(lent[who].put[k]))) memcpy(h, lent[who].was[k], sizeof(lent[who].was[k]));
+    }
+    lent[who].src = NULL;
+}
+
 void actor_pose(int who, BH_PWORK* src)
 {
     Disguise* d = &dg[who];
@@ -1785,6 +1802,7 @@ void actor_pose(int who, BH_PWORK* src)
     BH_PWORK* drv;
     if (!src->mlwP || !src->mlwP->objP || !src->mlwP->owP || !src->mtx) return;
     if (who < 2) hands_save(who, src);
+    else if (dbl_tick) lent_back(who, src);   /* (the posing that moves them) */
     if (who < 2 && !redraw) sh[who].drv = shadow(who, src);
     drv = who < 2 && sh[who].drv ? sh[who].drv : src;
     if (d->model < 0) { trace_hands(who, src); return; }
@@ -1857,11 +1875,19 @@ void actor_pose(int who, BH_PWORK* src)
                 turned as the model's hands too, so a piece lies along the model's forearm, not the record's (cast_glue.c
                 hides the record's own hand pieces where the model has hands of its own) */
                 int k;
-                for (k = 9; k <= 13; k += 4)
-                    if (d->rig.map[k] >= 0 && sr.map[k] >= 0)
-                        memcpy(who >= ACTOR_CAST && cast_hands ? src->mlwP->owP[(int)sr.map[k]].mtx : &src->mlwP->owP[(int)sr.map[k]].mtx[12],
-                               who >= ACTOR_CAST && cast_hands ? m->owP[(int)d->rig.map[k]].mtx : &m->owP[(int)d->rig.map[k]].mtx[12],
-                               who >= ACTOR_CAST && cast_hands ? 15 * sizeof(float) : 12);
+                lent[who].src = src;
+                for (k = 9; k <= 13; k += 4) {
+                    float* h;
+                    lent[who].node[k > 9] = -1;
+                    if (d->rig.map[k] < 0 || sr.map[k] < 0) continue;
+                    h = src->mlwP->owP[(int)sr.map[k]].mtx;
+                    lent[who].node[k > 9] = sr.map[k];
+                    memcpy(lent[who].was[k > 9], h, sizeof(lent[who].was[0]));
+                    memcpy(who >= ACTOR_CAST && cast_hands ? h : &h[12],
+                           who >= ACTOR_CAST && cast_hands ? m->owP[(int)d->rig.map[k]].mtx : &m->owP[(int)d->rig.map[k]].mtx[12],
+                           who >= ACTOR_CAST && cast_hands ? 15 * sizeof(float) : 12);
+                    memcpy(lent[who].put[k > 9], h, sizeof(lent[who].put[0]));
+                }
             }
             d->src_hand[0] = sr.map[9];
             d->src_hand[1] = sr.map[13];
