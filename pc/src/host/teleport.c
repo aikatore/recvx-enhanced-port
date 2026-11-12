@@ -450,7 +450,7 @@ void voices_frame(void)
     static int was, wbr;
     int br;
     voice_said_frame();
-    if (!g_enemy_opts.voices || !g_config.iso_path[0]) { was = 0; return; }
+    if (!enemy_opts()->voices || !g_config.iso_path[0]) { was = 0; return; }   /* (in effect: a co-op guest's is the host's) */
     br = biorand_next();
     if (was && br == wbr) return;   /* (asked when turned on and when BioRand's choice changes, until it could be) */
     wbr = br;
