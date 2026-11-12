@@ -535,10 +535,13 @@ void gs_read_rect(int psm, uint32_t bp, uint32_t bw, uint32_t w, uint32_t h, uin
         uint32_t m = psm == PSMCT24 ? 0xFFFFFF : 0xFFFFFFFF;
         for (uint32_t y = 0; y < h; y++, out += w)
             for (uint32_t x = 0; x < w; x++) { memcpy(&out[x], gs_memp + addr32(blockTable32, bp, b, x, y), 4); out[x] &= m; }
-    } else if (psm == PSMCT16 || psm == PSMCT16S) {
+    } else if (psm == PSMCT16 || psm == PSMCT16S || psm == PSMZ16 || psm == PSMZ16S) {
         const uint8_t (*bt)[4] = bt16(psm);
         for (uint32_t y = 0; y < h; y++, out += w)
             for (uint32_t x = 0; x < w; x++) { uint16_t v; memcpy(&v, gs_memp + addr16(bt, bp, b, x, y), 2); out[x] = v; }
+    } else if (psm == PSMT8) {   /* own loop: GCC 13 -m32 -O3 read 0 through the inlined gs_read_pixel below */
+        for (uint32_t y = 0; y < h; y++, out += w)
+            for (uint32_t x = 0; x < w; x++) out[x] = gs_memp[addr8(bp, b, x, y)];
     } else
         for (uint32_t y = 0; y < h; y++, out += w)
             for (uint32_t x = 0; x < w; x++) out[x] = gs_read_pixel(psm, bp, bw, x, y);
