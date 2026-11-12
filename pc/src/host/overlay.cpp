@@ -649,12 +649,12 @@ static void coop_window(void)
                           "addresses connect directly, and room codes need a co-op server.\n"
                           "Without a server, Automatic works like Direct;\n"
                           "Server Relay always uses the server."));
-    /* Hide IP addresses: the address fields as passwords, "Show" reveals them until the window closes */
+    /* Hide IP addresses: the join field as a password, "Show" reveals it until the window closes (the server: public, never) */
     static bool show_addr;
     if (!coop_visible || !c->hide_ip) show_addr = false;
     ImGuiInputTextFlags addr_flags = c->hide_ip && !show_addr ? ImGuiInputTextFlags_Password : 0;
     if (c->conn != COOP_CONN_DIRECT) {   /* first how to connect, then only what it needs (as the lobby) */
-        if (ImGui::InputText(tr("Co-op Server"), c->server, sizeof(c->server), addr_flags)) changed = true;
+        if (ImGui::InputText(tr("Co-op Server"), c->server, sizeof(c->server))) changed = true;
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             ImGui::SetTooltip(tr("Enter a co-op server address, with an optional port (default: 7141).\n"
                               "Both players use the same server; leave blank to use no server."));

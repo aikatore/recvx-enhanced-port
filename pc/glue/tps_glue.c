@@ -994,11 +994,17 @@ unsigned int tps_pad(unsigned int pad)
     {   /* a movement key held as a sub-screen (inventory, item box, files, map, save screen) or the trade screen opens
            or closes counts for neither until let go: no cursor step as it opens, no step forward as it closes. The
            sub-screens' own bits (system.c bhCheckSubTask: status 0x8, map 0x40000, computer, typewriter, option), not
-           ts_flg 0x80 (no 3D scene), which a door, a room load or a movie also set (W held through a door stopped in the new room) */
+           ts_flg 0x80 (no 3D scene), which a door, a room load or a movie also set (W held through a door stopped in the new room).
+           As it closes: only a key held since the last button press (the one that closed it; not run) or since it opened,
+           not one pressed during its closing animation (the bits clear as it ends) or as control comes back */
         static int was;
-        static unsigned stale;
+        static unsigned stale, used, btn_was;
         int sub = (sys->st_flg & 0x1C040008) || pc_trade_screen();
-        if (sub != was) stale = k & (TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT);
+        unsigned btn = (pad & 0xFB00) << 16 | (k & (TPS_K_ACTION | TPS_K_FIRE | TPS_K_CANCEL | TPS_K_STATUS | TPS_K_MAP | TPS_K_OPTIONS));
+        if ((btn & ~btn_was) || (sub && !was)) used = k & (TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT);
+        btn_was = btn;
+        used &= k;
+        if (sub != was) stale = used;
         was = sub;
         stale &= k;
         k &= ~stale;
@@ -1143,7 +1149,9 @@ static float body_ray(const BH_PWORK* e, const float* p, const float* d, int con
         t = pc_ray_capsule(p, d, a, b, r, &m);
         if (t >= 0 && (best < 0 || t < best)) best = t, *jnt = j, *no = n;
     }
-    if (!e->cpcl) {
+    /* the bat's and the moth's table holds only the body (the bat's 1 unit across under wings 7 wide): missed, their hit
+       capsule (wing to wing, radius 2; the fixed cameras' test, there with the shot's cone around it) */
+    if (!e->cpcl || (best < 0 && (e->id == 7 || e->id == 6))) {
         const NJS_CAPSULE* w = &e->watr;
         r = w->r;
         if (cone) {

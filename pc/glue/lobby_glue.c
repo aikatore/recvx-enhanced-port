@@ -1432,7 +1432,7 @@ static void row_text(int r, char* label, char* val, int n)
     case R_COPY: strcpy(label, "COPY JOIN ADDRESS"); break;
     case R_RCOPY: strcpy(label, g_coop.room[0] ? "COPY ROOM CODE" : "WAITING FOR ROOM CODE"); break;
     case R_ADDR: strcpy(label, lb.mode ? "CODE" : "ADDRESS"); snprintf(val, n, "%.*s", n - 1, lb.edit == F_ADDR ? lb.buf : coop_shown(g_coop.join)); break;
-    case R_SERVER: strcpy(label, "SERVER"); snprintf(val, n, "%.*s", n - 1, lb.edit == F_SERVER ? lb.buf : g_coop.server[0] ? coop_shown(g_coop.server) : "-"); break;
+    case R_SERVER: strcpy(label, "SERVER"); snprintf(val, n, "%.*s", n - 1, lb.edit == F_SERVER ? lb.buf : g_coop.server[0] ? g_coop.server : "-"); break;   /* public: never masked */
     case R_PW: {   /* shown as stars, also while typing */
         int k, len = (int)strlen(lb.edit == F_PW ? lb.buf : g_coop.password);
         strcpy(label, "PASSWORD");
@@ -1755,8 +1755,8 @@ static int lobby_input(void)
     return 0;
 }
 
-/* the field being typed shows stars: a password, or an address with Hide IP addresses (coop_shown) */
-static int edit_hidden(void) { return lb.edit == F_PW || (g_coop.hide_ip && (lb.edit == F_ADDR || lb.edit == F_SERVER)); }
+/* the field being typed shows stars: a password, or the join address with Hide IP addresses (coop_shown; the server never) */
+static int edit_hidden(void) { return lb.edit == F_PW || (g_coop.hide_ip && lb.edit == F_ADDR); }
 
 static void draw_rows(void)
 {

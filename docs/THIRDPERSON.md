@@ -695,6 +695,27 @@ and free aim (not "Aim Assist" with the mouse: its lock-on needs the wide test),
   ray, the joint the game's nearest bone. The hit is the first volume the ray enters (exact
   ray-capsule test); its joint takes the damage, its entry goes to `cpcl_no` as in the game's test.
   The game's later checks stay: a wall between the gun and the point hit stops the shot.
+* **Bats and moths** (types 7 and 6, `body_ray`): their tables hold only the body. A flying bat's is
+  1 unit across (radius 0.5, 1.2 long: about 30 pixels of a 640-wide picture at 20 units from the
+  camera) under wings 7 units from tip to tip; the moth's 1 to 1.4 under wings about 4 across. A ray
+  that misses the table is also tested against their hit capsule (`watr`, `bhEne_SetWeponAtr`: the
+  bat's from wing tip to wing tip, the moth's along its body, radius 2), thin, the joint the bone
+  nearest the point as the game picks it: a shot on a wing hits. Still smaller than the fixed
+  cameras' test (the same capsule plus the shot's cone of 2 units and more). The capsule is only read: only which enemy
+  and joint are hit changes (their damage adds up all joints), not damage, AI or collision. Measured in 1/3 (its four bats and bats spawned every 90 frames 8, 12 and 18 units
+  away; moths spawned in 6/3), the handgun aimed at the body's middle (`RECVX_TPS_AIM_AT=c0:side`)
+  with the crosshair moved sideways (a tick passes between the crosshair's ray and the shot, so a
+  fast bat is missed even when aimed at the middle):
+
+  | beside the body's middle | 0 | 0.5 | 1 | 2 | 3 units |
+  |---|---|---|---|---|---|
+  | bats before | 32/50 (64%) | 29/81 (36%) | 33/89 (37%) | 17/94 (18%) | 1/84 (1%) |
+  | bats now | 50/70 (71%) | 46/71 (65%) | 41/62 (66%) | 43/81 (53%) | 39/96 (41%) |
+  | moths before | 10/17 (59%) | 10/23 (43%) | 5/30 (17%) | 2/39 (5%) | 1/34 (3%) |
+  | moths now | 15/16 (94%) | 11/12 (92%) | 12/12 (100%) | 9/14 (64%) | 4/24 (17%) |
+
+  The Spotter cannot be hurt. With the fixed cameras and Precise Shots off nothing changes (`layout_check.sh`
+  identical; state logs of fixed-camera shots at bats in 1/3 identical).
 * **Measured** as above with it on: 0 of 674 shots with the crosshair beside the body hit (0 to 0.5
   units: 0 of 131, 0.5 to 1: 0 of 223, 1 to 2: 0 of 244, 2 and more: 0 of 76); 70 of 75 on the body
   hit (the other 5: a wall between the gun hand and the arm hit). Lying zombies (0/6) and crawlers
