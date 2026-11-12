@@ -20,8 +20,6 @@
   player can walk and away from the doors. They follow the enemy rates and count toward Types per Room.
 - **Types per Room**: the randomizer now aims for that many different enemy types in a room where its enemies allow
   it, instead of only capping them.
-- **Default co-op server**: "Via server" now comes filled in with eu.cvxenhanced.de, and a server name is never
-  hidden (a numeric address still is).
 - **Weapon shortcut wheel**: it sits higher and nearer the middle of the screen, clear of the HUD.
 - **Bats and moths**: easier to hit in the over-the-shoulder camera.
 - **Co-op server**: updates can now be applied without dropping running sessions, and a machine-readable status is
