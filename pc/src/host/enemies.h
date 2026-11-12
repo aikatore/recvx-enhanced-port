@@ -50,15 +50,18 @@ typedef struct SpawnNote {
     unsigned short room;        /* source room file RM_<room>.RDX and its record */
     unsigned char rec, id, mdlver, type;
     signed char flr;
-    unsigned char pad;          /* SPAWN_NOTE_KEPT: not a new enemy; the host's randomizer kept record `idx` of room
-                                   file `room` (stg * 1000 + rom * 10 + case) as it is (type id, model mdlver) */
+    unsigned char pad;          /* 0: an added enemy. The host's randomizer result of a room load (protocol 52, enemyopt_glue.c
+                                   follow_host): SPAWN_NOTE_DONE, room file `room` (stg * 1000 + rom * 10 + case), `rec` notes
+                                   follow; then SPAWN_NOTE_RAND each: record `idx` became this (room, rec: its entry; id,
+                                   mdlver, type, variant) */
     float px, py, pz;
     short ay;
     unsigned short variant;     /* an enemy variant's id (pc/src/host/variants.h; 0: the type itself) */
     unsigned short dead;        /* an extra enemy's dead flag (ENEMY_XDEAD_BASE + its bit; 0: none): the guest sets it too when
                                    the enemy dies in its game */
 } SpawnNote;
-#define SPAWN_NOTE_KEPT 1
+#define SPAWN_NOTE_RAND 2
+#define SPAWN_NOTE_DONE 3
 
 /* spawn_at's `mode` (pc/glue/spawn_glue.c) */
 #define SPAWN_LOADING 1             /* from the room load (the randomizer): no readiness checks */
@@ -77,8 +80,9 @@ const unsigned char* enemy_cast_off(void);      /* "Custom"'s unchecked models (
 void enemy_cast_off_from_host(int at, int n, const unsigned char* bits);   /* co-op guest: bytes at..at+n-1 of the host's */
 int  spawn_note_apply(int slot, const SpawnNote* n, int stg, int rom);   /* guest: placed now or once the room runs (1) */
 void spawn_pending(int run);                    /* guest, every co-op frame (0: the session ended, forget them) */
-void enemy_rand_kept(int room, int rec, int id); /* guest: the host's randomizer kept that record (SPAWN_NOTE_KEPT) */
-void coop_rand_kept(int rec, const SpawnNote* n);   /* coop_glue.c, host: this room load's randomizer kept record rec */
+void enemy_rand_result_begin(int room, int count);   /* guest: the host's randomizer result for that room file (SPAWN_NOTE_DONE) */
+void enemy_rand_result_add(int rec, const SpawnNote* n);   /* ... one record it changed (SPAWN_NOTE_RAND) */
+void coop_rand_result(int room, const unsigned char* rec, const SpawnNote* n, int count);   /* coop_glue.c, host: this room load's */
 void enemy_extra_note(int slot, const SpawnNote* n);   /* guest: the host's added enemy in that slot (its dead flag) */
 unsigned int* enemy_xdead_word(int i);          /* word i (< ENEMY_XDEAD_WORDS) of the extras' dead flags (co-op: EV_FLAGS 120 + i) */
 int  enemy_rec_scripted(int slot);           /* the room's scripts act on that record (co-op: never the guest's to run) */

@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 51                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 52                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -70,7 +70,10 @@ extern "C" {
                                                extras' dead flags (enemies.h enemy_xdead_word);
                                            51: extra enemies only where the player can walk (the camera zones, the
                                                player's walls) and a random 0..Extra Enemies per room (other enemies from
-                                               the same seed; nothing on the wire changed) */
+                                               the same seed; nothing on the wire changed);
+                                           52: the host's randomizer result of each room load to the guest, which makes it
+                                               (EV_SPAWN SpawnNote.pad SPAWN_NOTE_DONE then SPAWN_NOTE_RAND; no more
+                                               SPAWN_NOTE_KEPT) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per datagram (the receiver's check; a frame sends up to 96: coop_glue.c EV_BURST) */
 #define COOP_SNAP_BUDGET 2400           /* enemy snapshot bytes per frame (records past it wait, by priority) */

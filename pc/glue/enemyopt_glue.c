@@ -5,8 +5,9 @@
  * (a) runs on the host (or in single player) once per room load, at the first frame the room runs:
  * the extras are spawned like the F2 spawner's (spawn_glue.c spawn_add) and so reach a co-op guest
  * as added enemies. (b) and (c) change records at the end of the room load (room.c bhFinishRoom),
- * deterministically from the room file and the seed, on both co-op sides alike (the guest uses the
- * host's options), so the slots match and the host's snapshots drive the guest's copies.
+ * deterministically from the room file and the seed (and (c) the story flags at the load); a co-op guest
+ * uses the host's options and makes the host's randomizer result (follow_host), so the slots match and
+ * the host's snapshots drive the guest's copies.
  */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
@@ -76,14 +77,14 @@ const EnemyOpts* enemy_opts(void)
     return &g_enemy_opts;
 }
 
-static int kept_n;
 static const char* variety_name(int v) { return v == 2 ? "custom" : v ? "wild" : "mild"; }
 static char rates_ini[512];   /* recvx.ini enemy_rates (below: enemy_rates_ini) */
 static const char* rates_line(const unsigned char* rate, char* t);
+static void hres_forget(void);
 void enemy_opts_from_host(const EnemyOpts* o)
 {
     have_host_opts = o != NULL;
-    if (!o) { kept_n = 0; memset(host_off, 0, sizeof(host_off)); }   /* (enemy_rand_kept, EV_CASTOFF: the host's go with its session) */
+    if (!o) { hres_forget(); memset(host_off, 0, sizeof(host_off)); }   /* (the host's randomizer results, EV_CASTOFF: they go with its session) */
     if (o) {
         char rl[sizeof(rates_ini)];
         host_opts = *o;
@@ -395,26 +396,81 @@ static void place(const EnemyOpts* o)
 }
 
 /* ---------------------------------------------------------------- (c) randomizer */
-/* A co-op guest randomizes as the host (the same options, seed and room file), but each side refuses a
-   record whose type does not fit its own texture memory, and the guest's puppets follow the host's
-   slots. So the guest follows the host: its spawns take no texture reserve (SPAWN_DICTATED), and the
-   records the host had to keep come as SPAWN_NOTE_KEPT notes (coop_rand_kept) before the guest loads
-   the room - with the host there first, the usual case; a guest that was there first logs a
-   difference. Kept here until the guest's next load of that room. */
-#define KEPT_MAX 64
-static struct { short room; unsigned char rec; } kept[KEPT_MAX];
+/* A co-op guest does not randomize on its own: each side classifies the records from its story flags at its load
+   (dead_if: a flag can change between the host's load and the guest's), and each refuses a type that does not fit its
+   own texture memory, while the guest's puppets follow the host's slots. So the host sends its result of each room
+   load (coop_rand_result, protocol 52: a SPAWN_NOTE_DONE note with the room file and how many follow, then a
+   SPAWN_NOTE_RAND note per record it changed: the record, the new type's entry, variant, type), and the guest's load
+   of that room makes exactly those changes (follow_host; its spawns take no texture reserve, SPAWN_DICTATED) and keeps
+   every other record. That comes before the guest loads the room with the host there first, the usual case; a guest
+   that was there first draws on its own, as the host would from its own flags, and logs it. Kept here until the
+   host's next result for that room (its next load of it) or the session's end: a reload of ours meanwhile makes the
+   same (the host's last load of that room). */
+#define HRES_MAX 4
+static struct { short room1; unsigned char want, n, rec[128]; SpawnNote note[128]; } hres[HRES_MAX];   /* room1: the room file + 1, 0 none */
+static int hres_cur = -1, hres_next;
+static void hres_forget(void) { memset(hres, 0, sizeof(hres)); hres_cur = -1; }
+static unsigned char res_rec[128];      /* host: this room load's changes (coop_rand_result) */
+static SpawnNote res_note[128];
+static int res_n;
 
-void enemy_rand_kept(int room, int rec, int id)
+void enemy_rand_result_begin(int room, int count)
 {
-    int k;
-    if (rec >= 128) return;
-    if (sys && rom && (sys->tk_flg & 0x80) && room == room_file_now() && rec < rom->ene_n && (ene[rec].flg & 0x1) && ene[rec].id != id)
-        host_log("enemies: the host kept record %d of room %04d as type %d; here it is type %d (this room was loaded before the host's)\n", rec, room, id, ene[rec].id);
-    for (k = 0; k < kept_n && !(kept[k].room == room && kept[k].rec == rec); k++);
-    if (k < kept_n) return;
-    if (kept_n == KEPT_MAX) memmove(kept, kept + 1, sizeof(kept[0]) * --kept_n);
-    kept[kept_n].room = (short)room;
-    kept[kept_n++].rec = (unsigned char)rec;
+    int h;
+    if (count < 0 || count > 128) { hres_cur = -1; return; }
+    for (h = 0; h < HRES_MAX && hres[h].room1 != room + 1; h++);
+    if (h == HRES_MAX) { h = hres_next; hres_next = (hres_next + 1) % HRES_MAX; }
+    hres[h].room1 = (short)(room + 1); hres[h].want = (unsigned char)count; hres[h].n = 0;
+    hres_cur = h;
+    if (sys && rom && (sys->tk_flg & 0x80) && room == room_file_now())
+        host_log("enemies: the host's randomizer result for room %04d came after our load of it (%d changes): ours may differ\n", room, count);
+}
+void enemy_rand_result_add(int rec, const SpawnNote* n)
+{
+    if (hres_cur < 0 || rec >= 128 || hres[hres_cur].n >= hres[hres_cur].want) return;
+    hres[hres_cur].rec[hres[hres_cur].n] = (unsigned char)rec;
+    hres[hres_cur].note[hres[hres_cur].n++] = *n;
+}
+
+/* record k becomes m (n: where, its variant): 0, or why not (the record as it was) */
+static const char* rec_become(int k, const ActorModel* m, const SpawnNote* n, int mode)
+{
+    BH_PWORK save = ene[k];
+    const char* why;
+    int i;
+    ene[k].flg = 0;
+    if ((why = spawn_at(m, n, k, mode, NULL))) { ene[k] = save; bhCheckEneWorkNum(); return why; }
+    for (i = 0; i < save.mdl_n; i++)   /* the original's textures are released with the room's (the record now holds the new type) */
+        if ((save.mdl[i].flg & 0x200) && save.mdl[i].texP) spawn_keep_texlist(save.mdl[i].texP);
+    return NULL;
+}
+
+/* guest: the host's result for this room file, if it is all here: 1 = made */
+static int follow_host(int room)
+{
+    int h, i, j, k, made = 0;
+    for (h = 0; h < HRES_MAX && !(hres[h].room1 == room + 1 && hres[h].n == hres[h].want); h++);
+    if (h == HRES_MAX) {
+        host_log("enemies: room %04d: no randomizer result of the host's for it (loaded before the host's): our own draws\n", room);
+        return 0;
+    }
+    for (i = 0; i < hres[h].n; i++) {
+        SpawnNote n = hres[h].note[i];
+        ActorModel am = { "host's randomizer", n.room, n.rec, n.id, n.mdlver, 0, 0 };
+        const char* why;
+        k = hres[h].rec[i];
+        if (k >= rom->ene_n || !(ene[k].flg & 0x1)) { host_log("enemies: record %d: not here, the host's change skipped\n", k); continue; }
+        n.pad = 0;
+        n.px = ene[k].px; n.py = ene[k].py; n.pz = ene[k].pz; n.ay = ene[k].ay; n.flr = ene[k].flr_no;
+        if ((why = rec_become(k, &am, &n, SPAWN_LOADING | SPAWN_DICTATED))) { host_log("enemies: record %d stays %d (%s); the host's differs\n", k, ene[k].id, why); continue; }
+        for (j = 0; j < spawn_base_count() && !(spawn_entry(j)->room == n.room && spawn_entry(j)->rec == n.rec); j++);
+        rand_src[k] = j < spawn_base_count() ? spawn_entry(j) : NULL;
+        rand_var[k] = n.variant;
+        made++;
+        host_log("enemies: room %04d record %d: -> type %d model %d%s (as the host's)\n", room, k, n.id, n.mdlver, n.variant ? " (a variant)" : "");
+    }
+    host_log("enemies: room %04d: %d of the host's %d changes made, the other records as they are\n", room, made, hres[h].n);
+    return 1;
 }
 
 /* boss arenas: their scripts wait for the boss's death or drive it; nothing in these rooms changes */
@@ -616,7 +672,8 @@ static const ActorModel* pick_look(const Kind* kt, int type, int look, unsigned 
    script only shows or hides) to another kind; those an event drives (and those whose HP the script reads) to another
    look of their own type, so the event's motions, AI states and HP tests still fit. Bosses and their arenas, NPCs,
    water and wall types, props stay. Every record keeps its slot and kill bit; any refusal keeps the original.
-   The choices depend only on the options, the room file and its collision (the same on both co-op sides).
+   The choices depend only on the options, the room file, its collision and the story flags at the load (a co-op
+   guest makes the host's result: follow_host).
    "Custom" draws each kind by its rate alone (Wild and Mild also take every unused kind first). "Types per Room" (o->types),
    counting the kinds of the records that stay first, then each record's in turn: in Wild and Custom a target, so while the
    room has fewer kinds a record draws among the kinds it lacks (by weight, of those that fit there); once it has that many
@@ -687,15 +744,13 @@ static void randomize(const EnemyOpts* o)
     Kind kt[KINDS + VARIANT_MAX];
     int nk = make_kinds(kt);
     RoomKinds st = { .gen = enemy_room_gen, .mild = { -1, -1 } };
-    unsigned char held[128] = { 0 }, cls[128] = { 0 };   /* cls: 1 another kind, 2 another look */
+    unsigned char cls[128] = { 0 };   /* cls: 1 another kind, 2 another look */
     char line[600];
     int ln = 0;
     unsigned off = 0;   /* Custom: the base kinds at Off (an event's record takes no look of those either) */
     for (k = 0; custom && k < KINDS; k++) off |= (unsigned)!o->rate[k] << k;
-    for (k = j = 0; k < kept_n; k++)   /* guest: records the host kept (this room's notes are used up by this load) */
-        if (guest && kept[k].room == room) held[kept[k].rec] = 1;
-        else kept[j++] = kept[k];
-    kept_n = j;
+    res_n = 0;
+    if (guest && follow_host(room)) return;
     for (k = 0; k < rom->ene_n && k < 128; k++) {
         BH_PWORK* ep = &ene[k];
         if (!(ep->flg & 0x1)) continue;
@@ -752,31 +807,20 @@ static void randomize(const EnemyOpts* o)
         st.used[j] = 1;
         st.kused[kd] = 1;
         kcost = kd >= 0 && kd < nk ? kt[kd].cost : slot_cost(m->id);
-        if (held[k]) {   /* as the host's: the original */
-            in_set(st.set, &st.nset, kind_of(kt, save.id, save.mdlver));
-            host_log("enemies: record %d stays %d (as the host's)\n", k, save.id);
-            continue;
-        }
         n.room = m->room; n.rec = m->rec; n.id = m->id; n.mdlver = m->mdlver;
         n.type = m->id == save.id ? save.type : 0;   /* the same type keeps its variant (an event's or a lying zombie's) */
         n.variant = v ? v->id : 0;
         n.px = save.px; n.py = save.py; n.pz = save.pz; n.ay = save.ay; n.flr = save.flr_no;
-        ene[k].flg = 0;
-        why = spawn_at(m, &n, k, guest ? SPAWN_LOADING | SPAWN_DICTATED : SPAWN_LOADING, NULL);
-        if (why) {   /* softlock-safe fallback: the original record as it was */
-            SpawnNote kn = { (unsigned short)room, (unsigned char)k, (unsigned char)save.id, (unsigned char)save.mdlver, (unsigned char)save.type,
-                             save.flr_no, SPAWN_NOTE_KEPT, save.px, save.py, save.pz, (short)save.ay, 0 };
-            ene[k] = save;
-            bhCheckEneWorkNum();
+        if ((why = rec_become(k, m, &n, guest ? SPAWN_LOADING | SPAWN_DICTATED : SPAWN_LOADING))) {   /* softlock-safe fallback: the original
+                                                                                                       record as it was (the guest keeps it too: not in the result) */
             host_log("enemies: record %d stays %d (%s)%s\n", k, save.id, why, guest ? "; the host's may differ" : "");
-            if (!guest) coop_rand_kept(k, &kn), in_set(st.set, &st.nset, kind_of(kt, save.id, save.mdlver));   /* the guest keeps it too */
-            else st.cost += kcost - slot_cost(save.id), st.heavy += v && v->heavy, in_set(st.set, &st.nset, kd);   /* the host's budget and kinds (it made the
-                                                                                                         change), so the next draws stay its */
+            if (!guest) in_set(st.set, &st.nset, kind_of(kt, save.id, save.mdlver));
+            else st.cost += kcost - slot_cost(save.id), st.heavy += v && v->heavy, in_set(st.set, &st.nset, kd);   /* (own draws: as the host's budget and
+                                                                                                         kinds would be, so the next draws stay its) */
             continue;
         }
         in_set(st.set, &st.nset, kd);
-        for (i = 0; i < save.mdl_n; i++)   /* the original's textures are released with the room's (the record now holds the new type) */
-            if ((save.mdl[i].flg & 0x200) && save.mdl[i].texP) spawn_keep_texlist(save.mdl[i].texP);
+        if (!guest) { res_rec[res_n] = (unsigned char)k; res_note[res_n] = n; res_note[res_n++].pad = SPAWN_NOTE_RAND; }   /* (coop_rand_result) */
         rand_src[k] = m;   /* (the room file still says the old type: extra enemies copy from here) */
         rand_var[k] = v ? v->id : 0;
         st.cost += kcost - slot_cost(save.id);
@@ -818,7 +862,10 @@ void enemy_room_finished(void)
         memset(rand_src, 0, sizeof(rand_src));
         memset(rand_var, 0, sizeof(rand_var));
         memset(moved_rec, 0, sizeof(moved_rec));
-        if (o->rand) randomize(o);
+        if (o->rand) {
+            randomize(o);
+            if (!coop_is_guest()) coop_rand_result(room_file_now(), res_rec, res_note, res_n);   /* (every load, none changed too: the guest follows) */
+        }
         if (o->place) place(o);
     }
     cast_room(o);   /* the cutscene cast's models (cast_glue.c; it touches no record), after the randomizer: a record it gives another

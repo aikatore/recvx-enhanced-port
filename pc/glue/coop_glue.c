@@ -3313,29 +3313,36 @@ static void eopts_send(void)
     eopts_sid = peer_sid;
 }
 
-/* host: the records this room load's randomizer had to keep (enemyopt_glue.c), for the guest (SPAWN_NOTE_KEPT):
-   sent once it is in game and in control (an older build would hold its event stream while its room does not
-   run), and with every game state we send (a guest that joins loads the room after it) */
-static struct { SpawnNote n[32]; unsigned char rec[32]; int count, gen; unsigned int sent_sid; } kept_out;
-void coop_rand_kept(int rec, const SpawnNote* n)
+/* host: this room load's randomizer result (enemyopt_glue.c follow_host: the guest makes the same changes; protocol 52):
+   SPAWN_NOTE_DONE (the room file, how many follow), then a SPAWN_NOTE_RAND per record changed. Sent once the guest is in
+   game and in control (its event stream would wait while its room does not run), and with every game state we send (a
+   guest that joins loads the room after it) */
+static struct { SpawnNote n[128]; unsigned char rec[128]; int room, count, gen; unsigned int sent_sid; } kept_out = { .gen = -1 };
+void coop_rand_result(int room, const unsigned char* rec, const SpawnNote* n, int count)
 {
     if (!coop_on || !is_host || echo_delay) return;
-    if (kept_out.gen != enemy_room_gen) { kept_out.gen = enemy_room_gen; kept_out.count = 0; kept_out.sent_sid = 0; }
-    if (kept_out.count < 32) { kept_out.rec[kept_out.count] = (unsigned char)rec; kept_out.n[kept_out.count++] = *n; }
+    kept_out.gen = enemy_room_gen; kept_out.sent_sid = 0; kept_out.room = room;
+    kept_out.count = count < 0 ? 0 : count > 128 ? 128 : count;
+    memcpy(kept_out.rec, rec, (size_t)kept_out.count);
+    memcpy(kept_out.n, n, sizeof(n[0]) * (size_t)kept_out.count);
 }
 static void kept_send(void)
 {
+    Event e = { 0 };
     int k;
-    if (kept_out.gen != enemy_room_gen || !kept_out.count) return;
+    if (kept_out.gen != enemy_room_gen) return;
+    e.type = EV_SPAWN;
+    e.u.sp.pad = SPAWN_NOTE_DONE; e.u.sp.room = (unsigned short)kept_out.room; e.u.sp.rec = (unsigned char)kept_out.count;
+    queue_event(&e);
     for (k = 0; k < kept_out.count; k++) {
-        Event e = { 0 };
+        memset(&e, 0, sizeof(e));
         e.type = EV_SPAWN;
         e.idx = kept_out.rec[k];
         e.u.sp = kept_out.n[k];
         queue_event(&e);
     }
     kept_out.sent_sid = peer_sid;
-    host_log("coop: %d records the randomizer kept here sent to the partner\n", kept_out.count);
+    host_log("coop: the randomizer's result of room %04d (%d changes) sent to the partner\n", kept_out.room, kept_out.count);
 }
 
 /* host: an enemy that is not in the room file (spawn_glue.c) to a guest in our room */
@@ -3416,7 +3423,7 @@ static void send_blob(void)
     }
     go_cont = 0;
     eopts_send();   /* the guest loads its first room with the host's enemy options */
-    kept_send();    /* and the records our randomizer kept in it */
+    kept_send();    /* and our randomizer's result of it */
     if (!++xfer_tid) xfer_tid = 1;
     if (rec == 2) cont_tid = xfer_tid;
     for (off = 0; off < n; off += 64) {

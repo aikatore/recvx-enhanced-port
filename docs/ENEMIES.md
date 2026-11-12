@@ -207,8 +207,11 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   -> `spawn_at`, skipping lower free slots if needed); its Init creates the same children, and
   from then on it is an ordinary puppet. Notes arriving during a door, event or menu wait in
   `spawn_pending` (at most 900 frames). The host resends them when the guest (re)enters the room
-  (`spawn_replay`); a door clears them on both sides. Randomizer records the host had to keep go
-  along as notes marked `SPAWN_NOTE_KEPT`.
+  (`spawn_replay`); a door clears them on both sides. The host's randomizer result of each room
+  load goes along as notes too (protocol 52): `SPAWN_NOTE_DONE` (the room file, how many follow), then
+  a `SPAWN_NOTE_RAND` per record it changed; the guest's load of that room makes exactly those changes
+  and keeps every other record (`follow_host`), whatever its own story flags would classify. A guest
+  that loads the room before the host draws on its own and logs it.
 * **The host's enemy options** go to the guest as `EV_EOPTS` (session start, before the game
   state, on change) and replace the guest's: with protocol 39 also Types per Room and Custom's
   32 rates, which fill the event's 80 bytes (`EnemyOpts`; the lobby shows the guest the host's
@@ -772,7 +775,7 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
   look. A room can only go over when a record fits none of its kinds (a bat record among ground
   kinds: fliers stay fliers), logged as `over it` on the room's line. No Limit draws as before the
   target (Wild's unused kinds first, Custom's rates alone: the same enemies per seed). It depends
-  only on the options, the room file and the draws (the same on every visit and on both co-op sides).
+  only on the options, the room file and the draws (the same on every visit; a co-op guest makes the host's result).
   The price of variety: in a room with few records each takes another kind, so a kind with a high
   rate takes fewer records than its share ("Types per Room as a target" below).
 * **Variants**: a record that keeps its type (another look) keeps its variant (an event's pose, a
@@ -783,8 +786,8 @@ weight, then one of its looks (the spawner's entries of that type, from any stag
   plus what earlier records of the room drew; nothing depends on the player, the game's `rand()`
   or what was loaded before. Both co-op sides compute the same.
 * **Fallback**: any refusal (data not found, memory, textures) puts the original record back
-  exactly as it was, logged as `record N stays`; the host sends it to the guest as a
-  `SPAWN_NOTE_KEPT` note.
+  exactly as it was, logged as `record N stays`; it is not in the host's result, so the guest
+  keeps it too.
 * Log: one line per change (`room R record N: type T model V -> name (type T' model V')`, event
   records marked `event enemy: same type`) and per room `now k:type.model ...`.
 * Offline alternative: `pc/tools/rdxbuild.py` builds rooms with several `enemy_assets` donors

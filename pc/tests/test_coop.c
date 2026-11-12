@@ -266,6 +266,13 @@ static void test_events(void)
     BAD(EV_SPAWN, 1, e->u.sp.dead = ENEMY_XDEAD_BASE - 1);   /* an extra enemy's dead flag: 0 (none) or ENEMY_XDEAD_BASE + its bit */
     BAD(EV_SPAWN, 1, e->u.sp.dead = ENEMY_XDEAD_BASE + ENEMY_XDEAD_WORDS * 32);
     { Event e = ev(EV_SPAWN); e.u.sp.dead = ENEMY_XDEAD_BASE + ENEMY_XDEAD_WORDS * 32 - 1; CHECK(coop_check_event(&e, 1) == COOP_OK); }
+    /* the host's randomizer result (protocol 52): SPAWN_NOTE_DONE with up to 128 notes, SPAWN_NOTE_RAND for a record 0..127 */
+    BAD(EV_SPAWN, 1, e->u.sp.pad = 1);
+    BAD(EV_SPAWN, 1, e->u.sp.pad = SPAWN_NOTE_DONE + 1);
+    BAD(EV_SPAWN, 1, (e->u.sp.pad = SPAWN_NOTE_DONE, e->u.sp.rec = 129));
+    BAD(EV_SPAWN, 1, (e->u.sp.pad = SPAWN_NOTE_RAND, e->idx = 128));
+    { Event e = ev(EV_SPAWN); e.u.sp.pad = SPAWN_NOTE_DONE; e.u.sp.rec = 128; CHECK(coop_check_event(&e, 1) == COOP_OK); }
+    { Event e = ev(EV_SPAWN); e.u.sp.pad = SPAWN_NOTE_RAND; e.idx = 127; CHECK(coop_check_event(&e, 1) == COOP_OK); }
     BAD(EV_EOPTS, 1, e->u.eo.extra = ENEMY_EXTRA_MAX + 1);
     BAD(EV_EOPTS, 1, e->u.eo.seed = -1);
     BAD(EV_EOPTS, 1, e->u.eo.rand = 2);
