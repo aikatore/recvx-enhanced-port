@@ -933,7 +933,9 @@ static int extra_away(float x, float z)   /* (the earlier extras: extra_spot) */
    the 4 cells beside them walkable at their height (xg_inner: a margin from the floor's edges), not in water, away from
    doors, entries, triggers, items and records (extra_away), with no drop nor rising ground within 6 units (no_drop) and no
    wall within 6 units all round at the waist and at the feet (not in an object, nor against a wall or on a line wall: an
-   enemy put there is pushed off it). Only the room file and the options decide it (the same on every visit). ponytail:
+   enemy put there is pushed off it). The room file, its story state and the options decide it: the walls and floors as the
+   room's script set them at this load (some rooms toggle them on story flags: RM_4010, RM_8010), so the same on every
+   visit in the same story state, not across one that changes them. ponytail:
    one height per cell; where two floors overlap (a balcony over the floor) the first one reached has it. */
 #define XG_MAX 16384
 #define XG_STEP 4.0f
@@ -1222,7 +1224,8 @@ static int extra_count(const EnemyOpts* o)
    the randomizer as a free walker record at that spot (draw_kind on the room's kinds after the records, rk; it counts
    for the next ones), else a copy of a random record of the extra types. A spot where no kind fits is tried again (up to
    4 spots). Nothing depends on which are dead or where the player is, so the extras before one are the same on every
-   visit; the count only cuts the list short (extra i is the same, with the same dead flag, whatever the count). Fills
+   visit in the same story state (their spots come from extra_grid, which follows the walls the script sets); the count
+   only cuts the list short (extra i is the same, with the same dead flag, whatever the count). Fills
    x[0..cnt - 1]: 1 = planned (its spot, floor, angle, type, variant), 0 = no spot or no kind (its reason in why[]).
    `dry` (test aid): rk is left as it was. */
 typedef struct { int ok; const char* why; ActorModel am; SpawnNote n; } XPlan;

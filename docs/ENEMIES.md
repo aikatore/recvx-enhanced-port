@@ -602,8 +602,11 @@ co-op guest as added enemies).
   textures and sounds from its own room file). With the randomizer off: a copy of a random record of the roaming types
   zombie, Black Widow, Cerberus, Hunter, Bandersnatch, albinoid adult, anatomist (its own type and model: no upload); a
   room with none of those (bats only) gets none.
-* **The same on every visit**: the count, and extra i's spot, angle and kind come from draws of their own (seed, room
-  file, i) and from the extras before it, never from which are dead or where the player is; the count only cuts the list
+* **The same on every visit** (per room and story state): the count, and extra i's spot, angle and kind come from draws
+  of their own (seed, room file, i) and from the extras before it, never from which are dead or where the player is. The
+  count is the same on every visit; the spots follow the walkable floor, which a room's script can change with the story
+  (walls and floors turned on or off at the load on story flags: RM_4010 has 63 spots with `ev_flg` 35 clear and 3 with it
+  set, RM_8010 13 and 44 with `ev_flg` 381), so after such a change extra i can stand elsewhere or have no spot; the count only cuts the list
   short, so extra i is the same (spot, kind, dead flag, slot) whatever the count or the setting. A spot within 30 units of the player (a loaded
   save, a retry) skips that extra for the visit. Each keeps its slot: the room's first free slot when the extras come,
   plus i (a dead one's stays free), so a co-op guest still in the room finds them where they were.
