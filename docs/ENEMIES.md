@@ -517,7 +517,7 @@ count for both. Code: `pc/glue/enemyopt_glue.c`, one decomp hook at the end of
 
 | Setting (page) | ini key | Values | Test aid |
 |---|---|---|---|
-| "Extra Enemies" (GAMEPLAY) | `enemy_extra` | 0 = Off, 1..8 = "Up to N" | `RECVX_ENEMY_EXTRA` |
+| "Extra Enemies" (GAMEPLAY) | `enemy_extra` | 0 = Off, 1..8 = 0..N per room (random) | `RECVX_ENEMY_EXTRA` |
 | "Rearranged Enemies" (GAMEPLAY) | `enemy_place` | 0/1 | `RECVX_ENEMY_PLACE` |
 | "Enemy Randomizer" (GAMEPLAY) | `enemy_random` | 0/1 | `RECVX_ENEMY_RANDOM` |
 | "Enemy Seed" (GAMEPLAY) | `enemy_seed` | seed for placements and randomizer | `RECVX_ENEMY_SEED` |
@@ -538,7 +538,7 @@ record or extra), never from the game's `rand()`.
 
 ### Extra enemies
 
-"Up to N per room": at the first frame a room runs, the host (or single player) adds up to N enemies to it, whatever
+"0..N per room": at the first frame a room runs, the host (or single player) adds a random 0..N enemies to it, whatever
 its records (`pc/glue/enemyopt_glue.c enemy_extras_frame`, spawned as the F2 spawner's: `spawn_add`, so they reach a
 co-op guest as added enemies).
 
@@ -550,17 +550,34 @@ co-op guest as added enemies).
   room) would change what a room is for. Rooms whose doors count the kills (`DieEventCk`) get extras, but their
   "all dead" counts ignore them, so they never hold a door shut. A mod's or BioRand's room that has enemies where the
   disc has none gets none either (each extra needs a dead flag, below, and those are per listed room).
-* **How many**: N, fewer only where the room has no more free spots (below) or the spawner refuses one (its budgets:
-  enemy slots with 6 left free of 255, room memory, the 32 MB spawn pool, texture entries), and the room stops adding at
-  the first refusal. Small rooms have few free spots once the doors are kept clear: "Measured" below.
-* **Where** (`extra_grid`, `extra_spot`): once per room load the room's walkable floor is filled in as a grid of 4-unit
-  cells (larger in rooms over 16384 cells), from the records that stand on the ground (after "Rearranged") and the
-  entry positions, one cell at a time where an enemy can walk: no wall between the cells' centres (the wall line of
-  "Spots" at waist height, here with the odd wall types too: the lips along ledges, line walls), ground within a unit of the last cell's on the same floor and no slope (stairs, ramps), or no
-  ground where the last had none (the lowest floor of a room without floor slabs). A record on floor -1 (parked below
-  the room for an event, RM_1121) starts nothing. A cell is a spot when there is no drop nor rising ground within 6
-  units (`no_drop`: no pool edge, ledge, crate or step), no wall of any type within 6 units all round, at the waist and a
-  half unit above the feet (not in an object, nor against a wall or on a line wall: a zombie put on RM_8010's catwalk
+* **How many** (`extra_count`): a number of the room's own, 0..N, every value equally likely (a draw of the seed and the
+  room file: the same on every visit; only the host draws it), so N / 2 on average and none in one room of N + 1. The
+  draw is one fraction per room scaled by N: raising N never gives a room fewer. Before (protocol 50) it was N whenever
+  the room had the spots, which filled every room to the setting. Fewer only where the room has no more free spots
+  (below) or the spawner refuses one (its budgets: enemy slots with 6 left free of 255, room memory, the 32 MB spawn
+  pool, texture entries), and the room stops adding at the first refusal. Small rooms have few free spots once the doors
+  are kept clear: "Measured" below.
+* **Where** (`extra_grid`, `extra_spot`): once per room load the floor the player can walk to is filled in as a grid of
+  4-unit cells (larger in rooms over 16384 cells), from the entry positions (the cells within 8 units of each with no wall
+  in between: an entry by a door touches its frame), one cell at a time where the player and an enemy can walk:
+  * no wall between the cells' centres (the wall line of "Spots" at waist height, with every wall type the player's own
+    check takes: the odd types, the lips along ledges, line walls);
+  * the player's body fits in the cell (`player_fits`: `hitchk.c bhCheckWallEx`, the player's wall check, with
+    `PlyInfo`'s radius 3.5 and the taller characters' height 17.5, as a walking player: the walls only enemies pass,
+    attr 0x4, count too);
+  * a camera zone of the cell's floor shows it (`in_view`: `cut.c bhCheckCutArea`'s test over every zone of the room
+    file, also those its script turns on later, so the same on every visit): where no camera shows the floor, the player
+    never stands;
+  * ground within a unit of the last cell's on the same floor and no slope (stairs, ramps), or no ground where the last
+    had none (the lowest floor of a room without floor slabs).
+  Before (protocol 50) the records that stand on the ground were anchors too, the body and the camera zones did not
+  count and the lips were skipped: the fill leaked through gaps a body does not pass, over lips, past open edges and out
+  of the camera zones (RM_0030's street: 5500 cells of the 5600 outside it, where 8 extras stood unseen), and records
+  put in the scenery for an event seeded areas of their own (`pc/tools/enemy_bounds_check.sh`, "Measured"). A cell is a
+  spot when the 4 cells beside it were reached at its height (`xg_inner`: a margin from the edges of the walkable floor:
+  walls, the camera zones' edges, drops), it is not in water (`bhCheckWater`), there is no drop nor rising ground within
+  6 units (`no_drop`: no pool edge, ledge, crate or step), no wall of any type within 6 units all round, at the waist and
+  a half unit above the feet (not in an object, nor against a wall or on a line wall: a zombie put on RM_8010's catwalk
   rail line was pushed into the crate beside it, one on RM_7050's floor lines a unit high onto a table), and it is
   * at least **30 units (3 m) from every door** (the door's trigger box: type 0, or a trigger the script makes a door with
     `EtcAtariSet2`, or one where the script calls `SetDoorCall` while the player is at it, as RM_1121's) **and from every
@@ -585,8 +602,9 @@ co-op guest as added enemies).
   textures and sounds from its own room file). With the randomizer off: a copy of a random record of the roaming types
   zombie, Black Widow, Cerberus, Hunter, Bandersnatch, albinoid adult, anatomist (its own type and model: no upload); a
   room with none of those (bats only) gets none.
-* **The same on every visit**: extra i's spot, angle and kind come from draws of its own (seed, room file, i) and from
-  the extras before it, never from which are dead or where the player is. A spot within 30 units of the player (a loaded
+* **The same on every visit**: the count, and extra i's spot, angle and kind come from draws of their own (seed, room
+  file, i) and from the extras before it, never from which are dead or where the player is; the count only cuts the list
+  short, so extra i is the same (spot, kind, dead flag, slot) whatever the count or the setting. A spot within 30 units of the player (a loaded
   save, a retry) skips that extra for the visit. Each keeps its slot: the room's first free slot when the extras come,
   plus i (a dead one's stays free), so a co-op guest still in the room finds them where they were.
 * **Dead flags**: extra i of the room at index x of `xrooms` has its own flag, bit x * 8 + i of the extras' dead flags
@@ -606,15 +624,30 @@ co-op guest as added enemies).
 
 #### Measured
 
-2026-11-11, `pc/tools/enemy_door_check.sh` (the 94 room files with 50 surveyed seeds each, and two seeds of real extras):
-39574 surveyed spots and 767 extras that came, none within 30 units of a door or entry, as the game measures it and as
-the room files' doors and entries give it. Of 8 asked, 4.26 found a spot on average: 17 rooms take all 8 on every seed
-(0030, 0031, 0050, 0090, 1000, 1060, 1090, 1121, 3030, 3090, 4012, 7100, 7130, 9060, 9100, 9130, 9310), 30 at most 3,
-and 9 none (0160, 1030, 3140, 3160, 6010, 6020, 7200, 9010, 9120: small rooms whose floor is all within 30 units of a
-door or full of furniture). `enemy_floor_check.sh` (4 seeds in Wild, Mild and Custom, 1128 room visits): 4.18 extras of 8
-per room, no spawn refused (the budgets never ran out), the rest without a free spot; none in mid-air or sunk. Custom
-with every kind at 5: zombie, Cerberus, Bandersnatch, Hunter, Sweeper and anatomist each 14..16% of the extras, Black
-Widow, Tyrant, Giant Black Widow and Mutated Steve 2..3% each (open space, level ground, `rm_flg`, one heavy variant).
+2026-11-12, `pc/tools/enemy_bounds_check.sh` (the 94 room files; `RECVX_ENEMY_OOB`: a separate flood fill of 2-unit
+cells by the player's wall check from where the player stands and the entries, stairs and ramps included, and the
+game's own camera zone test): every spot of every room's grid and the spots the extras of 100 seeds take (with 8
+asked). Before (protocol 50) 15595 of the 19650 grid spots and 10987 of 39529 extras' spots (28%, in 36 rooms) were out
+of bounds: 15459 cells the player cannot walk to, 15176 outside every camera zone, 50 where the player's body touches a
+wall (in furniture), 464 in water; RM_0030 (5503 of 5606 cells, past the street's walls), 0031, 1090, 4012, 7100 (in
+the water past the dock) leaked into large areas, 3060, 3120, 7050, 7180, 9020, 9080, 9190 and 0110 had only spots out
+of bounds (behind railings, under catwalks, in the scenery records stand in for events), 9310 189 of 192. Now none of
+2824 grid spots and 26958 extras' spots. The cost: 24 rooms have no spot (before 9): besides those 9, the 8 whose spots were
+all out of bounds and the small rooms 0070, 0130, 3130, 4000, 7181, 8000 and 9310, whose few spots stood by the floor's
+edges (the margin; without it 17 rooms had none). The counts with 8 over the 100 seeds and 93 rooms: 0:1037 1:1008 2:1010 3:1026 4:1035 5:1053 6:1057 7:1027
+8:1047, 4.02 on average.
+
+`pc/tools/enemy_door_check.sh` (50 surveyed seeds per room, and two seeds of real extras): 26972 surveyed spots and 355
+extras that came, none within 30 units of a door or entry, as the game measures it and as the room files' doors and
+entries give it. Of 8 asked (spots only, no count), 2.90 found a spot on average: 7 rooms take all 8 on every seed (0050,
+1121, 3020, 3090, 7100, 7130, 9060), 31 at most 3 and 24 none (0070, 0110, 0130, 0160, 1030, 3060, 3120, 3130, 3140,
+3160, 4000, 6010, 6020, 7050, 7180, 7181, 7200, 8000, 9010, 9020, 9080, 9120, 9190, 9310: small rooms whose floor is all
+within 30 units of a door, full of furniture or out of the player's reach). `enemy_floor_check.sh` (4 seeds in Wild,
+Mild and Custom, 1128 room visits): 4.21 extras drawn of 8 per room, 1.89 spawned, no spawn refused (the budgets never
+ran out), the rest without a free spot; none in mid-air or sunk. (2026-11-11, before the count and the bounds: 4.18 of 8
+spawned per room; Custom with every kind at 5: zombie, Cerberus, Bandersnatch, Hunter, Sweeper and anatomist each
+14..16% of the extras, Black Widow, Tyrant, Giant Black Widow and Mutated Steve 2..3% each: open space, level ground,
+`rm_flg`, one heavy variant.)
 
 The radius: the cells of a room that pass every other rule, by their distance to the nearest door or entry at 25 / 30 / 40
 units (measured before the clearance at the feet): 0060 (the barracks) 12 / 9 / 1, 3180 (the turntable control room)
@@ -972,6 +1005,13 @@ extras with the randomizer (Wild) and eight extras, and in each room also survey
 and entry position as the game measures them, and from every entry position and type 0 door trigger of the room file
 as `pc/tools/rdx.py` reads it (an independent check). It prints per room how many of the eight found a spot.
 
+`pc/tools/enemy_bounds_check.sh OUT [SEEDS]` (headless, about 5 minutes): the same tour without options, and in each
+room every spot of the extras' grid and the spots the extras of seeds 1..SEEDS (default 100) take are checked apart
+from the grid's rules (`RECVX_ENEMY_OOB`): reached by a flood fill of 2-unit cells by the player's own wall check from
+where the player stands and the entry positions in a camera zone (stairs and ramps too), in a camera zone of the floor
+by the game's test (`bhCheckCutArea`), the player's body fits, not in water. Passes when none is flagged; prints the
+counts per room with 8 asked over the seeds.
+
 Test aids:
 
 | Env var | Effect |
@@ -982,6 +1022,7 @@ Test aids:
 | `RECVX_ENEMY_KILL=n[:r\|:x]` | from n game frames into each room, every 20 frames each living, shown enemy of the room's records and its extra enemies (ids 1..30, in its AI) takes a heavy hit as from the player's weapon (the knife's without one: weapons 0 and 1, none and the lighter, never hit in the game; `:r` only the records, `:x` only the extras); logs the living ones at frame n, each death (`flg & 2`, what `DieCk` turns into the kill bit) and per room how many died (Black Widows take damage through their body parts and do not die from it) |
 | `RECVX_HEADSHOT=n` | n game frames into each room, every living zombie in its AI (records and added ones) takes one head hit as from the magnum (weapon 6 on joint 11, the game's burst path); its head state (`exp0 + 0x78`), hp and modes are logged every 15 frames for 90 frames |
 | `RECVX_ENEMY_SPOTS=seeds` | at the first frame each room runs, the extras' spots of seeds 1..seeds (eight extras, the randomizer off: spots only, nothing spawns), one line per seed with each spot's x z and distances to the nearest door trigger and entry, then the room's grid (cells, walkable, spots) |
+| `RECVX_ENEMY_OOB=seeds` | at the first frame each room runs, the bounds check of the extras' spots (`pc/tools/enemy_bounds_check.sh`: the grid's spots and those of seeds 1..seeds with eight extras, nothing spawns): a line per flagged extra's spot (`reach`, `cam`, `wall`, `water`), then the room's totals and its counts of 8 over the seeds; 0 lists every flagged grid spot instead |
 | `RECVX_ENEMY_FLOORS=n` | n game frames into each room (2: the frame after the extras came), every enemy (ids 1..30) is logged with its position, floor and room-file type, the ground under it as `find_spot` sees it ("Spots", ` slope` on a slope) and the bottom of the box that ground is the top of (a shelf with room below is no crate), its floor's height and what the options did to it (`moved`, `random`, `extra`, `orig`; `other`: a part an enemy's Init put in a slot of its own) |
 | `RECVX_ENEMY_TRACE=dist` | traces enemy steps (co-op targets) |
 | `RECVX_TRACE_SND=1` | logs sound requests and extra banks |
