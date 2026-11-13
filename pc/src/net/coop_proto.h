@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 56                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 57                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -90,7 +90,11 @@ extern "C" {
                                                hand-over with its state, pset 1, taken at its frame; EV_ENEOWN 5 the room's runner,
                                                6 "it runs here now"), make-before-break hand-overs, hits passed on to the runner
                                                (COOP_HIT_FWD), BUSY_PAUSED, snapshots sent also with the partner elsewhere, events
-                                               ahead of a gap kept (no head-of-line blocking), EV_ESTATE packed (coop_zpack) */
+                                               ahead of a gap kept (no head-of-line blocking), EV_ESTATE packed (coop_zpack);
+                                           57: bosses go with their state when their runner leaves through a door (own_types p3 2, their
+                                               rm_flg bits after their work), a Black Widow with its legs off (EV_ESTATE: leg records
+                                               after the body), EV_FX x1/ao (an effect's exp1 as a word of its owner's work: Alexia 1's
+                                               burning blood) and FX_POOL (a blood pool as its call) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per datagram (the receiver's check; a frame sends up to 96: coop_glue.c EV_BURST) */
 #define COOP_SNAP_BUDGET 2400           /* enemy snapshot bytes per frame (records past it wait, by priority) */
@@ -243,6 +247,7 @@ static inline int coop_fx_get(uint8_t b, uint8_t refs, int bit) { return refs & 
 #define FX_PTCL_TYPES 19                /* its table (effsub3.c PtclTbl) */
 #define FX_ARM 1000                     /* not an effect: a Bandersnatch's arm length (its AI sets node offsets) */
 #define FX_REACT 1001                   /* not an effect: a zombie's flinch where the sender's shot hit it (protocol 40) */
+#define FX_POOL 1002                    /* (protocol 57) a blood pool (effect 300, two eff[] entries): EV_FX carries the bhSetBloodPoolLnk call */
 #define FX_REACT_REGIONS 6              /* FX_REACT region: 1..5 (tps_glue.c RG_*: head, right/left arm, right/left leg) */
 #define FX_RAW_WORDS 18
 /* EV_FX's generic entries (protocol 28): only the effects a sender's window can start (an enemy's step,
@@ -254,7 +259,10 @@ enum { FXF_LINK = 1,                    /* may follow a work (flg 0x80 iff Event
        FXF_LKWK = 4,                    /* follows Event.idx's work without flg 0x80 (its step reads lkwkp): required */
        FXF_TXP = 8,                     /* stflg 0x20: txp a texture of the owner's model, tex_id one of that list */
        FXF_MLW = 16,                    /* mlw: its model is one of the owner's, mdlver < its objects */
-       FXF_EXP0 = 32 };                 /* exp0: the work it belongs to (required) */
+       FXF_EXP0 = 32,                   /* exp0: the work it belongs to (required) */
+       FXF_EXP1 = 64,                   /* (protocol 57) exp1: an eff[] entry the owner's exp0 points at (x1, required) */
+       FXF_AO = 128 };                  /* (protocol 57) aox aoy aoz: a unit normal (ao) */
+#define FX_X1_MAX 16                    /* x1: one of the owner's first 16 exp0 words */
 #define FXV_ANY 255                     /* FxRule.mdlver_max: any (the step does not read it) */
 #define FXC_ANY (-1)                    /* FxRule.ct_max: any (the step sets it before reading it) */
 typedef struct FxRule {
@@ -373,6 +381,9 @@ typedef struct Event {
             int16_t ct[4];
             int16_t s[3];               /* scale, 1/256 */
             float p[3], o[3], n[3];     /* position, offset (link offset or direction), xn yn zn */
+            uint8_t x1, pad;            /* (protocol 57) FXF_EXP1: 1 + the owner's exp0 word that exp1 is (an eff[] entry of its
+                                           work: Alexia's fire manager), else 0 */
+            int16_t ao[3];              /* FXF_AO: aox aoy aoz (a unit normal), 1/16384 */
         } fx;
         struct {                        /* EV_FX of effect FX_BURST (bhSetRapEff 308: the sparks of a hit) */
             uint16_t id, nw;            /* FX_BURST, FX_RAW_WORDS */
@@ -386,6 +397,14 @@ typedef struct Event {
             uint32_t col, dst;
             float off[3], dir[3];
         } fxp;
+        struct {                        /* (protocol 57) EV_FX of FX_POOL: bhSetBloodPoolLnk(follows, pos, ay, table, bank);
+                                           Event.idx: the work it follows (FXR_IDX: an FX_*), pos has the table's offset added */
+            uint16_t id;                /* FX_POOL */
+            uint8_t refs, bank;         /* FXR_IDX; the palette bank (BloodType colour, 0..3) */
+            int32_t ay, srd_dir;
+            int32_t srt_dir[5];         /* vertices 0..15 */
+            float pos[3], srd_pos, bld_spd, srt_spd[5];
+        } fxb;
         struct {                        /* EV_FX of FX_ARM; Event.idx: the enemy slot (no refs) */
             uint16_t id, pad;
             float len[4];               /* x offsets of the arm's nodes 7..10 */

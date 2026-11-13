@@ -278,6 +278,7 @@ static const FxRule fx_rules[] = {
     { 257, 0xFFFF, 0,                                        0,        0,                          FXV_ANY, ANYF,    0, 63, { A, 0, A, A } },  /* acid drop: ct1 a UV index its init keeps */
     { 259,   1, 0,                                           0,        FXF_TXP,                    FXV_ANY, ANYF,    0, 63, { A, A, A, A } },  /* blood */
     { 260, 0xFFFF, 0,                                        0,        FXF_TXP,                    FXV_ANY, ANYF,    0, 63, { A, A, A, A } },  /* moth powder (en06's texture 1: apply_fx) */
+    { 265,   1, 0,                                           0,        FXF_EXP1 | FXF_AO,          FXV_ANY, ANYF,    0, 63, { A, A, A, A } },  /* Alexia 1's burning blood (en12 Blood, FlameLiquid): exp1 her fire manager, ao the floor's normal, ct0 its delay */
     { 267,   3, 0,                                           0,        0,                          FXV_ANY, ANYF,    0, 63, { A, A, A, A } },  /* fluid */
     { 274, 0xFFFF, 0,                                        0,        FXF_LINK_REQ,               FXV_ANY, ANYF,    0, 63, { 300, 8, A, A } },/* fire: ct0 its life, ct1 its delay */
     { 275, 0xFFFF, 0,                                        0,        0,                          FXV_ANY, ANYF,    0, 63, { A, A, A, A } },  /* fire */
@@ -340,6 +341,10 @@ static int fx_entry_ok(const Event* e)
     if ((r->refs & FXF_MLW) ? e->u.fx.mlw < 0 : e->u.fx.mlw != -1) return 0;
     if ((e->u.fx.txp >= 0 || e->u.fx.mlw >= 0) && own == FX_NONE) return 0;
     if ((r->refs & FXF_EXP0) ? ex == FX_NONE : ex != FX_NONE) return 0;
+    if ((r->refs & FXF_EXP1) ? e->u.fx.x1 < 1 || e->u.fx.x1 > FX_X1_MAX || own >= COOP_ENE_SLOTS : e->u.fx.x1 != 0) return 0;
+    if (e->u.fx.pad) return 0;
+    for (k = 0; k < 3; k++)
+        if (!(r->refs & FXF_AO) ? e->u.fx.ao[k] != 0 : e->u.fx.ao[k] < -16400 || e->u.fx.ao[k] > 16400) return 0;
     if (e->u.fx.id == 11 && !(e->u.fx.mdlver ? (t == 1 || t == 2 || t == 5) : (t <= 2 || t == 10 || t == 11))) return 0;   /* the others leave its UV table unset */
     if (e->u.fx.id == 108 && e->u.fx.lkono != 10 && e->u.fx.lkono != 12 && e->u.fx.lkono != 13 && e->u.fx.lkono != 15 && e->u.fx.lkono != 20) return 0;
     return 1;
@@ -466,6 +471,13 @@ int coop_check_event(const Event* e, int from_host)
         if (e->u.fx.id == FX_REACT)
             return e->idx < COOP_ENE_SLOTS && e->u.fxk.rg >= 1 && e->u.fxk.rg < FX_REACT_REGIONS && !e->u.fxk.pad ?
                    (fins(e->u.fxk.d, 3) && fabsf(e->u.fxk.d[0]) <= 1.01f && fabsf(e->u.fxk.d[1]) <= 1.01f && fabsf(e->u.fxk.d[2]) <= 1.01f ? COOP_OK : COOP_BAD_FLOAT) : COOP_BAD_FIELD;
+        if (e->u.fx.id == FX_POOL) {   /* (protocol 57) its vertex numbers index 16-entry tables */
+            for (k = 0; k < 5; k++)
+                if (e->u.fxb.srt_dir[k] < 0 || e->u.fxb.srt_dir[k] > 15) return COOP_BAD_FIELD;
+            if (e->u.fxb.bank > 3 || e->u.fxb.refs > FXR_IDX || !fx_ref(coop_fx_get(e->idx, e->u.fxb.refs, FXR_IDX))) return COOP_BAD_FIELD;
+            return fins(e->u.fxb.pos, 3) && fins(&e->u.fxb.srd_pos, 7) && fabsf(e->u.fxb.pos[0]) < 10000 && fabsf(e->u.fxb.pos[2]) < 10000 &&
+                   fabsf(e->u.fxb.bld_spd) < 100 ? COOP_OK : COOP_BAD_FLOAT;
+        }
         if (e->u.fx.id == FX_PARTICLE)
             return e->u.fxp.typ < FX_PTCL_TYPES && e->u.fxp.mk2 <= 1 && e->u.fxp.lnk < 64 && e->u.fxp.refs <= FXR_IDX &&
                    fx_ref(coop_fx_get(e->idx, e->u.fxp.refs, FXR_IDX)) ? (fins(e->u.fxp.off, 3) && fins(e->u.fxp.dir, 3) ? COOP_OK : COOP_BAD_FLOAT) : COOP_BAD_FIELD;
