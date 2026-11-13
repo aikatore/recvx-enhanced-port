@@ -9,8 +9,8 @@ when no direct path works.
 - No game, no SDL, no disc. It sees room codes and addresses; game data it relays is end-to-end
   encrypted.
 - All state is in memory; nothing is written to disk. A restart forgets every room (the games
-  open a new one automatically); an update with `--take-over` keeps them all
-  ([Updating without dropping sessions](#updating-without-dropping-sessions)).
+  open a new one automatically) and the [session history](#session-history); an update with
+  `--take-over` keeps them all ([Updating without dropping sessions](#updating-without-dropping-sessions)).
 - Direct P2P co-op (`ip:port#CODE`) does not use the server at all.
 
 ## For players
@@ -274,7 +274,7 @@ Counters and gauges kept in memory, readable three ways:
   server does not answer, or is a version without status-json):
 
 ```json
-{"version":"0.7.7","state_format":1,"started_at":1794343182,"uptime_s":3612,"process_started_at":1794346500,"handovers":1,
+{"version":"0.7.9","state_format":2,"started_at":1794343182,"uptime_s":3612,"process_started_at":1794346500,"handovers":1,
  "draining":false,"handover_capable":true,
  "rooms":2,"room_list":[{"id":"5f0c2a9e41b7","age_s":95,"players":2,"path":"relay","relay_bps":171230},
                         {"id":"c81d07e3aa52","age_s":12,"players":1,"path":"waiting","relay_bps":0}],
@@ -315,6 +315,51 @@ Drop reasons: `request_rate`, `relay_datagram_rate`, `relay_bandwidth` (per play
 token), `relay_auth` (bad MAC), `relay_replay`, `busy` (address table full, no randomness).
 
 A health check is a HELLO round trip (or `recvx-client 127.0.0.1 status` on the machine).
+
+### Session history
+
+The server keeps the last **500 finished rooms** in memory (kept across `--take-over`, lost on a
+restart; nothing is written to disk) and running totals since `started_at`.
+`recvx-client 127.0.0.1[:PORT] history-json [SEQ]` prints them as one JSON object on one line
+(STATUS `history SEQ`, only to 127.0.0.1; exit 1 from a server before 0.7.9):
+
+```json
+{"version":"0.7.9","started_at":1794343182,"last_seq":42,"kept":500,
+ "totals":{"rooms":42,"sessions":30,"room_s":61200,"partner_s":50110,"relay_s":9020,
+           "ping_host":{"n":2210,"avg":31.4},"ping_joiner":{"n":2002,"avg":48.9}},
+ "sessions":[{"seq":41,"id":"5f0c2a9e41b7","start":1794350000,"end":1794353318,"duration_s":3318,"ended":"host",
+              "players":2,"partners":1,"partner_s":3200,"path":"relay","relay_s":3100,"relay_bytes":512345678,
+              "ping_host":{"n":1067,"avg":28.3,"min":24.0,"max":61.0,"jitter":1.9},
+              "ping_joiner":{"n":1066,"avg":44.0,"min":39.0,"max":130.0,"jitter":3.2}},...],
+ "last":42,"more":false}
+```
+
+| field | meaning |
+|---|---|
+| `started_at`, `last_seq` | the service's start (as in status-json) and the rooms finished since: `seq` counts 1, 2, ... from it. A new `started_at` (a restart) starts `seq` again and the history is empty |
+| `sessions` | the finished rooms with `seq` > SEQ (default 0), oldest first, as many as fit one answer (about 150); `more`: the rest follows with SEQ = `last` |
+| `id` | the room's id from status-json `room_list` (a keyed hash, nothing of the code) |
+| `start`, `end`, `duration_s` | the room's opening and closing (unix seconds) |
+| `ended` | `host` (closed by the host: the game left co-op), `timeout` (no keepalive from the host for `room_timeout`: a crash or a lost connection), `replaced` (the host opened a new room) |
+| `players`, `partners`, `partner_s` | 2 when a partner was there at all; how many joined (a rejoin counts again); the time with a partner |
+| `path`, `relay_s`, `relay_bytes` | `relay` when anything was relayed, `direct` with a partner and nothing relayed, `none` without a partner; the time relay traffic flowed (gaps over 5 s left out); the bytes relayed. `relay_s / partner_s` is the relayed share |
+| `ping_host`, `ping_joiner` | round trips between the server and that player in ms: `n` samples, `avg`, `min`, `max`, `jitter` (the mean change from one sample to the next); `null` without samples. `ping_joiner` covers every partner of the room |
+| `totals` | since `started_at`: rooms, sessions (rooms with a partner), their time, and the round trips' count and average |
+
+No room codes, addresses, keys or player ids: a session is the room's hash, its times and numbers.
+
+**How the round trips are measured.** After each keepalive reply the server sends the player a
+**PING** (type 14, 16 bytes) and the player's game answers it at once with its token and how long
+the PING waited in the game before the answer (from the socket's receive timestamp: on Linux the
+kernel's, on Windows a thread's note; `net_rx_us`), which the server takes off. One sample per
+keepalive: every 3 s in a session, every second while a host waits. The first sample of each
+player is the HELLO handshake (WELCOME to its CREATE / JOIN), which every game since protocol 3
+does: a game before 0.7.9 gives only that one sample (it ignores PING; after 3 unanswered PINGs
+the server sends it no more), and that sample includes up to one game frame (the game reads the
+socket once a frame). Limits: the server's clock is milliseconds, so values on a LAN read 0-1 ms;
+it is the server <-> player round trip, not the one between the two players (when relayed, that
+is about the sum of both; when direct, the server does not see it); a stalled game (loading)
+answers late, but the waiting time is subtracted where the receive timestamp is exact.
 
 ## Updating without dropping sessions
 
@@ -367,6 +412,9 @@ it too), well below `member_timeout` (at least 6 s). The pause does not count as
 silence: whichever process goes on moves the host and joiner time-outs on by it before the next
 check, so a slow or refused take-over drops no player whose keepalives waited in the socket
 buffer. Times inside the state are the system's monotonic clock, the same for both processes.
+The session history moves along too. `state_format` 2 (0.7.9) added it; a 0.7.9 server still
+takes over from a 0.7.8 one (format 1: no history yet, and a partner already in a room counts
+from the room's opening), while a 0.7.8 build cannot read format 2 (exit 3: a downgrade drains).
 The new process applies its own config file (like a reload) but keeps the running server's
 `port`, `listen` and `control`, and a `max_rooms` at least as large. The room ids in
 status-json stay, and so do `started_at` and `uptime_s`; `process_started_at` is the new process's and `handovers` goes up by one.
@@ -489,8 +537,9 @@ No datagram on any path exceeds 1200 bytes. Addresses are family u8 (4 or 6; 0 n
 | KEEPALIVE 9 | c <-> s | request: room id, token, member sequence the host knows; reply: room id, partner present |
 | CLOSE 10 | c -> s | room id, token |
 | ERROR 11 | s -> c | code, server version, salt (with "password needed" / "wrong password") |
-| STATUS 12 | localhost only | request (body empty, or `json`); reply: the metrics as Prometheus text, in as many datagrams of whole lines as needed; to `json`: parts of the status-json text, each `J`, part index u16, part count u16, then the text |
+| STATUS 12 | localhost only | request (body empty, `json`, or `history SEQ`); reply: the metrics as Prometheus text, in as many datagrams of whole lines as needed; to `json` / `history`: parts of the status-json / history-json text, each `J`, part index u16, part count u16, then the text (a server before 0.7.9 answers `history` with the Prometheus text) |
 | KICK 13 | host -> s | room id, host token, member sequence; answered like a KEEPALIVE |
+| PING 14 | s <-> member | server: room id, probe id u32 (16 bytes in all); the member's answer: room id, probe id, token 16, the time it waited in the game u32 (us) (36 bytes, no reply). 0.7.9, without a new protocol version: older games drop the unknown type, older servers never send it ([Session history](#session-history)) |
 
 ERROR codes (`RDV_E_*`): 1 VERSION, 2 NO_ROOM ("Room not found"), 3 NEED_PW (carries the salt;
 a joiner with a password retries with a proof), 4 BAD_PW, 5 FULL, 6 RATE ("Too many attempts.
@@ -608,12 +657,12 @@ added without a protocol change. IPv6 would help players behind CGNAT who have n
 
 | test | what |
 |---|---|
-| ctest `rdv` (`pc/tests/test_rdv.c`) | protocol and server core: messages, crypto, room codes, hijacks, passwords, rejoin/KICK, limits, config parser (the shipped example must equal the defaults), metrics, log privacy, amplification invariant, the handover state (round trip; truncated, corrupted and other-format blobs) |
-| ctest `rdv_client` (`pc/tests/test_rdv_client.c`) | the client (`rendezvous.c`) against the server core on a fake network and clock: INTRO checks, epochs, downgrades, relay/direct switching both ways (a direct path that dies mid-session), restarts, stalls, DNS |
+| ctest `rdv` (`pc/tests/test_rdv.c`) | protocol and server core: messages, crypto, room codes, hijacks, passwords, rejoin/KICK, limits, config parser (the shipped example must equal the defaults), metrics, log privacy, amplification invariant, the handover state (round trip; truncated, corrupted and other-format blobs; format 1 from 0.7.8), the session history (handshake and PING round trips, an old game that does not answer, forged answers, relayed time, end reasons, the ring and its paging, kept across a take-over) |
+| ctest `rdv_client` (`pc/tests/test_rdv_client.c`) | the client (`rendezvous.c`) against the server core on a fake network and clock: INTRO checks, epochs, downgrades, relay/direct switching both ways (a direct path that dies mid-session), restarts, stalls, DNS, PING answers |
 | ctest `rdv_fuzz` (`pc/tests/fuzz_rdv.c`, Linux) | parser, server and client state machines under AddressSanitizer + UBSan, 300,000 inputs; libFuzzer-ready with `clang -fsanitize=fuzzer -DRDV_LIBFUZZER` |
 | ctest `rdv_paths` (`pc/server/test_paths.sh`, Linux) | a local server and two `recvx-client`s: punched, Via server, relay fallback, passwords, loss, plaintext, sustained relay delivery |
 | ctest `rdv_nat` (`pc/server/test_nat.sh`, Linux) | cone/symmetric NATs, same router, netem, in rootless network namespaces (skipped without user namespaces) |
-| ctest `rdv_handover` (`pc/server/test_handover.sh`, Linux) | `--take-over` refused by a build that cannot read the state (the old server goes on), then done by a second binary during relayed and direct sessions (no drops, a code from before still joins, counters only grow, the old process exits 0, MAINPID / BARRIER / READY on a fake notify socket); status-json parsed by python3; `--drain`; the control socket (mode, stale, live); a second control connection gets `busy`; exactly one server after a take-over behind a silent control connection, with a systemd barrier slower than the time-out, or with the old server frozen after `ok` |
+| ctest `rdv_handover` (`pc/server/test_handover.sh`, Linux) | `--take-over` refused by a build that cannot read the state (the old server goes on), then done by a second binary during relayed and direct sessions (no drops, a code from before still joins, counters only grow, the old process exits 0, MAINPID / BARRIER / READY on a fake notify socket); status-json parsed by python3; history-json kept across the take-over (a room finished before it, both players' round trips, the relayed share, paging by SEQ); `--drain`; the control socket (mode, stale, live); a second control connection gets `busy`; exactly one server after a take-over behind a silent control connection, with a systemd barrier slower than the time-out, or with the old server frozen after `ok` |
 
 Test aids in the game (environment variables):
 

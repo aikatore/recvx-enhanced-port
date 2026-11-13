@@ -959,6 +959,136 @@ static void test_state(void)
     }
 }
 
+/* the session history: the WELCOME round trip, PING / answer, an old game that never answers,
+   forged answers, the relayed time, the ring and its paging, the handover (format 2, and format 1
+   from 0.7.8: accepted, without the history) */
+static int ka_ping(const RdvAddr* a, const RdvMsg* room, const uint8_t token[16], RdvMsg* ping)
+{
+    RdvMsg k = { .type = RDV_KEEPALIVE, .room_id = room->room_id, .seq = 1 }, r;
+    int i;
+    memcpy(k.token, token, 16);
+    ask(a, &k, &r);
+    for (i = 0; i < nsent; i++)
+        if (!memcmp(&sent[i].to, a, sizeof(*a)) && rdv_parse(sent[i].b, sent[i].n, ping) == RDV_PING) return 1;
+    return 0;
+}
+
+static void pong(const RdvAddr* a, const RdvMsg* ping, const uint8_t token[16], uint32_t hold_us)
+{
+    RdvMsg p = *ping, r;
+    p.flags = 0;
+    p.hold_us = hold_us;
+    memcpy(p.token, token, 16);
+    CHECK(ask(a, &p, &r) == 0);   /* never answered */
+}
+
+static void test_history(void)
+{
+    SrvConfig c;
+    RdvMsg q = { .type = RDV_CREATE, .req_id = 9 }, room, in, p, cl = { .type = RDV_CLOSE }, x;
+    RdvAddr h = A(1, 5000), j = A(2, 6000);
+    uint8_t b[RDV_DGRAM_MAX], *blob;
+    uint32_t n;
+    int i;
+    static char js[65536], js2[65536];
+    char* at;
+    srv_defaults(&c);
+    c.max_rooms = 8;
+    c.creates_per_min = 1000000;
+    CHECK(srv_init(&c, cap));
+    srv_proc.started_at = 1800000000;
+    srv_proc.start_ms = now;
+    hello(&h, q.cookie);
+    now += 25;
+    CHECK(ask(&h, &q, &room) == RDV_ROOM);   /* the host: 25 ms from the WELCOME */
+    CHECK(join(&j, room.code, NULL, &in) == RDV_INTRO);   /* the joiner: 0 */
+    CHECK(ka_ping(&h, &room, room.token, &p) && (p.flags & 0x80) && p.room_id == room.room_id);
+    now += 40;
+    x = p; x.seq++; pong(&h, &x, room.token, 0);            /* not the PING sent */
+    pong(&j, &p, in.token, 0);                              /* the other member's address and token */
+    pong(&h, &p, in.token, 0);                              /* a wrong token */
+    pong(&h, &p, room.token, 5000);                         /* 40 ms, 5 of them in the game: 35 */
+    pong(&h, &p, room.token, 0);                            /* the same answer again */
+    for (i = 0; i < 3; i++) { now += 3000; CHECK(ka_ping(&j, &room, in.token, &p)); }   /* the joiner is an old game: no answers */
+    now += 3000;
+    CHECK(!ka_ping(&j, &room, in.token, &p));               /* after 3: no more PINGs */
+    CHECK(ka_ping(&h, &room, room.token, &p));
+    now += 15; pong(&h, &p, room.token, 0);                 /* 15 ms: jitter 20 between 35 and 15 */
+    for (i = 0; i < 4; i++) { now += 1000; srv_input(&j, b, relay(b, room.room_id, in.token, "COOPx"), now); }   /* 3 s relayed */
+    now += 2000;
+    cl.room_id = room.room_id;
+    memcpy(cl.token, room.token, 16);
+    ask(&h, &cl, &x);
+    CHECK(srv_history_json(js, sizeof(js), 0) > 0);
+    CHECK(strstr(js, "\"last_seq\":1,") && strstr(js, "\"more\":false") && !strstr(js, room.code));
+    CHECK(strstr(js, "\"seq\":1,\"id\":\"") && strstr(js, "\"start\":1800000000,") && strstr(js, "\"ended\":\"host\",\"players\":2,\"partners\":1,"));
+    CHECK(strstr(js, "\"path\":\"relay\",\"relay_s\":3,\"relay_bytes\":"));
+    CHECK(strstr(js, "\"ping_host\":{\"n\":3,\"avg\":25.0,\"min\":15.0,\"max\":35.0,\"jitter\":15.0}"));   /* 25, 35, 15 */
+    CHECK(strstr(js, "\"ping_joiner\":{\"n\":1,\"avg\":0.0,\"min\":0.0,\"max\":0.0,\"jitter\":0.0}"));
+    CHECK(strstr(js, "\"totals\":{\"rooms\":1,\"sessions\":1,"));
+    at = strstr(js, "\"duration_s\":");
+    CHECK(at && atoi(at + 13) == 18);
+    CHECK(srv_history_json(js, sizeof(js), 1) > 0 && strstr(js, "\"sessions\":[],\"last\":1,"));
+    {   /* a host alone that times out, one replaced by its new room */
+        RdvMsg r2;
+        CHECK(create(&h, 10, NULL, &r2) == RDV_ROOM);
+        CHECK(create(&h, 11, NULL, &r2) == RDV_ROOM);
+        now += 31000; srv_tick(now);
+        CHECK(srv_history_json(js, sizeof(js), 1) > 0 && strstr(js, "\"seq\":2,") && strstr(js, "\"ended\":\"replaced\",\"players\":1,\"partners\":0,"));
+        CHECK(strstr(js, "\"seq\":3,") && strstr(js, "\"ended\":\"timeout\"") && strstr(js, "\"path\":\"none\""));
+    }
+    for (i = 0; i < 520; i++) {   /* the ring keeps 500; a reply holds what fits, the rest after "last" */
+        RdvAddr a = B(i);
+        RdvMsg r2;
+        CHECK(create(&a, 1, NULL, &r2) == RDV_ROOM);
+        cl.room_id = r2.room_id;
+        memcpy(cl.token, r2.token, 16);
+        ask(&a, &cl, &x);
+        now += 100;
+    }
+    CHECK(srv_history_json(js, sizeof(js), 0) > 0 && strstr(js, "\"last_seq\":523,") && strstr(js, "\"sessions\":[{\"seq\":24,") && strstr(js, "\"more\":true"));
+    {   /* the pages: every kept entry once, in order */
+        int seen = 0, pages = 0, last = 0, k;
+        for (;;) {
+            CHECK(srv_history_json(js2, sizeof(js2), last) > 0);
+            for (at = js2; (at = strstr(at, "{\"seq\":")); at++) { k = atoi(at + 7); CHECK(k == (last ? last : 23) + 1); last = k; seen++; }
+            pages++;
+            if (strstr(js2, "\"more\":false") || pages > 10) break;
+        }
+        CHECK(seen == 500 && last == 523 && pages > 1);
+    }
+    {   /* --take-over keeps it all */
+        CHECK(srv_state_export(&blob, &n));
+        CHECK(srv_history_json(js, sizeof(js), 300) > 0);
+        CHECK(srv_init(&c, cap));
+        CHECK(srv_state_import(blob, n, &c, 1) == 0);
+        CHECK(srv_history_json(js2, sizeof(js2), 300) > 0 && !strcmp(js, js2));
+        free(blob);
+    }
+    {   /* format 1 (0.7.8): accepted; no history; a partner there counts from the room's start */
+        CHECK(srv_init(&c, cap));
+        CHECK(create(&h, 12, NULL, &room) == RDV_ROOM);
+        CHECK(join(&j, room.code, NULL, &in) == RDV_INTRO);
+        srv_state_format = 1;
+        CHECK(srv_state_export(&blob, &n));
+        srv_state_format = SRV_STATE_FORMAT;
+        CHECK(srv_init(&c, cap));
+        CHECK(srv_state_import(blob, n, &c, 1) == 0 && srv_stats()->members == 1);
+        free(blob);
+        now += 5000;
+        cl.room_id = room.room_id;
+        memcpy(cl.token, room.token, 16);
+        ask(&h, &cl, &x);
+        CHECK(srv_history_json(js, sizeof(js), 0) > 0 && strstr(js, "\"last_seq\":1,") && strstr(js, "\"partners\":1,\"partner_s\":5,"));
+        srv_state_format = 99;   /* a build that cannot read format 2 (or 1) */
+        CHECK(srv_state_export(&blob, &n));
+        srv_state_format = SRV_STATE_FORMAT;
+        CHECK(srv_init(&c, cap));
+        CHECK(srv_state_import(blob, n, &c, 1) == 1);
+        free(blob);
+    }
+}
+
 int main(void)
 {
     test_messages();
@@ -971,6 +1101,7 @@ int main(void)
     test_hardening();
     test_rejoin();
     test_state();
+    test_history();
     {
         SrvConfig c;
         srv_defaults(&c);

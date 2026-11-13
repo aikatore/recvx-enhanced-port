@@ -22,7 +22,13 @@ typedef struct Member {
     uint64_t rx_top;            /* RELAY counters: the highest seen and a 64-entry window below it */
     uint64_t rx_win;
     int ax;                     /* its address's entry in addrs[] + 1 (0: look it up) */
+    uint32_t ping_id;           /* the last PING sent (docs/SERVER.md "Session history") */
+    uint64_t ping_ms;           /* ... when (0: none outstanding) */
+    uint8_t pings, pongs;       /* PINGs sent and answered (counting to 255): a game that never answers gets 3 */
 } Member;
+
+/* round trips server <-> one side of a room, in ms. jitter: the mean change from one to the next */
+typedef struct Ping { uint32_t n; double sum, jsum, last, min, max; } Ping;
 
 typedef struct Room {
     uint32_t id;                /* slot | generation << 16; 0 = free */
@@ -39,7 +45,24 @@ typedef struct Room {
     int pw_fails;
     uint8_t gone_token[16];     /* the last joiner's token: its second CLOSE finds it gone (not carried over by --take-over) */
     Member m[2];                /* 0 host, 1 joiner */
+    Ping ping[2];               /* the session history (state format 2): round trips of the host, of the joiners */
+    uint64_t joined_ms, partner_ms, relay_ms;   /* the joiner's arrival (0: none now); time with a partner, time relayed (before now) */
+    uint32_t joins;             /* partners that joined */
 } Room;
+
+/* a finished room (docs/SERVER.md "Session history"): no code, no address */
+typedef struct Hist {
+    uint64_t seq;               /* 1, 2, ... since the service started (kept across --take-over) */
+    char id[13];                /* the room's status-json id */
+    uint8_t why;                /* HIST_* */
+    uint32_t joins;
+    double start, end;          /* unix seconds */
+    uint64_t partner_ms, relay_ms, relay_bytes;
+    Ping ping[2];
+} Hist;
+enum { HIST_HOST, HIST_TIMEOUT, HIST_REPLACED, HIST_WHYS };
+static const char* const hist_why[HIST_WHYS] = { "host", "timeout", "replaced" };
+#define HIST_N 500
 
 typedef struct Recent { char code[RDV_CODE_LEN + 1]; uint64_t until; } Recent;   /* closed codes in their grace period */
 
@@ -52,7 +75,7 @@ typedef struct Recent { char code[RDV_CODE_LEN + 1]; uint64_t until; } Recent;  
      idle for 2 minutes (by then every budget in it has refilled anyway), so neither a collision
      nor a flood of new addresses can give an address its failures or budget back. A full
      neighbourhood refuses the newcomer instead (fail closed, counted as busy). */
-typedef struct Pre { uint8_t ip[16]; int used; double tokens; uint64_t last_ms, log_ms; } Pre;
+typedef struct Pre { uint8_t ip[16]; int used; double tokens; uint64_t last_ms, log_ms, welcome_ms; uint16_t welcome_port; } Pre;   /* welcome: the last WELCOME (a round trip to the CREATE / JOIN; not carried over) */
 typedef struct Addr {
     uint8_t ip[16];
     int used, fails, creates;
@@ -86,6 +109,9 @@ static uint64_t rate_ms, rate_req, rate_in, rate_out;   /* the rates: counters a
 static double log_tokens;
 static uint64_t log_fill, log_held, total_log_ms, full_log_ms;
 static int draining;            /* srv_drain: no new rooms */
+static Hist hist[HIST_N];       /* the last HIST_N finished rooms: seq s at hist[(s - 1) % HIST_N] */
+static uint64_t hist_seq;       /* finished rooms since the service started */
+static struct { uint64_t sessions, room_ms, partner_ms, relay_ms; Ping ping[2]; } hist_tot;   /* all of them */
 static uint64_t drain_log_ms;
 
 /* the defaults, and why: docs/SERVER.md "Configuration" */
@@ -135,6 +161,9 @@ int srv_init(const SrvConfig* c, SrvSend send)
     log_fill = log_held = 0;
     draining = 0;
     drain_log_ms = 0;
+    memset(hist, 0, sizeof(hist));
+    memset(&hist_tot, 0, sizeof(hist_tot));
+    hist_seq = 0;
     all_req = cfg.req_total_per_sec;
     all_req_fill = all_fail_start = all_log_ms = 0;
     all_fails = 0;
@@ -357,16 +386,61 @@ static int code_taken(const char* code, uint64_t now)
     return 0;
 }
 
-static void session_end(Room* r)
+static void session_end(Room* r, uint64_t now)
 {
     if (!r->relayed) st.sessions_direct++;
+    if (r->joined_ms && now > r->joined_ms) r->partner_ms += now - r->joined_ms;
+    r->joined_ms = 0;
+}
+
+static void ping_add(Ping* p, double ms)
+{
+    if (p->n) p->jsum += ms > p->last ? ms - p->last : p->last - ms;
+    if (!p->n || ms < p->min) p->min = ms;
+    if (!p->n || ms > p->max) p->max = ms;
+    p->sum += ms;
+    p->last = ms;
+    p->n++;
+}
+
+/* a keyed hash of the room's internal id (status-json and the history): nothing of its code */
+static void room_hash(const Room* r, char out[13])
+{
+    uint8_t h[6];
+    int i;
+    crypto_blake2b_keyed(h, 6, secret, 32, (const uint8_t*)&r->id, 4);
+    for (i = 0; i < 6; i++) snprintf(out + 2 * i, 3, "%02x", h[i]);
+}
+
+static double unix_s(uint64_t ms) { return srv_proc.started_at + ((double)ms - (double)srv_proc.start_ms) / 1000.0; }   /* the monotonic clock -> unix seconds */
+
+static void hist_add(Room* r, uint64_t now, int why)
+{
+    Hist* h = &hist[hist_seq++ % HIST_N];
+    int k;
+    memset(h, 0, sizeof(*h));
+    h->seq = hist_seq;
+    room_hash(r, h->id);
+    h->why = (uint8_t)why;
+    h->joins = r->joins;
+    h->start = unix_s(r->opened_ms);
+    h->end = unix_s(now);
+    h->partner_ms = r->partner_ms;
+    h->relay_ms = r->relay_ms;
+    h->relay_bytes = r->relay_bytes;
+    memcpy(h->ping, r->ping, sizeof(h->ping));
+    hist_tot.sessions += r->joins != 0;
+    hist_tot.room_ms += now - r->opened_ms;
+    hist_tot.partner_ms += r->partner_ms;
+    hist_tot.relay_ms += r->relay_ms;
+    for (k = 0; k < 2; k++) { hist_tot.ping[k].n += r->ping[k].n; hist_tot.ping[k].sum += r->ping[k].sum; }
 }
 
 /* codes in their grace period (4 per room). Churn is limited per address (rooms_per_ip_per_min);
    when many addresses together still fill the table, a closed code is not recorded - a late joiner
    of it could then, against 2^40 codes, meet a newer room - instead of refusing every CREATE
    (review: refusing was a denial of service for the whole server). */
-static void close_room(Room* r, uint64_t now, const char* why)
+static void close_room(Room* r, uint64_t now, const char* why, int hwhy)
 {
     int i;
     for (i = 0; i < nrecent && recent[i].until > now; i++) ;   /* a free (expired) entry, else append */
@@ -376,14 +450,15 @@ static void close_room(Room* r, uint64_t now, const char* why)
     LOG("room %s closed (%s) after %llu s, %llu KB relayed", rname(r), why, (unsigned long long)(now - r->opened_ms) / 1000,
         (unsigned long long)r->relay_bytes / 1024);
     st.rooms--;
-    if (r->m[1].on) { st.members--; session_end(r); }
+    if (r->m[1].on) { st.members--; session_end(r, now); }
+    hist_add(r, now, hwhy);
     memset(r, 0, sizeof(*r));
 }
 
 static void member_leaves(Room* r, const char* why, uint64_t now)
 {
     V("room %s: the joiner left (%s)", rname(r), why);
-    session_end(r);
+    session_end(r, now);
     memcpy(r->gone_token, r->m[1].token, 16);
     memset(&r->m[1], 0, sizeof(r->m[1]));
     r->relayed = r->relaying = 0;
@@ -408,7 +483,8 @@ static void intro(Room* r, int to)
 }
 
 /* ---------------------------------------------------------------- requests */
-static void on_create(const RdvAddr* from, const RdvMsg* q, uint64_t now)
+/* hs: the round trip WELCOME -> this request in ms (-1: none) */
+static void on_create(const RdvAddr* from, const RdvMsg* q, uint64_t now, double hs)
 {
     RdvMsg m;
     Room* r = NULL;
@@ -434,7 +510,7 @@ static void on_create(const RdvAddr* from, const RdvMsg* q, uint64_t now)
         send_err(from, RDV_E_RATE, NULL);
         return;
     }
-    if (r) { close_room(r, now, "the host made a new one"); if (slot < 0) slot = (int)(r - rooms); r = NULL; }
+    if (r) { close_room(r, now, "the host made a new one", HIST_REPLACED); if (slot < 0) slot = (int)(r - rooms); r = NULL; }
     if (n >= cfg.rooms_per_ip) {
         if (now - e->log_ms >= 10000) { e->log_ms = now; LOG("limit: an address has rooms_per_ip %d rooms open, no more%s%s", n, WHO(from)); }
         send_err(from, RDV_E_TOO_MANY, NULL);
@@ -469,6 +545,7 @@ static void on_create(const RdvAddr* from, const RdvMsg* q, uint64_t now)
     r->m[0].lan = q->lan;
     r->m[0].last_ms = r->m[0].fill_ms = now;
     r->opened_ms = now;
+    if (hs >= 0) ping_add(&r->ping[0], hs);
     memcpy(r->m[0].pk, q->pk, 32);
     memcpy(r->m[0].token, tok, 16);
     crypto_wipe(tok, 16);
@@ -485,7 +562,7 @@ reply:
     send_msg(from, &m);
 }
 
-static void on_join(const RdvAddr* from, const RdvMsg* q, uint64_t now)
+static void on_join(const RdvAddr* from, const RdvMsg* q, uint64_t now, double hs)
 {
     Room* r;
     uint8_t p[32], tok[16];
@@ -549,6 +626,9 @@ static void on_join(const RdvAddr* from, const RdvMsg* q, uint64_t now)
     crypto_wipe(tok, 16);
     r->member_seq++;
     r->relayed = r->relaying = 0;
+    r->joined_ms = now;
+    r->joins++;
+    if (hs >= 0) ping_add(&r->ping[1], hs);
     st.members++;
     st.joined++;
     V("room %s: a partner joined%s%s", rname(r), WHO(from));
@@ -580,6 +660,38 @@ static void keepalive_reply(const Room* r, const RdvAddr* to)
     send_msg(to, &m);
 }
 
+/* PING: a round trip to a member (0.7.9 games answer; older ones get 3, then no more) */
+static void send_ping(Room* r, int side, uint64_t now)
+{
+    Member* s = &r->m[side];
+    RdvMsg m;
+    if (!s->pongs && s->pings >= 3) return;
+    if (s->pings < 255) s->pings++;
+    s->ping_id++;
+    s->ping_ms = now;
+    memset(&m, 0, sizeof(m));
+    m.type = RDV_PING;
+    m.flags = 0x80;
+    m.room_id = r->id;
+    m.seq = s->ping_id;
+    send_msg(&s->pub, &m);
+}
+
+static void on_pong(const RdvAddr* from, const RdvMsg* q, uint64_t now)
+{
+    int side;
+    Room* r = owner(from, q, &side);
+    Member* s;
+    double ms;
+    if (!r) return;
+    s = &r->m[side];
+    if (!s->ping_ms || q->seq != s->ping_id || now - s->ping_ms > 10000) return;   /* not the last one, or answered already */
+    ms = (double)(now - s->ping_ms) - q->hold_us / 1000.0;   /* the time it waited in the game is not the network's */
+    s->ping_ms = 0;
+    if (s->pongs < 255) s->pongs++;
+    ping_add(&r->ping[side], ms > 0 ? ms : 0);
+}
+
 static void on_keepalive(const RdvAddr* from, const RdvMsg* q, uint64_t now)
 {
     int side;
@@ -589,6 +701,7 @@ static void on_keepalive(const RdvAddr* from, const RdvMsg* q, uint64_t now)
     member_addr(&r->m[side], now);   /* keeps its address entry in use */
     if (side == 0 && r->m[1].on && q->seq != r->member_seq) { intro(r, 0); V("room %s: the host missed its INTRO, sent again", rname(r)); return; }
     keepalive_reply(r, from);
+    send_ping(r, side, now);
 }
 
 static void on_close(const RdvAddr* from, const RdvMsg* q, uint64_t now)
@@ -601,7 +714,7 @@ static void on_close(const RdvAddr* from, const RdvMsg* q, uint64_t now)
     if (!r || !crypto_verify16(r->gone_token, q->token)) return;
     r = owner(from, q, &side);
     if (!r) { V("CLOSE with a wrong room or token%s%s, dropped", WHO(from)); return; }
-    if (side == 0) { st.closed++; close_room(r, now, "closed by the host"); }
+    if (side == 0) { st.closed++; close_room(r, now, "closed by the host", HIST_HOST); }
     else member_leaves(r, "closed", now);
 }
 
@@ -681,6 +794,7 @@ static void on_relay(const RdvAddr* from, const uint8_t* buf, int n, const RdvMs
         if (cfg.total_pps) total_dgrams -= 1;
     }
     s->last_ms = now;
+    if (r->last_relay_ms && now - r->last_relay_ms < 5000) r->relay_ms += now - r->last_relay_ms;   /* relayed time: gaps over 5 s are not */
     if (!r->relayed) { r->relayed = 1; st.sessions_relayed++; }
     if (!r->relaying) { r->relaying = 1; V("room %s: relaying (from the %s%s)", rname(r), k ? "joiner" : "host", r->last_relay_ms ? ", again" : ""); }
     r->last_relay_ms = now;
@@ -766,15 +880,6 @@ int srv_status_text(char* o, int cap)
     return k < cap ? k : cap - 1;
 }
 
-/* a room's id in status-json: a keyed hash of its internal id, nothing of its code */
-static void room_hash(const Room* r, char out[13])
-{
-    uint8_t h[6];
-    int i;
-    crypto_blake2b_keyed(h, 6, secret, 32, (const uint8_t*)&r->id, 4);
-    for (i = 0; i < 6; i++) snprintf(out + 2 * i, 3, "%02x", h[i]);
-}
-
 int srv_status_json(char* o, int cap, uint64_t now)
 {
     Metric m[METRICS_MAX];
@@ -809,6 +914,43 @@ int srv_status_json(char* o, int cap, uint64_t now)
     }
     P("}}");
     return k < cap ? k : 0;   /* 0: it did not fit (cap is far above everything but the room list) */
+}
+
+static int ping_json(char* o, int cap, const char* name, const Ping* p)
+{
+    int k = 0;
+    if (!p->n) return P(",\"%s\":null", name);
+    P(",\"%s\":{\"n\":%u,\"avg\":%.1f,\"min\":%.1f,\"max\":%.1f,\"jitter\":%.1f}", name, p->n, p->sum / p->n, p->min, p->max,
+      p->n > 1 ? p->jsum / (p->n - 1) : 0.0);
+    return k;
+}
+
+int srv_history_json(char* o, int cap, uint64_t since)
+{
+    uint64_t s = hist_seq > HIST_N ? hist_seq - HIST_N : 0, last = since;
+    int k = 0, listed = 0, more = 0, i;
+    if (s < since) s = since;
+    P("{\"version\":\"%s\",\"started_at\":%.0f,\"last_seq\":%llu,\"kept\":%d,\"totals\":{\"rooms\":%llu,\"sessions\":%llu,\"room_s\":%.0f,"
+      "\"partner_s\":%.0f,\"relay_s\":%.0f", srv_proc.version ? srv_proc.version : "", srv_proc.started_at, (unsigned long long)hist_seq, HIST_N,
+      (unsigned long long)hist_seq, (unsigned long long)hist_tot.sessions, hist_tot.room_ms / 1000.0, hist_tot.partner_ms / 1000.0, hist_tot.relay_ms / 1000.0);
+    for (i = 0; i < 2; i++)
+        if (hist_tot.ping[i].n) P(",\"ping_%s\":{\"n\":%u,\"avg\":%.1f}", i ? "joiner" : "host", hist_tot.ping[i].n, hist_tot.ping[i].sum / hist_tot.ping[i].n);
+        else P(",\"ping_%s\":null", i ? "joiner" : "host");
+    P("},\"sessions\":[");
+    for (; s < hist_seq; s++) {   /* oldest first; s + 1 is the seq */
+        const Hist* h = &hist[s % HIST_N];
+        if (k > cap - 1024) { more = 1; break; }   /* the rest: the next request, after "last" */
+        P("%s{\"seq\":%llu,\"id\":\"%s\",\"start\":%.0f,\"end\":%.0f,\"duration_s\":%.0f,\"ended\":\"%s\",\"players\":%d,\"partners\":%u,"
+          "\"partner_s\":%.0f,\"path\":\"%s\",\"relay_s\":%.0f,\"relay_bytes\":%llu", listed++ ? "," : "", (unsigned long long)h->seq, h->id, h->start, h->end,
+          h->end - h->start, hist_why[h->why], h->joins ? 2 : 1, h->joins, h->partner_ms / 1000.0, h->relay_bytes ? "relay" : h->joins ? "direct" : "none",
+          h->relay_ms / 1000.0, (unsigned long long)h->relay_bytes);
+        k += ping_json(o + k, k < cap ? cap - k : 0, "ping_host", &h->ping[0]);
+        k += ping_json(o + k, k < cap ? cap - k : 0, "ping_joiner", &h->ping[1]);
+        P("}");
+        last = h->seq;
+    }
+    P("],\"last\":%llu,\"more\":%s}", (unsigned long long)last, more ? "true" : "false");
+    return k < cap ? k : 0;
 }
 
 int srv_summary(char* o, int cap)
@@ -848,26 +990,46 @@ void srv_input(const RdvAddr* from, const uint8_t* buf, int n, uint64_t now)
         rdv_cookie(secret, from, (uint32_t)(now / 60000), m.cookie);
         m.pub = *from;
         send_msg(from, &m);
+        {   /* (rate_ok made the address's Pre entry) */
+            Pre* e = &pres[ip_hash(from) % PRE_N];
+            e->welcome_ms = now;
+            e->welcome_port = from->port;
+        }
         V("HELLO%s%s", WHO(from));
         return;
     case RDV_CREATE:
     case RDV_JOIN:
         if (!cookie_ok(from, q.cookie, now)) { send_err(from, RDV_E_COOKIE, NULL); V("a stale cookie%s%s", WHO(from)); return; }
-        if (t == RDV_CREATE) on_create(from, &q, now); else on_join(from, &q, now);
+        {   /* the first request after a WELCOME: a round trip (a retry, a JOIN with the password after NEED_PW: none) */
+            Pre* e = &pres[ip_hash(from) % PRE_N];
+            double hs = -1;
+            if (!memcmp(e->ip, from->ip, 16) && e->welcome_ms && e->welcome_port == from->port && now - e->welcome_ms < 2000) hs = (double)(now - e->welcome_ms);
+            e->welcome_ms = 0;
+            if (t == RDV_CREATE) on_create(from, &q, now, hs); else on_join(from, &q, now, hs);
+        }
         return;
     case RDV_KEEPALIVE: if (!(q.flags & 0x80)) on_keepalive(from, &q, now); return;
     case RDV_CLOSE: on_close(from, &q, now); return;
     case RDV_KICK: on_kick(from, &q, now); return;
+    case RDV_PING: if (!(q.flags & 0x80)) on_pong(from, &q, now); return;
     case RDV_STATUS:   /* monitoring, from this machine only */
         if (from->fam == 4 && from->ip[0] == 127) {   /* the text in datagrams of whole lines (localhost only: no amplification) */
             uint8_t b[RDV_DGRAM_MAX];
             char t2[4096];
             int len, at = 0;
             V("STATUS from this machine");
-            if (q.payload_len == 4 && !memcmp(q.payload, "json", 4)) {   /* status-json: parts "J", index, count (u16 LE) */
+            int hist_q = q.payload_len >= 7 && q.payload_len < 40 && !memcmp(q.payload, "history", 7);
+            if ((q.payload_len == 4 && !memcmp(q.payload, "json", 4)) || hist_q) {   /* status-json, history-json: parts "J", index, count (u16 LE) */
                 static char js[65536];
                 uint8_t part[RDV_DGRAM_MAX - RDV_HDR];
-                int jn = srv_status_json(js, sizeof(js), now), per = (int)sizeof(part) - 5, cnt = (jn + per - 1) / per, i;
+                char since[40];
+                int jn, per = (int)sizeof(part) - 5, cnt, i;
+                if (hist_q) {   /* "history" or "history SEQ": the finished rooms after SEQ */
+                    memcpy(since, q.payload + 7, q.payload_len - 7);
+                    since[q.payload_len - 7] = 0;
+                    jn = srv_history_json(js, sizeof(js), strtoull(since, NULL, 10));
+                } else jn = srv_status_json(js, sizeof(js), now);
+                cnt = (jn + per - 1) / per;
                 for (i = 0; i < cnt; i++) {
                     int len2 = jn - i * per < per ? jn - i * per : per;
                     part[0] = 'J'; part[1] = (uint8_t)i; part[2] = (uint8_t)(i >> 8); part[3] = (uint8_t)cnt; part[4] = (uint8_t)(cnt >> 8);
@@ -917,7 +1079,7 @@ void srv_tick(uint64_t now)
     for (i = 0; i < cfg.max_rooms; i++) {
         Room* r = &rooms[i];
         if (!r->id) continue;
-        if (now - r->m[0].last_ms > to) { st.expired++; close_room(r, now, "the host timed out"); continue; }
+        if (now - r->m[0].last_ms > to) { st.expired++; close_room(r, now, "the host timed out", HIST_TIMEOUT); continue; }
         if (r->m[1].on && now - r->m[1].last_ms > cfg.member_timeout_s * 1000ull) { st.member_expired++; member_leaves(r, "timed out", now); }
         if (r->relaying && now - r->last_relay_ms > 5000) { r->relaying = 0; V("room %s: the relay idle for 5 s (a direct path now, or a pause)", rname(r)); }
     }
@@ -942,7 +1104,7 @@ int srv_draining(void) { return draining; }
    One set of functions writes and reads it (Io.wr): the order below is the format. Changing what
    is written means a new SRV_STATE_FORMAT; an import of an older format branches on it. Times are
    CLOCK_MONOTONIC milliseconds, the same for every process on the machine. */
-typedef struct Io { uint8_t* b; uint32_t n, cap; int wr, bad; } Io;
+typedef struct Io { uint8_t* b; uint32_t n, cap; int wr, bad; uint32_t fmt; } Io;   /* fmt: the blob's format (1: 0.7.8, no history) */
 static void io(Io* s, void* p, uint32_t n)
 {
     if (s->bad || n > s->cap - s->n) { s->bad = 1; if (!s->wr) memset(p, 0, n); return; }
@@ -958,6 +1120,14 @@ static void io_member(Io* s, Member* m)
 {
     IO(m->on); io_addr(s, &m->pub); io_addr(s, &m->lan); IO(m->pk); IO(m->token); IO(m->rejoin);
     IO(m->last_ms); IO(m->bytes); IO(m->dgrams); IO(m->fill_ms); IO(m->rx_top); IO(m->rx_win);
+    if (s->fmt >= 2) { IO(m->ping_id); IO(m->ping_ms); IO(m->pings); IO(m->pongs); }
+}
+static void io_ping(Io* s, Ping* p) { IO(p->n); IO(p->sum); IO(p->jsum); IO(p->last); IO(p->min); IO(p->max); }
+static int ping_ok(const Ping* p) { return fin(p->sum) && fin(p->jsum) && fin(p->last) && fin(p->min) && fin(p->max); }
+static void io_hist(Io* s, Hist* h)
+{
+    IO(h->seq); IO(h->id); IO(h->why); IO(h->joins); IO(h->start); IO(h->end); IO(h->partner_ms); IO(h->relay_ms); IO(h->relay_bytes);
+    io_ping(s, &h->ping[0]); io_ping(s, &h->ping[1]);
 }
 static void io_room(Io* s, Room* r)
 {
@@ -966,6 +1136,8 @@ static void io_room(Io* s, Room* r)
     IO(r->relayed); IO(r->relaying); IO(r->pw_fail_start); IO(r->pw_last_ms); IO(r->pw_fails);
     io_member(s, &r->m[0]);
     io_member(s, &r->m[1]);
+    if (s->fmt >= 2) { io_ping(s, &r->ping[0]); io_ping(s, &r->ping[1]); IO(r->joined_ms); IO(r->partner_ms); IO(r->relay_ms); IO(r->joins); }
+    else if (!s->wr && r->m[1].on) { r->joined_ms = r->opened_ms; r->joins = 1; }   /* from 0.7.8: the partner's arrival is not known */
 }
 static void io_globals(Io* s)
 {
@@ -989,6 +1161,24 @@ static void io_ad(Io* s, Addr* e)
     IO(e->rbytes); IO(e->rdgrams); IO(e->rfill);
 }
 
+/* the session history (format 2): the counters, then the kept entries, oldest first */
+static int io_history(Io* s)
+{
+    uint64_t q;
+    uint32_t cnt = hist_seq < HIST_N ? (uint32_t)hist_seq : HIST_N, i, k;
+    IO(hist_seq); IO(hist_tot.sessions); IO(hist_tot.room_ms); IO(hist_tot.partner_ms); IO(hist_tot.relay_ms);
+    for (k = 0; k < 2; k++) { IO(hist_tot.ping[k].n); IO(hist_tot.ping[k].sum); }
+    IO(cnt);
+    if (s->bad || cnt > HIST_N || cnt > hist_seq || !fin(hist_tot.ping[0].sum) || !fin(hist_tot.ping[1].sum)) return 0;
+    for (i = 0, q = hist_seq - cnt; i < cnt; i++, q++) {
+        Hist* h = &hist[q % HIST_N];
+        io_hist(s, h);
+        if (s->bad || h->seq != q + 1 || h->why >= HIST_WHYS || !fin(h->start) || !fin(h->end) || !ping_ok(&h->ping[0]) || !ping_ok(&h->ping[1])) return 0;
+        h->id[12] = 0;
+    }
+    return 1;
+}
+
 int srv_state_export(uint8_t** out_b, uint32_t* out_n)
 {
     Io s0, *s = &s0;
@@ -998,7 +1188,9 @@ int srv_state_export(uint8_t** out_b, uint32_t* out_n)
     for (i = 0; i < ADDR_N; i++) na += addrs[i].used != 0;
     memset(&s0, 0, sizeof(s0));
     s->wr = 1;
-    s->cap = 512 + sizeof(SrvStats) + nr * (sizeof(Room) + 8) + nre * (sizeof(Recent) + 8) + np * (sizeof(Pre) + 8) + na * (sizeof(Addr) + 8);
+    s->fmt = fmt;
+    s->cap = 512 + sizeof(SrvStats) + nr * (sizeof(Room) + 8) + nre * (sizeof(Recent) + 8) + np * (sizeof(Pre) + 8) + na * (sizeof(Addr) + 8) +
+             sizeof(hist_tot) + sizeof(hist);
     if (!(s->b = malloc(s->cap))) return 0;
     io(s, (void*)"RXST", 4); IO(fmt); IO(mr);
     io_globals(s);
@@ -1010,6 +1202,7 @@ int srv_state_export(uint8_t** out_b, uint32_t* out_n)
     for (i = 0; i < PRE_N; i++) if (pres[i].used) { IO(i); io_pre(s, &pres[i]); }
     IO(na);
     for (i = 0; i < ADDR_N; i++) if (addrs[i].used) { IO(i); io_ad(s, &addrs[i]); }
+    if (fmt >= 2) io_history(s);
     io(s, (void*)"RXEN", 4);
     if (s->bad) { crypto_wipe(s->b, s->cap); free(s->b); return 0; }
     *out_b = s->b;
@@ -1044,7 +1237,8 @@ int srv_state_import(const uint8_t* b, uint32_t n, SrvConfig* c, int nsocks)
     s->cap = n;
     io(s, magic, 4); IO(fmt);
     if (s->bad || memcmp(magic, "RXST", 4)) return -1;
-    if (fmt != (uint32_t)srv_state_format) return 1;   /* (an older format, once there is one, is read here) */
+    if (fmt != (uint32_t)srv_state_format && !(fmt == 1 && srv_state_format == SRV_STATE_FORMAT)) return 1;   /* format 1: 0.7.8, without the history */
+    s->fmt = fmt;
     IO(mr);
     if (s->bad || mr < 1 || mr > 65535) return -1;
     if ((int)mr > cfg.max_rooms) {   /* the running server's rooms keep their slots */
@@ -1067,7 +1261,7 @@ int srv_state_import(const uint8_t* b, uint32_t n, SrvConfig* c, int nsocks)
         Room r;
         memset(&r, 0, sizeof(r));
         IO(at); io_room(s, &r);
-        if (s->bad || at >= mr || rooms[at].id || !room_ok(&r, at, nsocks)) { crypto_wipe(&r, sizeof(r)); return -1; }
+        if (s->bad || at >= mr || rooms[at].id || !room_ok(&r, at, nsocks) || !ping_ok(&r.ping[0]) || !ping_ok(&r.ping[1])) { crypto_wipe(&r, sizeof(r)); return -1; }
         rooms[at] = r;
         crypto_wipe(&r, sizeof(r));
         st.rooms++;
@@ -1097,6 +1291,7 @@ int srv_state_import(const uint8_t* b, uint32_t n, SrvConfig* c, int nsocks)
         e.used = 1;
         addrs[at] = e;
     }
+    if (fmt >= 2 && !io_history(s)) return -1;
     io(s, magic, 4);
     return !s->bad && s->n == n && !memcmp(magic, "RXEN", 4) ? 0 : -1;
 }

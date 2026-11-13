@@ -44,6 +44,9 @@ static int dns_starts;
 NetResolve* net_resolve_start(const char* host, int port) { (void)host; dns_job.state = 0; dns_job.a.port = htons((uint16_t)port); dns_starts++; return &dns_job; }
 int net_resolve_poll(NetResolve* r, NetAddr* out) { if (r->state > 0) *out = r->a; return r->state; }
 void net_resolve_cancel(NetResolve* r) { (void)r; }
+uint64_t net_us(void) { return (uint64_t)clk * 1000; }
+uint64_t net_rx_us(void) { return (uint64_t)clk * 1000; }   /* (a PING is answered in the read that got it) */
+int net_rx_exact(void) { return 1; }
 
 typedef struct { NetAddr to; uint8_t b[RDV_DGRAM_MAX + 64]; int n; } Pkt;
 static Pkt cli_out[512];        /* what the client sent */
@@ -712,6 +715,17 @@ int main(int argc, char** argv)
     test_restart();
     test_dns();
     test_no_randomness();
+    {   /* the server's PINGs: the game answers each (the session history's round trips) */
+        RdvConfig c = base(1);
+        static char js[65536];
+        reset_server();
+        rdv_start(&c);
+        run(4500);   /* keepalives every second while it waits: a PING with each */
+        rdv_stop();
+        pump();
+        CHECK(srv_history_json(js, sizeof(js), 0) > 0 && strstr(js, "\"ended\":\"host\""));
+        CHECK(strstr(js, "\"ping_host\":{\"n\":") && atoi(strstr(js, "\"ping_host\":{\"n\":") + 17) >= 4);   /* the WELCOME's, and the PINGs' */
+    }
     srv_free();
     printf(fails ? "test_rdv_client: %d failures\n" : "test_rdv_client: all passed\n", fails);
     return fails != 0;

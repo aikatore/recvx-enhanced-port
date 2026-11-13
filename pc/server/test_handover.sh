@@ -46,6 +46,8 @@ sleep 0.3
 [ "$(stat -c %a "$ctl")" = 600 ] && ok "control socket mode 0600" || bad "control socket mode $(stat -c %a "$ctl")"
 grep -qx "READY=1" "$tmp/notify.txt" && ok "READY=1 at the start" || bad "no READY=1 at the start"
 
+# a room that ends before the take-over (the session history keeps it)
+srv host --secs 1 > "$tmp/eh.txt" 2>&1
 # the sessions: relayed (both forced), automatic (direct on 127.0.0.1), a host waiting
 srv host --secs 16 --relay > "$tmp/rh.txt" 2>&1 & rh=$!
 srv host --secs 16 > "$tmp/dh.txt" 2>&1 & dh=$!
@@ -57,6 +59,7 @@ srv join "$dcode" --secs 12 > "$tmp/dj.txt" 2>&1 & dj=$!
 pids="$pids $rj $dj"
 sleep 3
 srv status-json > "$tmp/before.json" || bad "status-json before"
+srv history-json > "$tmp/hist0.json" || bad "history-json before"
 
 # a build that cannot read this state: exit 3, nothing taken over
 RECVX_SERVER_TEST_STATE_FORMAT=99 "$bin/recvx-server" --take-over --port $port --control "$ctl" > "$tmp/t0.txt" 2>&1
@@ -78,6 +81,7 @@ grep -qx "MAINPID=$new" "$tmp/notify.txt" && grep -qx "BARRIER=1" "$tmp/notify.t
     && ok "systemd: MAINPID=$new, BARRIER, READY" || { bad "systemd notify"; cat "$tmp/notify.txt"; }
 sleep 1
 srv status-json > "$tmp/after.json" || bad "status-json after"
+srv history-json > "$tmp/hist1.json" || bad "history-json after"
 srv join "$wcode" --secs 3 > "$tmp/wj.txt" 2>&1 && ok "a code from before the take-over joins: $(grep RESULT "$tmp/wj.txt")" || { bad "join of the waiting room after the take-over"; cat "$tmp/wj.txt"; }
 
 python3 - "$tmp/before.json" "$tmp/after.json" "$rcode $dcode $wcode" <<'EOF' && ok "status-json: valid, no codes or addresses, counters only grow" || bad "status-json"
@@ -89,7 +93,7 @@ for t in (open(sys.argv[1]).read(), open(sys.argv[2]).read()):
     assert "127.0.0.1" not in t, "an address"
 for k in ("version", "state_format", "started_at", "uptime_s", "process_started_at", "handovers", "draining", "handover_capable", "rooms", "room_list", "players", "sessions", "counters", "drops"):
     assert k in a, k
-assert a["handover_capable"] is True and a["draining"] is False and a["state_format"] == 1
+assert a["handover_capable"] is True and a["draining"] is False and a["state_format"] == 2
 assert b["handovers"] == 0 and a["handovers"] == 1 and a["started_at"] == b["started_at"] and b["uptime_s"] >= 2 and a["uptime_s"] >= b["uptime_s"], "service uptime"
 assert a["process_started_at"] >= b["process_started_at"] and a["drops"] == a["counters"]["drops"] == a["counters"]["recvx_drops_total"]
 assert b["rooms"] == 3 and a["rooms"] == 3, (b["rooms"], a["rooms"])
@@ -106,7 +110,7 @@ assert set(bc) == set(ac) and "drops.relay_auth" in ac and "recvx_rooms_opened_t
 for k, v in bc.items():
     if k.endswith("_total") or "_total." in k or k.startswith("drops."): assert ac[k] >= v, (k, v, ac[k])
 assert ac["recvx_relay_datagrams_total.out"] > bc["recvx_relay_datagrams_total.out"], "relay traffic after the take-over"
-assert ac["recvx_rooms_opened_total"] == bc["recvx_rooms_opened_total"] == 3
+assert ac["recvx_rooms_opened_total"] == bc["recvx_rooms_opened_total"] == 4   # (and the one that ended before)
 EOF
 
 # the sessions across the take-over: both ends succeed, nearly every ping answered, no room lost
@@ -119,6 +123,31 @@ if [ $r1 -eq 0 ] && [ $r2 -eq 0 ] && [ $r3 -eq 0 ] && [ $r4 -eq 0 ] && grep -q "
 then ok "no session dropped"; else bad "sessions: exits $r1 $r2 $r3 $r4"; grep -h "lost\|FAILED" "$tmp"/?[hj].txt; fi
 wait $wh
 pids=""
+sleep 0.3
+srv history-json > "$tmp/hist2.json" || bad "history-json at the end"
+srv history-json 2 > "$tmp/hist3.json" || bad "history-json after seq 2"
+python3 - "$tmp" "$rcode $dcode $wcode" <<'EOF' && ok "history-json: kept across the take-over, round trips of both players, no codes or addresses" || bad "history-json"
+import json, sys
+h0, h1, h2, h3 = (json.load(open(f"{sys.argv[1]}/hist{i}.json")) for i in range(4))
+for i in range(4):
+    t = open(f"{sys.argv[1]}/hist{i}.json").read()
+    for c in sys.argv[2].split(): assert c not in t and c.replace("-", "") not in t, "a room code"
+    assert "127.0.0.1" not in t, "an address"
+assert h0["last_seq"] == 1 and len(h0["sessions"]) == 1 and h0["sessions"][0]["partners"] == 0 and h0["sessions"][0]["ended"] == "host", h0
+assert h1["sessions"] == h0["sessions"] and h1["started_at"] == h0["started_at"], "the history after the take-over"
+s = h2["sessions"]
+assert h2["last_seq"] == 4 and [x["seq"] for x in s] == [1, 2, 3, 4] and not h2["more"] and h2["totals"]["rooms"] == 4 and h2["totals"]["sessions"] == 3, h2
+assert [x["seq"] for x in h3["sessions"]] == [3, 4], h3
+for x in s[1:]:
+    assert x["partners"] == 1 and x["players"] == 2 and x["start"] < x["end"] and x["duration_s"] >= 14, x
+    for side in ("ping_host", "ping_joiner"):   # recvx-client is the game's client code: it answers every PING
+        p = x[side]
+        assert p["n"] >= (3 if x["partner_s"] >= 10 else 1) and 0 <= p["min"] <= p["avg"] <= p["max"] < 1000 and p["jitter"] >= 0, (side, x)
+paths = sorted(x["path"] for x in s[1:])
+assert paths == ["direct", "direct", "relay"], paths
+r = next(x for x in s if x["path"] == "relay")
+assert r["relay_bytes"] > 100000 and r["relay_s"] >= 8 and r["partner_s"] >= 10, r
+EOF
 
 # drain: an open room goes on, a new one is refused, the server stops when the room closed
 srv host --secs 4 > "$tmp/h3.txt" 2>&1 & h3=$!

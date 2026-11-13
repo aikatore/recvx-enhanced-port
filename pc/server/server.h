@@ -85,6 +85,9 @@ int srv_summary(char* out, int cap);              /* the metrics in one log line
 /* the metrics and the rooms as one JSON object on one line (STATUS "json"; docs/SERVER.md "Metrics").
    No room codes, tokens, keys or addresses. */
 int srv_status_json(char* out, int cap, uint64_t now_ms);
+/* the finished rooms after seq `since` (oldest first, as many as fit; "more" says the rest is
+   there) and the totals, as one JSON object (STATUS "history SEQ"; docs/SERVER.md "Session history") */
+int srv_history_json(char* out, int cap, uint64_t since);
 
 /* drain: new rooms are refused (RDV_E_SERVER_FULL, "full or busy"), open rooms go on; main.c
    stops when the last one closed */
@@ -98,7 +101,7 @@ int srv_draining(void);
    import, into a fresh srv_init: 0 taken, 1 a format this build cannot read (nothing changed),
    -1 invalid. *c gets the running max_rooms when the blob's is larger. nsocks: the sockets
    received (an address's `via` must be below it). */
-#define SRV_STATE_FORMAT 1
+#define SRV_STATE_FORMAT 2   /* 2: + the session history (0.7.9); format 1 (0.7.8) is still read */
 extern int srv_state_format;   /* the format written and read: SRV_STATE_FORMAT (a test sets another: a build that cannot read this state) */
 #define SRV_STATE_MAX (64u << 20)
 int srv_state_export(uint8_t** out, uint32_t* n);

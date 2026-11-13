@@ -554,6 +554,16 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
                 if (cfg.host && m.has_member && kick_seq && kick_seq == member_seq && st == RDV_ST_WAITING) send_kick();   /* the KICK was lost */
             }
             return -1;
+        case RDV_PING:   /* the server measures its round trip to us (docs/SERVER.md "Session history"): back at once */
+            if ((m.flags & 0x80) && room_id && m.room_id == room_id) {
+                uint64_t held = net_rx_exact() ? net_us() - net_rx_us() : 0;   /* since it arrived: the game's frame, not the network */
+                m.flags = 0;
+                memcpy(m.token, token, 16);
+                m.hold_us = held > 1000000 ? 1000000 : (uint32_t)held;
+                send_msg(&cfg.server, &m);
+                crypto_wipe(m.token, 16);
+            }
+            return -1;
         case RDV_RELAY:
             if (!room_id || m.room_id != room_id || (n = game_in(buf, cap, m.payload, m.payload_len)) < 0) return -1;
             if (confirmed && net_ms() - t_dir > RELAYS_MS) fall_back("the partner relays, nothing direct");   /* our direct datagrams likely do not reach it either */

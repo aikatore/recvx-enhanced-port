@@ -26,6 +26,9 @@ const char* net_addr_str(const NetAddr* a) { (void)a; return "x"; }
 NetResolve* net_resolve_start(const char* h, int p) { (void)h; (void)p; return NULL; }
 int net_resolve_poll(NetResolve* r, NetAddr* o) { (void)r; (void)o; return -1; }
 void net_resolve_cancel(NetResolve* r) { (void)r; }
+uint64_t net_us(void) { return (uint64_t)clk * 1000; }
+uint64_t net_rx_us(void) { return (uint64_t)clk * 1000; }   /* (a PING is answered in the read that got it) */
+int net_rx_exact(void) { return 1; }
 int net_send(const NetAddr* to, const void* b, int n) { (void)to; (void)b; return n > 0 && n <= RDV_DGRAM_MAX + RDV_RELAY_HDR; }
 static void srv_send(const RdvAddr* to, const uint8_t* b, int n) { (void)to; (void)b; if (n > RDV_DGRAM_MAX) abort(); }
 

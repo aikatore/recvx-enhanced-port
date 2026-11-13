@@ -29,7 +29,7 @@ static void rb(R* r, void* d, int n) { if (r->at + n <= r->n) memcpy(d, r->p + r
 static int raddr(R* r, RdvAddr* a) { a->fam = r8(r); a->port = r16(r); rb(r, a->ip, 16); return a->fam == 0 || a->fam == 4 || a->fam == 6; }
 
 /* body sizes after the 8-byte header; -1: variable */
-static const int body[RDV_TYPES] = { 0, -1, 39, 124, 36, 124, 96, 21, -1, -1, 20, 19, -1, 24 };
+static const int body[RDV_TYPES] = { 0, -1, 39, 124, 36, 124, 96, 21, -1, -1, 20, 19, -1, 24, -1 };
 
 int rdv_test_fail;
 
@@ -99,6 +99,12 @@ int rdv_parse(const uint8_t* b, int n, RdvMsg* m)
     case RDV_KICK:   /* the host removes its partner: room, host token, the member sequence it means */
         m->room_id = r32(&r); rb(&r, m->token, 16); m->seq = r32(&r);
         break;
+    case RDV_PING:   /* the server's probe 8 bytes (room id, probe id), the member's answer 28 (+ token, hold time) */
+        m->room_id = r32(&r); m->seq = r32(&r);
+        if (n == RDV_HDR + 28) { rb(&r, m->token, 16); m->hold_us = r32(&r); }
+        else if (n == RDV_HDR + 8) m->flags |= 0x80;
+        else return RDV_BAD_SIZE;
+        break;
     case RDV_ERROR:
         m->err = r8(&r); m->version = r16(&r); rb(&r, m->salt, 16);
         if (m->err < RDV_E_VERSION || m->err > RDV_E_TOO_MANY) return RDV_BAD_FIELD;
@@ -137,6 +143,10 @@ int rdv_build(uint8_t* b, int cap, const RdvMsg* m)
         break;
     case RDV_CLOSE: w32(&w, m->room_id); wb(&w, m->token, 16); break;
     case RDV_KICK: w32(&w, m->room_id); wb(&w, m->token, 16); w32(&w, m->seq); break;
+    case RDV_PING:
+        w32(&w, m->room_id); w32(&w, m->seq);
+        if (!(m->flags & 0x80)) { wb(&w, m->token, 16); w32(&w, m->hold_us); }
+        break;
     case RDV_ERROR: w8(&w, m->err); w16(&w, RDV_VERSION); wb(&w, m->salt, 16); break;
     case RDV_STATUS: wb(&w, m->payload, m->payload_len); break;
     default: return 0;

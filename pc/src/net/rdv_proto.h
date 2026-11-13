@@ -24,7 +24,10 @@ extern "C" {
 #define RDV_CODE_CHARS "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   /* also the co-op join codes */
 
 enum { RDV_HELLO = 1, RDV_WELCOME, RDV_CREATE, RDV_ROOM, RDV_JOIN, RDV_INTRO, RDV_PUNCH, RDV_RELAY,
-       RDV_KEEPALIVE, RDV_CLOSE, RDV_ERROR, RDV_STATUS, RDV_KICK, RDV_TYPES };
+       RDV_KEEPALIVE, RDV_CLOSE, RDV_ERROR, RDV_STATUS, RDV_KICK, RDV_PING, RDV_TYPES };
+/* RDV_PING (0.7.9, no new RDV_VERSION): the server's round-trip probe to a room member and the
+   member's answer (docs/SERVER.md "Session history"). Older games drop the unknown type; older
+   servers never send it, so a newer game never answers one. */
 enum { RDV_E_VERSION = 1, RDV_E_NO_ROOM, RDV_E_NEED_PW, RDV_E_BAD_PW, RDV_E_FULL, RDV_E_RATE, RDV_E_COOKIE,
        RDV_E_SERVER_FULL, RDV_E_TOO_MANY };
 enum { RDV_F_PW = 1, RDV_F_E2E = 2 };   /* CREATE / INTRO flags; JOIN: RDV_F_PW = a proof is given */
@@ -45,6 +48,7 @@ typedef struct RdvMsg {
     char code[RDV_CODE_LEN + 1];
     RdvAddr pub, lan;                   /* WELCOME: pub = the sender as the server sees it; CREATE/JOIN: lan */
     int err, role, attempt, has_member;
+    uint32_t hold_us;                   /* PING answer: how long the probe waited in the game before the answer (us) */
     const uint8_t* payload;             /* RELAY: the frame after the 24-byte header (seq = its counter, mac[0..8) its MAC) */
     int payload_len;
 } RdvMsg;
