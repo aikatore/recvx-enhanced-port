@@ -5,6 +5,7 @@
 ### Fixes
 
 - **Co-op**: more synchronization fixes, including boss fights and blood effects.
+- **Randomize Voice Lines**: mouths no longer move while no sound plays.
 
 ## 0.7.8 (2026-11-13)
 
