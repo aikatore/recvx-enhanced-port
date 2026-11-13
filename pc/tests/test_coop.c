@@ -102,7 +102,8 @@ static void test_events(void)
     BAD(EV_ENE_HIT, 0, e->u.eh.dam[1] = 5);              /* damage on an absent joint */
     BAD(EV_ENE_HIT, 0, e->u.eh.flg = 0x80);
     BAD(EV_ENE_HIT, 0, e->u.eh.flg = 4 | COOP_HIT_AIM | 0x100);   /* the aim height is at_flg 0xE << 8, nothing else */
-    BAD(EV_ENE_HIT, 0, e->u.eh.flg = 4 | 0x4000);
+    BAD(EV_ENE_HIT, 0, e->u.eh.flg = 4 | 0x8000);
+    { Event e = ev(EV_ENE_HIT); e.u.eh.flg = 4 | COOP_HIT_AIM | COOP_HIT_FWD; CHECK(coop_check_event(&e, 1) == COOP_OK); }   /* (56) passed on to the runner */
     { Event e = ev(EV_ENE_HIT); e.u.eh.flg = 4 | COOP_HIT_AIM | 0xE00; CHECK(coop_check_event(&e, 0) == COOP_OK); }
     { Event e = ev(EV_ENE_HIT); e.u.eh.flg = 4 | COOP_HIT_AIM | 0x400 | COOP_HIT_PRECISE; CHECK(coop_check_event(&e, 0) == COOP_OK); }
     BAD(EV_ENE_HIT, 0, e->u.eh.comb_flg = 0x81);
@@ -151,7 +152,21 @@ static void test_events(void)
     BAD(EV_UNGRAB, 0, e->u.gr.state = 3);
     BAD(EV_ENEOWN, 1, e->u.gr.state = 3);   /* (53) the hand-in: the guest claims (3), the host answers (4) */
     BAD(EV_ENEOWN, 0, e->u.gr.state = 4);
-    BAD(EV_ENEOWN, 0, e->u.gr.state = 5);
+    BAD(EV_ENEOWN, 0, e->u.gr.state = 5);                 /* (56) the room's runner: child COOP_ROOM_* ... */
+    BAD(EV_ENEOWN, 0, (e->u.gr.state = 5, e->u.gr.child = COOP_ROOM_CLAIM));   /* ... the host asks for the claims */
+    BAD(EV_ENEOWN, 0, (e->u.gr.state = 5, e->u.gr.child = COOP_ROOM_HOST));    /* ... the host's verdict */
+    BAD(EV_ENEOWN, 1, (e->u.gr.state = 5, e->u.gr.child = COOP_ROOM_DONE));    /* ... the guest's claims are in */
+    BAD(EV_ENEOWN, 1, (e->u.gr.state = 5, e->u.gr.child = COOP_ROOM_GUEST));
+    BAD(EV_ENEOWN, 1, e->u.gr.state = 7);
+    BAD(EV_ENEOWN, 1, e->u.gr.pset = 2);                   /* (56) pset: the giver leaves */
+    {
+        Event e = ev(EV_ENEOWN);
+        e.u.gr.state = 5; e.u.gr.child = COOP_ROOM_CLAIM; CHECK(coop_check_event(&e, 1) == COOP_OK);
+        e.u.gr.child = COOP_ROOM_HOST; CHECK(coop_check_event(&e, 1) == COOP_OK);
+        e.u.gr.child = COOP_ROOM_DONE; CHECK(coop_check_event(&e, 0) == COOP_OK);
+        e = ev(EV_ENEOWN); e.u.gr.state = 6; CHECK(coop_check_event(&e, 0) == COOP_OK && coop_check_event(&e, 1) == COOP_OK);
+        e = ev(EV_ENEOWN); e.u.gr.pset = 1; e.u.gr.tid = 0; CHECK(coop_check_event(&e, 0) == COOP_OK && coop_check_event(&e, 1) == COOP_OK);
+    }
     { Event e = ev(EV_ENEOWN); e.u.gr.state = 3; CHECK(coop_check_event(&e, 0) == COOP_OK); e.u.gr.state = 4; CHECK(coop_check_event(&e, 1) == COOP_OK); }
     BAD(EV_ENEOWN, 0, e->idx = 255);
     { Event e = ev(EV_UNGRAB); e.u.gr.state = 2; CHECK(coop_check_event(&e, 1) == COOP_OK); }   /* (46) the grab is over, kept */
@@ -542,6 +557,9 @@ static void test_dgrams(void)
     BADP(q.mset = 300, COOP_BAD_FIELD);
     BADP(q.mset = 255, COOP_BAD_FIELD);
     BADP(q.busy = 7, COOP_BAD_FIELD);
+    BADP(q.busy = BUSY_DOOR + 1, COOP_BAD_FIELD);
+    BADP(q.busy = BUSY_DOOR, COOP_OK);            /* (56) in a door, the next room loading */
+    BADP(q.busy = BUSY_PAUSED, COOP_OK);          /* (56) in game, its enemies stand still */
     BADP(q.flr = 33, COOP_BAD_FIELD);             /* flr_no 30: past rom->grand[32] */
     BADP(q.flr = 255, COOP_BAD_FIELD);
     BADP(q.flr = 32, COOP_OK);                    /* floors -2..29, 0 = not sent */
@@ -669,6 +687,35 @@ static void test_xfer(void)
         for (off = 0, r = 0; off < 4576; off += 64) r = coop_xfer_chunk(&x, 9, 4576, off, 4576 - off < 64 ? 4576 - off : 64, data);
         CHECK(r == 1);
     }
+}
+
+/* (protocol 56) EV_ESTATE's packing: the zero words left out */
+static void test_zpack(void)
+{
+    static unsigned char in[5256], z[5256 + 200], out[5256 + 64];
+    int n, k, len;
+    for (n = 0; n <= 5256; n += n < 64 ? 4 : 1972) {
+        memset(in, 0, sizeof(in));
+        for (k = 0; k < n; k += 4 + (k % 7) * 4) in[k + (k / 4) % 4] = (unsigned char)(k * 13 + 1);   /* (a word in every few) */
+        len = coop_zpack(in, n, z, sizeof(z));
+        CHECK(len >= 2 + (n / 4 + 7) / 8 && len <= 2 + (n / 4 + 7) / 8 + n);
+        memset(out, 0xEE, sizeof(out));
+        CHECK(coop_zunpack(z, len, out, sizeof(out)) == n && !memcmp(in, out, n));
+        if (n) CHECK(coop_zunpack(z, len, out, n - 1) == -1);    /* larger than the buffer */
+        if (len > 2 + (n / 4 + 7) / 8) {
+            CHECK(coop_zunpack(z, len - 1, out, sizeof(out)) == -1);   /* a word cut */
+            CHECK(coop_zunpack(z, len + 4, out, sizeof(out)) == -1);   /* a word too many */
+        }
+    }
+    memset(in, 0, sizeof(in));
+    CHECK(coop_zpack(in, 3848, z, sizeof(z)) == 2 + 121);          /* all zero: the bits only */
+    CHECK(coop_zpack(in, 6, z, sizeof(z)) == 0);                   /* not whole words */
+    CHECK(coop_zpack(in, COOP_ZPACK_MAX + 4, z, sizeof(z)) == 0);
+    memset(in, 1, sizeof(in));
+    CHECK(coop_zpack(in, 3848, z, 3000) == 0);                     /* does not fit */
+    z[0] = 7; z[1] = 0; CHECK(coop_zunpack(z, 3, out, sizeof(out)) == -1);   /* n not whole words */
+    z[0] = 8; z[1] = 0; z[2] = 0x04; CHECK(coop_zunpack(z, 3, out, sizeof(out)) == -1);   /* a bit past the last word */
+    CHECK(coop_zunpack(z, 1, out, sizeof(out)) == -1);
 }
 
 /* ---------------------------------------------------------------- the event ring */
@@ -1597,6 +1644,7 @@ int main(int argc, char** argv)
     test_snaps();
     test_dgrams();
     test_xfer();
+    test_zpack();
     test_ring();
     test_code();
     test_direct();

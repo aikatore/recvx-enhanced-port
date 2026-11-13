@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 55                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 56                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -85,7 +85,12 @@ extern "C" {
                                                the extras the guest killed are made dead on the host, and SPAWN_NOTE_DONE
                                                carries the room's records' hash (variant, id << 8 | mdlver: "room file differs");
                                            55: EneSnap.link (a linked part's parent slot): the players' slots of a zombie's upper
-                                               half differ when their room files give a record another look */
+                                               half differ when their room files give a record another look;
+                                           56: the player first in a room runs its enemies until it leaves (EV_ENEOWN 1 then: a
+                                               hand-over with its state, pset 1, taken at its frame; EV_ENEOWN 5 the room's runner,
+                                               6 "it runs here now"), make-before-break hand-overs, hits passed on to the runner
+                                               (COOP_HIT_FWD), BUSY_PAUSED, snapshots sent also with the partner elsewhere, events
+                                               ahead of a gap kept (no head-of-line blocking), EV_ESTATE packed (coop_zpack) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per datagram (the receiver's check; a frame sends up to 96: coop_glue.c EV_BURST) */
 #define COOP_SNAP_BUDGET 2400           /* enemy snapshot bytes per frame (records past it wait, by priority) */
@@ -114,7 +119,9 @@ enum { OPT2_EXTRA_OBJECTS = 1,          /* Pose.opts2 (protocol 33): extra item 
        OPT2_OWNERSHIP = 4,              /* (protocol 46) "Shared Enemy Control", engaged-player enemy ownership: common enemies
                                            run in the game of the player they are engaged with (coop_glue.c "Phase 3") */
        OPT2_ALL = 7 };
-enum { BUSY_NONE, BUSY_EVENT, BUSY_MENU, BUSY_BOX, BUSY_TRADE };
+enum { BUSY_NONE, BUSY_EVENT, BUSY_MENU, BUSY_BOX, BUSY_TRADE,
+       BUSY_PAUSED,                     /* (protocol 56) in game, its enemies stand still (a scene, a message): it runs none */
+       BUSY_DOOR };                     /* (protocol 56) in a door or the next room loading (before: BUSY_NONE): not in the room yet */
 enum { MSET_OWN = -1, MSET_ROOM = -2, MSET_NONE = -3 };
 #define MNW_ROOM 0x7FFE
 #define MNW_KEEP 0x7FFF
@@ -271,6 +278,10 @@ typedef struct AtrRec {                 /* a room record (ATR_WORK, 0x24 bytes) 
 
 #define COOP_HIT_AIM 0x1000u            /* EV_ENE_HIT flg: bits 0xE00 hold the shooter's aim height */
 #define COOP_HIT_PRECISE 0x2000u        /* EV_ENE_HIT flg: the shooter's "Precise hits" judged it (a zombie's head bursts only from a head hit) */
+enum { COOP_ROOM_CLAIM, COOP_ROOM_DONE, COOP_ROOM_GUEST, COOP_ROOM_HOST };   /* EV_ENEOWN 5's child (protocol 56): the host came
+                                           into the guest's room and asks for its claims; the guest's claims are all sent; (unused); the
+                                           host's verdict when both came at once: the host's room */
+#define COOP_HIT_FWD 0x4000u            /* (protocol 56) EV_ENE_HIT flg: passed on by the game that got it and did not run the enemy (once at most) */
 typedef struct Event {
     uint32_t id;
     uint8_t type, idx, stg, rom;        /* enemy slot; events for another room are dropped */
@@ -603,6 +614,12 @@ void coop_xfer_init(CoopXfer* x, void* buf, int cap);
 void coop_xfer_reset(CoopXfer* x);
 /* -1 rejected (nothing changed), 0 taken, 1 the transfer is complete */
 int coop_xfer_chunk(CoopXfer* x, int tid, int total, int off, int len, const uint8_t* data);
+/* (protocol 56) an EV_ESTATE transfer's content: n bytes (a multiple of 4, at most COOP_ZPACK_MAX) as a u16 n, a bit per
+   4-byte word (set: not zero), then those words. The enemy states it carries are mostly zero once the words the receiver
+   never takes are cleared (pointers, matrices): a zombie's 61 chunks became about 13. */
+#define COOP_ZPACK_MAX 8192
+int coop_zpack(const uint8_t* in, int n, uint8_t* out, int cap);       /* its length, 0: does not fit */
+int coop_zunpack(const uint8_t* in, int len, uint8_t* out, int cap);   /* n, -1: malformed or larger than cap */
 
 /* Which player an enemy of the host goes for (coop_glue.c coop_enemy_begin): 0 the host's, 1 the
    partner's stand-in. Per player ([0] the host's, [1] the partner's): d squared XZ distance (the

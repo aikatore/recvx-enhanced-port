@@ -733,7 +733,8 @@ void coop_control_remote(void)
        stays, frozen in its last pose: it is drawn only (enemies do not target it, proxy_ok) */
     if (!have_rx || !local_visible()) return;
     if (!partner_here()) { p2_seen_room = -1; return; }
-    p2_busy = (rx.flags & (PF_IN_GAME | PF_VISIBLE)) != (PF_IN_GAME | PF_VISIBLE) ? rx.busy : rx.busy == BUSY_TRADE ? BUSY_TRADE : 0;   /* trading: drawn live, no target */
+    p2_busy = rx.busy == BUSY_DOOR || rx.busy == BUSY_PAUSED ? 0 :   /* (protocol 56: as BUSY_NONE before) */
+              (rx.flags & (PF_IN_GAME | PF_VISIBLE)) != (PF_IN_GAME | PF_VISIBLE) ? rx.busy : rx.busy == BUSY_TRADE ? BUSY_TRADE : 0;   /* trading: drawn live, no target */
     if ((rx.flags & (PF_IN_GAME | PF_VISIBLE)) != (PF_IN_GAME | PF_VISIBLE) && (!p2_busy || p2_seen_room != coop_room_key() || p2_chr < 0)) return;
     if (rx.chr < 0 || rx.chr > 3 + ACTOR_MODELS || rx.costume < 0 || rx.costume > 3 || rx.mfile < 0 || rx.mfile > 15) return;
     if (rx.chr != p2_chr || rx.costume != p2_costume || rx.mfile != p2_mfile) {
@@ -890,17 +891,18 @@ static struct CoopBufs {
     CoopSnapRx srx;                     /* ... and the partner's as taken */
     EneSnap run_snap[PC_ENE_SLOTS][2];  /* our last two snapshots of a slot we run (owners_sync) */
     EneSnap rx_sn[COOP_ENE_SLOTS], tx_snaps[PC_ENE_SLOTS];   /* receive(), send_frame() */
+    Event rb[COOP_RING];                /* protocol 56: the partner's events that came ahead of a gap, by id % COOP_RING (id 0: none) */
 }* bufs;
 static CoopSnapHist* hist;
 static CoopSnapTx* stx;
 static CoopSnapRx* srx;
 static EneSnap (*run_snap)[2];
 static uint32_t hist_applied[PC_ENE_SLOTS];       /* the sender frame of the snapshot applied last */
-static uint32_t run_from[PC_ENE_SLOTS];           /* the partner's newest frame when we started running the slot (owners_sync) */
 static uint32_t shown_seq[PC_ENE_SLOTS];          /* the frame shown last, its position and turn as shown (the blend back) */
 static float shown_p[PC_ENE_SLOTS][3];
 static int32_t shown_ay[PC_ENE_SLOTS];
 static CoopPlayout playout;
+static int snap_room = -1;              /* the partner's room (key | its case + 1 << 16) of the snapshots kept */
 static struct { uint32_t seq; int n; } snap_cnt[8];   /* snapshots that came per sender frame (snaps_live) */
 static struct { unsigned int at[5], frames, held, skipped; int behind; uint32_t last; } play_st;   /* RECVX_COOP_STATS */
 static void bufs_free(void)
@@ -918,7 +920,7 @@ static int bufs_get(void)
 static void snaps_reset(void)
 {
     if (hist) memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist));
-    memset(hist_applied, 0, sizeof(hist_applied)); memset(shown_seq, 0, sizeof(shown_seq)); memset(run_from, 0, sizeof(run_from));
+    memset(hist_applied, 0, sizeof(hist_applied)); memset(shown_seq, 0, sizeof(shown_seq));
     memset(snap_cnt, 0, sizeof(snap_cnt));
     coop_playout_reset(&playout);
 }
@@ -970,12 +972,17 @@ int pc_player_voice(int se)
 _Static_assert(sizeof(BH_PWORK) == 1408 && ESTATE_SIZE <= 64 * (int)sizeof(((CoopXfer*)0)->have), "EV_ESTATE: BH_PWORK as the 32-bit game has it");
 _Static_assert(12288 / sizeof(MN_WORK) == COOP_MNW_MAX, "an enemy's motion set: 512 entries");
 static unsigned char owned[PC_ENE_SLOTS], owned_child[PC_ENE_SLOTS], estate[ESTATE_SIZE], estate_out[ESTATE_SIZE];   /* received / being sent */
+/* (protocol 56) EV_ESTATE carries them packed (coop_zpack: the zero words left out); the received transfer is unpacked into
+   estate[] once, when an event that names it is applied (estate_take) */
+#define ESTATE_Z (2 + ESTATE_SIZE / 32 + 1 + ESTATE_SIZE)
+static unsigned char estate_z[ESTATE_Z], estate_zin[ESTATE_Z];
+static unsigned short estate_tid;       /* the transfer unpacked into estate[] (0 none) */
 static unsigned short own_wait[PC_ENE_SLOTS];    /* host: the guest's frames in our room without a snapshot of a grab it runs */
 static unsigned int snap_at[PC_ENE_SLOTS];       /* guest: our frame at which the slot last took the host's state */
 static unsigned int pose_seq[PC_ENE_SLOTS];       /* guest: the host frame of the slot's last snapshot */
 static unsigned char step_ran[PC_ENE_SLOTS];      /* the slot's last step ran its AI here (else a puppet's) */
 static unsigned char gave_grab[PC_ENE_SLOTS];     /* its step here just handed its grab of the stand-in over (grab_out) */
-static CoopXfer estate_x;               /* EV_ESTATE chunks into estate[] */
+static CoopXfer estate_x;               /* EV_ESTATE chunks into estate_zin[] */
 static unsigned short xfer_tid;         /* our last transfer id (blob, estate) */
 static void queue_event(Event* e);
 static int same_room(void);
@@ -997,7 +1004,7 @@ static int P3_HIT = 150;                /* frames (5 s) a player's hit counts as
 static unsigned char own_grab[PC_ENE_SLOTS];     /* the slot changed hands for a grab, still running in the runner's game */
 static unsigned char p3_want[PC_ENE_SLOTS];      /* frames in a row we would hand it to the partner */
 #define LEAVE_WAIT 15
-static unsigned char p3_leave[PC_ENE_SLOTS];     /* guest: frames we left with it not in a state to go with its state */
+static unsigned char p3_leave[PC_ENE_SLOTS];     /* frames we left with it not in a state to go with its state */
 static unsigned int own_t[PC_ENE_SLOTS];         /* our frame of its last change of hands */
 static unsigned int p3_ref_t[PC_ENE_SLOTS];      /* our frame + 1 of the partner's last refusal of it */
 static unsigned int own_ms[PC_ENE_SLOTS];        /* net_ms when we handed it over (until the new runner's first snapshot) */
@@ -1018,6 +1025,34 @@ static int p3_on(void)
 int coop_shared_enemies(void) { return is_host || g_coop.state == COOP_OFF ? p3_env() : peer_opts >= 0 && (peer_opts & (OPT2_OWNERSHIP << 8)); }   /* the guest's lobby: the host's */
 static int we_run(int i) { return i >= 0 && i < PC_ENE_SLOTS && owned[i] != is_host; }
 static void own_set(int i, int m) { if (i >= 0 && i < PC_ENE_SLOTS) owned[i] = (unsigned char)(is_host ? !m : !!m); }
+/* Protocol 56: who runs the enemies (docs/COOP.md "Who runs the enemies"). The player who was in the room first runs its
+   enemies until it leaves the room (a door, its menu, a scene that stops its enemies): then it hands every one it runs to the
+   player staying, with its state, and the receiver takes it at the frame of that state as its playout shows it (no gap,
+   no jump). The other player shows them as puppets; its own copies stay hidden and still until the runner's state of each
+   has come (or until it is known that it runs them itself). Both enter at once: the host decides (it was first unless the
+   guest was already in the room when the host's room loaded). The records the room's scripts act on are the host's
+   whenever it plays in the room (the scripts run there): the guest hands them in when the host comes. Shared Enemy
+   Control moves the common enemies between the two by engagement on top of that. A hand-over (EV_ENEOWN 1) is make
+   before break: the giver runs the enemy on until the receiver says it runs it (EV_ENEOWN 6); hits meanwhile go to the
+   receiver, so each is applied once. */
+static unsigned int away_n;                      /* frames the partner has not been in our room */
+static int dflt = -1;                            /* the runner of slots that come up in this room load: 1 the guest, 0 the host */
+static unsigned char giving[PC_ENE_SLOTS];       /* we handed it over and run it on until the partner's EV_ENEOWN 6 or 0 */
+static uint32_t take_at[PC_ENE_SLOTS];           /* the partner's frame of a hand-over we take (its state is in our copy already):
+                                                    ours once the playout shows that frame; 0 none */
+static unsigned char take_how[PC_ENE_SLOTS];     /* ... 1 the giver left the room, 2 without its state (let go from the puppet) */
+static uint32_t keep_from[PC_ENE_SLOTS];         /* the partner's first frame of its run of a slot we stopped running (EV_ENEOWN 6) */
+static unsigned char seen[PC_ENE_SLOTS];         /* this room load: the slot showed a state, ours or the partner's (else hidden) */
+static unsigned char hid[PC_ENE_SLOTS];          /* hidden by us: 1 | its mdflg 1 << 1 | its flg 0x60, put back */
+static unsigned char act_was[PC_ENE_SLOTS];      /* the slot was in use at our last frame */
+static unsigned char prov[PC_ENE_SLOTS];         /* host: the guest's until its claims say (we came into the room it ran) */
+static int claim_wait;                            /* host: frames left to wait for the guest's claims */
+static int claimed, host_verdict;                /* guest: claims sent for this room load; host: our verdict sent */
+static int run_room = -1;                        /* the room (key | case << 16) of our ownership table: the room load whose enemies they are */
+#define PAUSE_LEAVE 8                            /* frames our game stops its enemies (a scene, a message) before we hand them over */
+#define AWAY_GRACE 45                            /* frames the partner may be away (a door's hand-over on its way) before we run all */
+static unsigned char hin_qt[PC_ENE_SLOTS];       /* (the guest's room, below) */
+static unsigned short hin_t[PC_ENE_SLOTS];
 /* Protocol 47: a slot that changed hands, by any path (a grab, a hand-over, a take-back, a time-out,
    a slot gone free). Its kept snapshots and its codec bases were the other direction's: they start again (the new
    runner's first record is full). One we stopped running is seeded with our own last two states (build_snapshots)
@@ -1037,12 +1072,14 @@ static void owners_sync(void)
        runs them (their hit capsules follow its body there; a limb shot off comes off in the game that runs the body).
        Before (phase 3) they stayed with the host, following its puppet of a body the guest ran. A part shot off
        (unlinked) stays with the game that ran it then. */
+    /* (protocol 56) every linked part goes with its body (a Black Widow's legs, a Hunter's helper): the room's runner leaves
+       and hands the bodies over, their parts stood still in the other game without a runner */
     for (i = 0; sys && i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
         BH_PWORK* ep = &ene[i];
         BH_PWORK* r;
-        if ((ep->flg & 0x81) != 0x81 || ep->id < 31 || ep->id > 38) continue;
+        if ((ep->flg & 0x81) != 0x81 || take_at[i] || giving[i]) continue;
         r = pc_root_in(ep, ene, PC_ENE_SLOTS);
-        if (r != ep && r->id == 1 && (r->flg & 0x1)) owned[i] = owned[r - ene];
+        if (r != ep && (r->flg & 0x1)) owned[i] = owned[r - ene];
     }
     for (i = 0; i < PC_ENE_SLOTS; i++) {
         uint32_t P = playout.P;
@@ -1050,15 +1087,17 @@ static void owners_sync(void)
         if (owned[i] == owned_was[i]) continue;
         owned_was[i] = owned[i];
         hist_applied[i] = 0; shown_seq[i] = 0; own_seed[i] = 0; own_win[i] = 0;
-        coop_snaptx_forget(stx, i);
-        /* what we hold of the partner's records goes only when we start running it: one we stop running has had none
-           since (the partner sends the slots it runs) but the old runner's last ones still on their way when we took it,
-           which run_from tells apart; the rest is the new runner's, which receive() may have decoded before this (its
-           take-back and its first full record in one datagram): dropped, the records coded against it were lost too */
-        if (we_run(i)) { memset(&hist[i], 0, sizeof(hist[i])); coop_snaprx_forget(srx, i); run_from[i] = playout.newest; }
-        else
+        /* (protocol 56) the partner's kept frames of the slot go at every change of hands: when we start running it all of
+           them, when we stop all before the partner's first frame of its run (EV_ENEOWN 6 names it; else everything that came
+           so far). Before, frames of the partner's copy from before the hand-over could be shown after it (a teleport there
+           and back). The codec bases stay: both sides keep them, the records coded against them are right whoever runs it */
+        if (we_run(i)) memset(&hist[i], 0, sizeof(hist[i]));
+        else {
+            uint32_t from = keep_from[i] ? keep_from[i] : playout.newest + 1;
             for (k = 0; k < COOP_HIST; k++)
-                if (hist[i].seq[k] && (int32_t)(hist[i].seq[k] - run_from[i]) <= 0) hist[i].seq[k] = 0;
+                if (hist[i].seq[k] && (int32_t)(hist[i].seq[k] - from) < 0) hist[i].seq[k] = 0;
+        }
+        keep_from[i] = 0;
         if (we_run(i) || !sys || i >= (int)sys->ewk_n || !(ene[i].flg & 0x1) || !playout.started || !P || frame_no - run_q[i][0] > 2) continue;
         own_win[i] = 1; win_st[2]++;
         for (k = 1; k >= 0; k--) {   /* the older one a frame before */
@@ -1228,12 +1267,14 @@ static int child_here(int i, int c)
 }
 /* bytes of one enemy's state: its work and exp0; a zombie's goes with its upper half's after ESTATE_ENE (ESTATE_PLY) */
 static int ene_len(const BH_PWORK* ep, int c) { const OwnType* t = own_type(ep); return c < PC_ENE_SLOTS ? ESTATE_PLY : (int)sizeof(BH_PWORK) + (t ? t->exp0 : 0); }
+static void ene_mask(unsigned char* w);
 static void ene_pack(BH_PWORK* ep, unsigned char* out)
 {
     const OwnType* t = own_type(ep);
     unsigned char* x = out + sizeof(BH_PWORK);
     unsigned int k;
     memcpy(out, ep, sizeof(BH_PWORK));
+    ene_mask(out);   /* (protocol 56: only what ene_unpack takes; the rest, pointers and matrices, goes as zeros, which pack away) */
     memset(x, 0, ENE_EXP0);
     if (!ep->exp0 || !t) return;
     memcpy(x, ep->exp0, t->exp0);
@@ -1256,6 +1297,18 @@ static const struct { unsigned short from, to; } ene_fields[] = {
     FLD(wax, kdnp), FLD(kdnidx, dan_ap),             /* angles, hp, damage, hit data, sounds */
     { offsetof(BH_PWORK, comb_flg), sizeof(BH_PWORK) },   /* combo state, total damage */
 };
+static void ene_mask(unsigned char* w)
+{
+    static unsigned char keep[sizeof(BH_PWORK)];
+    unsigned int k;
+    if (!keep[0]) {
+        memset(keep, 1, offsetof(BH_PWORK, id));   /* flg; type (ene_unpack takes them) */
+        memset(keep + offsetof(BH_PWORK, type), 1, sizeof(((BH_PWORK*)0)->type));
+        for (k = 0; k < sizeof(ene_fields) / sizeof(ene_fields[0]); k++) memset(keep + ene_fields[k].from, 1, ene_fields[k].to - ene_fields[k].from);
+    }
+    for (k = 0; k < sizeof(BH_PWORK); k++)
+        if (!keep[k]) w[k] = 0;
+}
 /* the modes (and type) the partner sends for an enemy of ours: within the tables its code calls through and indexes
    (coop_ene_modes_ok); `x0`: its exp0 as it will be (a zombie's upper half runs en01b's tables), NULL none */
 static int ene_modes_ok(const BH_PWORK* ep, int type, const unsigned char* m, const unsigned char* x0)
@@ -1320,22 +1373,35 @@ static int ene_unpack(BH_PWORK* ep, const unsigned char* in, int mdl, int mnw)
 }
 #undef FLD
 
-/* our grab state to the partner: the EV_ESTATE chunks of one transfer, whose id goes with EV_GRAB/UNGRAB */
+/* our grab state to the partner: the EV_ESTATE chunks of one transfer, whose id goes with EV_GRAB/UNGRAB/ENEOWN; n bytes of
+   estate_out, packed (protocol 56) */
+static int estate_events(int n) { return (coop_zpack(estate_out, n, estate_z, sizeof(estate_z)) + 63) / 64 + 1; }   /* (with the event naming it) */
 static unsigned short send_estate(int n)
 {
-    int off;
+    int off, z = coop_zpack(estate_out, n, estate_z, sizeof(estate_z));
     if (!++xfer_tid) xfer_tid = 1;
-    for (off = 0; off < n; off += 64) {
+    for (off = 0; off < z; off += 64) {
         Event e = { 0 };
         e.type = EV_ESTATE;
         e.u.blob.tid = xfer_tid;
-        e.u.blob.total = n;
+        e.u.blob.total = z;
         e.u.blob.off = off;
-        e.u.blob.len = n - off < 64 ? n - off : 64;
-        memcpy(e.u.blob.data, estate_out + off, e.u.blob.len);
+        e.u.blob.len = z - off < 64 ? z - off : 64;
+        memcpy(e.u.blob.data, estate_z + off, e.u.blob.len);
         queue_event(&e);
     }
     return xfer_tid;
+}
+/* the partner's transfer `tid` complete, unpacked into estate[], and of n bytes */
+static int estate_take(int tid, int n)
+{
+    if (!tid || !estate_x.done || estate_x.tid != tid || estate_x.total < 2) return 0;
+    if (estate_tid != tid) {
+        memset(estate, 0, sizeof(estate));
+        if (coop_zunpack(estate_zin, estate_x.total, estate, sizeof(estate)) < 0) return 0;
+        estate_tid = (unsigned short)tid;
+    }
+    return (estate_zin[0] | estate_zin[1] << 8) == n;
 }
 
 /* an en01 grab hold: set when the grab starts, cleared by every release (~0x24080, ~0xA4080) */
@@ -1421,66 +1487,166 @@ void pc_enemy_unhold(BH_PWORK* ep) { unhold(ep, ep->hp < 0); }
    guest died in it and sits at the game over). Without this, a grab whose hand-back never came stayed
    the guest's here - a frozen puppet - for good. (A guest in another room in game: owned_drop.) */
 #define OWN_LOST 300
-/* host, Phase 3: an enemy the guest's game ran between attacks is ours again (the guest's game is told: EV_ENEOWN state 2) */
-static void p3_takeback(int i, int release, const char* why)
+/* an ownership message (EV_ENEOWN) of slot i: state, child, frame */
+enum { ROOM_CLAIM = COOP_ROOM_CLAIM, ROOM_DONE = COOP_ROOM_DONE, ROOM_HOST = COOP_ROOM_HOST };   /* EV_ENEOWN 5's child */
+static void own_msg(int i, int c, int state, uint32_t frame)
 {
     Event e = { 0 };
+    e.type = EV_ENEOWN; e.idx = i; e.u.gr.child = c; e.u.gr.state = state;
+    e.u.gr.mdl = e.u.gr.cmdl = -1; e.u.gr.mnw = e.u.gr.cmnw = MNW_KEEP;
+    e.u.gr.stflg_b = frame;
+    queue_event(&e);
+}
+/* host: an enemy the guest's game ran is ours again (the guest's game is told: EV_ENEOWN state 2) */
+static void p3_takeback(int i, int release, const char* why)
+{
     int c = own_child(&ene[i]);
-    owned[i] = 0; own_wait[i] = 0; own_grab[i] = 0; own_ms[i] = 0; own_t[i] = frame_no;
+    owned[i] = 0; own_wait[i] = 0; own_grab[i] = 0; own_ms[i] = 0; own_t[i] = frame_no; take_at[i] = 0; giving[i] = 0;
     if (c < PC_ENE_SLOTS) owned[c] = 0;
     if (release && (ene[i].flg & 0x1)) pc_enemy_unhold(&ene[i]);
-    e.type = EV_ENEOWN; e.idx = i; e.u.gr.child = c; e.u.gr.state = 2;
-    e.u.gr.mdl = e.u.gr.cmdl = -1; e.u.gr.mnw = e.u.gr.cmnw = MNW_KEEP;
-    queue_event(&e);
+    own_msg(i, c, 2, frame_no);
     p3_n[4]++;
-    host_log("coop: p3: enemy %d taken back from the partner's game (%s)\n", i, why);
+    host_log("coop: own: enemy %d taken back from the partner's game (%s)\n", i, why);
 }
 static void own_timeout(void)
 {
     static unsigned int seq;
-    int i, c;
+    int i;
     if (!is_host || !sys || !have_rx || rx.seq == seq) return;
     seq = rx.seq;
     for (i = 0; i < PC_ENE_SLOTS; i++) {
-        if (!owned[i] || (ene[i].flg & 0x80)) continue;
-        if (!own_grab[i] && (!same_room() || !tx_in_game)) continue;   /* (Phase 3: one it runs between attacks waits while either is away) */
+        if (!owned[i] || (ene[i].flg & 0x80) || !(ene[i].flg & 0x1) || take_at[i]) continue;
+        if (!own_grab[i] && (!same_room() || !tx_in_game)) continue;   /* (one it runs waits while either is away) */
         if (++own_wait[i] < OWN_LOST) continue;
-        if (p3_on() && !own_grab[i]) { p3_takeback(i, 1, "no snapshot of it for 10 s"); continue; }
-        c = own_grab[i] ? owned_child[i] : own_child(&ene[i]);
-        owned[i] = 0; owned_child[i] = 255; own_wait[i] = 0; own_grab[i] = 0;
-        if (c < PC_ENE_SLOTS) owned[c] = 0;
-        if (ene[i].flg & 0x1) pc_enemy_unhold(&ene[i]);
-        {   /* the guest's game is told (taken back): silent, a grab it still ran there went on in both games */
-            Event e = { 0 };
-            e.type = EV_ENEOWN; e.idx = i; e.u.gr.child = c; e.u.gr.state = 2;
-            e.u.gr.mdl = e.u.gr.cmdl = -1; e.u.gr.mnw = e.u.gr.cmnw = MNW_KEEP;
-            queue_event(&e);
-        }
-        host_log("coop: enemy %d: no word from the partner's game running it for %d of its frames, ours again: released\n", i, OWN_LOST);
+        p3_takeback(i, 1, "no snapshot of it for 10 s");
     }
 }
 
-/* host: drop what the client runs (it left the room, timed out, or the session ended) */
-static void owned_drop(void)
+/* our copy waits for the runner's state: not drawn (mdflg 1, its shadow and effects with it), not hit, not in the way */
+static void hide_on(int i, BH_PWORK* ep)
 {
-    int i, n = 0, here = sys && owned_room == coop_room_key();
-    for (i = 0; i < PC_ENE_SLOTS; i++)
-        if (owned[i]) { if (is_host && here && (ene[i].flg & 0x1)) { pc_enemy_unhold(&ene[i]); n++; } owned[i] = 0; }
-    if (n) host_log("coop: %d enemies the partner's game ran are ours again: released\n", n);
-    memset(owned_child, 255, sizeof(owned_child));
-    memset(own_grab, 0, sizeof(own_grab));
-    memset(own_ms, 0, sizeof(own_ms));
-    owned_room = -1;
+    if (hid[i]) return;
+    hid[i] = (unsigned char)(1 | (ep->mdflg & 1) << 1 | (ep->flg & 0x60));
+    ep->mdflg |= 1;
+    ep->flg &= ~0x60u;
+}
+int coop_enemy_waiting(int i) { return i >= 0 && i < PC_ENE_SLOTS && hid[i]; }   /* (test aid RECVX_COOP_ENEPOS: H) */
+static void hide_off(int i)
+{
+    BH_PWORK* ep = &ene[i];
+    if (!hid[i]) return;
+    if (ep->flg & 0x1) { ep->mdflg = (ep->mdflg & ~1u) | (hid[i] >> 1 & 1); ep->flg |= hid[i] & 0x60; }
+    hid[i] = 0;
+}
+/* hits on an enemy whose hand-over to us is under way: kept until we run it (hit_apply) */
+#define DEFER_N 64
+static struct { Event e; int n; } defer[DEFER_N];
+static int defer_n;
+static void hit_apply(const Event* e);
+static void defer_hit(const Event* e)
+{
+    if (defer_n < DEFER_N) defer[defer_n++].e = *e;
+    else host_log("coop: own: no room for the hit on enemy %d: lost\n", e->idx);
+}
+static void defer_run(int i)
+{
+    int k, j;
+    for (k = j = 0; k < defer_n; k++)
+        if (defer[k].e.idx == i) hit_apply(&defer[k].e);
+        else defer[j++] = defer[k];
+    defer_n = j;
 }
 
-/* every room load (bhFinishRoom), also of the same room again (a Retry, a loaded save): what the partner's game ran was the
-   old load's. The host's drop only came with another room key, so a Retry of the same room kept a slot the guest ran
-   (a grab of the host's zombie) as the guest's: our fresh copy never ran its first step (en01 InitType11) and crashed on
-   its empty work. The new copies are not let go (unhold): fresh. The guest's go back (grab_check: another load's) */
+/* slot i (and its child c) runs here now: no hand-over of it is under way any more, it shows, the hits kept for it apply */
+static void own_ours(int i, int c)
+{
+    int k, s2[2] = { i, c };
+    for (k = 0; k < 2; k++) {
+        int j = s2[k];
+        if (j < 0 || j >= PC_ENE_SLOTS) continue;
+        giving[j] = 0; take_at[j] = 0; take_how[j] = 0; prov[j] = 0;
+        hide_off(j);
+        seen[j] = 1;
+        defer_run(j);
+    }
+}
+
+/* every slot ours: the partner left the room without handing them over (its game ended, crashed or timed out; a hand-over
+   that did not come in AWAY_GRACE frames), or its session restarted. One it ran goes on from what we showed of it, let go
+   (unhold: a zombie stands, another type starts its Move) - its own work here is what it last ran on; one still hidden here
+   is shown as our game has it */
+void pc_enemy_unhold(BH_PWORK* ep);
+static void own_takeover(const char* why)
+{
+    int i, n = 0;
+    for (i = 0; sys && i < PC_ENE_SLOTS; i++) {
+        BH_PWORK* ep = &ene[i];
+        int act = i < (int)sys->ewk_n && (ep->flg & 0x1);
+        giving[i] = 0;
+        if (we_run(i) || (take_at[i] && have_rx && act)) continue;   /* (a hand-over on its way completes at its frame) */
+        own_set(i, 1);
+        own_grab[i] = 0;
+        if (!act || run_room != (coop_room_key() | my_case() << 16)) { take_at[i] = 0; hid[i] = 0; continue; }
+        if (!seen[i]) hide_off(i);
+        else if (!(ep->flg & 0x80) && (take_how[i] & 2 || !take_at[i])) { pc_enemy_unhold(ep); n++; }
+        take_at[i] = 0; take_how[i] = 0;
+        seen[i] = 1;
+        defer_run(i);
+    }
+    memset(prov, 0, sizeof(prov));
+    claim_wait = 0;
+    dflt = !is_host;
+    if (n) host_log("coop: own: the partner is not in the room (%s): %d of its enemies run here from what we showed\n", why, n);
+}
+
+/* drop the ownership of the room load (the session ends, a new room loads): `put` the hidden ones back as they were */
+static void own_reset(int put)
+{
+    int i;
+    for (i = 0; put && sys && i < PC_ENE_SLOTS && run_room == (coop_room_key() | my_case() << 16); i++) hide_off(i);
+    memset(owned, 0, sizeof(owned)); memset(owned_was, 0, sizeof(owned_was));
+    memset(owned_child, 255, sizeof(owned_child));
+    memset(own_grab, 0, sizeof(own_grab)); memset(own_ms, 0, sizeof(own_ms)); memset(own_wait, 0, sizeof(own_wait));
+    memset(giving, 0, sizeof(giving)); memset(take_at, 0, sizeof(take_at)); memset(take_how, 0, sizeof(take_how));
+    memset(keep_from, 0, sizeof(keep_from)); memset(seen, 0, sizeof(seen)); memset(hid, 0, sizeof(hid));
+    memset(act_was, 0, sizeof(act_was)); memset(prov, 0, sizeof(prov)); memset(p3_leave, 0, sizeof(p3_leave)); memset(p3_want, 0, sizeof(p3_want));
+    memset(hin_t, 0, sizeof(hin_t)); memset(hin_qt, 0, sizeof(hin_qt)); memset(p3_ref_t, 0, sizeof(p3_ref_t));
+    defer_n = 0;
+    memset(hist_applied, 0, sizeof(hist_applied)); memset(shown_seq, 0, sizeof(shown_seq)); memset(own_win, 0, sizeof(own_win)); memset(own_seed, 0, sizeof(own_seed));
+    claim_wait = claimed = host_verdict = 0;
+    dflt = -1;
+    owned_room = run_room = -1;
+}
+static void owned_drop(void) { own_reset(1); }
+
+/* the partner is in our room: in game there, or busy there (its menu, the item box, a scene, the trade screen; a door or
+   the title say BUSY_NONE out of game) */
+static int partner_present(void)
+{
+    return have_peer && have_rx && !echo_delay && partner_here() && rx.busy != BUSY_DOOR && ((rx.flags & PF_IN_GAME) || rx.busy != BUSY_NONE);
+}
+/* every room load (bhFinishRoom), also of the same room again (a Retry, a loaded save): the old load's ownership goes (before,
+   a Retry of the same room kept a slot the guest ran as the guest's: our fresh copy never ran its first step and crashed on its
+   empty work). Who runs the new load's enemies: the partner when it is in the room already (we are second: our copies wait
+   hidden for its state), else we. The host that comes second waits for the guest's claims (the guest may have killed some,
+   or have other enemies in the room): EV_ENEOWN 5 asks for them. */
 void coop_room_loaded(void)
 {
-    owned_room = -1;
-    if (is_host) owned_drop();
+    int second, i;
+    own_reset(0);
+    if (!coop_on || echo_delay || !sys) return;
+    second = partner_present();
+    run_room = coop_room_key() | my_case() << 16;
+    owned_room = coop_room_key();
+    dflt = second ? is_host : !is_host;
+    for (i = 0; i < PC_ENE_SLOTS; i++) owned[i] = owned_was[i] = (unsigned char)dflt;
+    if (second && is_host) {
+        memset(prov, 1, sizeof(prov));
+        claim_wait = 150;
+        own_msg(0, ROOM_CLAIM, 5, frame_no);   /* "claim" */
+    }
+    host_log("coop: own: room %d/%d loaded, the %s in it %s: %s\n", sys->stg_no, sys->rom_no, is_host ? "guest" : "host", second ? "already" : "not",
+             dflt == !is_host ? "we run its enemies" : "the partner runs its enemies, ours wait for its state");
 }
 
 /* host, after the step of an enemy targeting the proxy that started a grab on it */
@@ -1583,8 +1749,9 @@ static void grab_in(const Event* e)
     const BH_PWORK* a = (const BH_PWORK*)(estate + ESTATE_PLY);
     const MN_WORK* set;
     BH_PWORK* ep;
-    int i = e->idx, c;
+    int i = e->idx, c, have = estate_take(e->u.gr.tid, ESTATE_SIZE);
     unsigned int x;
+    if (!have) memset(estate + ESTATE_PLY, 0, sizeof(BH_PWORK));   /* (no state: refused below) */
     /* late: our own copy of that enemy grabbed us meanwhile (its step ran here: the host left mid-attack and our game took
        over, or its snapshot of the grab's start). Before, refused: the enemy became the host's puppet frozen in its grab
        while our player played the grab with nobody holding it, and the failsafe saw that puppet as the holder. Our game
@@ -1596,6 +1763,7 @@ static void grab_in(const Event* e)
         own_set(i, 1);
         if (c < PC_ENE_SLOTS) own_set(c, 1);
         own_grab[i] = 1; own_t[i] = frame_no; owned_room = coop_room_key();
+        own_ours(i, c);
         host_log("coop: enemy %d grabs us, as our copy of it does already: ours runs it\n", i);
         return;
     }
@@ -1610,7 +1778,7 @@ static void grab_in(const Event* e)
     c = ene_slot(ep->exp1);
     set = !e->u.gr.pset ? plp->mnwPb : e->u.gr.mnw >= 0 && e->u.gr.mnw < COOP_MNW_MAX && ep->mnwPb ? ep->mnwPb + e->u.gr.mnw
                                      : e->u.gr.mnw == MNW_ROOM ? sys->rmthp : ep->mnwP;
-    if (!estate_x.done || estate_x.tid != e->u.gr.tid || estate_x.total != ESTATE_SIZE || ep->id != 1 || !ep->exp0 ||
+    if (!have || ep->id != 1 || !ep->exp0 ||
         c != child_here(i, e->u.gr.child) || (c < PC_ENE_SLOTS && !(ene[c].flg & 0x1)) || !finite3(a->px, a->py, a->pz) || !mtn_ok(ep, set, a->mtn_no, a->frm_no) ||
         wall_between(plp, a) || !ene_unpack(ep, estate, e->u.gr.mdl, e->u.gr.mnw)) {
         host_log("coop: enemy %d grabs us, but its state does not fit here\n", i);
@@ -1622,6 +1790,7 @@ static void grab_in(const Event* e)
     own_grab[i] = 1;
     own_t[i] = frame_no;
     owned_room = coop_room_key();
+    own_ours(i, c);
     /* our player as the grab's start left the proxy: modes, motion, position, and the bits
        the enemy changed */
     *(int*)&plp->mode0 = *(int*)&a->mode0;
@@ -1760,32 +1929,25 @@ static void hold_watch(void)
     hold.orphan = 0;
 }
 
-/* client, at the hand-off: a grab we run is over when the enemy lets go (or is gone) */
+/* at the hand-off: a grab handed to our game is over when the enemy lets go (or is gone). The enemy runs on here (EV_UNGRAB
+   state 2, protocol 56 also without Shared Enemy Control): before, it went back to the host with its state, a second hand-over
+   right at the player (a wobble, its hits of those frames lost). A record the room's scripts act on goes to the host by the rule
+   for those (own_frame) */
 static void grab_check(void)
 {
     int i;
     for (i = 0; i < PC_ENE_SLOTS; i++) {
         BH_PWORK* ep = &ene[i];
-        if (!we_run(i) || ep->flg & 0x80) continue;   /* children go with their parent */
-        if (is_host && !own_grab[i]) continue;   /* (the host: only a grab taken from the guest's zombie, Phase 3) */
-        if (owned_room != coop_room_key() || i >= (int)sys->ewk_n || !(ep->flg & 0x1)) {
-            if (!is_host) {   /* (also one we ran between attacks, Phase 3: the host lets it go) */
-                ev_room = owned_room;   /* (the room it is in: past a door ours is the next one, which the host's handler ignores) */
-                grab_back(i, 0, own_child(ep));
-                ev_room = -1;
-            }
+        if (!own_grab[i] || !we_run(i) || (ep->flg & 0x80)) continue;   /* children go with their parent */
+        if (owned_room != coop_room_key() || i >= (int)sys->ewk_n || !(ep->flg & 0x1)) { own_grab[i] = 0; continue; }
+        if (!holding(ep) && plp->mnwP != ep->mnwP && tx_in_game) {
+            Event e = { 0 };
+            e.type = EV_UNGRAB; e.idx = i; e.u.gr.child = ene_slot(ep->exp1); e.u.gr.state = 2;
+            e.u.gr.mdl = e.u.gr.cmdl = -1; e.u.gr.mnw = e.u.gr.cmnw = MNW_KEEP;
+            queue_event(&e);
             own_grab[i] = 0;
-        } else if (own_grab[i] && !holding(ep) && plp->mnwP != ep->mnwP && tx_in_game) {
-            if (p3_on() && (is_host || !enemy_rec_scripted(i))) {   /* Phase 3: the grab is over, we keep running it (the partner's game:
-                                                                    no longer held); a record the room's scripts act on goes back */
-                Event e = { 0 };
-                e.type = EV_UNGRAB; e.idx = i; e.u.gr.child = ene_slot(ep->exp1); e.u.gr.state = 2;
-                e.u.gr.mdl = e.u.gr.cmdl = -1; e.u.gr.mnw = e.u.gr.cmnw = MNW_KEEP;
-                queue_event(&e);
-                own_grab[i] = 0;
-                own_t[i] = frame_no;
-                host_log("coop: the grab of enemy %d ends, it runs on here\n", i);
-            } else grab_back(i, 1, own_child(ep));
+            own_t[i] = frame_no;
+            host_log("coop: the grab of enemy %d ends, it runs on here\n", i);
         }
     }
 }
@@ -1826,17 +1988,6 @@ static void enemy_epoch(void)
 }
 
 static int same_room(void) { return have_rx && (rx.flags & PF_IN_GAME) && partner_here(); }
-/* not in a door transition, nor in a cutscene of ours (M8): its event drives the enemies and waits
-   for their motions (FrameCheck), which a puppet only shows as snapshots let it - they run here
-   then and take the host's state again afterwards */
-static int snaps_live(void)   /* the host sent snapshots in one of its last 4 frames */
-{
-    int k;
-    for (k = 0; k < 8; k++)
-        if (snap_cnt[k].n && (int32_t)(rx.seq - snap_cnt[k].seq) < 4) return 1;
-    return 0;
-}
-static int puppets(void) { return !echo_delay && !is_host && same_room() && snaps_live() && !(sys->cb_flg & 0x5); }
 /* host: our examine - a trigger's message or close-up (hitchk.c: st_flg 0x2000 / 0x80) - stops the game's enemies
    (sp_flg 0x2 off until it closes): in single player the world waits for the one player reading. The partner in our room
    plays on, and our enemies stood still in its game (its puppets of ours), its shots on them taking effect only when we
@@ -1845,8 +1996,8 @@ static int puppets(void) { return !echo_delay && !is_host && same_room() && snap
    (enemy_begin). */
 int coop_enemies_run(void)
 {
-    return (is_host || p3_on()) && !echo_delay && sys && plp && (sys->st_flg & 0x2080) && !(sys->cb_flg & 0x5) && !(sys->gm_flg & 0x9) && !frozen &&
-           proxy_ok && same_room();   /* (Phase 3: the guest's too - it runs some of them) */
+    return coop_on && !echo_delay && sys && plp && (sys->st_flg & 0x2080) && !(sys->cb_flg & 0x5) && !(sys->gm_flg & 0x9) && !frozen &&
+           proxy_ok && same_room();   /* (the guest's too: it runs enemies) */
 }
 static int examining;                   /* host: this enemy step runs although our examine paused the enemies */
 
@@ -2036,6 +2187,7 @@ static int enemy_begin(BH_PWORK* ep);
 static int step_stats = -1, step_kind;   /* RECVX_COOP_STATS: the enemy steps' cost, [0] run here [1] puppets */
 static uint64_t step_t0, step_ns[2];
 static unsigned int step_cnt[2];
+static int hit_send(int i, BH_PWORK* ep, int keep);
 static int has_hit(const BH_PWORK* ep)    /* the weapon code's output on it, not yet taken by its damage code */
 {
     int j;
@@ -2062,6 +2214,9 @@ int coop_enemy_begin(BH_PWORK* ep)
             hit_t[i][0] = frame_no + 1;
             if (trace) fprintf(stderr, "coop: hit local idx=%d hp=%d\n", i, ep->hp);
         }
+        /* (protocol 56) handed over and run on here until the partner runs it from the state we sent: a hit now goes to the
+           partner (it starts from that state), taken off before the step - each hit applied once */
+        if (giving[i] && ep->mode0 && has_hit(ep)) hit_send(i, ep, 0);
     }
     return r;
 }
@@ -2077,16 +2232,18 @@ static int enemy_begin(BH_PWORK* ep)
         if (owned[i] != is_host) snap_root[i] = root_flag(ep);   /* (one we run: held as its step left it) */
         return puppet_step(ep);
     }
-    if (owned[i] && is_host) return puppet_step(ep);   /* the guest's game runs it: a grab, or (Phase 3) one engaged with the guest */
-    if (!is_host && !owned[i]) {   /* the host's: a puppet of its snapshots */
-        if (!puppets() || !ep->mode0 || event_driven(ep) || grips_us(ep) || runs_here(ep)) return 0;   /* mode0 0: the enemy's own initialising step */
+    if (!we_run(i)) {   /* the partner's game runs it: a puppet of its snapshots */
+        /* mode0 0: the enemy's own initialising step; an event of ours drives it, or it holds our player: it runs here */
+        if (!ep->mode0 || (!is_host && (event_driven(ep) || grips_us(ep) || runs_here(ep)))) return 0;
+        /* (protocol 56) the runner's state of it has not come yet (we came into its room): hidden and still, not shown at
+           the room's start position and then snapped to where it is */
+        if (!seen[i]) { hide_on(i, ep); return 1; }
         if (trace && !(ep->flg & 0x80) && frame_no - snap_at[i] == 60)
-            fprintf(stderr, "coop: ORPHAN enemy %d (id %d) is a puppet without the host's state for 60 frames: modes %d %d %d %d flg %x\n", i, ep->id,
+            fprintf(stderr, "coop: ORPHAN enemy %d (id %d) is a puppet without the partner's state for 60 frames: modes %d %d %d %d flg %x\n", i, ep->id,
                     ep->mode0, ep->mode1, ep->mode2, ep->mode3, ep->flg);
         return puppet_step(ep);
     }
-    if (!is_host && (!p3_on() || !proxy_ok || own_grab[i])) return 0;   /* ours, against our player alone: a grab handed to us, the host no target now */
-    {   /* we run it and either player may be its target: the host's enemies, and (Phase 3) the guest's own */
+    {   /* we run it and either player may be its target (protocol 56: the guest's too, whoever was in the room first) */
         int held = proxy_ok && partner_held(), cool_p = coop_atk_cooling(&atk[i][1], frame_no), k = ene_slot(ep->lkwkp);
         if (ep->id == 27 && linked_to(ep) == 2 && (!have_rx || !partner_here())) {   /* the partner left: the larva laid on its stand-in goes too */
             ep->flg = 0;
@@ -2098,7 +2255,7 @@ static int enemy_begin(BH_PWORK* ep)
         if (ghost.slot == i && partner_held()) tgt[i] = 1;   /* its hold of the partner runs to its end */
         else if (linked_to(ep)) tgt[i] = linked_to(ep) == 2;   /* (the stand-in also while the partner is busy: it keeps its last pose) */
         else if (ep->id == 27 && !ep->mode0) {}   /* a larva's Init: the player its moth laid it on (larva_laid) */
-        else if (!proxy_ok || hold_family(ep)) tgt[i] = 0;   /* (hold_family: it holds our player) */
+        else if (!proxy_ok || hold_family(ep) || own_grab[i]) tgt[i] = 0;   /* (hold_family: it holds our player; own_grab: its grab of ours) */
         else if ((ep->flg & 0x80) && k < PC_ENE_SLOTS) tgt[i] = tgt[k];   /* a linked part goes for its parent's victim */
         else {
             CoopTgtIn in = { { 0 } };
@@ -2152,6 +2309,9 @@ void coop_enemy_end(BH_PWORK* ep)
 {
     int i = ep - ene, swapped = swap_plp != NULL;
     if (i < 0 || i >= PC_ENE_SLOTS) return;
+    /* (protocol 56) one the partner runs whose state has not come: hidden right after its Init, before this frame draws it (an
+       extra coming up at the room's first frame stood one frame at its spot) */
+    if (!seen[i] && !we_run(i) && ep->mode0 && run_room >= 0 && !echo_delay) hide_on(i, ep);
     if (fx_open == 1) { fx_end(ep, 0); fx_arm(ep); }
     aim_restore();
     if (swap_plp) {
@@ -2299,132 +2459,245 @@ static int p3_pref(int i)
     if (h0 != h1 && (t == h1 || dx * dx + dz * dz >= COOP_TGT_TOUCH * COOP_TGT_TOUCH)) return h1;
     return t;
 }
-static void p3_give(int i, const char* why)
+static int hin_ok(int k, int any);
+#define HIN_WAIT 90
+/* hand enemy i (with its upper half) to the partner's game (EV_ENEOWN 1, protocol 56): with its state (`state`: ene_pack) or
+   without it (the receiver lets it go from its puppet); `leaving`: we leave the room (a door, our menu, a scene that stops our
+   enemies) and stop running it now, else we run it on until the partner says it runs it (6) or refuses (0). The partner
+   takes it at the frame of the state (stflg_b: our frame) as its playout shows it */
+static void own_give(int i, int leaving, int state, const char* why)
 {
     BH_PWORK* ep = &ene[i];
     int c = own_child(ep);
     Event e = { 0 };
-    memset(estate_out, 0, sizeof(estate_out));
-    ene_pack(ep, estate_out);
-    if (c < PC_ENE_SLOTS) ene_pack(&ene[c], estate_out + ESTATE_ENE);
-    e.u.gr.tid = send_estate(ene_len(ep, c));
+    e.u.gr.mdl = e.u.gr.cmdl = -1; e.u.gr.mnw = e.u.gr.cmnw = MNW_KEEP;
+    if (state) {
+        memset(estate_out, 0, sizeof(estate_out));
+        ene_pack(ep, estate_out);
+        if (c < PC_ENE_SLOTS) ene_pack(&ene[c], estate_out + ESTATE_ENE);
+        e.u.gr.tid = send_estate(ene_len(ep, c));
+        e.u.gr.mdl = mdl_of(ep); e.u.gr.mnw = mnw_of(ep);
+        if (c < PC_ENE_SLOTS) { e.u.gr.cmdl = mdl_of(&ene[c]); e.u.gr.cmnw = mnw_of(&ene[c]); }
+    }
     e.type = EV_ENEOWN;
     e.idx = i;
     e.u.gr.child = c;
     e.u.gr.state = 1;
-    e.u.gr.mdl = mdl_of(ep); e.u.gr.mnw = mnw_of(ep);
-    e.u.gr.cmdl = c < PC_ENE_SLOTS ? mdl_of(&ene[c]) : -1; e.u.gr.cmnw = c < PC_ENE_SLOTS ? mnw_of(&ene[c]) : MNW_KEEP;
+    e.u.gr.pset = (unsigned char)leaving;
     e.u.gr.flg_b = ep->id | ep->mdlver << 8;   /* what the receiver's slot must hold */
-    e.u.gr.stflg_b = frame_no;                 /* (the logs: our frame of the state) */
+    e.u.gr.stflg_b = frame_no;                 /* our frame of the state: the receiver runs it from there */
     queue_event(&e);
-    own_set(i, 0); own_set(c, 0);
-    own_t[i] = frame_no; own_ms[i] = net_ms(); p3_want[i] = 0; tgt[i] = 0;
+    if (leaving) { own_set(i, 0); own_set(c, 0); giving[i] = 0; if (c < PC_ENE_SLOTS) giving[c] = 0; dflt = is_host; }   /* (and what comes up: the partner's) */
+    else { giving[i] = 1; if (c < PC_ENE_SLOTS) giving[c] = 1; }
+    own_t[i] = frame_no; own_ms[i] = net_ms(); p3_want[i] = 0; tgt[i] = 0; p3_leave[i] = 0;
     snap_at[i] = frame_no;
-    owned_room = coop_room_key();
-    p3_n[*why == 'l' ? 3 : 0]++;
-    host_log("coop: p3: enemy %d handed to the partner's game (%s) at frame %u, %.1f m from us, %.1f m from the partner\n", i, why, frame_no,
+    p3_n[leaving ? 3 : 0]++;
+    host_log("coop: own: enemy %d (id %d) handed to the partner's game (%s%s) at frame %u, %.1f m from us, %.1f m from the partner\n", i, ep->id, why,
+             state ? "" : ", without its state", frame_no,
              sqrtf((ep->px - plp->px) * (ep->px - plp->px) + (ep->pz - plp->pz) * (ep->pz - plp->pz)) / 10,
              sqrtf((ep->px - ply2.px) * (ep->px - ply2.px) + (ep->pz - ply2.pz) * (ep->pz - ply2.pz)) / 10);
 }
-/* the partner's EV_ENEOWN: state 1 an enemy it hands us (taken only whole: our slot holds the same enemy with the same
-   upper half, the state fits, no event of ours drives it, we are not in a door - else refused: it runs on there);
-   0 one we handed over was refused (it is ours again, as we left it); 2 one we ran was taken back (the host's time-out) */
-static void p3_apply(const Event* e)
+/* the partner hands us enemy i (EV_ENEOWN 1): taken only as the same enemy (type and look, the same upper half), not one an
+   event of ours drives, not in a door; its state goes into our copy at once (a puppet still: the snapshots it shows meanwhile
+   change only what they carry, its own work is the state's) and it is ours once the playout shows the state's frame
+   (own_frame). Without its state (or a state that does not fit) only when the giver leaves: it is let go from the puppet then.
+   Refused: 0, the giver runs it on (2: we run it already) */
+static void own_take(const Event* e)
+{
+    int i = e->idx, c = child_here(e->idx, e->u.gr.child), leaving = e->u.gr.pset, ok, st = 0;
+    BH_PWORK* ep = &ene[i];
+    if (i >= PC_ENE_SLOTS) return;
+    ok = e->stg == sys->stg_no && e->rom == sys->rom_no && run_room == (coop_room_key() | my_case() << 16) && !(sys->cb_flg & 0x1) &&
+         i < (int)sys->ewk_n && (ep->flg & 0x81) == 0x1 && !we_run(i) && !take_at[i] &&
+         ((ep->id | ep->mdlver << 8) == e->u.gr.flg_b || (ep->id == (e->u.gr.flg_b & 0xFF) && enemy_room_differs())) && own_child(ep) == c &&
+         (c >= PC_ENE_SLOTS || (c < (int)sys->ewk_n && (ene[c].flg & 0x1) && !we_run(c)));
+    if (ok && e->u.gr.tid && own_work(ep) && !event_driven(ep) && estate_take(e->u.gr.tid, ene_len(ep, c)) && ene_unpack(ep, estate, e->u.gr.mdl, e->u.gr.mnw) &&
+        (c >= PC_ENE_SLOTS || ene_unpack(&ene[c], estate + ESTATE_ENE, e->u.gr.cmdl, e->u.gr.cmnw)))
+        st = 1;
+    if (!ok || (!st && !leaving)) {
+        own_msg(i, c, i < PC_ENE_SLOTS && we_run(i) ? 2 : 0, frame_no);
+        p3_n[2]++;
+        host_log("coop: own: enemy %d from the partner's game does not fit here: refused%s\n", i, we_run(i) ? " (we run it)" : !ok ? "" : " (its state)");
+        return;
+    }
+    take_at[i] = e->u.gr.stflg_b ? e->u.gr.stflg_b : 1;
+    take_how[i] = (unsigned char)(leaving | (st ? 0 : 2));
+    if (st) { seen[i] = 1; hid[i] = 0; }   /* (its state is shown from now: the snapshots of the frames before it change only what they carry) */
+    if (c < PC_ENE_SLOTS) { take_at[c] = take_at[i]; take_how[c] = take_how[i]; if (st) { seen[c] = 1; hid[c] = 0; } }
+    host_log("coop: own: enemy %d (id %d) comes from the partner's game%s%s: ours from its frame %u\n", i, ep->id, leaving ? " (it leaves)" : "",
+             st ? "" : " without its state", take_at[i]);
+}
+/* a hand-over to us is ours: the playout shows its frame (or the partner is not in the room any more) */
+static void own_took(int i)
+{
+    BH_PWORK* ep = &ene[i];
+    int c = own_child(ep), how = take_how[i];
+    own_set(i, 1); own_set(c, 1);
+    if (how & 1) dflt = !is_host;   /* (the giver left: what comes up is ours) */
+    if ((how & 2) && (ep->flg & 0x1) && seen[i]) pc_enemy_unhold(ep);   /* (without its state: let go from the puppet) */
+    own_ours(i, c < PC_ENE_SLOTS ? c : -1);
+    own_t[i] = frame_no; p3_want[i] = 0; tgt[i] = 0;
+    p3_n[1]++;
+    own_msg(i, c, 6, frame_no);   /* "we run it": the giver stops (and drops what it showed of us before this frame) */
+    host_log("coop: own: enemy %d is ours now\n", i);
+}
+/* the partner's EV_ENEOWN 0, 1, 2, 6 */
+static void own_apply(const Event* e)
 {
     int i = e->idx, c = child_here(e->idx, e->u.gr.child);
     BH_PWORK* ep = &ene[i];
-    Event r = { 0 };
     if (!sys || !plp || i >= PC_ENE_SLOTS) return;
-    if (e->u.gr.state == 0) {
-        if (!we_run(i) && owned_room == coop_room_key() && (ep->flg & 0x1) && own_child(ep) == c) {
-            own_set(i, 1); own_set(c, 1);
-            own_t[i] = frame_no; own_ms[i] = 0; p3_ref_t[i] = frame_no + 1;
-            p3_n[2]++;
-            host_log("coop: p3: enemy %d: the partner's game did not take it, it runs on here\n", i);
-        }
+    if (e->u.gr.state == 1) { own_take(e); return; }
+    if (e->stg != sys->stg_no || e->rom != sys->rom_no || run_room != (coop_room_key() | my_case() << 16)) return;   /* (another room's) */
+    if (e->u.gr.state == 6) {   /* it runs it now (from its frame stflg_b): we stop, its frames before are not ours to show */
+        if (giving[i]) { own_set(i, 0); own_set(c, 0); giving[i] = 0; if (c < PC_ENE_SLOTS) giving[c] = 0; }
+        if (!we_run(i)) { keep_from[i] = e->u.gr.stflg_b; if (c < PC_ENE_SLOTS) keep_from[c] = e->u.gr.stflg_b; }
         return;
     }
-    if (e->u.gr.state == 2) {
-        if (!is_host && we_run(i)) { own_set(i, 0); own_set(c, 0); own_grab[i] = 0; host_log("coop: p3: enemy %d: the host took it back\n", i); }
-        return;
-    }
-    if (!p3_on() || e->stg != sys->stg_no || e->rom != sys->rom_no || i >= (int)sys->ewk_n || !(ep->flg & 0x1) || we_run(i) || (sys->cb_flg & 0x1) ||
-        (ep->id | ep->mdlver << 8) != e->u.gr.flg_b || !own_p3(ep) || own_child(ep) != c || (ep->id == 1 && c >= PC_ENE_SLOTS) ||
-        (c < PC_ENE_SLOTS && (!(ene[c].flg & 0x1) || we_run(c) || !ene[c].exp0)) ||
-        !estate_x.done || estate_x.tid != e->u.gr.tid || estate_x.total != ene_len(ep, c) || event_driven(ep) || enemy_rec_scripted(i) || !ep->exp0 ||
-        !ene_unpack(ep, estate, e->u.gr.mdl, e->u.gr.mnw) || (c < PC_ENE_SLOTS && !ene_unpack(&ene[c], estate + ESTATE_ENE, e->u.gr.cmdl, e->u.gr.cmnw))) {
-        /* one we run already (the host's take-back crossed the give): not 0 - the giver would run it on as well, both games
-           running one enemy for the visit - but 2, which leaves the giver's copy a puppet */
-        r.type = EV_ENEOWN; r.idx = i; r.u.gr.child = c; r.u.gr.state = we_run(i) ? 2 : 0;
-        r.u.gr.mdl = r.u.gr.cmdl = -1; r.u.gr.mnw = r.u.gr.cmnw = MNW_KEEP;
-        queue_event(&r);
+    if (e->u.gr.state == 0) {   /* refused: ours again (one we gave leaving: it runs here when our game runs its enemies) */
+        if (giving[i]) { giving[i] = 0; if (c < PC_ENE_SLOTS) giving[c] = 0; }
+        else if (!we_run(i) && !take_at[i] && (ep->flg & 0x1) && own_child(ep) == c) { own_set(i, 1); own_set(c, 1); }
+        else return;
+        own_t[i] = frame_no; own_ms[i] = 0; p3_ref_t[i] = frame_no + 1;
         p3_n[2]++;
-        host_log("coop: p3: enemy %d from the partner's game does not fit here: refused%s\n", i, we_run(i) ? " (we run it)" : "");
+        host_log("coop: own: enemy %d: the partner's game did not take it, it runs on here\n", i);
         return;
     }
-    own_set(i, 1); own_set(c, 1);
-    own_grab[i] = 0;
-    own_t[i] = frame_no; own_ms[i] = 0; p3_want[i] = 0; tgt[i] = 0;
-    owned_room = coop_room_key();
-    p3_n[1]++;
-    host_log("coop: p3: enemy %d is ours now (the partner's state of its frame %u)\n", i, e->u.gr.stflg_b);
+    if (e->u.gr.state == 2) {   /* taken back by the host (or a hand-over crossed one of the partner's): it runs it */
+        if (!we_run(i) || (is_host && !giving[i])) return;   /* (the host keeps one both took) */
+        own_set(i, 0); own_set(c, 0); own_grab[i] = 0;
+        giving[i] = 0; if (c < PC_ENE_SLOTS) giving[c] = 0;
+        host_log("coop: own: enemy %d: the partner's game runs it\n", i);
+    }
 }
-/* at the hand-off, after the snapshots: who runs what */
-static void p3_frame(void)
+
+/* host -> guest: the guest's claims (3, answered 4/2), its "claims done" (5), the host's verdict */
+static void claim_room(void);
+static void own_room_msg(const Event* e)
 {
-    int i, leaving, budget = ring.next - ring.head < COOP_RING / 2 ? 2 : 0;   /* hand-overs per frame (each ~51 events) */
-    static int tuned;
+    int i, kind = e->u.gr.child;
+    if (!sys || e->stg != sys->stg_no || e->rom != sys->rom_no || run_room < 0) return;
+    if (!is_host && kind == ROOM_CLAIM) {   /* the host came into our room: we run it (also when we showed the host's: it loaded the room again) */
+        own_takeover("the host loaded the room we are in");
+        claimed = 0;
+        claim_room();
+        return;
+    }
+    if (!is_host && kind == ROOM_HOST) {   /* both came at once: the host's room */
+        for (i = 0; i < PC_ENE_SLOTS; i++)
+            if (we_run(i) && !own_grab[i]) { own_set(i, 0); giving[i] = 0; take_at[i] = 0; }
+        dflt = 0; claimed = 1;
+        host_log("coop: own: the host runs this room's enemies (it came in with us)\n");
+        return;
+    }
+    if (is_host && kind == ROOM_DONE) {   /* every claim of the guest came: the rest is ours */
+        int n = 0;
+        if (!claim_wait) { if (!host_verdict++) own_msg(0, ROOM_HOST, 5, frame_no); return; }
+        for (i = 0; i < PC_ENE_SLOTS; i++)
+            if (prov[i] && !hin_qt[i]) {   /* (a claim still waiting for our copy to be set up keeps it: hin_answer) */
+                if (i < (int)sys->ewk_n && (ene[i].flg & 0x81) == 0x1) { own_set(i, 1); own_ours(i, -1); n++; }
+                prov[i] = 0;
+            }
+        claim_wait = 0;
+        host_log("coop: own: the guest's claims are in: %d of the room's enemies run here, the rest in the guest's game\n", n);
+    }
+}
+
+/* at the hand-off, after the snapshots: who runs what */
+static void own_frame(void)
+{
+    int i, pres, runs, paused, leave, door, budget, me;
+    static int tuned, paused_n;
     if (!tuned++ && getenv("RECVX_COOP_P3") && sscanf(getenv("RECVX_COOP_P3"), "%d,%d,%d", &P3_GIVE, &P3_HOLD, &P3_HIT) == 3)
         host_log("coop: p3: test: give %d, hold %d, hit %d\n", P3_GIVE, P3_HOLD, P3_HIT);
-    if (!p3_on() || !sys || !plp) return;
-    if (!is_host && have_rx && (rx.flags & PF_IN_GAME) && !partner_here()) {   /* the host plays in another room: its game took them back */
-        for (i = 0; i < PC_ENE_SLOTS; i++)
-            if (owned[i] && !own_grab[i]) { owned[i] = 0; p3_n[4]++; }
+    if (!coop_on || echo_delay || !sys || !plp || run_room < 0) return;
+    me = coop_room_key() | my_case() << 16;
+    /* the partner in the room our enemies are of (also while we are in a door out of it) */
+    pres = have_peer && have_rx && (rx.stg * 256 + (unsigned char)rx.rom) == (run_room & 0xFFFF) && (!rx.rcase || rx.rcase - 1 == (run_room >> 16)) &&
+           rx.busy != BUSY_DOOR && ((rx.flags & PF_IN_GAME) || rx.busy != BUSY_NONE);
+    if (have_rx) away_n = pres ? 0 : away_n + 1;   /* (no word from it: a network outage holds its enemies where they are, as
+                                                   they were before it, until it is back or the session ends) */
+    /* hand-overs to us whose frame the playout shows now (or whose giver is gone) */
+    for (i = 0; i < PC_ENE_SLOTS; i++)
+        if (take_at[i] && !(i < (int)sys->ewk_n && (ene[i].flg & 0x80) && own_child((BH_PWORK*)ene[i].lkwkp) == i) &&
+            (!have_rx || !playout.started || (int32_t)(playout.P - take_at[i]) >= 0 || (int32_t)(playout.newest - take_at[i]) > 60 || run_room != me))
+            own_took(i);
+    /* not there: gone, in game elsewhere, or away (a door, a load) for AWAY_GRACE frames without handing us what it ran */
+    if (!have_peer || (!pres && have_rx && (((rx.flags & PF_IN_GAME) && rx.busy != BUSY_DOOR) || away_n >= AWAY_GRACE))) {
+        for (i = 0; i < PC_ENE_SLOTS && (we_run(i) || take_at[i]); i++) ;
+        if (i < PC_ENE_SLOTS) own_takeover(!have_peer ? "the session ended" : (rx.flags & PF_IN_GAME) ? "it plays in another room" : "it is away");
+        for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) act_was[i] = (ene[i].flg & 0x1) != 0;
         return;
     }
-    /* we leave (a door, a menu, a cutscene of ours) or our game stops its enemies (the status screen) while the partner
-       plays on in the room: what we run goes to the partner's game with its state (the host's only to a partner that is
-       a target) */
-    leaving = same_room() && (!tx_in_game || (sys->cb_flg & 0x5) || frame_no - enemy_frame > 2) && (!is_host || proxy_ok);
-    /* a door is one frame of this (the next one runs in the next room, where grab_check hands the rest back without their
-       state): leaving, as many as three quarters of the ring hold */
-    if (leaving) budget = ((int)(COOP_RING * 3 / 4) - (int)(ring.next - ring.head)) / ((ESTATE_PLY + 63) / 64 + 1);
+    /* a slot that comes up (an extra at the room's first frame, a spawned enemy, a slot used again): the room's runner's. One the
+       partner runs whose state has not come is hidden also while our game steps no enemies (the door's fade, a scene): it
+       would be drawn where its record put it */
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
-        if (own_grab[i] && !we_run(i) && (!(ene[i].flg & 0x1) || (frame_no - own_t[i] > 90 && !ply_busy(&ply2)))) own_grab[i] = 0;   /* (no word of its end) */
-        if (is_host && owned[i] && !own_grab[i] && (ene[i].flg & 0x1) && event_driven(&ene[i])) { p3_takeback(i, 0, "an event of ours drives it"); continue; }
-        /* a slot gone free (a dead enemy cleared) is nobody's any more: a later enemy in it is the host's. The host's copy
-           goes free with the guest's snapshot; the guest sends that free slot a few times first (build_snapshots) */
-        if (owned[i] && !own_grab[i] && !(ene[i].flg & 0x1) && (is_host || ++own_wait[i] > 60)) { owned[i] = 0; own_wait[i] = 0; }
-        else if (!is_host && (ene[i].flg & 0x1)) own_wait[i] = 0;
+        int act = (ene[i].flg & 0x1) != 0;
+        if (act && !act_was[i] && !take_at[i] && !giving[i] && !own_grab[i] && dflt >= 0 && run_room == me) {
+            owned[i] = (unsigned char)dflt;
+            if (we_run(i)) { seen[i] = 1; hide_off(i); }
+        }
+        act_was[i] = (unsigned char)act;
+        if (act && !seen[i] && !we_run(i) && ene[i].mode0 && run_room == me) hide_on(i, &ene[i]);
+    }
+    /* host: the guest's claims did not come */
+    if (claim_wait && !--claim_wait) {
+        int n = 0;
+        for (i = 0; i < PC_ENE_SLOTS; i++)
+            if (prov[i] && !hin_qt[i]) { if (!we_run(i)) n++; own_set(i, 1); own_ours(i, -1); prov[i] = 0; }
+        dflt = 0;
+        if (!host_verdict++) own_msg(0, ROOM_HOST, 5, frame_no);
+        host_log("coop: own: no claims of the guest for this room: we run its %d enemies\n", n);
+    }
+    /* we leave (a door, a menu, a scene that stops our enemies) while the partner plays on in the room: what we run goes to its
+       game. Our enemies are the room's still until our next room loads (run_room), so the hand-over may take a few frames */
+    runs = pres && (rx.flags & PF_IN_GAME) && rx.busy != BUSY_PAUSED;
+    door = run_room != me || (sys->cb_flg & 0x1);
+    paused = !tx_in_game || door || !((sys->sp_flg & 0x2) || coop_enemies_run());
+    /* (a scene or message that stops our enemies counts after PAUSE_LEAVE frames: a short one hands nothing over and back) */
+    paused_n = paused ? paused_n + 1 : 0;
+    leave = runs && (door || !tx_in_game || paused_n >= PAUSE_LEAVE) && !frozen;
+    budget = (int)(COOP_RING * 3 / 4) - (int)(ring.next - ring.head);
+    for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
+        BH_PWORK* ep = &ene[i];
+        if (own_grab[i] && !we_run(i) && (!(ep->flg & 0x1) || (frame_no - own_t[i] > 90 && !ply_busy(&ply2)))) own_grab[i] = 0;   /* (no word of its end) */
+        /* (once the guest's state of it is here: before, the host's copy was taken back from where its record put it) */
+        if (is_host && !we_run(i) && !own_grab[i] && !take_at[i] && seen[i] && (ep->flg & 0x1) && event_driven(ep)) { p3_takeback(i, 0, "an event of ours drives it"); continue; }
         if (!we_run(i)) { p3_want[i] = p3_leave[i] = 0; continue; }
-        if (!own_movable(i)) {
-            BH_PWORK* ep = &ene[i];
-            p3_want[i] = 0;
-            /* the guest leaves (its status screen stops its enemies) while one is mid-action (a Hunter getting up after a hit):
-               it would stand still in both games until the guest's enemies run again. After LEAVE_WAIT frames it goes back
-               without its state: the host lets it go from its puppet (unhold: a zombie stands, another type starts its Move) */
-            if (leaving && !is_host && !own_grab[i] && (ep->flg & 0x81) == 0x1 && own_p3(ep) && !hold_family(ep) && ++p3_leave[i] >= LEAVE_WAIT &&
-                budget-- > 0) {
-                ev_room = owned_room;
-                grab_back(i, 0, own_child(ep));
-                ev_room = -1;
-                p3_leave[i] = 0; p3_n[3]++;
-                host_log("coop: p3: enemy %d handed to the partner's game (leaving, mid-action: without its state)\n", i);
-            } else if (!leaving) p3_leave[i] = 0;
+        if (giving[i] || own_grab[i] || (ep->flg & 0x81) != 0x1 || event_driven(ep)) continue;   /* (an event of ours drives it: it runs here) */
+        if (leave) {
+            int st = own_work(ep) && hin_ok(i, 1), need = st ? estate_events(ene_len(ep, own_child(ep))) : 1;
+            if (p3_ref_t[i] && frame_no + 1 - p3_ref_t[i] < (unsigned int)P3_HOLD) continue;   /* (refused: again later) */
+            if (budget < need) continue;
+            if (!st && !door && ++p3_leave[i] < LEAVE_WAIT) continue;   /* (in a menu: it may come into a state to go) */
+            ev_room = run_room & 0xFFFF;   /* (in a door ours may be the next room's already) */
+            own_give(i, 1, st, door ? "we leave the room" : "our game stops its enemies");
+            ev_room = -1;
+            budget -= need;
             continue;
         }
         p3_leave[i] = 0;
-        if (leaving) {   /* (refused: again after P3_HOLD, not every round trip while the status screen is up) */
-            if ((p3_ref_t[i] && frame_no + 1 - p3_ref_t[i] < (unsigned int)P3_HOLD) || budget-- <= 0) continue;
-            ev_room = is_host ? -1 : owned_room;   /* (in a door our room number may be the next one's already) */
-            p3_give(i, "leaving");
-            ev_room = -1;
+        if (!runs || door) { p3_want[i] = 0; continue; }
+        /* a record the room's scripts act on runs in the host's game while it plays in the room (the scripts run there) */
+        if (!is_host && enemy_rec_scripted(i)) {
+            int any = ++hin_t[i] >= HIN_WAIT, need;
+            if (!own_work(ep) || !hin_ok(i, any) || (p3_ref_t[i] && frame_no + 1 - p3_ref_t[i] < (unsigned int)P3_HOLD)) continue;
+            need = estate_events(ene_len(ep, own_child(ep)));
+            if (budget < need) continue;
+            own_give(i, 0, 1, "a record the room's scripts act on: the host's");
+            budget -= need;
             continue;
         }
-        if (!proxy_ok || !same_room() || frozen || (sys->cb_flg & 0x5) || !tx_in_game) { p3_want[i] = 0; continue; }
+        /* Shared Enemy Control: the player it is engaged with runs it */
+        if (!p3_on() || !own_movable(i) || !proxy_ok || frozen || (sys->cb_flg & 0x5) || !tx_in_game) { p3_want[i] = 0; continue; }
         if (!p3_pref(i)) { p3_want[i] = 0; continue; }
-        if (++p3_want[i] >= P3_GIVE && frame_no - own_t[i] >= P3_HOLD && budget-- > 0)
-            p3_give(i, hit_t[i][1] && frame_no + 1 - hit_t[i][1] < P3_HIT ? "engaged: target or shooter" : "engaged: target");
+        if (++p3_want[i] >= P3_GIVE && frame_no - own_t[i] >= P3_HOLD) {
+            int need = estate_events(ene_len(ep, own_child(ep)));
+            if (budget < need) continue;
+            own_give(i, 0, 1, hit_t[i][1] && frame_no + 1 - hit_t[i][1] < P3_HIT ? "engaged: target or shooter" : "engaged: target");
+            budget -= need;
+        }
     }
 }
 
@@ -2799,7 +3072,7 @@ static void enemy_trace(BH_PWORK* ep, int i, int ran)
         dp = sqrtf((ep->px - ply2.px) * (ep->px - ply2.px) + (ep->pz - ply2.pz) * (ep->pz - ply2.pz));
     if (dh > lim && (dp < 0 || dp > lim)) return;
     fprintf(stderr, "etr g=%u s=%d id=%d ty=%d t=%c dH=%.1f dP=%.1f m=%d.%d.%d.%d mtn=%u f=%d hp=%d pH=%d.%d pP=%d.%d bH=%d bP=%d x=%x %s e=%.0f,%.0f h=%.0f,%.0f fl=%x st=%x age=%u\n", (unsigned)gs_frame_count(), i, ep->id, ep->type,
-            !coop_on || !we_run(i) || (!is_host && !p3_on()) ? '-' : tgt[i] ? 'P' : proxy_ok ? 'H' : 'h', dh, dp, ep->mode0, ep->mode1, ep->mode2, ep->mode3, ep->mtn_no, ep->frm_no >> 16,
+            !coop_on || !we_run(i) ? '-' : tgt[i] ? 'P' : proxy_ok ? 'H' : 'h', dh, dp, ep->mode0, ep->mode1, ep->mode2, ep->mode3, ep->mtn_no, ep->frm_no >> 16,
             ep->hp, plp->hp, plp->mode0, dp < 0 ? 0 : ply2.hp, dp < 0 ? 0 : ply2.mode0, ply_busy(plp), dp < 0 ? 0 : ply_busy(&ply2) || partner_held(),
             ep->id == 1 && ep->exp0 ? *(int*)(ep->exp0 + 0x40) : 0, ran ? "run" : "pup", ep->px, ep->pz, plp->px, plp->pz, ep->flg, ep->stflg, ran || is_host ? 0 : frame_no - snap_at[i]);
 }
@@ -2884,7 +3157,9 @@ static int build_snapshots(EneSnap* out)
     int i, k, cnt = 0, n = 0, win[PC_ENE_SLOTS], free_idx[4], free_n = 0, m = sys->ewk_n < PC_ENE_SLOTS ? sys->ewk_n : PC_ENE_SLOTS;
     /* not during a door transition: the room number is already the next one while the
        enemy slots still hold the old room's */
-    if (!tx_in_game || (sys->cb_flg & 0x1) || !same_room() || echo_delay) return 0;   /* the client runs the enemies of its own room (M5) */
+    /* (protocol 56) also with the partner elsewhere: a partner coming into our room has our state of its enemies at once (its
+       copies wait hidden for it) */
+    if (!tx_in_game || (sys->cb_flg & 0x1) || echo_delay || !room_ready() || run_room != (coop_room_key() | my_case() << 16)) return 0;
     for (i = 0; i < m; i++)
         if (owned[i] != is_host && (ene[i].flg & 0x1)) win[cnt++] = i;
     for (k = 0; k < m && free_n < 4; k++) {
@@ -2919,33 +3194,61 @@ static int build_snapshots(EneSnap* out)
     return n;
 }
 
-/* at the hand-off: our hits on puppets go to the side that runs them (and are cleared here:
-   the puppets do not run their own damage code) */
+/* our hit on enemy i (the weapon code's output on it) as EV_ENE_HIT, taken off the enemy: to the partner, which runs it, or
+   (protocol 56) kept here when its hand-over to us is under way (take_at: we run it from the giver's state, which has not
+   seen this hit) */
+static int hit_send(int i, BH_PWORK* ep, int keep)
+{
+    int j, n;
+    Event e = { 0 };
+    for (j = n = 0; ep->mlwP && j < ep->mlwP->obj_num && j < 64; j++)
+        if (ep->dam[j] && n < 6) { e.u.eh.jnt[n] = j; e.u.eh.dam[n++] = ep->dam[j]; ep->dam[j] = 0; }
+    if (!n && !(ep->flg & 0x4) && !(ep->flg2 & 0x4) && !(ep->comb_flg & 0x70)) return 0;
+    for (; n < 6; n++) e.u.eh.jnt[n] = -1;
+    e.type = EV_ENE_HIT;
+    e.idx = i;
+    e.u.eh.flg = (ep->flg & 0x4) | (plp->at_flg & 0xE) << 8 | COOP_HIT_AIM;   /* with the shooter's aim height */
+    if (pc_precise_head(ep)) e.u.eh.flg |= COOP_HIT_PRECISE;   /* and whether its "Precise hits" judged it (tps_glue.c) */
+    e.u.eh.flg2 = ep->flg2 & 0x4; e.u.eh.comb_flg = ep->comb_flg & 0x70;
+    e.u.eh.djnt_no = ep->djnt_no; e.u.eh.wpnr_no = ep->wpnr_no;
+    e.u.eh.dp[0] = ep->dpx; e.u.eh.dp[1] = ep->dpy; e.u.eh.dp[2] = ep->dpz;
+    e.u.eh.dv[0] = ep->dvx; e.u.eh.dv[1] = ep->dvy; e.u.eh.dv[2] = ep->dvz;
+    e.u.eh.dax = ep->dax; e.u.eh.day = ep->day;
+    ep->flg &= ~0x4; ep->flg2 &= ~0x4; ep->comb_flg &= ~0x70;
+    hit_t[i][0] = frame_no + 1;
+    if (keep) { e.stg = sys->stg_no; e.rom = sys->rom_no; defer_hit(&e); }
+    else queue_event(&e);
+    return 1;
+}
+/* at the hand-off: our hits on puppets go to the side that runs them (and are cleared here: the puppets do not run their own
+   damage code) */
 static void capture_hits(void)
 {
-    int i, j, n;
-    if (is_host ? !same_room() : !puppets()) return;
+    int i;
+    if (!sys || !plp || !coop_on || echo_delay) return;
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
         BH_PWORK* ep = &ene[i];
-        Event e = { 0 };
-        if (!(ep->flg & 0x1) || !ep->mode0 || owned[i] != is_host) continue;
-        for (j = n = 0; ep->mlwP && j < ep->mlwP->obj_num && j < 64; j++)
-            if (ep->dam[j] && n < 6) { e.u.eh.jnt[n] = j; e.u.eh.dam[n++] = ep->dam[j]; ep->dam[j] = 0; }
-        if (!n && !(ep->flg & 0x4) && !(ep->flg2 & 0x4) && !(ep->comb_flg & 0x70)) continue;
-        for (; n < 6; n++) e.u.eh.jnt[n] = -1;
-        e.type = EV_ENE_HIT;
-        e.idx = i;
-        e.u.eh.flg = (ep->flg & 0x4) | (plp->at_flg & 0xE) << 8 | COOP_HIT_AIM;   /* with the shooter's aim height */
-        if (pc_precise_head(ep)) e.u.eh.flg |= COOP_HIT_PRECISE;   /* and whether its "Precise hits" judged it (tps_glue.c) */
-        e.u.eh.flg2 = ep->flg2 & 0x4; e.u.eh.comb_flg = ep->comb_flg & 0x70;
-        e.u.eh.djnt_no = ep->djnt_no; e.u.eh.wpnr_no = ep->wpnr_no;
-        e.u.eh.dp[0] = ep->dpx; e.u.eh.dp[1] = ep->dpy; e.u.eh.dp[2] = ep->dpz;
-        e.u.eh.dv[0] = ep->dvx; e.u.eh.dv[1] = ep->dvy; e.u.eh.dv[2] = ep->dvz;
-        e.u.eh.dax = ep->dax; e.u.eh.day = ep->day;
-        ep->flg &= ~0x4; ep->flg2 &= ~0x4; ep->comb_flg &= ~0x70;
-        hit_t[i][0] = frame_no + 1;
-        queue_event(&e);
+        if (!(ep->flg & 0x1) || !ep->mode0 || we_run(i)) continue;
+        hit_send(i, ep, take_at[i] != 0);
     }
+}
+/* a hit (EV_ENE_HIT) on an enemy we run: its damage code takes it at its next step */
+static void hit_apply(const Event* e)
+{
+    BH_PWORK* ep = &ene[e->idx];
+    int n;
+    if (e->idx >= sys->ewk_n || !(ep->flg & 0x1) || !ep->mlwP) return;
+    for (n = 0; n < 6; n++)   /* joints of its model only (coop_check_event: 0..63, damage bounded) */
+        if (e->u.eh.jnt[n] >= (int)ep->mlwP->obj_num) return;
+    for (n = 0; n < 6; n++)
+        if (e->u.eh.jnt[n] >= 0 && ep->dam[(int)e->u.eh.jnt[n]] < 100000) ep->dam[(int)e->u.eh.jnt[n]] += e->u.eh.dam[n];
+    ep->flg |= e->u.eh.flg & 0x4; ep->flg2 |= e->u.eh.flg2; ep->comb_flg |= e->u.eh.comb_flg;
+    if (e->u.eh.flg & COOP_HIT_AIM) hit_aim[e->idx] = 0x80 | ((e->u.eh.flg >> 8) & 0xE);
+    ep->djnt_no = e->u.eh.djnt_no; ep->wpnr_no = e->u.eh.wpnr_no;
+    tps_hit_precise[e->idx] = e->u.eh.flg & COOP_HIT_PRECISE ? e->u.eh.wpnr_no + 1 : 0;
+    ep->dpx = e->u.eh.dp[0]; ep->dpy = e->u.eh.dp[1]; ep->dpz = e->u.eh.dp[2];
+    ep->dvx = e->u.eh.dv[0]; ep->dvy = e->u.eh.dv[1]; ep->dvz = e->u.eh.dv[2];
+    ep->dax = e->u.eh.dax; ep->day = e->u.eh.day;
 }
 
 /* ---------------------------------------------------------------- enemies killed while the guest ran them (protocol 15, EV_GONE)
@@ -2968,26 +3271,19 @@ static int gone_dead(const BH_PWORK* ep)   /* a killed enemy (not a linked part,
     return (ep->flg & 0x83) == 0x3 && !(ep->stflg & 0x1000000) && ep->mode0 && ep->id <= 90;
 }
 
-/* ---------------------------------------------------------------- the hand-in (protocol 53, every type since 54)
+/* ---------------------------------------------------------------- the guest's room (protocol 53, every type since 54; protocol 56)
    The host's fresh load of a room the guest has been in alone (the host elsewhere, its enemies run by the guest's game)
    had the host's enemies take over: the guest's became puppets of the host's, which stood at the room's start positions,
-   so everything the guest had moved jumped back (and the extras only the host drew popped in, enemyopt_glue.c). Now the
-   guest's enemies go on as they are: at that moment the guest keeps running each one it ran alone (of own_types: every
-   type the guest can meet outside a boss fight's script) and claims it (EV_ENEOWN state 3: its slot, type and look;
-   stflg_b 1: it lies dead there). The host, whose copy in that slot is the same enemy, shows it as a puppet of the guest's
-   snapshots from then on (state 4; else state 2, refused: the host's runs) and the guest hands it in with its whole
-   state (EV_UNGRAB state 1, as a grab ends: ene_unpack) once it can go: a Shared Enemy Control type (p3) in its Move
-   (walking, standing, lying), or after HIN_WAIT frames in any other mode but a grab or on stairs (their pointers are the
-   game's that set them); any other type in the states hin_state_ok names (its code's pointers and its grabs of its own
-   game's player), however long that takes - meanwhile it runs in the guest's game, as a grabbing zombie does. A dead one
-   goes too, as the corpse it is (the host's script counts it dead), when its type allows. So the host's game runs it on
-   from where it is. A record the room's scripts act on is handed in too (the scripts run on the host); with Shared Enemy
-   Control the p3 types stay the guest's until that rule's own hand-overs (p3_frame). The guest's dead ones it did not
-   claim the host hides (EV_GONE, below). Not after the host's menu (its enemies were not reloaded). */
-#define HIN_WAIT 90
-static unsigned char hin[PC_ENE_SLOTS];          /* guest: 1 claimed, 2 the host shows it as ours: hand it in */
-static unsigned short hin_t[PC_ENE_SLOTS];
-static unsigned char hin_mt[PC_ENE_SLOTS];       /* guest: frames our menu held one that cannot go with its state now */
+   so everything the guest had moved jumped back (and the extras only the host drew popped in, enemyopt_glue.c). Since
+   protocol 53 the guest's enemies go on as they are: the guest claims each one it ran alone (of own_types: every type the
+   guest can meet outside a boss fight's script; EV_ENEOWN state 3: its slot, type and look; stflg_b 1: it lies dead there),
+   the host, whose copy in that slot is the same enemy, shows it as a puppet of the guest's snapshots (state 4; else state
+   2, refused: the host's runs). Protocol 56: the guest was first in the room, so it runs them on until it leaves (then it
+   hands them to the host with their state, own_frame), and the host's copies wait hidden until the guest's state of each has
+   come (its snapshots come all the time) or its claims are done (EV_ENEOWN 5: the rest is the host's). Before (53..55) the
+   guest handed every one in to the host as soon as it could go, a hand-over each. Only a record the room's scripts act on is
+   still handed in (the scripts run on the host). The guest's dead ones it did not claim the host hides (EV_GONE, below). */
+static unsigned char hin[PC_ENE_SLOTS];          /* guest: 1 claimed, 2 the host shows it as ours */
 static int hin_alone, hin_gen = -1;              /* guest: our game ran this room load's enemies with the host elsewhere */
 /* not claimed: what the host's fresh copy is as well (a bat asleep, a baby spider still inside its mother), and the Tyrant of
    a fight whose room script talks to it (type 1, rm_flg 0x1F: en19 Br01) */
@@ -3053,19 +3349,28 @@ static int hin_ok(int k, int any)
         return 0;
     return any || (ep->mode0 == 1 && ep->hp >= 0 && !(ep->flg & 0x2));
 }
-static void hin_claim(void)
+/* guest: the host came into the room we ran alone (it asked, ROOM_CLAIM, or its pose came): our enemies go on as they are,
+   claimed one by one; what we cannot claim (a boss of a fight, one an event drives, one hidden) is the host's. Then "done",
+   and the dead we did not claim named (EV_GONE) */
+static void claim_room(void)
 {
     int k, c, n = 0, d = 0;
+    Event g = { 0 };
+    if (claimed || is_host) return;
+    claimed = 1;
+    dflt = 1;
     for (k = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS; k++) {
         BH_PWORK* ep = &ene[k];
         Event e = { 0 };
         int dead = (ep->flg & 0x2) != 0;
-        if ((ep->flg & 0x81) != 0x1 || (dead && !gone_dead(ep)) || owned[k] || !own_work(ep) || !ep->mode0 || event_driven(ep) || !hin_wanted(ep)) continue;
+        if ((ep->flg & 0x81) != 0x1 || !we_run(k) || own_grab[k]) continue;
         c = own_child(ep);
-        if (ep->id == 1 && !(c < PC_ENE_SLOTS && (ene[c].flg & 0x81) == 0x81 && ene[c].exp0 && !owned[c])) continue;
-        own_set(k, 1);
-        if (c < PC_ENE_SLOTS) own_set(c, 1);
-        hin[k] = 1; hin_t[k] = 0; hin_mt[k] = 0;
+        if ((dead && !gone_dead(ep)) || !own_work(ep) || !ep->mode0 || event_driven(ep) || !hin_wanted(ep) ||
+            (ep->id == 1 && !(c < PC_ENE_SLOTS && (ene[c].flg & 0x81) == 0x81 && ene[c].exp0 && we_run(c)))) {
+            own_set(k, 0); own_set(c, 0); giving[k] = 0;   /* the host's: our copy shows its state from now */
+            continue;
+        }
+        hin[k] = 1;
         e.type = EV_ENEOWN; e.idx = k; e.u.gr.child = c; e.u.gr.state = 3;
         e.u.gr.mdl = e.u.gr.cmdl = -1; e.u.gr.mnw = e.u.gr.cmnw = MNW_KEEP;
         e.u.gr.flg_b = ep->id | ep->mdlver << 8;
@@ -3073,13 +3378,30 @@ static void hin_claim(void)
         queue_event(&e);
         n++; d += dead;
     }
-    if (n) { owned_room = coop_room_key(); host_log("coop: the host comes into the room we ran alone: %d of our enemies go on as they are (hand-in), %d of them dead\n", n, d); }
+    own_msg(0, ROOM_DONE, 5, frame_no);
+    owned_room = coop_room_key();
+    host_log("coop: own: the host comes into the room we ran alone: %d of our enemies go on as they are, %d of them dead\n", n, d);
+    /* the dead we did not claim: the host hides its copies (EV_GONE) */
+    memset(gone_mask, 0, sizeof(gone_mask));
+    g.type = EV_GONE;
+    g.idx = sys->rcase;
+    for (k = n = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS; k++) {
+        if (!(ene[k].flg & 0x1) || !gone_dead(&ene[k]) || we_run(k)) continue;
+        gone_mask[k >> 5] |= 1u << (k & 31);
+        g.u.gn.slot[g.u.gn.n] = k;
+        g.u.gn.ver[g.u.gn.n] = ene[k].mdlver;
+        g.u.gn.id[g.u.gn.n++] = ene[k].id;
+        n++;
+        if (g.u.gn.n == COOP_GONE_MAX) { queue_event(&g); g.u.gn.n = 0; }
+    }
+    if (g.u.gn.n) queue_event(&g);
+    if (n) host_log("coop: the host's enemies take over: %d of ours died meanwhile, the host hides its copies\n", n);
+    gone_t = n ? 150 : 0;
 }
 /* host: the guest's claims (state 3), answered once our copy is there and set up (an extra enemy comes at the room's first
    frame, which can be after the guest's claim) or after 150 frames. A dead one of the guest's (stflg_b 1) is taken also when
    our copy is hidden or dead: its corpse shows here as it lies there (before, what our script or EV_GONE hid) */
-static Event hin_q[PC_ENE_SLOTS];
-static unsigned char hin_qt[PC_ENE_SLOTS];        /* 1 + frames waited, 0 none */
+static Event hin_q[PC_ENE_SLOTS];             /* (hin_qt: 1 + frames waited, 0 none) */
 static void hin_answer(int i, int last)
 {
     const Event* e = &hin_q[i];
@@ -3092,15 +3414,23 @@ static void hin_answer(int i, int last)
     /* (the players' room files differ: the same type in another look is taken too, each game showing its own look; its state
        runs on its own motions and model, which ene_unpack checks, instead of jumping back to our start position) */
     other = (ep->id | ep->mdlver << 8) != e->u.gr.flg_b && ep->id == (e->u.gr.flg_b & 0xFF) && enemy_room_differs();
-    ok = here && room_ready() && i < (int)sys->ewk_n && (ep->flg & 0x81) == 0x1 && ep->mode0 && (dead || !(ep->flg & 0x2)) &&
-         ((ep->id | ep->mdlver << 8) == e->u.gr.flg_b || other) && !owned[i] && !own_grab[i] && own_child(ep) == c && !event_driven(ep) &&
-         (c >= PC_ENE_SLOTS || (c < (int)sys->ewk_n && (ene[c].flg & 0x1) && !owned[c]));
+    /* (protocol 56) only in a room the guest was in first (prov: ours wait for its claims); else the host's room: refused, and
+       the guest told (both came at once) */
+    ok = here && room_ready() && (prov[i] || (owned[i] && claim_wait)) && i < (int)sys->ewk_n && (ep->flg & 0x81) == 0x1 && ep->mode0 && (dead || !(ep->flg & 0x2)) &&
+         ((ep->id | ep->mdlver << 8) == e->u.gr.flg_b || other) && !own_grab[i] && own_child(ep) == c && !event_driven(ep) &&
+         (c >= PC_ENE_SLOTS || (c < (int)sys->ewk_n && (ene[c].flg & 0x1)));
     r.type = EV_ENEOWN; r.idx = i; r.u.gr.child = c; r.u.gr.state = ok ? 4 : 2;
     r.u.gr.mdl = r.u.gr.cmdl = -1; r.u.gr.mnw = r.u.gr.cmnw = MNW_KEEP;
     queue_event(&r);
-    if (!ok) { host_log("coop: hand-in: the guest's enemy %d (id %d model %d) is not ours here (id %d model %d): ours runs\n", i, e->u.gr.flg_b & 0xFF, e->u.gr.flg_b >> 8, ep->id, ep->mdlver); return; }
+    if (!ok) {
+        if (here && !claim_wait && !prov[i]) { if (!host_verdict++) own_msg(0, ROOM_HOST, 5, frame_no); }
+        else if (here && i < (int)sys->ewk_n && (ep->flg & 0x1)) { own_set(i, 1); own_ours(i, -1); }   /* (ours: it shows as our game has it) */
+        host_log("coop: hand-in: the guest's enemy %d (id %d model %d) is not ours here (id %d model %d): ours runs\n", i, e->u.gr.flg_b & 0xFF, e->u.gr.flg_b >> 8, ep->id, ep->mdlver);
+        return;
+    }
     own_set(i, 0);
-    if (c < PC_ENE_SLOTS) own_set(c, 0);
+    if (c < PC_ENE_SLOTS) { own_set(c, 0); prov[c] = 0; }
+    prov[i] = 0;
     own_wait[i] = 0; own_t[i] = frame_no; owned_child[i] = 255;
     owned_room = coop_room_key();
     host_log("coop: hand-in: enemy %d as the guest's game has it%s%s, until it hands it in\n", i, dead ? " (dead)" : "",
@@ -3118,89 +3448,26 @@ static void hin_apply(const Event* e)
     int i = e->idx;
     if (i >= PC_ENE_SLOTS) return;
     if (!is_host) {
-        if (e->u.gr.state == 4 && hin[i] == 1 && we_run(i)) { hin[i] = 2; hin_t[i] = 0; }
+        if (e->u.gr.state == 4 && hin[i] == 1 && we_run(i)) hin[i] = 2;   /* (it runs here on: protocol 56) */
         return;
     }
     if (e->u.gr.state != 3) return;
     hin_q[i] = *e; hin_qt[i] = 1;
     hin_answer(i, 0);
 }
-/* guest, after the snapshots: what the host shows as ours goes in; one that cannot go with its state while our menu stops our
-   enemies goes back without it after LEAVE_WAIT frames (the host lets it go from its puppet: unhold), so it does not stand
-   still in both games. At most as many per frame as half the event ring holds (a room of ants) */
-static void hin_frame(void)
-{
-    int k, menu;
-    if (!tx_in_game || (sys->cb_flg & 0x1)) return;
-    menu = (sys->cb_flg & 0x4) || frame_no - enemy_frame > 2;
-    for (k = 0; k < PC_ENE_SLOTS; k++) {
-        int any, c;
-        if (!hin[k]) continue;
-        if (!we_run(k) || owned_room != coop_room_key() || !(ene[k].flg & 0x1)) { hin[k] = 0; continue; }   /* (refused, taken back, gone) */
-        c = own_child(&ene[k]);
-        if (hin[k] == 1) {   /* no answer (a lost one cannot be: the stream is reliable) */
-            if (++hin_t[k] > 300) { hin[k] = 0; grab_back(k, 0, c); }
-            continue;
-        }
-        if (p3_on() && own_p3(&ene[k]) && !enemy_rec_scripted(k)) { hin[k] = 0; continue; }   /* Shared Enemy Control: the engaged player's game runs it */
-        if (hin_t[k] < 0xFFFF) hin_t[k]++;
-        any = hin_t[k] >= HIN_WAIT;
-        if (!hin_ok(k, any)) {
-            if (hin_t[k] % 300 == 0)
-                host_log("coop: hand-in: enemy %d (id %d, type %d, modes %d %d %d %d, flg %x) still runs here after %d frames: not in a state to go\n", k, ene[k].id,
-                         ene[k].type, ene[k].mode0, ene[k].mode1, ene[k].mode2, ene[k].mode3, ene[k].flg, hin_t[k]);
-            if (menu && ++hin_mt[k] >= LEAVE_WAIT && (int)(ring.next - ring.head) < COOP_RING / 2) {
-                host_log("coop: hand-in: enemy %d (id %d, modes %d %d %d) goes to the host's game without its state (our menu)\n", k, ene[k].id, ene[k].mode0,
-                         ene[k].mode1, ene[k].mode2);
-                grab_back(k, 0, c);
-                hin[k] = 0;
-            } else if (!menu) hin_mt[k] = 0;
-            continue;
-        }
-        if ((int)(ring.next - ring.head) + (ene_len(&ene[k], c) + 63) / 64 + 1 > COOP_RING / 2) break;   /* (the next frame) */
-        run_from[k] = playout.newest;   /* (the host's snapshots of it before its answer were of its fresh copy: never shown) */
-        host_log("coop: hand-in: enemy %d (id %d, mode %d, hp %d%s) to the host's game with its state after %d frames\n", k, ene[k].id, ene[k].mode0, ene[k].hp,
-                 ene[k].flg & 0x2 ? ", dead" : "", hin_t[k]);
-        grab_back(k, 1, c);
-        hin[k] = 0;
-    }
-}
-
-/* guest, every frame before the snapshots: at the moment the host's enemies take over ours */
+/* guest, every frame before the snapshots: the host comes into the room we ran alone (its ROOM_CLAIM is the usual way; its pose
+   in game here covers both coming in at once) */
 static void gone_frame(void)
 {
     static int was;
-    int now = puppets(), k, n = 0;
-    Event e = { 0 };
-    if (hin_gen != enemy_room_gen) {   /* a new load of the room (a door, the host's game state at a rejoin): the old load's claims go */
-        for (k = 0; k < PC_ENE_SLOTS; k++)
-            if (hin[k] && we_run(k)) { own_set(k, 0); if (own_child(&ene[k]) < PC_ENE_SLOTS) own_set(own_child(&ene[k]), 0); }
-        hin_gen = enemy_room_gen; hin_alone = 0; memset(hin, 0, sizeof(hin));
-    }
+    int now = same_room() && rx.busy != BUSY_DOOR;
+    if (hin_gen != enemy_room_gen) { hin_gen = enemy_room_gen; hin_alone = 0; memset(hin, 0, sizeof(hin)); }
     /* our enemies run alone with the host known in game in another room (not while a rejoin's session starts: no pose yet, and its
        game state reloads our room) */
-    if (!now && tx_in_game && room_ready() && !(sys->cb_flg & 0x5) && frame_no - enemy_frame <= 2 && have_peer && have_rx && (rx.flags & PF_IN_GAME) &&
-        !partner_here())
-        hin_alone = 1;
-    if (now && !was && hin_alone) hin_claim();
-    if (now || (same_room() && snaps_live())) hin_alone = 0;   /* (the host came while our status screen was up: its enemies ran since) */
-    if (now && !was) {
-        memset(gone_mask, 0, sizeof(gone_mask));
-        e.type = EV_GONE;
-        e.idx = sys->rcase;
-        for (k = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS; k++) {
-            if (!(ene[k].flg & 0x1) || !gone_dead(&ene[k]) || owned[k]) continue;
-            gone_mask[k >> 5] |= 1u << (k & 31);
-            e.u.gn.slot[e.u.gn.n] = k;
-            e.u.gn.ver[e.u.gn.n] = ene[k].mdlver;
-            e.u.gn.id[e.u.gn.n++] = ene[k].id;
-            n++;
-            if (e.u.gn.n == COOP_GONE_MAX) { queue_event(&e); e.u.gn.n = 0; }
-        }
-        if (e.u.gn.n) queue_event(&e);
-        if (n) host_log("coop: the host's enemies take over: %d of ours died meanwhile, the host hides its copies\n", n);
-        gone_t = n ? 150 : 0;
-    }
+    if (!now && tx_in_game && room_ready() && !(sys->cb_flg & 0x5) && have_peer && have_rx && (rx.flags & PF_IN_GAME) && rx.busy != BUSY_DOOR && !partner_here())
+        hin_alone = 1, claimed = 0;   /* (its next coming in is claimed again) */
+    if (now && !was && hin_alone && dflt == 1) claim_room();
+    if (now) hin_alone = 0;
     if (!now || (gone_t && !--gone_t)) memset(gone_mask, 0, sizeof(gone_mask));
     was = now;
 }
@@ -3285,14 +3552,17 @@ static int anc_stats;
 static void apply_snapshots(void)
 {
     static unsigned int logged;
-    static int key = -1;
     static int stats = -1;
-    int k, mismatch = 0, n = sys->ewk_n < PC_ENE_SLOTS ? sys->ewk_n : PC_ENE_SLOTS, me = coop_room_key() | my_case() << 16;
+    int k, mismatch = 0, n = sys->ewk_n < PC_ENE_SLOTS ? sys->ewk_n : PC_ENE_SLOTS;
     uint32_t P, from, was;
     owners_sync();
-    if (me != key) { memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist)); memset(hist_applied, 0, sizeof(hist_applied)); key = me; }   /* our room: other enemies */
-    if (is_host ? !same_room() : !puppets()) return;
-    if (!coop_playout_frame(&playout, net_us(), &P)) return;
+    if (echo_delay || !coop_playout_frame(&playout, net_us(), &P)) return;
+    /* (protocol 56) the kept snapshots are of the partner's room (receive: snap_room), which may be ours before the partner's pose
+       says it plays in it: it sends them all the time. Not in a door of ours (our enemy slots are the old room's, then
+       loading) */
+    if (!room_ready() || run_room != (coop_room_key() | my_case() << 16) || (snap_room & 0xFFFF) != coop_room_key() ||
+        ((snap_room >> 16) && (snap_room >> 16) - 1 != my_case()))
+        return;
     if (stats < 0) stats = getenv("RECVX_COOP_STATS") != NULL;
     if (play_st.frames++) { play_st.held += P == play_st.last; play_st.skipped += P - play_st.last > 1 && P - play_st.last < 100; }
     play_st.last = P;
@@ -3354,6 +3624,7 @@ static void apply_snapshots(void)
             continue;
         }
         if (!s->mode[0]) continue;   /* a new enemy there whose Init has not run: ours ran, it would run again (its children twice) */
+        seen[t] = 1; hid[t] = 0;   /* (its flags and mdflg are the runner's from here: shown) */
         snap_at[t] = frame_no;
         snap_root[t] = s->root;
         snap_neck[t] = s->neck;
@@ -3533,13 +3804,15 @@ static void session_reset(void)
 {
     coop_session_gen++;
     enemy_partner_forget();   /* (the partner's randomizer results and extras: another session's) */
-    if (is_host) owned_drop(); else { memset(owned, 0, sizeof(owned)); memset(own_grab, 0, sizeof(own_grab)); memset(own_ms, 0, sizeof(own_ms)); }
+    if (sys && run_room >= 0) own_takeover("its session restarted"); else own_reset(1);   /* (protocol 56: every enemy of our room ours) */
+    defer_n = 0;
     own_live = own_sent_ok = 0;
     own_done_ok = retry_ok = go_want = go_seen = 0; cont_tid = 0;   /* a new partner session: its items come again */
     in_last = 0; coop_ring_reset(&ring); blob_end = 0; snaps_reset();
+    if (bufs) memset(bufs->rb, 0, sizeof(bufs->rb));
     if (bufs) { coop_snaptx_reset(stx); coop_snaprx_reset(srx); }   /* (protocol 45) the bases were the old session's */
     coop_xfer_init(&blob_x, blob_in, sizeof(blob_in));   /* half a transfer of the old session is no use */
-    coop_xfer_init(&estate_x, estate, sizeof(estate));
+    coop_xfer_init(&estate_x, estate_zin, sizeof(estate_zin)); estate_tid = 0;
     if (is_host) blob_due = 1; else need_blob = 1;
     world_reset();
     trade_reset();   /* after the stream reset: an open offer of ours asks again */
@@ -4995,7 +5268,7 @@ static void wake_scan(const unsigned char* d, const unsigned int* tab, int ntab,
 static int wake_partner(unsigned int* keep)
 {
     int i, ang = (rx.ay + 8192) & 0xC000, flr = rx.flr - 3;
-    if (!nwake || echo_delay || !have_rx || (rx.flags & (PF_IN_GAME | PF_VISIBLE)) != (PF_IN_GAME | PF_VISIBLE) || rx.busy || !rx.flr ||
+    if (!nwake || echo_delay || !have_rx || (rx.flags & (PF_IN_GAME | PF_VISIBLE)) != (PF_IN_GAME | PF_VISIBLE) || (rx.busy && rx.busy != BUSY_PAUSED) || !rx.flr ||
         (rx.pflg & 6) || !partner_here() || (sys->cb_flg & 0x5) || !script_known()) return 0;
     for (i = 0; i < nwake; i++) {
         int ix = wake[i].ix, n = wake[i].etc ? rom->etc_n : rom->flr_n;
@@ -6606,7 +6879,7 @@ static void ts_frame(void)
     me = tx_in_game && local_visible() && plp->mode0 == 1 && plp->mnwP == plp->mnwPb && plp->hp >= 0;
     { int i; for (i = 0; i < PC_ENE_SLOTS && me; i++) if (own_grab[i] && !we_run(i)) me = 0; }   /* the partner runs a grab of one of ours (Phase 3: either side) */
     partner = have_rx && same_room() && (rx.flags & (PF_IN_GAME | PF_VISIBLE)) == (PF_IN_GAME | PF_VISIBLE) &&
-              (rx.busy == BUSY_NONE || rx.busy == BUSY_TRADE) && rx.mode0 == 1 && rx.mset == MSET_OWN;
+              (rx.busy == BUSY_NONE || rx.busy == BUSY_PAUSED || rx.busy == BUSY_TRADE) && rx.mode0 == 1 && rx.mset == MSET_OWN;
     near = have_peer && have_rx && tx_in_game && trade_near();
     g_trade.hint[0] = 0;
     switch (g_trade.phase) {
@@ -7231,17 +7504,18 @@ static int apply_event(const Event* e)
     if (pop_pending) return 0;   /* what follows a blob applies to the loaded game */
     if (e->type == EV_SPAWN) return is_host ? host_spawn_note(e) : spawn_note_apply(e->idx, &e->u.sp, e->stg, e->rom);
     if (e->type == EV_ESTATE) {   /* EV_GRAB / EV_UNGRAB name the transfer they need complete */
-        if (e->u.blob.total >= (int)sizeof(BH_PWORK) && e->u.blob.total <= ESTATE_SIZE)   /* (protocol 54: an enemy without a child, its own size) */
-            coop_xfer_chunk(&estate_x, e->u.blob.tid, e->u.blob.total, e->u.blob.off, e->u.blob.len, e->u.blob.data);
+        if (e->u.blob.total >= 2 && e->u.blob.total <= ESTATE_Z)   /* (protocol 56: packed) */
+            if (coop_xfer_chunk(&estate_x, e->u.blob.tid, e->u.blob.total, e->u.blob.off, e->u.blob.len, e->u.blob.data) >= 0) estate_tid = 0;
         return 1;
     }
     if (e->type == EV_GRAB) {
-        if ((!is_host || p3_on()) && sys && plp) grab_in(e);   /* (Phase 3: the guest's zombie grabs the host) */
+        if (sys && plp) grab_in(e);   /* (either way: the guest runs enemies too) */
         return 1;
     }
     if (e->type == EV_ENEOWN) {
-        if (sys && plp && e->u.gr.state >= 3) hin_apply(e);   /* (the hand-in: also with the rule off) */
-        else if (sys && plp && (p3_on() || (!is_host && e->u.gr.state == 2))) p3_apply(e);   /* (a grab the host let go: also with the rule off) */
+        if (sys && plp && (e->u.gr.state == 3 || e->u.gr.state == 4)) hin_apply(e);   /* (the guest's room) */
+        else if (sys && plp && e->u.gr.state == 5) own_room_msg(e);
+        else if (sys && plp) own_apply(e);   /* (protocol 56: hand-overs whoever runs it) */
         return 1;
     }
     if (e->type == EV_TRIG) return sys ? apply_trig(e) : 1;
@@ -7261,9 +7535,9 @@ static int apply_event(const Event* e)
         int i = e->idx, c = i < PC_ENE_SLOTS ? owned_child[i] : 255;
         /* only a grab we handed over. It ends here whatever comes with it: the enemy is ours again
            (with the state only when the child is the one we handed over with it - the transaction) */
-        if ((!is_host && !p3_on()) || !sys || i >= PC_ENE_SLOTS || we_run(i)) return 1;
-        if (e->u.gr.state == 2) {   /* Phase 3: the grab is over, the partner's game runs the enemy on */
-            if (p3_on()) own_grab[i] = 0;
+        if (!sys || i >= PC_ENE_SLOTS || we_run(i)) return 1;
+        if (e->u.gr.state == 2) {   /* the grab is over, the partner's game runs the enemy on */
+            own_grab[i] = 0;
             return 1;
         }
         if (!own_grab[i]) c = own_child(&ene[i]);   /* (Phase 3: one the partner ran between attacks, given up as it leaves) */
@@ -7282,7 +7556,8 @@ static int apply_event(const Event* e)
             }
             return 1;
         }
-        if (!e->u.gr.state || c != child_here(i, e->u.gr.child) || !estate_x.done || estate_x.tid != e->u.gr.tid || estate_x.total != ene_len(&ene[i], c) ||
+        own_ours(i, c < PC_ENE_SLOTS ? c : -1);
+        if (!e->u.gr.state || c != child_here(i, e->u.gr.child) || !estate_take(e->u.gr.tid, ene_len(&ene[i], c)) ||
             !ene_unpack(&ene[i], estate, e->u.gr.mdl, e->u.gr.mnw)) {
             pc_enemy_unhold(&ene[i]);
             host_log("coop: enemy %d is back from the partner without its grab state: released\n", i);
@@ -7297,23 +7572,23 @@ static int apply_event(const Event* e)
                        e->type == EV_PLY_HIT ? e->u.ph.hp_delta : e->u.eh.dam[0] + e->u.eh.dam[1] + e->u.eh.dam[2] + e->u.eh.dam[3] + e->u.eh.dam[4] + e->u.eh.dam[5],
                        e->type == EV_PLY_HIT ? (plp ? plp->hp : 0) : e->idx < PC_ENE_SLOTS ? ene[e->idx].hp : 0);
     if (!sys || !plp || e->stg != sys->stg_no || e->rom != sys->rom_no) return 1;
-    if (e->type == EV_ENE_HIT && e->idx < sys->ewk_n && e->idx < PC_ENE_SLOTS && owned[e->idx] != is_host) {
-        BH_PWORK* ep = &ene[e->idx];
-        int n;
-        if (!(ep->flg & 0x1) || !ep->mlwP) return 1;
-        hit_t[e->idx][1] = frame_no + 1;   /* (Phase 3: who it is engaged with) */
-        for (n = 0; n < 6; n++)   /* joints of its model only (coop_check_event: 0..63, damage bounded) */
-            if (e->u.eh.jnt[n] >= (int)ep->mlwP->obj_num) return 1;
-        for (n = 0; n < 6; n++)
-            if (e->u.eh.jnt[n] >= 0 && ep->dam[(int)e->u.eh.jnt[n]] < 100000) ep->dam[(int)e->u.eh.jnt[n]] += e->u.eh.dam[n];
-        ep->flg |= e->u.eh.flg & 0x4; ep->flg2 |= e->u.eh.flg2; ep->comb_flg |= e->u.eh.comb_flg;
-        if (e->u.eh.flg & COOP_HIT_AIM) hit_aim[e->idx] = 0x80 | ((e->u.eh.flg >> 8) & 0xE);
-        ep->djnt_no = e->u.eh.djnt_no; ep->wpnr_no = e->u.eh.wpnr_no;
-        tps_hit_precise[e->idx] = e->u.eh.flg & COOP_HIT_PRECISE ? e->u.eh.wpnr_no + 1 : 0;
-        ep->dpx = e->u.eh.dp[0]; ep->dpy = e->u.eh.dp[1]; ep->dpz = e->u.eh.dp[2];
-        ep->dvx = e->u.eh.dv[0]; ep->dvy = e->u.eh.dv[1]; ep->dvz = e->u.eh.dv[2];
-        ep->dax = e->u.eh.dax; ep->day = e->u.eh.day;
-    } else if (e->type == EV_PLY_HIT && (!is_host || p3_on())) {   /* (Phase 3: an enemy the guest's game runs hit the host) */
+    if (e->type == EV_ENE_HIT && e->idx < sys->ewk_n && e->idx < PC_ENE_SLOTS && (ene[e->idx].flg & 0x1)) {
+        int i = e->idx;
+        hit_t[i][1] = frame_no + 1;   /* (Shared Enemy Control: who it is engaged with) */
+        /* (protocol 56) a hit always reaches the game that runs the enemy, once: here when we run it (not one we handed over
+           and run on only until the partner runs it from our state), kept when its hand-over to us is under way, else on to
+           the partner (it ran it when the shot was fired here, or runs it now: a grab, a hand-over crossed it). Before, a hit
+           on an enemy we did not run (yet) was dropped: hits lost around grabs and hand-overs */
+        if (we_run(i) && !giving[i]) hit_apply(e);
+        else if (take_at[i]) defer_hit(e);
+        else if (!(e->u.eh.flg & COOP_HIT_FWD)) {
+            Event f = *e;
+            f.u.eh.flg |= COOP_HIT_FWD;
+            queue_event(&f);
+            p3_n[7]++;
+            if (trace) fprintf(stderr, "coop: hit on enemy %d passed on to the partner's game, which runs it\n", i);
+        } else host_log("coop: own: a hit on enemy %d came back from the partner, and we do not run it either: dropped\n", i);
+    } else if (e->type == EV_PLY_HIT) {   /* (protocol 56: the guest runs enemies too) */
         /* held here (a grab our game runs): as in single player, where a held player is no target, no other enemy's blow (the
            sender saw the stand-in free: its pose of the grab was not there yet) */
         if (plp->mode0 == 4 || plp->mode0 == 6) {
@@ -7439,7 +7714,7 @@ static void stop(void)
     have_peer = have_rx = 0;
     coop_ring_reset(&ring); in_last = 0; snaps_reset(); proxy_ok = 0; ver_msg[0] = 0;
     coop_xfer_init(&blob_x, blob_in, sizeof(blob_in));
-    coop_xfer_init(&estate_x, estate, sizeof(estate));
+    coop_xfer_init(&estate_x, estate_zin, sizeof(estate_zin)); estate_tid = 0;
     owned_drop();
     peer_sid = blob_end = 0;
     blob_due = need_blob = pop_pending = popping = follow_pending = 0;
@@ -7747,7 +8022,6 @@ static void wrong_code(const NetAddr* from)
 static void receive(void)
 {
     static unsigned char buf[COOP_DGRAM_MAX + 64];
-    static int snap_room = -1;          /* the room of the snapshots kept */
     NetAddr from;
     Pose p;
     const Event* ev;
@@ -7844,11 +8118,18 @@ static void receive(void)
         /* events: in order, each once (the sender repeats unacknowledged ones) */
         coop_ring_ack(&ring, p.ev_ack);
         coop_snaptx_ack(stx, p.snap_ack);
+        /* protocol 56: an event that comes ahead of a gap (a datagram lost or overtaken by a later one) is kept until the
+           gap is filled, then applied in order. Before, it was dropped and came again only once its answer was overdue
+           (the round trip + 80 ms): with jitter that reorders datagrams a hand-over's state (dozens of events) waited for
+           one resend after another, up to 8 s, and every event behind it with it */
         for (k = 0; k < nev; k++)
-            if (ev[k].id == in_last + 1) {
-                if (!apply_event(&ev[k])) break;   /* not yet: the peer resends it */
-                in_last++;
-            }
+            if (ev[k].id - in_last - 1 < COOP_RING && bufs->rb[ev[k].id % COOP_RING].id != ev[k].id) bufs->rb[ev[k].id % COOP_RING] = ev[k];
+        while (bufs->rb[(in_last + 1) % COOP_RING].id == in_last + 1) {
+            Event* e = &bufs->rb[(in_last + 1) % COOP_RING];
+            if (!apply_event(e)) break;   /* not yet: kept */
+            e->id = 0;
+            in_last++;
+        }
         /* a frame comes in one or more datagrams, each with the pose: each datagram's snapshots are kept under its
            frame (also a late one's), the playout learns the path from every arrival; an older frame's pose changes
            nothing */
@@ -7856,10 +8137,12 @@ static void receive(void)
         {
             int c = p.seq % 8, room = (p.stg * 256 + (unsigned char)p.rom) | p.rcase << 16;
             if (snap_cnt[c].seq != p.seq) { snap_cnt[c].seq = p.seq; snap_cnt[c].n = 0; }
-            if (nene) {   /* (protocol 45: decoded against the bases we hold, late frames too) */
+            if ((nene || (p.flags & PF_IN_GAME)) && (!have_rx || (int)(p.seq - rx.seq) >= 0) && room != snap_room) {   /* the partner's room: other enemies */
+                memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist)); memset(hist_applied, 0, sizeof(hist_applied)); snap_room = room;
+            }
+            if (nene && room == snap_room) {   /* (protocol 45: decoded against the bases we hold, late frames too) */
                 EneSnap* sn = bufs->rx_sn;
                 int got = coop_snaprx_take(srx, p.seq, sb, n - (int)(sb - buf) - ext * (int)sizeof(PoseExt), nene, sn);
-                if (room != snap_room) { memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist)); memset(hist_applied, 0, sizeof(hist_applied)); snap_room = room; }   /* other enemies */
                 snap_cnt[c].n += got;
                 for (k = 0; k < got; k++) {
                     int i = sn[k].idx;
@@ -8307,8 +8590,11 @@ void coop_frame(void)
     }
     tx.legs = tps_legs_me.on ? coop_legs_pack(tps_legs_me.mtn, tps_legs_me.yaw) : 0;   /* walking under the aim (tps_glue.c) */
     tx.legs_frm = tx_in_game && tps_legs_me.on ? (uint8_t)((tps_legs_me.frm >> 16) + 1) : 0;
-    tx.busy = !sys || (sys->tk_flg & 0x28) || (sys->ss_flg & 0x400000) || (sys->cb_flg & 0x1) ? BUSY_NONE :   /* title, (re)start, demo, a door: gone */
-              !tx_in_game ? ((sys->cb_flg & 0x40000) ? BUSY_BOX : BUSY_MENU) : !(tx.flags & PF_VISIBLE) ? BUSY_EVENT : BUSY_NONE;
+    tx.busy = !sys || (sys->tk_flg & 0x28) || (sys->ss_flg & 0x400000) ? BUSY_NONE :   /* title, (re)start, demo: gone */
+              (sys->cb_flg & 0x1) || !room_ready() ? BUSY_DOOR :   /* (protocol 56; before, BUSY_NONE: gone) a door, the next room loading */
+              !tx_in_game ? ((sys->cb_flg & 0x40000) ? BUSY_BOX : BUSY_MENU) : !(tx.flags & PF_VISIBLE) ? BUSY_EVENT :
+              /* (protocol 56) in game, its enemies stand still (a scene, a message): it hands over what it runs, takes nothing */
+              !((sys->sp_flg & 0x2) || coop_enemies_run()) ? BUSY_PAUSED : BUSY_NONE;
     if (tx.busy == BUSY_NONE && tx_in_game && g_trade.phase == TRADE_OPEN) tx.busy = BUSY_TRADE;
     if (sys) use_frame(); else tx.use = 0;
     tx.type = PKT_POSE;
@@ -8350,10 +8636,7 @@ void coop_frame(void)
             if (!is_host && rdv_error() && !bye_reason) bye_reason = rdv_error();
         }
         /* signed: receive() stamps rx_at with its own, later clock reading (a tick after `now` read as ~49 days) */
-        if (have_rx && (int)(now - rx_at) > 3000) {
-            int i;
-            for (i = 0; is_host && sys && p3_on() && i < PC_ENE_SLOTS; i++)   /* Phase 3: what it ran between attacks would stand still */
-                if (owned[i] && !own_grab[i] && !(ene[i].flg & 0x80)) p3_takeback(i, 1, "the partner timed out");
+        if (have_rx && (int)(now - rx_at) > 3000) {   /* (what it ran is ours: own_frame) */
             have_rx = 0; snaps_reset(); g_coop.state = COOP_LOST; host_log("coop: partner timed out\n");
         }
         else if (g_coop.state == COOP_LOST && (int)(now - rx_at) > LOST_MS) {   /* no goodbye came: crashed, or the network is gone */
@@ -8371,24 +8654,19 @@ void coop_frame(void)
             p2_show = p2_drawn = 0;
             return;
         }
-        /* host: the client's grabs end with the room (ours, or the partner's when it is seen elsewhere; a
-           time-out alone keeps them: room loads at low frame rates take that long) */
-        if (sys && owned_room >= 0 && is_host && (owned_room != coop_room_key() ||
-                                                  (have_rx && (rx.flags & PF_IN_GAME) && !same_room()))) owned_drop();
         own_timeout();
-        if (sys && (!is_host || p3_on())) grab_check();
+        if (sys) grab_check();
         if (sys && plp) grab_failsafe();
         if (sys && plp) hold_watch();
         if (sys && !is_host) gone_frame();
         else if (sys) { gone_host_frame(); hin_host_frame(); }
         apply_snapshots();
-        proxy_ok = (is_host || p3_on()) && p2_show && !p2_busy;   /* a busy partner is no target (as the paused game in single player); Phase 3: the guest's targets too */
-        p3_frame();
-        if (sys && !is_host) hin_frame();
+        proxy_ok = p2_show && !p2_busy;   /* a busy partner is no target (as the paused game in single player); the guest's enemies target the host too */
+        own_frame();
         if (sys) session();
         if (sys && plp) gameover_frame();
         if (sys && plp) enemy_sync();
-        if (trace && is_host && sys && sys->ewk_n && tx_in_game && same_room() && (rx.flags & PF_VISIBLE) && !rx.busy && frame_no - enemy_frame == 30)
+        if (trace && is_host && sys && sys->ewk_n && tx_in_game && same_room() && (rx.flags & PF_VISIBLE) && (!rx.busy || rx.busy == BUSY_PAUSED) && frame_no - enemy_frame == 30)
             fprintf(stderr, "coop: STALL our enemies have not run for 30 frames while the partner plays in this room (sp %x st %x cb %x gm %x)\n",
                     sys->sp_flg, sys->st_flg, sys->cb_flg, sys->gm_flg);
         if (sys && plp) trade_frame();
@@ -8403,9 +8681,9 @@ void coop_frame(void)
         if (sys && plp && in_session_game()) grant_frame();
         if (trace && frame_no % 30 == 0 && sys && sys->ewk_n) {
             int i, nt = 0, np = 0, no = 0;
-            for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) { nt += tgt[i]; np += ene[i].mode0 != 0; no += owned[i] && !(ene[i].flg & 0x80); }
+            for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) { nt += tgt[i]; np += ene[i].mode0 != 0 && !we_run(i); no += owned[i] && !(ene[i].flg & 0x80); }
             fprintf(stderr, "coop: enemies %s n=%d targeting partner=%d puppets=%d ene0=(%.1f,%.1f) hp=%d mode=%d, partner drawn=%d busy=%d, guest grabs=%d\n",
-                    is_host ? "host" : puppets() ? "puppet" : "local", sys->ewk_n, nt, puppets() ? np : 0,
+                    is_host ? "host" : "guest", sys->ewk_n, nt, np,
                     ene[0].px, ene[0].pz, ene[0].hp, ene[0].mode0, p2_drawn, p2_busy, no);
         }
         if (sys && (sys->tk_flg & 0x28)) atr_key = -1;   /* continue, game over, load in the same room: its windows and records start again */

@@ -23,7 +23,7 @@ int coop_item_word_ok(uint32_t w) { int id = (w >> 16) & 0xFF; return id > 0 && 
 int coop_check_pose(const Pose* p)
 {
     if (!fin(p->px) || !fin(p->py) || !fin(p->pz)) return COOP_BAD_FLOAT;
-    if (p->busy > BUSY_TRADE || p->mset < MSET_NONE || p->mset >= COOP_ENE_SLOTS) return COOP_BAD_FIELD;
+    if (p->busy > BUSY_DOOR || p->mset < MSET_NONE || p->mset >= COOP_ENE_SLOTS) return COOP_BAD_FIELD;
     if (p->flr > 32) return COOP_BAD_FIELD;   /* flr_no + 3: rooms have floors -2..29 (rom->grand[2 + flr_no], 32 entries); 0 not sent */
     if (p->rcase > 10) return COOP_BAD_FIELD;   /* room case + 1: cases 0..9 (one digit of the file name); 0 not sent */
     if ((p->flags & ~PF_ALL) || (p->opts & ~OPT_ALL) || (p->opts2 & ~OPT2_ALL)) return COOP_BAD_FIELD;   /* only the flags and game rules this protocol has */
@@ -375,7 +375,7 @@ int coop_check_event(const Event* e, int from_host)
             if (e->u.eh.jnt[k] < -1 || e->u.eh.jnt[k] >= 64) return COOP_BAD_FIELD;
             if (e->u.eh.dam[k] < 0 || e->u.eh.dam[k] > 10000 || (e->u.eh.jnt[k] < 0 && e->u.eh.dam[k])) return COOP_BAD_FIELD;
         }
-        if ((e->u.eh.flg & ~(4u | 0xE00u | COOP_HIT_AIM | COOP_HIT_PRECISE)) || (e->u.eh.flg2 & ~4u) || (e->u.eh.comb_flg & ~0x70u)) return COOP_BAD_FIELD;
+        if ((e->u.eh.flg & ~(4u | 0xE00u | COOP_HIT_AIM | COOP_HIT_PRECISE | COOP_HIT_FWD)) || (e->u.eh.flg2 & ~4u) || (e->u.eh.comb_flg & ~0x70u)) return COOP_BAD_FIELD;
         if (e->u.eh.wpnr_no < 0 || e->u.eh.wpnr_no >= 23 || e->u.eh.djnt_no < -1 || e->u.eh.djnt_no >= 64) return COOP_BAD_FIELD;
         return fins(e->u.eh.dp, 3) && fins(e->u.eh.dv, 3) ? COOP_OK : COOP_BAD_FLOAT;
     case EV_PLY_HIT:
@@ -400,9 +400,15 @@ int coop_check_event(const Event* e, int from_host)
     case EV_UNGRAB:
     case EV_ENEOWN:   /* state: 1 with its state, 0 without (EV_ENEOWN: refused, run it on), 2 EV_UNGRAB: the grab is over and
                          the runner keeps it / EV_ENEOWN: taken back; EV_ENEOWN 3 the guest ran it alone and keeps running it
-                         (the hand-in, guest -> host), 4 the host shows it as the guest's until the guest hands it in (host -> guest) */
-        if (e->idx >= COOP_ENE_SLOTS || e->u.gr.state > (e->type == EV_GRAB ? 1 : e->type == EV_ENEOWN ? 4 : 2) || e->u.gr.pset > 1) return COOP_BAD_FIELD;
+                         (the guest's room, guest -> host), 4 the host shows it as the guest's (host -> guest); protocol 56: EV_ENEOWN 1
+                         a hand-over (pset 1: the giver leaves; tid 0: without its state), 5 the room's runner (child: COOP_ROOM_*),
+                         6 the receiver of a hand-over runs it now */
+        if (e->idx >= COOP_ENE_SLOTS || e->u.gr.state > (e->type == EV_GRAB ? 1 : e->type == EV_ENEOWN ? 6 : 2) || e->u.gr.pset > 1) return COOP_BAD_FIELD;
         if (e->type == EV_ENEOWN && (e->u.gr.state == 3 ? from_host : e->u.gr.state == 4 && !from_host)) return COOP_BAD_DIR;
+        if (e->type == EV_ENEOWN && e->u.gr.state == 5) {
+            if (e->u.gr.child > COOP_ROOM_HOST || e->u.gr.child == COOP_ROOM_GUEST) return COOP_BAD_FIELD;
+            if ((e->u.gr.child == COOP_ROOM_DONE) == from_host) return COOP_BAD_DIR;
+        }
         if (e->u.gr.mdl < -1 || e->u.gr.mdl >= 16 || e->u.gr.cmdl < -1 || e->u.gr.cmdl >= 16) return COOP_BAD_FIELD;
         for (k = 0; k < 2; k++) {
             int m = k ? e->u.gr.cmnw : e->u.gr.mnw;
@@ -813,6 +819,38 @@ int coop_xfer_chunk(CoopXfer* x, int tid, int total, int off, int len, const uin
     for (k = 0; k < chunks && x->have[k]; k++) ;
     x->done = k == chunks;
     return x->done;
+}
+
+int coop_zpack(const uint8_t* in, int n, uint8_t* out, int cap)
+{
+    int w = n / 4, mb = (w + 7) / 8, k, len = 2 + mb;
+    if (n < 0 || n % 4 || n > COOP_ZPACK_MAX || cap < len) return 0;
+    out[0] = (uint8_t)n; out[1] = (uint8_t)(n >> 8);
+    memset(out + 2, 0, mb);
+    for (k = 0; k < w; k++) {
+        if (!(in[4 * k] | in[4 * k + 1] | in[4 * k + 2] | in[4 * k + 3])) continue;
+        if (len + 4 > cap) return 0;
+        out[2 + k / 8] |= (uint8_t)(1 << (k & 7));
+        memcpy(out + len, in + 4 * k, 4);
+        len += 4;
+    }
+    return len;
+}
+int coop_zunpack(const uint8_t* in, int len, uint8_t* out, int cap)
+{
+    int n, w, mb, k, at;
+    if (len < 2) return -1;
+    n = in[0] | in[1] << 8;
+    w = n / 4; mb = (w + 7) / 8; at = 2 + mb;
+    if (n % 4 || n > COOP_ZPACK_MAX || n > cap || len < at) return -1;
+    if (mb && (in[2 + mb - 1] >> (w - 8 * (mb - 1)) & 0xFF) && (w & 7)) return -1;   /* bits past the last word */
+    for (k = 0; k < w; k++) {
+        if (!(in[2 + k / 8] >> (k & 7) & 1)) { memset(out + 4 * k, 0, 4); continue; }
+        if (at + 4 > len) return -1;
+        memcpy(out + 4 * k, in + at, 4);
+        at += 4;
+    }
+    return at == len ? n : -1;
 }
 
 /* ---------------------------------------------------------------- room scripts */

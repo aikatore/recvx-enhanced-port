@@ -74,7 +74,8 @@ void coop_test_aids(CoopTest* t)
             al = al[n] == ',' ? al + n + 1 : NULL;
         }
     }
-    {   /* test aid: RECVX_COOP_ENEPOS="hostframe[,...]": the room's enemies (not linked parts) with where they stand, their
+    {   int coop_enemy_waiting(int i);   /* coop_glue.c */
+        /* test aid: RECVX_COOP_ENEPOS="hostframe[,...]": the room's enemies (not linked parts) with where they stand, their
            HP and mode, and whether they are dead or hidden (slot:type.model@x,z hp mode0 [D][H]): pc/tools/coop_handin_check.sh
            compares the two sides */
         static const char* ep = (const char*)-1;
@@ -87,7 +88,7 @@ void coop_test_aids(CoopTest* t)
             for (k = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS && ln < (int)sizeof(line) - 48; k++)
                 if ((ene[k].flg & 0x81) == 0x1 && ene[k].id >= 1 && ene[k].id <= 30)
                     ln += snprintf(line + ln, sizeof(line) - ln, " %d:%d.%d@%.0f,%.0f,%d,%d%s%s", k, ene[k].id, ene[k].mdlver, ene[k].px, ene[k].pz, ene[k].hp, ene[k].mode0,
-                                   ene[k].flg & 0x2 ? ",D" : "", ene[k].stflg & 0x1000000 ? ",H" : "");
+                                   ene[k].flg & 0x2 ? ",D" : "", (ene[k].stflg & 0x1000000) || coop_enemy_waiting(k) ? ",H" : "");   /* (H: hidden, or waiting for the runner's state) */
             host_log("%s\n", line);
             ep = ep[n] == ',' ? ep + n + 1 : NULL;
         }
