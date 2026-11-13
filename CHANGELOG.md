@@ -4,23 +4,8 @@
 
 ### Fixes
 
-- In co-op, a guest entering a room alone now gets the same randomized enemies and extra enemies as the host right
-  away, instead of them appearing only once the host arrives.
-- In co-op, enemies of every kind no longer jump back to their starting points when the host enters a room the guest
-  is already fighting in, and enemies the guest killed lie in the same place for both players.
-- In co-op, the player who is in a room first now keeps control of its enemies until leaving, and hands them over
-  without a gap: enemies no longer pop in at their starting points when the other player enters, no longer freeze or
-  jump when they change hands, and shots at them are no longer lost. During a connection drop they now wait in place
-  instead of jumping back afterwards.
-- In co-op, the host's game no longer crashes on a retry while the partner is caught by an enemy, and the guest's game
-  no longer crashes when it is brought into the host's room during its own game over.
-- In co-op, extra enemies no longer turn into other enemies when the host comes back to a room the guest stayed in.
-- In co-op, a Bandersnatch that grabs one player no longer drags the other player around.
-- In co-op, a key item picked up by both players at the same moment no longer ends up twice in one inventory.
-- In co-op, Hunters no longer stop attacking a player for a moment after a few swipes.
+- **Co-op**: many synchronization fixes for enemies, extra enemies, grabs, items and connections.
 - Leaving a room changed by a mod in which an enemy takes another look no longer crashes the game.
-- In co-op, when the direct connection between the players breaks, the game now switches to the relay server and
-  carries on instead of losing the session, and goes back to the direct connection once it works again.
 
 ## 0.7.7 (2026-11-12)
 
