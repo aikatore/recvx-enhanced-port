@@ -2528,7 +2528,9 @@ void coop_enemy_end(BH_PWORK* ep)
     aid_m12 = -1;
     /* (protocol 56) one the partner runs whose state has not come: hidden right after its Init, before this frame draws it (an
        extra coming up at the room's first frame stood one frame at its spot) */
-    if (!seen[i] && !we_run(i) && ep->mode0 && run_room >= 0 && !echo_delay && !event_driven(ep)) hide_on(i, ep);
+    if (!seen[i] && !we_run(i) && ep->mode0 && run_room >= 0 && !echo_delay && (is_host || !event_driven(ep))) hide_on(i, ep);   /* (protocol 57: the
+                                                    host's event does not run it before it takes it back - its copy stood a frame where
+                                                    its record put it at the host's entry: a boss's part 100 units off) */
     if (fx_open == 1) { fx_end(ep, 0); fx_arm(ep); }
     aim_restore();
     if (i == gease.slot && gease.n > 0 && !swapped && plp) grab_ease(ep);
@@ -2894,7 +2896,7 @@ static void own_frame(void)
             if (we_run(i)) { seen[i] = 1; hide_off(i); }
         }
         act_was[i] = (unsigned char)act;
-        if (act && !seen[i] && !we_run(i) && ene[i].mode0 && run_room == me && !event_driven(&ene[i])) hide_on(i, &ene[i]);
+        if (act && !seen[i] && !we_run(i) && ene[i].mode0 && run_room == me && (is_host || !event_driven(&ene[i]))) hide_on(i, &ene[i]);
     }
     /* host: the guest's claims did not come */
     if (claim_wait && !--claim_wait) {
@@ -3624,10 +3626,13 @@ static int gone_dead(const BH_PWORK* ep)   /* a killed enemy (not a linked part,
 static unsigned char hin[PC_ENE_SLOTS];          /* guest: 1 claimed, 2 the host shows it as ours */
 static int hin_alone, hin_gen = -1;              /* guest: our game ran this room load's enemies with the host elsewhere */
 /* not claimed: what the host's fresh copy is as well (a bat asleep, a baby spider still inside its mother), and the Tyrant of
-   a fight whose room script talks to it (type 1, rm_flg 0x1F: en19 Br01) */
+   a fight whose room script talks to it (type 1, rm_flg 0x1F: en19 Br01). (protocol 57) A boss of own_types (one whose work
+   goes at a leave) is claimed: the guest runs its fight on when the host comes back into the room; before, the host's copy took
+   it over with its own work from its Init and its entry scene handed that back to the guest (the Gulp Worm stood a frame at its
+   start, its fight's state reset) */
 static int hin_wanted(const BH_PWORK* ep)
 {
-    return !(ep->id == 7 && ep->type == 1) && !(ep->id == 24 && ep->mode0 == 6) && !(ep->id == 19 && ep->type == 1) && !own_boss(ep);
+    return !(ep->id == 7 && ep->type == 1) && !(ep->id == 24 && ep->mode0 == 6) && !(ep->id == 19 && ep->type == 1);
 }
 /* the types of the hand-in only (own_types p3 0): the states in which their state can go (from the type's en*.c code,
    docs/COOP.md "The hand-in"); in any other the guest's game runs it on until it is in one, or it leaves the room */

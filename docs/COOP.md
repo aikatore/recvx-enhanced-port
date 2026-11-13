@@ -955,7 +955,8 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   (`OUTAGE_EASE`) from where the event left it. Before, it ran from where its record put it, with its own health, and jumped
   at the event's end (a Sweeper in 1/12: 101 units; a Cerberus the scene held: 25), and the host took one back at once when
   its door had lasted more than 30 frames, from its record's place (55 units), or gave and took it back every other frame in
-  its door out of the room.
+  its door out of the room. The host's copy of one the guest runs stays hidden until the guest's state of it came also while an
+  event of the host's drives it (protocol 57; before, it stood a frame where its record put it at the host's entry).
 * **The guest's room**: the host that comes into a room the guest runs asks for the guest's claims (EV_ENEOWN 5
   `COOP_ROOM_CLAIM`); its copies are the guest's meanwhile (`prov`), shown as the guest's snapshots say. The guest claims each
   enemy it runs (EV_ENEOWN 3, see "The hand-in" below for what is claimed) and says when it is done (5 `COOP_ROOM_DONE`); the
@@ -1248,7 +1249,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   | baby spider (24) | out of its mother, on the ground (Move 1..3) | jumping, released mid-air. Inside its mother (`mode0` 6): not claimed |
   | ceiling trap (25) | up (Move 0), type 1, or done | coming down (its moving wall's height is room state) |
   | moth larva (27) | never: it rides on the player of the game that made it (`lkwkp` = that `plp`) | - |
-  | bosses (Gulp Worm 2, Alexia 12..14 with tentacles 18 and babies 30, Alfred 16, Monster Steve 17 and the knights 54/55, tentacles 29, Nosferatu's core 53, the crane 56) | never: the host's entry runs the room's entry script, which re-arms the fight (clears `rm_flg`, in 9280/9301/9302/9321 also the fight's shared flags, a `CineSet`); their phases are the script's flags and `rm_flg`, their work a web of children (Alexia 2's 992 bytes). Their runner leaving through a door (protocol 57): the Gulp Worm, Alexia 1, Alfred, Steve and his knights in any state, with their `rm_flg` bits; Alexia 2 and the others without their state | they take the host's state as before |
+  | bosses (Gulp Worm 2, Alexia 12..14 with tentacles 18 and babies 30, Alfred 16, Monster Steve 17 and the knights 54/55, tentacles 29, Nosferatu's core 53, the crane 56) | never: the host's entry runs the room's entry script, which re-arms the fight (clears `rm_flg`, in 9280/9301/9302/9321 also the fight's shared flags, a `CineSet`); their phases are the script's flags and `rm_flg`, their work a web of children (Alexia 2's 992 bytes). Their runner leaving through a door (protocol 57): the Gulp Worm, Alexia 1, Alfred, Steve and his knights in any state, with their `rm_flg` bits; Alexia 2 and the others without their state. Protocol 57: those four kinds are claimed too (the guest runs the fight on when the host comes back; before, the host's copy took it over with its work from its Init and its entry scene handed that back to the guest: the Gulp Worm stood a frame at its start, its fight's state reset) | they take the host's state as before (Alexia 2 and her parts, the Tyrant of a fight: the host's copy runs them; its babies stood a frame where their records put them) |
 
 * **Room files that differ** (protocol 54): `SPAWN_NOTE_DONE` (now sent for every room load, without the randomizer too)
   carries a hash of the room's records (`enemy_room_hash`: the enemy records - type, look, floor, place, angle - and how many
