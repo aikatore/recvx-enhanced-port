@@ -903,7 +903,6 @@ static float shown_p[PC_ENE_SLOTS][3];
 static int32_t shown_ay[PC_ENE_SLOTS];
 static CoopPlayout playout;
 static int snap_room = -1;              /* the partner's room (key | its case + 1 << 16) of the snapshots kept */
-static struct { uint32_t seq; int n; } snap_cnt[8];   /* snapshots that came per sender frame (snaps_live) */
 static struct { unsigned int at[5], frames, held, skipped; int behind; uint32_t last; } play_st;   /* RECVX_COOP_STATS */
 static void bufs_free(void)
 {
@@ -921,7 +920,6 @@ static void snaps_reset(void)
 {
     if (hist) memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist));
     memset(hist_applied, 0, sizeof(hist_applied)); memset(shown_seq, 0, sizeof(shown_seq));
-    memset(snap_cnt, 0, sizeof(snap_cnt));
     coop_playout_reset(&playout);
 }
 static uint32_t snap_neck[PC_ENE_SLOTS];         /* EneSnap.neck of the slot (SNAP_NECK in snap_root) */
@@ -993,9 +991,9 @@ void pc_enemy_holds(BH_PWORK* pl, BH_PWORK* by);   /* eneset.c */
 /* Phase 3 (protocol 46..48, the host's rule "Shared Enemy Control", OPT2_OWNERSHIP): engaged-player ownership. A common
    enemy (zombies: id 1, its body with its upper half) runs in the game of the player it is engaged with; the other
    game shows it as a puppet of that game's snapshots. owned[i] keeps its meaning on both sides (the guest runs slot
-   i); we_run(i): this game runs it. It changes hands between attacks (p3_frame, p3_give, p3_apply: EV_ESTATE + EV_ENEOWN
-   in one burst), a grab it starts on the other player's stand-in goes over as the host's zombie grabs always did
-   (grab_out / grab_in, now either way). Only the runner hands an enemy over, so there is one runner at a time. */
+   i); we_run(i): this game runs it. It changes hands between attacks (own_frame, own_give, own_take: EV_ESTATE + EV_ENEOWN,
+   protocol 56 make before break), a grab it starts on the other player's stand-in goes over as the host's zombie grabs
+   always did (grab_out / grab_in, either way). Only the runner hands an enemy over, so there is one runner at a time. */
 static int peer_opts;                   /* (defined with the game rules below) */
 /* the policy's constants (test aid RECVX_COOP_P3="give,hold,hit" on both sides overrides them: the tuning runs) */
 static int P3_GIVE = 8;                 /* frames in a row the runner prefers the partner before it hands the enemy over */
@@ -1485,7 +1483,7 @@ void pc_enemy_unhold(BH_PWORK* ep) { unhold(ep, ep->hp < 0); }
 /* host: a grab the guest runs comes back here when the guest, sending, has not sent a snapshot of it
    for OWN_LOST of its frames (~10 s): its game never took the grab, lost it, or is not running it (the
    guest died in it and sits at the game over). Without this, a grab whose hand-back never came stayed
-   the guest's here - a frozen puppet - for good. (A guest in another room in game: owned_drop.) */
+   the guest's here - a frozen puppet - for good. (A guest in another room in game: own_takeover.) */
 #define OWN_LOST 300
 /* an ownership message (EV_ENEOWN) of slot i: state, child, frame */
 enum { ROOM_CLAIM = COOP_ROOM_CLAIM, ROOM_DONE = COOP_ROOM_DONE, ROOM_HOST = COOP_ROOM_HOST };   /* EV_ENEOWN 5's child */
@@ -8147,15 +8145,13 @@ static void receive(void)
            nothing */
         coop_playout_arrive(&playout, p.seq, arr, net_rx_exact());
         {
-            int c = p.seq % 8, room = (p.stg * 256 + (unsigned char)p.rom) | p.rcase << 16;
-            if (snap_cnt[c].seq != p.seq) { snap_cnt[c].seq = p.seq; snap_cnt[c].n = 0; }
+            int room = (p.stg * 256 + (unsigned char)p.rom) | p.rcase << 16;
             if ((nene || (p.flags & PF_IN_GAME)) && (!have_rx || (int)(p.seq - rx.seq) >= 0) && room != snap_room) {   /* the partner's room: other enemies */
                 memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist)); memset(hist_applied, 0, sizeof(hist_applied)); snap_room = room;
             }
             if (nene && room == snap_room) {   /* (protocol 45: decoded against the bases we hold, late frames too) */
                 EneSnap* sn = bufs->rx_sn;
                 int got = coop_snaprx_take(srx, p.seq, sb, n - (int)(sb - buf) - ext * (int)sizeof(PoseExt), nene, sn);
-                snap_cnt[c].n += got;
                 for (k = 0; k < got; k++) {
                     int i = sn[k].idx;
                     coop_hist_put(&hist[i], p.seq, &sn[k]);

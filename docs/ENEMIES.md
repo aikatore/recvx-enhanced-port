@@ -196,8 +196,9 @@ Mixing types the PS2 never mixed can still show odd behaviour (a Hunter may leap
 
 Details in [COOP.md](COOP.md); what matters for enemies:
 
-* The host runs the AI; the guest's enemies are puppets updated from per-slot snapshots (no type
-  or model), so both sides must hold the same enemy in the same slot. A frame carries at most 48
+* The player who was in the room first runs the AI until it leaves the room, then hands every enemy to the player
+  staying with its state (protocol 56, COOP.md "Who runs the enemies"); the other one's enemies are puppets updated from
+  per-slot snapshots, hidden until the first one came, so both sides must hold the same enemy in the same slot. A frame carries at most 48
   snapshots (`COOP_SNAP_FRAME`, 10 per 1200-byte datagram); with more active slots each frame sends
   the next 48. Measured with 249 active slots: 5 datagrams and ~5.5 KB per frame (~1.3 Mbit/s at
   30 fps), each slot every ~5 frames; puppets keep animating in between.
@@ -219,9 +220,10 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   (its extras as `EV_SPAWN` notes with their slots, then `SPAWN_NOTE_XDONE` with the room file and their count;
   `SPAWN_XDONE_NONE` when its extras are the host's). The host that comes in while the guest is still there makes the
   guest's result and the guest's extras in the same slots (`gx_follow`), but an extra whose dead flag is set by then;
-  then the guest hands its enemies in with their state (COOP.md "The hand-in"). Before, the guest had no extras until
+  the guest's game runs them on until it leaves (protocol 56; 53..55 handed them in to the host: COOP.md "The hand-in"),
+  only the records the room's scripts act on go to the host. Before, the guest had no extras until
   the host came, and then they popped in at their spots while every other enemy went back to the room's start. An extra
-  the guest killed meanwhile the host makes too (protocol 54), dead and hidden until the guest hands in its corpse, which
+  the guest killed meanwhile the host makes too (protocol 54), dead and hidden until the guest claims its corpse, which
   then lies on the host where it lies on the guest (before: not made, nothing there on the host).
 * **The host's enemy options** go to the guest as `EV_EOPTS` (session start, before the game
   state, on change) and replace the guest's: with protocol 39 also Types per Room and Custom's
@@ -229,18 +231,18 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   rates read-only). Placements and the randomizer depend only on the room
   file and the seed, so both sides make the same records in the same slots. The guest never spawns
   (F2 refuses there).
-* **Targets** (host, `coop_proto.c coop_pick_target`): each enemy goes for one player at a time:
+* **Targets** (the runner's game, `coop_proto.c coop_pick_target`): each enemy goes for one player at a time:
   kept through its grab or bite, never a busy one, the one right in front, else the nearer by a
   margin (another floor counts as twice as far); a busy target is left for a free player within
   4 m. A loop guard makes an enemy that attacks the same player three times within 90 frames
   leave it alone for 60 (COOP.md). The partner's stand-in carries what the AI reads of a player (position, angles, modes, hp,
   `stflg`, hit capsule `watr`, floor, busy bits); attacks on it reach the guest as `EV_PLY_HIT` or
-  `EV_GRAB`. A zombie grab on the guest makes the slot the guest's until handed back (~10 s
-  timeout).
-* **Kills while the guest runs the room** (`EV_GONE`): at the take-over the guest names its dead
-  enemies; the host hides its matching copies for that visit. The others go to the host with their state, living and
-  dead (protocol 53 the Shared Enemy Control types, 54 every type but the bosses' and the moth's larva: COOP.md "The
-  hand-in", its table says in which states each type goes).
+  `EV_GRAB`. A zombie grab of the other player makes the slot that player's (it runs the zombie on after the grab; the
+  host takes it back after ~10 s without its snapshots).
+* **Kills while the guest runs the room**: the host coming in shows the guest's dead as they lie there (claimed with the
+  rest, protocol 54); the dead the guest cannot claim it names (`EV_GONE`), and the host hides its matching copies for that
+  visit. When the runner leaves, its enemies, living and dead, go to the player staying with their state (COOP.md "The
+  hand-in", its table says in which states each type can go).
 
 ## Head blow-offs
 
