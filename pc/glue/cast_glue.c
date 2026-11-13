@@ -522,6 +522,23 @@ static VoiceSaid said;
 static int said_seed;
 static int line_age(const VoiceLine* l) { return voice_said_age(&said, l); }
 
+/* A group (lines said as one, the voice tool's joined set: voice_curated) as the original: the line in place of its first part
+   fills all their time and plays on through the later parts, which stay quiet, while they follow one another (gpart: the next
+   one wanted; a part said elsewhere, not right after the one before, is a line of its own). bhVoiceOn stops the line before
+   (StopVoice) before it asks pc_voice_on: for the part wanted, StopAdx stops nothing while the slot's flag is clear (keep; put
+   back in pc_voice_on). */
+static unsigned short gpart = 0xFFFF;
+static struct { int on; unsigned flag, play; } keep;
+static int keep_playing(void)
+{
+    const unsigned char* p = bhScePtr;   /* (in bhVoiceOn: just after the VoiceOn, 8 bytes) */
+    const EnemyOpts* o = enemy_opts();
+    if (gpart == 0xFFFF || !p || !o || !o->voices || p[-8] != 25 || (p[-6] | p[-5] << 8) != gpart) return 0;
+    keep.on = 1; keep.flag = AdxTInfo[1].Flag; keep.play = AdxPlayFlag[1];
+    AdxTInfo[1].Flag = 0;
+    return 1;
+}
+
 /* a line not replaced: the speaker shown as another character (or as an enemy) says nothing of its own; quiet, and the
    script waits the original line's time as for an inserted one */
 static int quiet(int sp, int ms)
@@ -539,7 +556,11 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     const VoiceCurated *cv = voice_curated(disc, vid), *lc;   /* (checked by hand: docs/ACTORS.md "Lines checked by hand") */
     const char* why;
     char from[12], cut[64];
+    unsigned short want = gpart;   /* (the next part of a group whose first one was just said) */
+    int gn = vl.gnext;
 #define KEEP(why) do { if (getenv("RECVX_CAST_TRACE") || cv) host_log("voices: room %04d line %d/%d kind %d rec %d, speaker %d (%s), shown as %d: stays (%s)\n", room_file_now(), disc, vid, kind, rec, sp, sp >= 0 && sp < RECS ? cast_name(cast_character(ene[sp].id, ene[sp].mdlver)) : "-", m, why); vl.cap = 0; return vid; } while (0)
+    if (keep.on) { AdxTInfo[1].Flag = keep.flag; AdxPlayFlag[1] = keep.play; keep.on = 0; }   /* (keep_playing) */
+    gpart = 0xFFFF;
     voice_end();   /* (an enemy's sound stops at the next line, as PlayVoiceEx2 stops a line) */
     vl.gnext = -1;   /* (an inserted group starts no more parts) */
     m = -1;
@@ -581,12 +602,17 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
             ADXF_LoadPartitionNw(VOICE_PT + d, d ? (char*)"\\VOICE2.AFS" : (char*)"\\VOICE1.AFS", NULL, NULL);
             part[d] = ADXF_GetPtStat(VOICE_PT + d) == 3 ? 1 : -1;   /* (ADXF_STAT_READEND) */
         }
-    if (cv && cv->flags & VOICE_PART) return quiet(sp, ms);   /* (a group's later part: the line in place of its first takes all their time) */
-    fit = cv && cv->next != 0xFFFF ? group_ms(disc, vid) : ms;
+    if (cv && cv->flags & VOICE_PART && vid == want) {   /* (a group's later part: the line in place of its first takes all their time) */
+        gpart = cv->next; vl.gnext = gn;
+        host_log("voices: room %04d record %d: line %d/%d (%d ms), a later part of a group said as one: quiet, the line in place of its first plays on\n", room_file_now(), sp, disc, vid, ms);
+        return quiet(sp, ms);
+    }
+    gpart = cv && cv->next != 0xFFFF && !(cv->flags & VOICE_PART) ? cv->next : 0xFFFF;
+    fit = gpart != 0xFFFF ? group_ms(disc, vid) : ms;
     grunts = cv && cv->flags & VOICE_GRUNT ? VOICE_PICK_GRUNTS : VOICE_PICK_ANY;   /* (a grunt for a grunt) */
     if (grunts != VOICE_PICK_GRUNTS && (fit <= 0 || fit >= VOICE_SHORT_MS)) grunts = VOICE_PICK_SPOKEN;   /* (a spoken line for one: never a grunt) */
     if (!(l = voice_pick((unsigned)o->seed, room_file_now(), disc, vid, chr, fit, fit > 0 ? fit + VOICE_GRACE_MS : 0, line_ms, line_age,
-                         grunts | (ms > 0 && ms < VOICE_SHORT_MS ? VOICE_PICK_FIT : 0)))) {   /* (a gasp: one that ends in time, else quiet below) */
+                         grunts | (fit > 0 && fit < VOICE_SHORT_MS ? VOICE_PICK_FIT : 0)))) {   /* (a gasp: one that ends in time, else quiet below) */
         if (grunts != VOICE_PICK_GRUNTS) {   /* (latent: voice_pick always finds one for a character with lines) not the original's voice */
             host_log("voices: room %04d record %d: %s's line %d/%d (%d ms): no line of %s picked: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr));
             return quiet(sp, ms);
@@ -594,9 +620,9 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
         host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a grunt and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr));
         return quiet(sp, ms);
     }
-    if (part[l->disc - 1] < 0) KEEP("the archive did not load");
+    if (part[l->disc - 1] < 0) { gpart = 0xFFFF; KEEP("the archive did not load"); }
     lms = line_ms(l);
-    if (ms > 0 && ms < VOICE_SHORT_MS && lms > fit + VOICE_GRACE_MS) {   /* a gasp or grunt, and the character has no short sound: quiet */
+    if (fit > 0 && fit < VOICE_SHORT_MS && lms > fit + VOICE_GRACE_MS) {   /* a gasp or grunt, and the character has no short sound: quiet */
         host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a short sound and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr));
         return quiet(sp, ms);
     }
@@ -679,6 +705,7 @@ void voice_said_frame(void)
 /* StopVoice (sdfunc.c): VoiceOff, a skip, the line before an enemy's sounds; the slot stops or fades as the game asks */
 void pc_voice_stop(void)
 {
+    if (keep_playing()) return;   /* (the next part of a group said as one: the line in place of it plays on) */
     voice_end();
     vl.cap = 0;
 }

@@ -12,10 +12,10 @@ if any(e["speaker"] is not None and (e["speaker"] not in range(7) or e.get("spea
     sys.exit("voice_curation.py: a speaker index and its name disagree")
 lines = d["lines"]
 nxt, part = {}, set()
-for g in d.get("groups", []):
+for g in d.get("groups", []):   # (the tool's groups: split lines, and the Cutscenes page's lines joined as one; said as one line)
     g = [tuple(p) for p in g]
-    if len(g) < 2 or len({p[0] for p in g}) != 1:
-        print("voice_curation.py: group %s skipped (fewer than two parts, or parts of both discs)" % g); continue
+    if len(g) < 2 or len({p[0] for p in g}) != 1 or len(set(g)) != len(g) or any(p in nxt or p in part for p in g):
+        print("voice_curation.py: group %s skipped (fewer than two parts, parts of both discs, or a part twice or in another group)" % g); continue
     for a, b in zip(g, g[1:]): nxt[a] = b[1]; part.add(b)
 rows = []
 for e in lines.values():

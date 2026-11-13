@@ -1326,8 +1326,14 @@ group's next part (`voice_curated`, `cast.h`). The rules:
   for the group: in the catalogue its length is all the parts' (`cast_glue.c group_ms`), and when it is inserted the
   parts play in order (`pc_voice_tick` starts the next part on ADX slot 1 when one ends; the next line, `VoiceOff`, a
   skip or the fade at `VOICE_GRACE_MS` past the original stop it, and no part starts after that). As an original, the line in place of its first part
-  is picked to fill the time of all its parts, and its later parts stay quiet (the script still waits each one's own
-  length). The later parts are never inserted on their own. (No groups in the table yet.)
+  is picked to fill the time of all its parts (the length window, the gasp rule and the cut at the end are the parts'
+  lengths together), said once in the history, and plays on through its later parts, which stay quiet (the script still
+  waits each one's own length): `bhVoiceOn` stops the line before ahead of each `VoiceOn`, so for the part wanted next
+  `pc_voice_stop` lets it be (`keep_playing`: ADX slot 1's flag clear for `StopAdx`, put back in `pc_voice_on`). Only
+  while the parts follow one another: a later part that another scene says on its own, not right after the part before,
+  is a line of its own. The later parts are never inserted on their own. The tool makes groups on its main page (split
+  lines) and on its Cutscenes page (a scene's lines in play order: consecutive lines joined as one, for scenes where one
+  sentence spans several files and each got a line of its own). (No groups in the table yet.)
 * **Not checked**: the port's own guess as above.
 * The log marks them: `voices: room 9350 record 2: Wesker's line 2/514 (451 ms, speaker checked), shown as Claire
   (Cutscene Model) -> Claire's line 2/283 (872 ms) from RM_6051, the speaker checked by hand: Talking Mouths: its lips
