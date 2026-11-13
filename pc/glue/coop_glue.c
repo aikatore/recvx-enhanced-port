@@ -7571,9 +7571,18 @@ static int apply_event(const Event* e)
     if (trace) fprintf(stderr, "coop: event %u in type=%d idx=%d damage=%d target_hp=%d\n", e->id, e->type, e->idx,
                        e->type == EV_PLY_HIT ? e->u.ph.hp_delta : e->u.eh.dam[0] + e->u.eh.dam[1] + e->u.eh.dam[2] + e->u.eh.dam[3] + e->u.eh.dam[4] + e->u.eh.dam[5],
                        e->type == EV_PLY_HIT ? (plp ? plp->hp : 0) : e->idx < PC_ENE_SLOTS ? ene[e->idx].hp : 0);
-    if (!sys || !plp || e->stg != sys->stg_no || e->rom != sys->rom_no) return 1;
-    if (e->type == EV_ENE_HIT && e->idx < sys->ewk_n && e->idx < PC_ENE_SLOTS && (ene[e->idx].flg & 0x1)) {
-        int i = e->idx;
+    if (e->type == EV_ENE_HIT && sys && plp) {   /* (by the room of our enemies: in a door we hand them over, a hit then is the receiver's) */
+        int i = e->idx, ours = (e->stg * 256 + e->rom) == (run_room & 0xFFFF);
+        if (!ours || i >= (int)sys->ewk_n || i >= PC_ENE_SLOTS || !(ene[i].flg & 0x1)) {
+            if (!ours && !(e->u.eh.flg & COOP_HIT_FWD) && have_peer && (e->stg != sys->stg_no || e->rom != sys->rom_no)) {   /* (we left that
+                                                    room: the partner plays there, it runs them) */
+                Event f = *e;
+                f.u.eh.flg |= COOP_HIT_FWD;
+                ev_room = e->stg * 256 + e->rom; queue_event(&f); ev_room = -1;
+                p3_n[7]++;
+            }
+            return 1;
+        }
         hit_t[i][1] = frame_no + 1;   /* (Shared Enemy Control: who it is engaged with) */
         /* (protocol 56) a hit always reaches the game that runs the enemy, once: here when we run it (not one we handed over
            and run on only until the partner runs it from our state), kept when its hand-over to us is under way, else on to
@@ -7584,11 +7593,14 @@ static int apply_event(const Event* e)
         else if (!(e->u.eh.flg & COOP_HIT_FWD)) {
             Event f = *e;
             f.u.eh.flg |= COOP_HIT_FWD;
-            queue_event(&f);
+            ev_room = run_room & 0xFFFF; queue_event(&f); ev_room = -1;   /* (in a door ours may be the next room's already) */
             p3_n[7]++;
             if (trace) fprintf(stderr, "coop: hit on enemy %d passed on to the partner's game, which runs it\n", i);
         } else host_log("coop: own: a hit on enemy %d came back from the partner, and we do not run it either: dropped\n", i);
-    } else if (e->type == EV_PLY_HIT) {   /* (protocol 56: the guest runs enemies too) */
+        return 1;
+    }
+    if (!sys || !plp || e->stg != sys->stg_no || e->rom != sys->rom_no) return 1;
+    if (e->type == EV_PLY_HIT) {   /* (protocol 56: the guest runs enemies too) */
         /* held here (a grab our game runs): as in single player, where a held player is no target, no other enemy's blow (the
            sender saw the stand-in free: its pose of the grab was not there yet) */
         if (plp->mode0 == 4 || plp->mode0 == 6) {

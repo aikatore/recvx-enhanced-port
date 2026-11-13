@@ -1,25 +1,29 @@
 #!/bin/bash
-# Two-instance co-op check (docs/COOP.md "The hand-in"): a guest that is in a room before the host gets the room's
-# randomized enemies and extra enemies at once, and when the host comes in nothing jumps back, pops in or comes alive
-# again, whatever the enemy type, and the guest's dead lie on the host too. The host plays with "Extra Enemies" 5, the
+# Two-instance co-op check (docs/COOP.md "The hand-in", "Who runs the enemies"): a guest that is in a room before the host
+# gets the room's randomized enemies and extra enemies at once, and when the host comes in nothing jumps back, pops in or
+# comes alive again, whatever the enemy type, and the guest's dead lie on the host too. The guest runs them on (protocol
+# 56; only the records the room's scripts act on go to the host) until it leaves at ~3420: then each goes to the host's game
+# with its state, and nothing jumps on the host. The host plays with "Extra Enemies" 5, the
 # randomizer on, seed 88119; the guest with coop_follow = 0. The host waits in 0/1 (no enemies) and comes in at host
 # frame ~3000; the guest is there from ~1000. The pairs, all at once:
 #   A  0/2 (the first zombie room: five scripted zombie records, an extra Cerberus in slot 39); the guest kills record 3
 #   B  0/6 (the barracks: Hunters and zombies here, an extra Bandersnatch in slot 23, dead flag 40); the guest kills record 1
-#   C  as B, the guest kills the extra: the host makes it dead, and the guest hands its corpse in (protocol 54)
-#   D  0/2 with ev_flg 104 (a later visit: the zombies walk, no rise event); after the hand-in the host kills zombie 0:
+#   C  as B, the guest kills the extra: the host makes it dead, the guest's corpse shows on the host (protocol 54)
+#   D  0/2 with ev_flg 104 (a later visit: the zombies walk, no rise event; records the scripts act on: handed in); after the
+#      hand-in the host kills zombie 0:
 #      its room script's DieCk counts it (ed_flg) in both games
 #   M  as D without the randomizer, the guest with a modded RM_0020 (record 1 another look, record 2 moved; made from the
 #      disc image into OUT at run time): both warn that the room files differ, the zombie of another look is handed in
 #   M2 5/63 without the randomizer, the guest's RM_5630 with record 2 in a look of another count of linked parts (41 -> 7):
 #      the later zombies' upper halves sit in other slots (protocol 55): every zombie is handed in, none refused
 #   T1..T4 the types without Shared Enemy Control's hand-over (protocol 54): bats and Spotters (0/13), ants (9/17), Black
-#      Widows (6/9), Tyrants (1/0, the randomizer's Custom rates: only Tyrants)
+#      Widows (6/9), Tyrants (1/0, the randomizer's Custom rates: only Tyrants): each goes with its state when the guest leaves
 # RECVX_COOP_ENEPOS logs every enemy (slot, type, look, where, HP, mode, dead) every 5 host frames around the entry (2900..3300).
 # Checks: the guest has its extras and the randomizer's types before the host comes; the host makes the guest's (no
 # second set); afterwards both list the same slots, types, HP and dead ones, positions within 6 units (a Hunter on the
 # move); on the guest no enemy moves more than 12 units in 5 frames around the entry (before: the room's start
-# positions); each type of T1..T4 goes to the host's game with its state. About 4 minutes (20 instances at once).
+# positions); on the host nothing moves more than 12 units in 5 frames when the guest leaves (3400..3500); each type of T1..T4
+# goes to the host's game with its state then. About 4 minutes (20 instances at once).
 #   pc/tools/coop_handin_check.sh OUT [PORT]
 # Environment: RECVX_ISO (disc image), RECVX_BIN (binary, default build/pc/recvx).
 out=$1; port=${2:-48481}
@@ -39,15 +43,15 @@ run() {   # run DIR INI MODS exitframe args... (the caller exports the test aids
     timeout -s KILL 600 "$bin" "$iso" --skip-intro --size 320x240 --vanilla --save-dir "$d/save" --coop-conn direct "$@" > "$d/log.txt" 2>&1
     echo $? > "$d/exit"
 }
-pos="1500,$(seq -s, 2900 5 3300),3400"
+pos="1500,$(seq -s, 2900 5 3500)"
 pair() {   # pair NAME PORT STG:ROOM GUEST_KILL [HOST_INI [FLAGS [HOST_KILL [GUEST_MODS]]]]
     local o=$out/$1 p=$2
     (export RECVX_COOP_CODE=TEST-KEYS RECVX_INPUT="$newgame" RECVX_TELEPORT="1:0:1:0,2600:$3:0" RECVX_COOP_ENEPOS="$pos" RECVX_FLAGS="$6"
      export RECVX_COOP_KILL="$7" RECVX_COOP_ALIVE=3450
-     run "$o/host" "enemy_extra = 5\nenemy_random = 1\nenemy_seed = 88119\n$5" "$out/mods" 3500 --coop-host "$p") &
+     run "$o/host" "enemy_extra = 5\nenemy_random = 1\nenemy_seed = 88119\n$5" "$out/mods" 3560 --coop-host "$p") &
     sleep 2
-    (export RECVX_TELEPORT="1000:$3:0" RECVX_COOP_KILL="$4" RECVX_COOP_ENEPOS="$pos" RECVX_FLAGS="$6" RECVX_COOP_ALIVE=3450
-     run "$o/guest" "coop_follow = 0\n" "${8:-$out/mods}" 3560 --coop-join "127.0.0.1:$p#TEST-KEYS") &
+    (export RECVX_TELEPORT="1000:$3:0,2015:0:1:0" RECVX_COOP_KILL="$4" RECVX_COOP_ENEPOS="$pos" RECVX_FLAGS="$6" RECVX_COOP_ALIVE=3450
+     run "$o/guest" "coop_follow = 0\n" "${8:-$out/mods}" 3620 --coop-join "127.0.0.1:$p#TEST-KEYS") &
     wait
 }
 # the enemies a side logged at host frame F: "slot:type.look" of the living (dead and hidden ones apart)
@@ -85,12 +89,20 @@ for f0, f1 in zip(fs, fs[1:]):
         if g[f0][k][4] or g[f1][k][4]: continue
         d = abs(g[f1][k][1] - g[f0][k][1]) + abs(g[f1][k][2] - g[f0][k][2])
         if d > jump: jump, at = d, 'slot %d between host frames %d and %d' % (k, f0, f1)
+hj, hat = 0.0, ''
+fs = sorted(f for f in h if 3400 <= f <= 3500)
+for f0, f1 in zip(fs, fs[1:]):
+    for k in set(h[f0]) & set(h[f1]):
+        if h[f0][k][4] or h[f1][k][4]: continue
+        d = abs(h[f1][k][1] - h[f0][k][1]) + abs(h[f1][k][2] - h[f0][k][2])
+        if d > hj: hj, hat = d, 'slot %d between host frames %d and %d' % (k, f0, f1)
 print('alike' if not bad else '; '.join(bad))
 print('jump %.1f %s' % (jump, at))
+print('hostjump %.1f %s' % (hj, hat))
 EOF
 }
 # the types that went to the host's game with their state (the guest's log), sorted, unique
-given() { sed -n 's/.*hand-in: enemy [0-9]* (id \([0-9]*\), mode.*with its state after.*/\1/p' "$out/$1/guest/log.txt" | sort -n | uniq | tr '\n' ' '; }
+given() { grep 'handed to the partner.s game (we leave the room) at' "$out/$1/guest/log.txt" | sed -n 's/.*own: enemy [0-9]* (id \([0-9]*\)).*/\1/p' | sort -n | uniq | tr '\n' ' '; }
 rm -rf "$out"; mkdir -p "$out/mods" "$out/mods_guest"
 # M's room file: RM_0020 with record 1 another look (model 32, as record 3) and record 2 30 units off, from the disc image
 python3 "$root/pc/tools/rdx.py" --iso "$iso" dump 0020 -o "$out/rm0020.json" > /dev/null &&
@@ -120,20 +132,21 @@ for r in A B C D M M2 T1 T2 T3 T4; do
     check "$r: neither side crashed" "[ \$(cat $out/$r/host/exit) = 0 ] && [ \$(cat $out/$r/guest/exit) = 0 ] && ! grep -q 'fatal signal' $out/$r/*/log.txt"
     cmp $r $([ ${r:0:1} = M ] && echo 1) > "$out/$r/cmp.txt"
     check "$r: afterwards both have the same enemies, HP and dead ones, within 6 units ($(head -1 $out/$r/cmp.txt))" "[ \"\$(head -1 $out/$r/cmp.txt)\" = alike ]"
-    check "$r: on the guest nothing jumps when the host comes in ($(tail -1 $out/$r/cmp.txt))" "tail -1 $out/$r/cmp.txt | awk '{ exit !(\$2 <= 12) }'"
+    check "$r: on the guest nothing jumps when the host comes in ($(sed -n 2p $out/$r/cmp.txt))" "sed -n 2p $out/$r/cmp.txt | awk '{ exit !(\$2 <= 12) }'"
+    check "$r: on the host nothing jumps when the guest leaves ($(sed -n 3p $out/$r/cmp.txt))" "sed -n 3p $out/$r/cmp.txt | awk '{ exit !(\$2 <= 12) }'"
 done
 check "A: the guest alone has the randomized zombies and the extra Cerberus at once" "[ '$(types A guest 1500)' = '0:1.10 1:1.37 2:1.36 3:1.7 5:1.39 39:4.0 ' ]"
 check "A: the host makes the guest's extra (no second set)" "grep -q \"enemies: the guest's extra type 4 model 0 (dead flag 0) into slot 39: spawned\" $out/A/host/log.txt && ! grep -q 'enemies: extra Cerberus' $out/A/host/log.txt"
 check "B: the guest alone has its extra Bandersnatch at once" "[ '$(types B guest 1500)' = '0:5.1 1:1.37 2:5.0 3:1.41 23:9.0 ' ]"
 check "B: the host makes the guest's extra (no second set)" "grep -q \"enemies: the guest's extra type 9 model 0 (dead flag 40) into slot 23: spawned\" $out/B/host/log.txt && ! grep -q 'enemies: extra Bandersnatch' $out/B/host/log.txt"
-check "C: the host makes the extra the guest killed dead, its corpse comes with the hand-in" "grep -q \"into slot 23: spawned dead\" $out/C/host/log.txt && grep -q 'hand-in: enemy 23 (id 9, mode 4, hp -[0-9]*, dead) to the host' $out/C/guest/log.txt"
+check "C: the host makes the extra the guest killed dead, the guest's corpse shows (claimed dead)" "grep -q \"into slot 23: spawned dead\" $out/C/host/log.txt && grep -q 'hand-in: enemy 23 as the guest.s game has it (dead)' $out/C/host/log.txt"
 check "C: the corpse lies there on the host too" "grep 'host frame 3400:' $out/C/host/log.txt | grep -q ' 23:9.0@[-0-9]*,[-0-9]*,-[0-9]*,4,D'"
-check "D: the walking zombies go to the host with their state" "[ \$(grep -c 'hand-in: enemy [0-9]* (id 1, mode 1, .*with its state' $out/D/guest/log.txt) -ge 4 ]"
+check "D: the walking zombies (records the scripts act on) go to the host with their state" "[ \$(grep -c 'own: enemy [0-9]* (id 1) handed to the partner.s game (a record the room.s scripts act on' $out/D/guest/log.txt) -ge 4 ]"
 check "D: the host's kill of a handed-in zombie counts in its script and the guest's (ed_flg)" "grep -q 'host frame 3450, ed_flg 1 bits' $out/D/host/log.txt && grep -q 'host frame 3450, ed_flg 1 bits' $out/D/guest/log.txt"
 check "M: both say the room files differ" "grep -q 'room file RM_0020 differs between the players' $out/M/host/log.txt && grep -q 'room file RM_0020 differs between the players' $out/M/guest/log.txt"
 check "M: the zombie in another look is handed in" "grep -q 'hand-in: enemy 1 as the guest.s game has it (in another look here' $out/M/host/log.txt"
 check "M2: no zombie refused at the hand-in ($(grep -c 'is not ours here' $out/M2/host/log.txt))" "! grep -q 'is not ours here' $out/M2/host/log.txt && grep -q 'hand-in: enemy 5 as the guest' $out/M2/host/log.txt"
-check "T1: bats and Spotters go with their state ($(given T1))" "[ '$(given T1)' = '7 11 ' ]"
+check "T1: bats and Spotters go with their state when the guest leaves ($(given T1))" "given T1 | grep -qw 7 && given T1 | grep -qw 11"
 check "T2: ants go with their state ($(given T2))" "given T2 | grep -qw 10 && given T2 | grep -qw 71"
 check "T3: Black Widows go with their state ($(given T3))" "given T3 | grep -qw 3"
 check "T4: Tyrants go with their state ($(given T4))" "given T4 | grep -qw 19"
