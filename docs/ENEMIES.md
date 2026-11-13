@@ -238,7 +238,14 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   leave it alone for 60 (COOP.md). The partner's stand-in carries what the AI reads of a player (position, angles, modes, hp,
   `stflg`, hit capsule `watr`, floor, busy bits); attacks on it reach the guest as `EV_PLY_HIT` or
   `EV_GRAB`. A zombie grab of the other player makes the slot that player's (it runs the zombie on after the grab; the
-  host takes it back after ~10 s without its snapshots).
+  host takes it back after ~10 s without its snapshots); its player slides into the grab over 8 frames. A Cerberus's or
+  anatomist's grab of the stand-in, sent as a hit, keeps the partner its victim to the grab's end (their grab steps act on
+  whichever player `plp` is).
+* **Bosses** (no type of the hand-overs: Gulp Worm, Alexia and her parts, Alfred, Steve, the Tyrant of a fight ...) stay
+  with their runner while its menu or scene stops them (as in single player), and one that comes up while both play in the
+  room is the host's game's; they go to the partner only when the runner leaves through a door (without their state).
+* **Outages**: a puppet held during a network outage is eased to its runner's state when the datagrams come again
+  (COOP.md "The partner gone").
 * **Kills while the guest runs the room**: the host coming in shows the guest's dead as they lie there (claimed with the
   rest, protocol 54); the dead the guest cannot claim it names (`EV_GONE`), and the host hides its matching copies for that
   visit. When the runner leaves, its enemies, living and dead, go to the player staying with their state (COOP.md "The
