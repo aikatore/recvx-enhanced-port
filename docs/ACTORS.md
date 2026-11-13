@@ -1498,6 +1498,17 @@ the line.
   mouth with the inserted line's lips`). A line without a `LipSet` keeps a still mouth unless "Talking Mouths" gives it
   one (below). The mouth moves only on a model with a face (the cutscene models; a player file on the double with
   "Animated Faces" on, its talking twin; an imported model's jaw, `imp_face`).
+* **No mouth without a sound**: the lips that came with a line replaced (the speaker's, and every `LipSet` in the
+  original's time: a second speaker's lips in the same file, Alfred's in Claire's 12 s line 1/118 in 1020) run only
+  while what plays in its place sounds (`vl.hush`, `vl.snd`, checked every tick by `pc_voice_tick`): the speaker's
+  until the inserted line ends (`AdxPlayFlag[1]`) or starts its fade (a cut one), or the enemy model's sounds end, and
+  never for a quiet line or a second speaker; then the lips end as an entry's end does (`LipStart`'s bit off: the
+  face's own expression stays). Before, the script's lips ran on to the original's end: an inserted line without lips
+  of its own ("from no scene", `with its lips (none: the script's)`) shorter than the original, a quiet gasp, a grunt
+  for a long line. Measured (`RECVX_MOUTH_TRACE=1`, a line per tick and face: lips, jaw, what sounds; 0030, 0040,
+  1002, 1020, 6060, 9350, seed 1): face-ticks with lips running and nothing sounding 1361 before, 0 now; the
+  speaker's lips while its line sounds the same (5953 before, 5965 now). The jaw still moves in silence where the
+  scene's expression moves it (Claire's in 1020 after her grunt), as in the game with the option off.
 * **Subtitles** stay the script's: the original line's text (`MessageSet` is its own op, timed by the script; the US and
   European English rooms have no subtitles at all). The text tells the story while the voice is the joke; the inserted
   line's subtitle would be another room's message, in some languages a message the room does not have.
