@@ -950,8 +950,9 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   runner's first snapshot or the hand-in answer, then jumped: 5 to 16 visible frames, up to 205 units at 80 ms. The guest's
   own entry scene no longer runs the host's enemies locally either (only one its event drives: `event_driven`, which is shown
   and runs in its game; the host takes back one its own event drives, once the guest's state of it came or 30 frames after
-  its room was ready, not while it is in a door). Protocol 57: the guest's copy of such an enemy starts from the runner's state
-  (the snapshot of the frame its event takes it, `evd`) and, when the event lets go, is eased back to the runner's
+  its room was ready, not while it is in a door). Protocol 57: the guest's copy of such an enemy that its scene (cinema) takes starts from the
+  runner's state (the snapshot of the frame its event takes it, `evd`; an event task that holds an enemy as its work in play -
+  Alexia 2's babies - runs it as before) and, when the event lets go, is eased back to the runner's
   (`OUTAGE_EASE`) from where the event left it. Before, it ran from where its record put it, with its own health, and jumped
   at the event's end (a Sweeper in 1/12: 101 units; a Cerberus the scene held: 25), and the host took one back at once when
   its door had lasted more than 30 frames, from its record's place (55 units), or gave and took it back every other frame in

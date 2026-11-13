@@ -3944,11 +3944,13 @@ static void apply_snapshots(void)
         hist_applied[k] = from;
         play_st.at[at]++;
         /* (protocol 57) the guest: an enemy the host runs that an event of ours drives (our own entry scene, bhEtask's work) runs
-           here meanwhile; it starts from the runner's state (this frame's snapshot) and, when our event lets go, is eased back
+           here meanwhile; taken in our scene (cinema), it starts from the runner's state (this frame's snapshot) and, when our event lets go, is eased back
            to the runner's (OUTAGE_EASE) from where our event left it. Before, it started from where its record put it (its own
            HP) and jumped to the runner's at the event's end: 101 units (a Sweeper in 1/12), 7 to 25 in a scene that held it */
         if (!is_host && (ene[t].flg & 0x1)) {
             if (!event_driven(&ene[t])) evd[t] = 0;
+            else if (!evd[t] && !(sys->cb_flg & 0x4)) {}   /* (only one our scene takes: a fight's event tasks that hold an enemy as
+                                                    their work in play - Alexia 2's babies - run it here as before) */
             else if (evd[t]++) {
                 if (evd[t] > 2) evd[t] = 2;
                 shown_p[k][0] = ene[t].px; shown_p[k][1] = ene[t].py; shown_p[k][2] = ene[t].pz; shown_ay[k] = ene[t].ay;
