@@ -949,8 +949,13 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   the coming player's own copies stood at the room's start positions (and the guest's ran their own AI) until the
   runner's first snapshot or the hand-in answer, then jumped: 5 to 16 visible frames, up to 205 units at 80 ms. The guest's
   own entry scene no longer runs the host's enemies locally either (only one its event drives: `event_driven`, which is shown
-  and runs in its game; the host takes back one its own event drives, once the guest's state of it came or 30 frames into
-  the room).
+  and runs in its game; the host takes back one its own event drives, once the guest's state of it came or 30 frames after
+  its room was ready, not while it is in a door). Protocol 57: the guest's copy of such an enemy starts from the runner's state
+  (the snapshot of the frame its event takes it, `evd`) and, when the event lets go, is eased back to the runner's
+  (`OUTAGE_EASE`) from where the event left it. Before, it ran from where its record put it, with its own health, and jumped
+  at the event's end (a Sweeper in 1/12: 101 units; a Cerberus the scene held: 25), and the host took one back at once when
+  its door had lasted more than 30 frames, from its record's place (55 units), or gave and took it back every other frame in
+  its door out of the room.
 * **The guest's room**: the host that comes into a room the guest runs asks for the guest's claims (EV_ENEOWN 5
   `COOP_ROOM_CLAIM`); its copies are the guest's meanwhile (`prov`), shown as the guest's snapshots say. The guest claims each
   enemy it runs (EV_ENEOWN 3, see "The hand-in" below for what is claimed) and says when it is done (5 `COOP_ROOM_DONE`); the
@@ -969,17 +974,28 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   hand-over: 43 to 74 units there and back with Shared Enemy Control). A giver that leaves stops running it at once (its game
   does not step its enemies any more); its enemies are the room's until its next room loads (`run_room`), so the hand-over
   may take a few frames of its door. One not in a state to go with its state (`hin_ok`: a grab, stairs, mid-attack for most
-  types) goes without it after `LEAVE_WAIT` (15) frames of the menu, at once in a door (a boss or a part without a work we
+  types) goes without it after `LEAVE_WAIT` (15) frames of the menu, at once in a door (a boss, or a part without a work we
   send, no type of `own_types`, does not go in a menu or scene at all: it stays the runner's, stopped as in single player;
-  before, the partner's game ran it on from its puppet's pose, its Move from the start - Alexia's fight reset); the receiver lets it go from its
-  puppet (`unhold`: a zombie stands, another type starts its Move), and a hit its copy had not taken yet goes after it. An
+  before, the partner's game ran it on from its puppet's pose, its Move from the start - Alexia's fight reset; in a door a
+  boss goes with its state since protocol 57, below); the receiver lets it go from its
+  puppet (`unhold`: a zombie stands, another type of the hand-overs starts its Move, a boss goes on from its puppet's modes), and a hit its copy had not taken yet goes after it. An
   enemy an event of the leaver drives goes too in a door (the event ends there). Refused (EV_ENEOWN 0): the giver runs it on
   (2: the receiver runs it already); no answer in 10 s: the same. The replies are stamped with the enemy's room (a receiver
-  in its door is in the next one already). Not taken during a network outage (the giver runs it on meanwhile), and one whose
+  in its door is in the next one already). Protocol 57: a boss (Gulp Worm, Alexia 1, Alfred, Monster Steve and his knights:
+  `own_types` p3 2, their works from their Inits, their pointers kept) goes with its state when its runner leaves through a
+  door, in any state, with the bits of `sys->rm_flg` its steps set for the room's script (`rmf`: the Gulp Worm's and Alexia
+  1's 0x1); before, it went without its state and the receiver ran it on from its puppet's modes with its own stale work (the
+  Gulp Worm jumped 188 units where it moves 39). Alexia 2 (a work of 992 bytes with 50 heap pointers of her vertices, larger
+  than an `EV_ESTATE` enemy) and her parts still go without it, and so does Alfred in a motion of his set that the
+  receiver's copy has not loaded (seen in 3/1: motion 4 of his set is empty in the game that did not start the fight; the
+  receiver's `ene_unpack` refuses a state whose motion it cannot play); a boss still stays with its runner in its menu or scene (it
+  waits there, as in single player). Not taken during a network outage (the giver runs it on meanwhile), and one whose
   frame F the playout passed more than `TAKE_STALE` (15) frames ago (it came after an outage or a long resend) is refused
   while its giver stays in the room: the giver runs it on and gives it again later with its state then. Before, it was taken
   from F after the outage, and the giver's view of it went back to F (11 units after a 5 s outage). A Black Widow goes
-  with its state when its runner leaves in any state but its grab ("The hand-in" table, the leave column). As many as three quarters of the event ring hold go per frame; a whole room fits (a zombie with its upper
+  with its state when its runner leaves in any state but its grab ("The hand-in" table, the leave column), also with its legs
+  shot off (protocol 57: a record per leg off after its work, `bw_pack`: its object's flags and free matrix, the leg's modes,
+  counters, place and work - the flying, landing or lying leg goes on in the receiver's game). As many as three quarters of the event ring hold go per frame; a whole room fits (a zombie with its upper
   half about 14 events).
 * **Hits** (`hit_send`, `hit_apply`): our hit on a puppet goes to its runner as EV_ENE_HIT, taken off our copy. Protocol 56:
   a hit reaches the game that runs the enemy, once: applied there when it runs it (not while it runs it on only as the giver
@@ -1072,7 +1088,8 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   so (`SNAP_ROOT_STILL`) and the puppet's root (node 8 for a zombie's upper half) is put back the same way. A puppet
   shows the frame the runner's step advanced to, one frame ahead of the runner's picture. Snapshots are not used during door
   transitions of ours. Enemies driven by the joiner's own event run its local AI during it (protocol 56: only those; before,
-  the joiner's own scene ran every enemy locally, which then jumped to the host's state when it ended: 50 to 135 units). A puppet morphs (`mdflg` 2) only with
+  the joiner's own scene ran every enemy locally, which then jumped to the host's state when it ended: 50 to 135 units;
+  protocol 57: from the runner's state, eased back after it, "Waiting for the runner's state"). A puppet morphs (`mdflg` 2) only with
   the two shapes its own code picks (`obj_a`, `obj_b`); Alexia's tentacles have none on the guest
   and are drawn unmorphed (before, the guest crashed in her second form's fight).
 * **Enemy playout** (both sides, for the other side's snapshots; `coop_proto.h` `CoopPlayout`, `CoopSnapHist`):
@@ -1104,8 +1121,13 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   (bites, shake off, death) and sends snapshots of the slot; at its end it runs the zombie on (`EV_UNGRAB` state 2; a record
   the room's scripts act on goes to the host by that rule). Before protocol 56, without Shared Enemy Control, `EV_UNGRAB`
   returned it to the host with its state: a second hand-over right at the player. A grab the victim cannot take (its state does not fit, or the
-  position it puts the player at lies behind a wall from where the player stands) is refused and
-  the zombie released. The joiner's player takes the grab's modes, motion and position from the
+  position it puts the player at lies behind a wall from where the player stands, or another zombie holds the player already) is refused and
+  the zombie released; until the answer comes the giver shows its zombie still where it grabbed (protocol 57: seeded with its
+  newest state twice, `owners_sync`; before, it was carried on at its lunge's speed and stepped back 3 to 4 units in a frame at
+  the refusal). A grab a zombie starts on the partner's stand-in while its hand-over to the partner is under way (make before
+  break: the giver still runs it, `giving`) is not handed over: the partner runs it from the state it got and its own step
+  grabs its own player; the giver's copy lets go (protocol 57; before, `EV_GRAB` went too, the partner took the zombie twice
+  and both games ran it: jumps of up to 40 units with Shared Enemy Control). The joiner's player takes the grab's modes, motion and position from the
   host's proxy, and of its flags the ones the enemy changed there, plus the planted foot
   (`flg` 0x40000, `bhFixPosition`) the grab's start lets go of: the proxy never has it, and an
   aimed weapon or the knife left ours set, which moved the player off the zombie every frame of
@@ -1213,7 +1235,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
 
   | type | goes with its state | stays the joiner's meanwhile |
   |---|---|---|
-  | Black Widow (3) | on the floor or the ceiling (also one that started there, `flg` 0x2000000), idle, walking, turning, chasing (Brain on); dead. Its runner leaving: any state but its grab (`mode0` 2; the grab block, `exp1`, is the leader's in each game), its dive, jump, climb and change of surface go on from where they are (their surfaces go as records) | a dive, jump, attack, grab or change of surface; once a leg is shot off (its legs are its own game's children: the host's would be whole). Before, the leaver's went without its state then and the receiver ran it on from its puppet's pose with its own stale work: jumps of up to 47 units, about 1 leave in 3 |
+  | Black Widow (3) | on the floor or the ceiling (also one that started there, `flg` 0x2000000), idle, walking, turning, chasing (Brain on); dead; with legs shot off too (protocol 57: they go as records, `bw_pack`). Its runner leaving: any state but its grab (`mode0` 2; the grab block, `exp1`, is the leader's in each game), its dive, jump, climb and change of surface go on from where they are (their surfaces go as records) | a dive, jump, attack, grab or change of surface. Before, the leaver's went without its state then and the receiver ran it on from its puppet's pose with its own stale work: jumps of up to 47 units, about 1 leave in 3; before protocol 57 also once a leg was shot off (the receiver's would have been whole) |
   | moth (6) | perched, flying, closing in; dead | its grab (no moth may hold the player: `exp1`), take-off, landing, crawling wingless |
   | bat (7) | hanging awake, chasing, hovering, circling; dead | latched on (`flg` 0x1000), dropping, knocked back, going up to hang; the swarm's leader while its pause runs (`exp1[6]`, `[7]`: only it counts down). Asleep (type 1): not claimed |
   | fish (8), ants B (20) and C (71) | always | - |
@@ -1226,7 +1248,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   | baby spider (24) | out of its mother, on the ground (Move 1..3) | jumping, released mid-air. Inside its mother (`mode0` 6): not claimed |
   | ceiling trap (25) | up (Move 0), type 1, or done | coming down (its moving wall's height is room state) |
   | moth larva (27) | never: it rides on the player of the game that made it (`lkwkp` = that `plp`) | - |
-  | bosses (Gulp Worm 2, Alexia 12..14 with tentacles 18 and babies 30, Alfred 16, Monster Steve 17 and the knights 54/55, tentacles 29, Nosferatu's core 53, the crane 56) | never: the host's entry runs the room's entry script, which re-arms the fight (clears `rm_flg`, in 9280/9301/9302/9321 also the fight's shared flags, a `CineSet`); their phases are the script's flags and `rm_flg`, their work a web of children (Alexia 2's 992 bytes) | they take the host's state as before |
+  | bosses (Gulp Worm 2, Alexia 12..14 with tentacles 18 and babies 30, Alfred 16, Monster Steve 17 and the knights 54/55, tentacles 29, Nosferatu's core 53, the crane 56) | never: the host's entry runs the room's entry script, which re-arms the fight (clears `rm_flg`, in 9280/9301/9302/9321 also the fight's shared flags, a `CineSet`); their phases are the script's flags and `rm_flg`, their work a web of children (Alexia 2's 992 bytes). Their runner leaving through a door (protocol 57): the Gulp Worm, Alexia 1, Alfred, Steve and his knights in any state, with their `rm_flg` bits; Alexia 2 and the others without their state | they take the host's state as before |
 
 * **Room files that differ** (protocol 54): `SPAWN_NOTE_DONE` (now sent for every room load, without the randomizer too)
   carries a hash of the room's records (`enemy_room_hash`: the enemy records - type, look, floor, place, angle - and how many
@@ -1542,6 +1564,18 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   list) or model, `exp0` only where it belongs to a work. Left out on purpose: effects whose state
   cannot go as fields (OR_WORK effects, raw pointers in counters, a drawing function or extra slot set
   by the creator) and those only room scripts or other effects make. Anything else is refused.
+* **Alexia 1's burning blood and blood pools** (protocol 57): the window covers the steps of every enemy its game runs (the
+  guest's too, since protocol 56). Alexia 1's blood and flame puddles (effect 265, `en12.c` Blood, FlameLiquid: they ignite and
+  burn the player standing in them) point at her fire manager (`exp1` = her `exp0` 0x20, an `eff[]` entry her Init makes in
+  each game): `EV_FX` names it as that word of its owner's work (`x1`, rule `FXF_EXP1`), with the floor's normal (`ao`,
+  `FXF_AO`), and the receiver's copy of her takes its own; before, it went as "pointers", so only the game that ran her saw
+  her blood (in every order: the runner's game only). Her embrace's fire on the partner (252 on the copy of its stand-in,
+  `ghost`) follows the receiver's player (before, "follows something unknown"). A blood pool (effect 300, `bhSetBloodPoolLnk`:
+  two entries, the second its vertex work; zombies, Cerberus, Bandersnatch dying) goes as its call (`FX_POOL`: what it
+  follows, its place with the table's offset, its angle, the table's values, its palette bank; `coop_fx_pool`); before, it was
+  left out (its work is an extra entry) and showed only in the runner's game. Still each game's own: effects an event or room
+  table starts (each game runs its own), the Tyrant's claws and slashes (307..310, OR_WORK), 0 / 349 (matrices set by their
+  caller).
 * **Voices**: `Pose.voice_n` counts the sender's player voices, `Pose.voice` is the last one; the
   receiver plays each new count at the partner's position in the voice of the partner's model.
   Voice calls during a host enemy's step on the stand-in play nothing (the partner's game sends them).
@@ -1710,7 +1744,7 @@ bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows t
 list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
 `EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
 the Bandersnatch and the anatomist too (each type's `exp0` with its pointer words kept, the `type` field taken), never for a
-record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). 54: every type outside the boss fights is handed in, the dead ones too (`EV_ENEOWN` state 3 `stflg_b` 1), with up to 0x204 bytes of `exp0` (an enemy without a child its own size, `ATR_WORK` pointers as table and index); the extras the joiner killed are made dead on the host; `SPAWN_NOTE_DONE` carries the room's records' hash ("Room files that differ"). 55: `EneSnap.link` (1 + a linked part's parent slot, in the `SQ_ID` field's bits 16..23): a zombie's upper half is matched by its zombie, not by its slot ("Room files that differ"). 56: the player first in a room runs its enemies until it leaves ("Who runs the enemies"): `EV_ENEOWN` 1 a make-before-break hand-over (`pset` 1: the giver leaves; `tid` 0: without its state; `stflg_b`: its frame), 5 the room's runner (`COOP_ROOM_*`), 6 "it runs here now"; `COOP_HIT_FWD` (a hit passed on to the runner); `Pose.busy` `BUSY_PAUSED` 5 and `BUSY_DOOR` 6; snapshots also with the partner in another room; events that come ahead of a gap are kept; `EV_ESTATE` packed (`coop_zpack`). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). 54: every type outside the boss fights is handed in, the dead ones too (`EV_ENEOWN` state 3 `stflg_b` 1), with up to 0x204 bytes of `exp0` (an enemy without a child its own size, `ATR_WORK` pointers as table and index); the extras the joiner killed are made dead on the host; `SPAWN_NOTE_DONE` carries the room's records' hash ("Room files that differ"). 55: `EneSnap.link` (1 + a linked part's parent slot, in the `SQ_ID` field's bits 16..23): a zombie's upper half is matched by its zombie, not by its slot ("Room files that differ"). 56: the player first in a room runs its enemies until it leaves ("Who runs the enemies"): `EV_ENEOWN` 1 a make-before-break hand-over (`pset` 1: the giver leaves; `tid` 0: without its state; `stflg_b`: its frame), 5 the room's runner (`COOP_ROOM_*`), 6 "it runs here now"; `COOP_HIT_FWD` (a hit passed on to the runner); `Pose.busy` `BUSY_PAUSED` 5 and `BUSY_DOOR` 6; snapshots also with the partner in another room; events that come ahead of a gap are kept; `EV_ESTATE` packed (`coop_zpack`). 57: bosses go with their state when their runner leaves through a door (`own_types` p3 2, their `rm_flg` bits after their work), a Black Widow with its legs off (leg records after its work), `EV_FX` `x1` / `ao` (an effect's `exp1` as a word of its owner's work: Alexia 1's burning blood) and `FX_POOL` (a blood pool as its call). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -2061,6 +2095,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_VOMIT="hostframe,..."` | Host: the walking zombie nearest the partner vomits. |
 | `RECVX_COOP_CRAWL="hostframe,..."` | Host: its walking zombies become crawlers (as a knock-down with little health left), which crawl towards their target and grab its legs. |
 | `RECVX_COOP_ORPHAN=frame` | Put our player in a grab with no holder, 3 m off (failsafe test). |
+| `RECVX_COOP_NO_EMBRACE=1` | Both sides: Alexia 1's step that starts her embrace (`en12` BR00, which kills its victim at its frame 60 whatever its health) is undone (her modes as before it, the victim's busy flag off), so a fight of two players with `RECVX_INF_HEALTH` runs on without game overs (about one every 320 frames otherwise). |
 | `RECVX_COOP_STALE="hostframe,..."` | Our player's busy flag set with no enemy to clear it (the busy flag watchdog's test). |
 | `RECVX_COOP_LARVA="hostframe,..."` / `RECVX_COOP_HATCH="hostframe,..."` | A moth's larva on our player (as one carried into a room) / our larvae hatch now (not while held). |
 | `RECVX_COOP_BUSYLOG=n` | Every n frames: our player's busy flag, modes, motion, whether the status screen is open, the larvae (count, the last one's mode2/mode3 and player: 1xx ours, 2xx the partner's). |
