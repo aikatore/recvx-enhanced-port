@@ -350,9 +350,11 @@ static int write_ini(FILE* f, void* ud)
 /* Main thread only (settings_poll, and main() before the game thread starts); everyone else
    asks with settings_save_later(). Written to a temporary file and renamed over recvx.ini, so a
    crash or full disk never leaves a truncated file. */
+int g_config_readonly;
 void config_save(void)
 {
     char p[1100];
+    if (g_config_readonly) return;
     SDL_CreateDirectory(g_config.save_dir);
     path(p, sizeof(p));
     if (pc_save_file(p, "w", write_ini, NULL) != 0) host_log("config: cannot write %s\n", p);

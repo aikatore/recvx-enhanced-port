@@ -68,6 +68,26 @@ const VoiceCurated* voice_curated(int disc, int vid)
     return NULL;
 }
 
+typedef struct { int room, ofs, vid, ms, gap; } VoicePlayed;
+static const VoicePlayed played[] = {
+#define VOICE_PLAYED
+#include "voice_curation.inc"
+#undef VOICE_PLAYED
+};
+static int played_cmp(const void* a, const void* b)
+{
+    const VoicePlayed *x = a, *y = b;
+    return x->room != y->room ? (x->room > y->room) - (x->room < y->room) : (x->ofs > y->ofs) - (x->ofs < y->ofs);
+}
+int voice_played_ms(int room, int ofs, int vid, int* gap)
+{
+    VoicePlayed k = { room, ofs, 0, 0, 0 };
+    const VoicePlayed* p = bsearch(&k, played, sizeof played / sizeof played[0] - 1, sizeof played[0], played_cmp);
+    if (!p || p->vid != vid) { *gap = -1; return -1; }   /* (another file there: another room file, a mod's) */
+    *gap = p->gap;
+    return p->ms;
+}
+
 static void add(int room, int disc, int vid, int chr, const unsigned char* lip, int lip_n, int grunt)
 {
     VoiceLine* l;
@@ -177,6 +197,61 @@ void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const 
             sure[sure_n++] = q[j];
         }
     }
+}
+
+int voice_room_lines(int room, const unsigned char* d, int n, int (*insn)(const unsigned char*), VoiceOnAt* out, int max)
+{
+    long rom = rd32(d, n, 0x10), base = rd32(d, n, 0x1C), ep = rd32(d, n, rom + 2 * 4);
+    int nr = (int)rd32(d, n, rom + 0x80 + 2 * 4), disc = room / 1000 < 6 ? 1 : 2, k = 0, c = 0;
+    unsigned first_ofs, offs[260];
+#define CHR_OF(r) ((r) >= 0 && (r) < nr && ep && ep + (r) * 0x24L + 0x24 <= n ? cast_character(d[ep + (r) * 0x24 + 4] | d[ep + (r) * 0x24 + 5] << 8, d[ep + (r) * 0x24 + 9]) : -1)
+    if (!base || base >= n) return 0;
+    first_ofs = rd32(d, n, base);
+    for (unsigned i = 0; i * 4 < first_ofs && k < 260 && base + (long)i * 4 + 4 <= n; i++) {
+        unsigned v = rd32(d, n, base + (long)i * 4);
+        offs[k++] = v;
+        if (v && v < first_ofs) first_ofs = v;
+    }
+    for (int i = 0; i < k; i++) {   /* (as voice_scan_room's sweep; the speaker as cast_glue.c pc_voice_on finds it) */
+        long o = base + offs[i], ends[64], next = 0, pre = -1;
+        int ne = 0, pre_rec = 0, claimed = 0;
+        for (int j = 0; j < k; j++) if (offs[j] > offs[i] && (!next || offs[j] < (unsigned long)next)) next = offs[j];
+        while (o >= 0 && o + 8 <= n && (!next || o < base + next)) {
+            int op = d[o], len = insn(d + o), rec = -1;
+            while (ne && ends[ne - 1] <= o) ne--;
+            if (len <= 0) break;
+            if (op == OP_VOICEON && c < max) {
+                VoiceOnAt* v = &out[c++];
+                const VoiceCurated* cv;
+                v->script = i; v->ofs = (int)(o - base); v->disc = disc; v->vid = d[o + 2] | d[o + 3] << 8; v->kind = d[o + 1];
+                v->branch = ne > 0; v->sp = -1;
+                if (voice_lipset(d + o + len, (int)(n - o - len), insn, &rec) >= 0) { v->sp = rec; claimed = 1; }
+                else if (pre >= 0 && voice_lipset_before(d + pre, d + o, insn)) v->sp = pre_rec;
+                else if (v->kind == 1) v->sp = d[o + 6];
+                else if (!v->kind) v->sp = voice_said_by(room, v->vid);
+                pre = -1;
+                v->own = CHR_OF(v->sp);
+                if ((cv = voice_curated(disc, v->vid)) && cv->flags & VOICE_CONFIRMED) {   /* (the speaker checked by hand: that character's record) */
+                    if (cv->chr < 0) v->own = -2;
+                    else if (v->own != cv->chr) {
+                        for (v->sp = 0; v->sp < nr && CHR_OF(v->sp) != cv->chr; v->sp++);
+                        v->own = v->sp < nr ? cv->chr : -3;
+                    }
+                }
+            }
+            if (op == OP_LIPSET) {
+                if (claimed) claimed = 0;
+                else { pre = o + len; pre_rec = d[o + 2]; }
+            }
+            if (op == OP_IFEL && ne < 64) ends[ne++] = o + d[o + 1] + 1;
+            else if (op == OP_ELSE) { if (ne) ne--; if (ne < 64) ends[ne++] = o + d[o + 1]; }
+            else if (op == OP_ENDIF && ne) ne--;
+            o += len;
+            if (!ne && (op == OP_END || (i >= 2 && op == OP_EVTEND))) break;
+        }
+    }
+    return c;
+#undef CHR_OF
 }
 
 /* ponytail: a linear search; a few hundred entries, looked up once per line */
@@ -420,6 +495,30 @@ const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr,
 #undef TAKE
 #undef AGE
 #undef SKIP
+}
+
+VoiceChoice voice_choose(unsigned seed, int room, int disc, int vid, int chr, int ms, int full, int pl, int gap, int grunt,
+                         int (*ms_of)(const VoiceLine*), int (*age)(const VoiceLine*))
+{
+    VoiceChoice c = { 0 };
+    int fit_only, max;
+    if (!pl) { c.why = "cut by the next line at once"; return c; }   /* (the next line starts with it: the scene says nothing of it) */
+    c.fit = pl > 0 ? pl : full;   /* (until the next line, else its whole length) */
+    max = pl > 0 && gap > 0 ? gap : c.fit > 0 ? c.fit + VOICE_GRACE_MS : 0;   /* (by the next line's start, which stops what plays past
+        it; else within the grace) */
+    c.grunts = grunt ? VOICE_PICK_GRUNTS : VOICE_PICK_ANY;   /* (a grunt for a grunt) */
+    if (!grunt && (full <= 0 || full >= VOICE_SHORT_MS)) c.grunts = VOICE_PICK_SPOKEN;   /* (a spoken line for one: never a grunt) */
+    fit_only = full > 0 && full < VOICE_SHORT_MS;   /* (a gasp: one that ends in time, else quiet) */
+    if (!(c.l = voice_pick(seed, room, disc, vid, chr, c.fit, max, ms_of, age,
+                           c.grunts | (fit_only ? VOICE_PICK_FIT : 0)))) {   /* (latent but for grunts: a character with lines has one) */
+        c.why = c.grunts == VOICE_PICK_GRUNTS ? "a grunt, and the character has none" : "no line picked";
+        return c;
+    }
+    c.lms = ms_of(c.l);
+    if (fit_only && c.lms > c.fit + VOICE_GRACE_MS) { c.l = NULL; c.why = "a short sound, and the character has none"; return c; }
+    if (pl > 0 && gap > 0 && c.lms > gap) { c.cut = VOICE_CUT_FADE; c.stop = gap; }   /* (the next line would stop it at once) */
+    else if (ms > 0 && c.lms > c.fit + VOICE_GRACE_MS) { c.cut = VOICE_CUT_GRACE; c.stop = c.fit; }
+    return c;
 }
 
 /* ---------------------------------------------------------------- an enemy model's sounds in place of a line

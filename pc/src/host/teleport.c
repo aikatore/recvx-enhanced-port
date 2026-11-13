@@ -378,6 +378,21 @@ static void voices_log(const char* how, Uint64 t0)
              g[0], g[1], g[2], g[3], g[4], g[5], g[6], nl[0], nl[1], nl[2], nl[3], nl[4], nl[5], nl[6], voice_sure_count());
 }
 
+int room_each(void (*fn)(int room, const unsigned char* d, int n, void* ud), void* ud)
+{
+    File* f = calloc(MAX_FILES, sizeof(File));
+    FILE* iso = pc_fopen(g_config.iso_path, "rb");
+    long cap = 16 << 20, pcap = 4 << 20, m;
+    unsigned char *out = malloc(cap), *in = malloc(pcap);
+    int nf, nmod, i, n = -1;
+    if (f && out && in && iso)
+        for (nf = room_files(f, 0, &nmod), n = i = 0; i < nf; i++)
+            if ((m = room_read(&f[i], iso, &in, &pcap, &out, &cap)) >= 0) { fn(atoi(f[i].name + 3), out, (int)m, ud); n++; }
+    if (iso) fclose(iso);
+    free(f); free(out); free(in);
+    return n;
+}
+
 static int SDLCALL vscan(void* ud)
 {
     Uint64 t0 = SDL_GetTicks();

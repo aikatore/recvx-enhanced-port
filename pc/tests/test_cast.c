@@ -451,6 +451,26 @@ int main(void)
             n1 += voice_pick((unsigned)s, 1020, 1, 40, 2, 9000, 9000, line_ms_short, NULL, VOICE_PICK_ANY) == voice_line(2, 1);   /* (a 0.5 s gasp for a 9 s line) */
         }
         CHECK(n1 > 0 && n1 < 256 / 10 && k == 3 && n3 > 256 * 3 / 4 && n3 < 256 && n2 == 0 && !voice_pick(1, 1020, 1, 40, 1, 0, 0, NULL, NULL, VOICE_PICK_ANY) && !voice_pick(1, 1020, 1, 40, 7, 0, 0, NULL, NULL, VOICE_PICK_ANY));
+        for (s = 0; s < 64; s++) {   /* voice_choose (pc_voice_on, --voice-plan): for the time the line plays (pl: until the next line) */
+            VoiceChoice c = voice_choose((unsigned)s, 1020, 1, 40, 2, 5000, 5000, 0, 0, 0, line_ms, NULL);
+            CHECK(!c.l && c.why);   /* (cut at once: quiet) */
+            c = voice_choose((unsigned)s, 1020, 1, 40, 2, 5000, 5000, 1500, 1500, 0, line_ms, NULL);
+            CHECK(c.l == voice_line(2, 1) && c.fit == 1500 && c.lms == 1000 && c.cut == VOICE_CUT_NONE);   /* (the 3 s one: past the next line, no grace) */
+            c = voice_choose((unsigned)s, 1020, 1, 40, 2, 5000, 5000, 500, 500, 0, line_ms, NULL);
+            CHECK(c.l && c.cut == VOICE_CUT_FADE);   /* (none ends in time: one running longer, faded out before the next line) */
+            c = voice_choose((unsigned)s, 1020, 1, 40, 2, 2000, 2000, 2000, 2500, 0, line_ms, NULL);
+            CHECK(c.l == voice_line(2, 1) && c.cut == VOICE_CUT_NONE);   /* (played whole, the next line 0.5 s after: the 3 s one not) */
+            c = voice_choose((unsigned)s, 1020, 1, 40, 2, 2000, 2000, 2000, 2500, 0, line_ms, said_second);
+            CHECK(c.l == voice_line(2, 0) && c.cut == VOICE_CUT_FADE && c.stop == 2500);   /* (... the 1 s one just said: faded out by the next) */
+            c = voice_choose((unsigned)s, 1020, 1, 40, 2, 5000, 5000, -1, -1, 0, line_ms, NULL);
+            CHECK(c.l && c.fit == 5000 && c.cut == VOICE_CUT_NONE);   /* (unknown: the whole file) */
+            c = voice_choose((unsigned)s, 1020, 1, 40, 2, 1300, 1300, -1, -1, 0, line_ms, said_second);
+            CHECK(c.l == voice_line(2, 0) && c.cut == VOICE_CUT_GRACE);   /* (the 1 s one just said: the 3 s one, cut after the grace) */
+            c = voice_choose((unsigned)s, 1020, 1, 40, 2, 500, 500, 100, 100, 0, line_ms, NULL);
+            CHECK(c.l == voice_line(2, 1) && c.cut == VOICE_CUT_FADE);   /* (a gasp cut to 0.1 s: the shortest, within the grace, faded out) */
+            c = voice_choose((unsigned)s, 1020, 1, 40, 2, 500, 500, 100, 100, 0, line_ms, said_second);
+            CHECK(!c.l && c.why);   /* (... its short one just said: quiet) */
+        }
         CHECK(voice_model_chr(3) == 2 && voice_model_chr(5) == 3 && voice_model_chr(6) == 3 && voice_model_chr(7) == 3 && voice_model_chr(8) == 4 &&
               voice_model_chr(11) == 4 && voice_model_chr(12) == 5 && voice_model_chr(13) == 6 && voice_model_chr(ACTOR_PART + 3) == 3 &&
               voice_model_chr(ACTOR_PART + 4) == 0 && voice_model_chr(17) == -1 && voice_model_chr(14) == -1 && voice_model_chr(ACTOR_MODELS) == -1 &&

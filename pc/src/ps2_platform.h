@@ -71,6 +71,7 @@ typedef struct {
 extern HostConfig g_config;
 void config_load(void);
 void config_save(void);
+extern int g_config_readonly;   /* 1: config_save writes nothing (recvx --voice-plan) */
 
 /* overlay (host/overlay.cpp) */
 void overlay_init(void* window, void* gl_context);

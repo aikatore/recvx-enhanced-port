@@ -1319,8 +1319,8 @@ group's next part (`voice_curated`, `cast.h`). The rules:
 * **Grunt** (`VOICE_GRUNT`): a gasp, grunt or short sound, also a longer one (a scream). Such a line is in the
   character's own pool of grunts (also one without a `LipSet`, under the tool's guess of its speaker where it was not
   checked). A grunt is replaced only by a grunt of the character shown (`voice_pick` `VOICE_PICK_GRUNTS`, weighted as
-  any line); a character without one stays quiet there (`... is a grunt and Alexia has
-  none: quiet`). A line of 1.2 s or more that is not a grunt never gets a grunt (`VOICE_PICK_SPOKEN`); a short line not marked as one keeps the rules above (any line that ends in time,
+  any line); a character without one stays quiet there (`... shown as Alexia: quiet (a grunt, and the character has
+  none)`). A line of 1.2 s or more that is not a grunt never gets a grunt (`VOICE_PICK_SPOKEN`); a short line not marked as one keeps the rules above (any line that ends in time,
   `VOICE_PICK_ANY`).
 * **Groups** (`VOICE_PART`, `next`): lines the tool joined, said one after another as one line. The first part stands
   for the group: in the catalogue its length is all the parts' (`cast_glue.c group_ms`), and when it is inserted the
@@ -1333,7 +1333,7 @@ group's next part (`voice_curated`, `cast.h`). The rules:
   while the parts follow one another: a later part that another scene says on its own, not right after the part before,
   is a line of its own. The later parts are never inserted on their own. The tool makes groups on its main page (split
   lines) and on its Cutscenes page (a scene's lines in play order: consecutive lines joined as one, for scenes where one
-  sentence spans several files and each got a line of its own). (No groups in the table yet.)
+  sentence spans several files and each got a line of its own). (Six groups so far, all in Steve's main gate scene, RM_0030.)
 * **Not checked**: the port's own guess as above.
 * The log marks them: `voices: room 9350 record 2: Wesker's line 2/514 (451 ms, speaker checked), shown as Claire
   (Cutscene Model) -> Claire's line 2/283 (872 ms) from RM_6051, the speaker checked by hand: Talking Mouths: its lips
@@ -1365,6 +1365,75 @@ model has no lines: the creatures (Monster Steve, Nosferatu, the Tyrant, ...) an
 ("Enemy models"); the hazmat man and every **imported model** (an Outbreak character has no lines on this disc) keep
 the line.
 
+### Played lengths
+
+Many lines never play to their end: the scene starts the next line first (`bhVoiceOn` stops the task's own line,
+`PlayVoiceEx2` whatever plays on slot 1), or a `VoiceOff` stops it. A line in its place is picked for the time the
+original really plays there, and one that runs longer fades out before the next line starts rather than being cut off
+mid-word. That time is measured in the game, ahead of time, not worked out from the script: the scripts wait for motion
+frames of several records (each its own motion, set by other events, at its own speed: 15 frames a second in 0030 and
+0040, 30 in 9350), for the event timer, flags and loops, so the voice tool's script clock (its Cutscenes page) is far
+off in many scenes (in 1020 a gap it gives as 2.1 s is 7.4 s in the game).
+
+* **The table** (`voice_curation.inc`'s `VOICE_PLAYED` part, `voices.c voice_played_ms`): per `VoiceOn` (room file, its
+  offset in the room's script block from `rom->evtp`, the file) the milliseconds it plays and the milliseconds until the
+  next line (or `StopVoice`) starts, at most its length and the grace: rows for the lines cut short, the lines whose next
+  one starts within the grace after their end (a line in their place must end by then too), and a group's first part
+  with its later parts after it (from its start to the last part's end). The pick then takes lines that end by the next
+  line's start, no grace past it (`voice_choose`); one running longer fades out before it. Sorted, a binary search per
+  line; the file must match (a mod's or BioRand's room file with other offsets finds nothing). No row: the file's length
+  (a group: its parts' together), and the grace, as before. 250 rows (72 lines cut short), from 97 runs: 581 `VoiceOn`s
+  measured, 8 of them not alike in every run or not to their end; about 606 of the 673 scene lines the voice tool lists
+  (the rest: scenes `RECVX_TEST_SCENE` does not play, the other character's branches).
+* **Measured** (headless, the six scenes of the mouth check 0030, 0040, 1002, 1020, 6060, 9350 with the user's settings,
+  104 inserted lines, the same picks with `RECVX_VOICE_WHOLE=1` as before): inserted lines stopped mid-word by the next
+  line 18 before (15 with more than 0.15 s left, up to 2.4 s), 0 now; 8 faded out before the next line instead, none of
+  those fades cut short. Every line started at the same game frame as before, the cast the same; with the option off the
+  game is unchanged (`layout_check.sh`). A line is a binary search more per `VoiceOn`; the table about 5 KB.
+* **Measuring** (headless, voices off, a scene each: `RECVX_TEST_SCENE`, the scene list's every scene with a line):
+  `RECVX_VOICE_TIME=1` logs each line's start (`voicetime: <game ms> on room 0030 ofs 3856 line 1/31 (438 ms) played
+  -1`: game frames at 30 a second, so a busy machine does not shorten an `AdxCk` wait) and each `StopVoice`. A line plays
+  until the next event, at most its length; unknown where the run ended first, or where two runs differ by more than
+  0.1 s (another case or character).
+* **Updating it**: the logs into `voice_played.json` beside `voice_curation.json` (runs whose frames fell behind the
+  clock left out), then the table as before:
+
+```
+python3 pc/tools/voice_curation.py --measure /path/to/recvx-voice-tool/voice_played.json LOGS.../log.txt   # (headless runs:
+#   RECVX_VOICE_TIME=1 RECVX_TEST_SCENE=400:RM_<room>:<level>:<event> RECVX_EXIT_FRAME=7000, every scene of RECVX_SCENE_LIST
+#   with a line)
+python3 pc/tools/voice_curation.py /path/to/recvx-voice-tool/voice_curation.json
+```
+
+### Voice plan
+
+`recvx <disc image> --save-dir DIR --voice-plan SEED --out plan.json` writes what Randomize Voice Lines makes of every
+cutscene line with that seed (the voice tool shows it next to the original), without starting the game, and exits (2:
+no disc image or no `--out`). The cast options are recvx.ini's (`--save-dir`), the voice lines on; nothing is written
+there. It runs the game's own choice (`voices.c voice_choose`, as `pc_voice_on`: the cooldown over the lines said, the
+grunts, the groups, the played lengths, the cut and fade) over the room files' scripts in story order as far as the
+numbers give it (stage 0..9, in each the room files, in each scd0, scd1 and the events in turn). A playthrough meets
+the scenes in another order, some twice and some never, so from some point on its picks differ (the history). The
+speaker's look: Claire's and Chris's the player's look for them, everyone else's the cast's pick (`cast_model`, "Random
+per cutscene" per room file) while the cast is on, else themselves; every record counted as drawn, no character other
+than Claire or Chris played, no imports. The JSON (`version` 1):
+
+```
+{"version":1,"seed":7,"options":{"voices":1,"cast":1,"cast_assign":1,"cast_all":0,"cast_enemy":1,"mouths":1},
+ "scenes":[{"room":"RM_0030","script":"event 6","disc":1,"lines":[
+   {"disc":1,"vid":31,"speaker":"Steve","order":6,"orig_ms":432,"played_ms":3480,"played_known":true,"group":31,
+    "group_part":0,"repl":{"kind":"line","disc":2,"vid":104,"speaker_of_line":"Chris","ms":1640,"cut_ms":null,
+    "fade":false,"why":"picked"}}, ...]}]}
+```
+
+`script` as the voice tool names it (`scd0`, `scd1`, `event N`); `speaker` the line's character (null: none of the cast,
+no speaker); `orig_ms` the file's length as the game reads it (8 ms steps); `played_ms` the table's time (a group's
+first part: the span), else the file's length (`played_known` false: no row, the line plays whole or was not measured); `group` the file of the group's first part while its parts follow it there, `group_part` 0.. ; `repl.kind`
+`line`, `grunt`, `quiet` (nothing plays), `enemy` (the enemy model's sounds), `original` (the line keeps its voice:
+`repl` is the line itself), `group_silent` (a later part: the first part's line plays on); `cut_ms` where a longer
+line is stopped (the next line's start, faded out by then; or the end of the time and grace, faded from there), with
+`fade` true; `why` the reason, as the log's. ctest `voice_plan` checks the shape with `RECVX_ISO` (skipped without).
+
 ### In a cutscene
 
 * `bhVoiceOn` asks `pc_voice_on`: with the option on (`enemy_opts()->voices`: the host's in co-op), the catalogue read,
@@ -1376,11 +1445,13 @@ the line.
     lines of that kind with a length; Alfred's 14 spoken: 7, Rodrigo's 20: 10, Alexia's 24: 12, Claire's 128: 64; two
     lines alternate, three go in turn), so no line twice in a row, no A-B-A, and no line is more than 1 / (cooldown + 1)
     of a character's lines (Alfred: 1 in 8). Of the lines out of the cooldown, in this order:
-    1. one that **ends in time**, at most `VOICE_GRACE_MS` (1 s) after the original line's length: a line not said yet
-       before one said already, the length a soft preference (below);
+    1. one that **ends in time**: within the time the original plays in this scene, until the next line where that is
+       measured ("Played lengths": the next line stops whatever plays past it, so no grace), else within the original's
+       length and `VOICE_GRACE_MS` (1 s) more; a line not said yet before one said already, the length a soft
+       preference (below);
     2. else (not for a gasp: "Short sounds") one that **runs longer**, the shorter the likelier ((max / len)², max the
-       original's length and grace), **cut at the original's end** with a 0.27 s fade ("The end of an inserted line"):
-       it sounds like a line cut off, and it never runs into the scene's pauses or the next line;
+       time it plays, with the grace where that is the original's length), **cut there** with a 0.27 s fade ("The end
+       of an inserted line"): it sounds like a line cut off, and it never runs into the scene's pauses or the next line;
     3. only where every line of the character is in the cooldown (a pool of one line) the least recently said, never
        the last: so a single line is said, then nothing (quiet) for the next.
     The previous line stops when the next original starts (`PlayVoiceEx2` stops slot 1). So a speaker never talks on
@@ -1446,7 +1517,7 @@ the line.
   gets one of the character's own short sounds, by the same pick (a line ending at most 1 s after it: in the catalogue
   Claire has 35 under 1.2 s, Steve 30, Chris 23, Wesker 9, Rodrigo 1). It stays quiet where the character has
   none that short (Alfred, Alexia), or where those were said among its last few (above; `pc_voice_on` answers -1, the
-  script still waits its length; log `... is a short sound and Alfred has none: quiet`), and then an inserted line before it plays on through it. The catalogue's lines
+  script still waits its length; log `... shown as Alfred: quiet (a short sound, and the character has none)`), and then an inserted line before it plays on through it. The catalogue's lines
   all have a `LipSet` (so their lips); the lines without one are not added for this: the four characters with short
   sounds have enough of their own.
 * **No line in the pause after a short one**: an earlier version gave a short line before a long script pause a whole
@@ -1462,9 +1533,13 @@ the line.
   sound ticks (`VOICE_FADE` 7 + 1; a tick is a game frame, `VsyncFunc` runs at the buffer swap: 0.27 s) with the
   game's own fade (`RequestAdxFadeFunctionEx`, which `ExecAdxFadeManager` steps down to -127 and then `StopAdx`s; each
   step is `ADXT_SetOutVol`, the stream's `SDL_SetAudioStreamGain`; `vl.cap`, checked every tick by `pc_voice_tick`;
-  log `voices: the inserted line is cut at the original's end (4 ms late), fading out over 267 ms`, and the pick's
-  own log line says `none out of the cooldown ends in time: cut at 2749 ms`). The next line or a room change during
-  the fade stops it at once. A shorter
+  log `voices: the inserted line is cut 1412 ms before its end (4 ms late), fading out over 267 ms`, and the pick's
+  own log line says `none out of the cooldown ends in time: cut at 2749 ms`). Where the next line's start is measured
+  ("Played lengths") a line running past it fades out `VOICE_FADE_MS` before it, so the fade ends as the next line
+  starts (`, faded out by 2600 ms, when the next line starts`; `VOICE_CUT_FADE`), instead of the next line stopping it
+  mid-word; the next line, `StopVoice` or a room change during the fade stops it at once (`the inserted line's fade-out
+  is cut by the next line 33 ms before its end`), and one still playing unfaded then is logged too (`the inserted line
+  is cut hard by the next line 864 ms before its end`; by `StopVoice`). A shorter
   line leaves a silence. Before (`6d6525eb`), such a line was the shortest one but the last, faded out 1 s after the
   original's end; before that (`cca465b8`) also lines picked for variety, so speakers talked on into the pauses.
   Earlier still, a line could run on well after the scene's speech: a line picked at random from all of the
@@ -1654,7 +1729,8 @@ lobby's CUTSCENE CAST page, TALKING MOUTHS; shown while the voice lines are on; 
 * The inserted lines are the lines with mouth movements and the lines checked by hand; the other lines without them
   (off-screen calls, many short exclamations) are never inserted.
 * The hand-checked table covers the lines checked so far (198 of 691 in the first pass); the rest keep the guesses.
-* An inserted line or sound can go on up to 1 s after the original line's end, also past the scene's end.
+* An inserted line or sound can go on up to 1 s after the original line's end, also past the scene's end, where its
+  played length is not measured; there the next line can still stop it mid-word.
 * A line the script names no speaker for keeps its voice (the kind-0 lines of scripts that put several speakers at
   the player, the kind-2 ones); see "Never the original voice".
 * Enemy sounds: which program is a cry was read from the code (the voice channel, the hurt and death calls) and the

@@ -15,6 +15,7 @@
 #include "enemies.h"
 #include "../import/import.h"
 #include "lang.h"
+#include "cast.h"
 extern char g_lang_us_iso[1024];   /* import/lang.c */
 #include "../net/update.h"
 void render_loop(void);
@@ -236,6 +237,8 @@ static void usage(void)
         "  --profile[=file]   per-frame timing CSV (default recvx_profile.csv): logic, vu0, vu1, gs,\n"
         "                     interp, present, wait; also shown live in the F1 overlay\n"
         "  --profile-samples=file  sampling CPU profiler (summarise with pc/tools/profile.py)\n"
+        "  --voice-plan SEED --out FILE  write what Randomize Voice Lines says in every cutscene with that seed\n"
+        "                     (and recvx.ini's cast options) as JSON, without starting the game, and exit\n"
         "F1 opens the settings overlay; settings are saved in <save dir>/recvx.ini (options set there,\n"
         "e.g. skip_doors = 0 or skip_intro = 0, override the defaults).\n"
         "The image can also be given with the RECVX_ISO environment variable. Without one, a file\n"
@@ -245,6 +248,9 @@ static void usage(void)
 static char log_path[1024], profile_path[1024];
 static int iso_given;   /* image from the command line / RECVX_ISO: no file selector */
 static int save_given;  /* --save-dir */
+static int voice_plan = -1;          /* --voice-plan SEED (cast.h voice_plan_export) */
+static char voice_plan_out[1024];    /* --out */
+int ADXF_LoadPartitionNw(int ptid, const char* fname, void* dir, void* ptinfo);   /* audio/adx.c */
 
 static void iso_from(const char* s)
 {
@@ -287,6 +293,8 @@ static void parse_args(int argc, char** argv)
         else if (!strcmp(argv[i], "--third-person")) g_tps.on = 1;
         else if (!strcmp(argv[i], "--dev")) g_dev_tools = 1;   /* developer tools (the F2 object placer); BioRand and the importers are shown without it */
         else if (!strcmp(argv[i], "--quiet")) g_config.log_level = 0;
+        else if (!strcmp(argv[i], "--voice-plan") && i + 1 < argc) { voice_plan = atoi(argv[++i]); g_config_readonly = 1; }
+        else if (!strcmp(argv[i], "--out") && i + 1 < argc) SDL_strlcpy(voice_plan_out, argv[++i], sizeof(voice_plan_out));
         else if (!strcmp(argv[i], "--coop-host") && i + 1 < argc) { g_coop.port = atoi(argv[++i]); g_coop.request = COOP_REQ_HOST; }
         else if (!strcmp(argv[i], "--coop-join") && i + 1 < argc) { SDL_strlcpy(g_coop.join, argv[++i], sizeof(g_coop.join)); g_coop.request = COOP_REQ_JOIN; }
         else if (!strcmp(argv[i], "--coop-server") && i + 1 < argc) SDL_strlcpy(g_coop.server, argv[++i], sizeof(g_coop.server));
@@ -383,6 +391,14 @@ int main(int argc, char** argv)
         if (SDL_getenv("RECVX_IMPORT_ISO")) SDL_strlcpy(g_import.iso[src], SDL_getenv("RECVX_IMPORT_ISO"), sizeof(g_import.iso[src]));
         SDL_strlcpy(g_lang_us_iso, g_config.iso_path, sizeof(g_lang_us_iso));   /* (a language import reads the US text) */
         exit(import_run(src, what) == 0 ? 0 : 1);
+    }
+    if (voice_plan >= 0) {   /* headless (docs/ACTORS.md "Voice plan"): the disc, its room and voice archives, the JSON, then exit */
+        if (!voice_plan_out[0] || !g_config.iso_path[0] || !cdvd_open_image(g_config.iso_path)) {
+            fprintf(stderr, "recvx --voice-plan SEED --out FILE <disc image>: %s\n", voice_plan_out[0] ? "cannot open the disc image" : "no --out");
+            exit(2);
+        }
+        ADXF_LoadPartitionNw(17, "\\RDX_LNK.AFS", NULL, NULL);   /* (the room files: adxwrap.c's partition) */
+        exit(voice_plan_export(voice_plan, voice_plan_out) ? 1 : 0);
     }
     update_start();   /* the newest version for the title, on a thread of its own (net/update.h) */
 
