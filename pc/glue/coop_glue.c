@@ -2153,7 +2153,9 @@ void coop_enemy_end(BH_PWORK* ep)
             e.type = EV_PLY_HIT;
             e.idx = i;
             e.u.ph.hp_delta = dh > 0 ? dh : 0;
-            if (kill && e.u.ph.hp_delta <= ply2_save.hp) e.u.ph.hp_delta = ply2_save.hp + 1 > 1000 ? 1000 : ply2_save.hp + 1;   /* its own death there */
+            /* its own death there; not for a grab sent as a hit: its real damage only (a second grab of a partner already held
+               in its game, the pose not here yet under loss, was sent as its death) */
+            if (kill && !grab && e.u.ph.hp_delta <= ply2_save.hp) e.u.ph.hp_delta = ply2_save.hp + 1 > 1000 ? 1000 : ply2_save.hp + 1;
             e.u.ph.mode[0] = v->mode0; e.u.ph.mode[1] = v->mode1; e.u.ph.mode[2] = v->mode2; e.u.ph.mode[3] = v->mode3;
             e.u.ph.flg_set = v->flg & ~a->flg;
             e.u.ph.exp1_set = *(int*)p2.plhdw & ~*(int*)(exp_save + 128);
@@ -7284,6 +7286,12 @@ static int apply_event(const Event* e)
         ep->dvx = e->u.eh.dv[0]; ep->dvy = e->u.eh.dv[1]; ep->dvz = e->u.eh.dv[2];
         ep->dax = e->u.eh.dax; ep->day = e->u.eh.day;
     } else if (e->type == EV_PLY_HIT && (!is_host || p3_on())) {   /* (Phase 3: an enemy the guest's game runs hit the host) */
+        /* held here (a grab our game runs): as in single player, where a held player is no target, no other enemy's blow (the
+           sender saw the stand-in free: its pose of the grab was not there yet) */
+        if (plp->mode0 == 4 || plp->mode0 == 6) {
+            host_log("coop: enemy %d's hit of %d on our player ignored: held\n", e->idx, e->u.ph.hp_delta);
+            return 1;
+        }
         plp->hp -= e->u.ph.hp_delta;
         /* the enemy's hit reaction (as en01's bite/push sets it), unless we are already reacting */
         if (e->u.ph.mode[0] == 2 && plp->mode0 != 2 && plp->mode0 != 3 && plp->hp >= 0) {
