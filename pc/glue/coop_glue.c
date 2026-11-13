@@ -2461,6 +2461,7 @@ static int p3_pref(int i)
     return t;
 }
 static int hin_ok(int k, int any);
+static int hin_any_event;               /* hin_ok: also one an event of ours drives (we leave the room: our event ends) */
 #define HIN_WAIT 90
 /* hand enemy i (with its upper half) to the partner's game (EV_ENEOWN 1, protocol 56): with its state (`state`: ene_pack) or
    without it (the receiver lets it go from its puppet); `leaving`: we leave the room (a door, our menu, a scene that stops our
@@ -2488,6 +2489,11 @@ static void own_give(int i, int leaving, int state, const char* why)
     e.u.gr.flg_b = ep->id | ep->mdlver << 8;   /* what the receiver's slot must hold */
     e.u.gr.stflg_b = frame_no;                 /* our frame of the state: the receiver runs it from there */
     queue_event(&e);
+    /* a hit our copy has not taken yet goes after it (with its state it is in the state's damage fields) */
+    if (!state && ep->mode0) {
+        hit_send(i, ep, 0);
+        if (c < PC_ENE_SLOTS && ene[c].mode0) hit_send(c, &ene[c], 0);
+    }
     if (leaving) { own_set(i, 0); own_set(c, 0); giving[i] = 0; if (c < PC_ENE_SLOTS) giving[c] = 0; dflt = is_host; }   /* (and what comes up: the partner's) */
     else { giving[i] = 1; if (c < PC_ENE_SLOTS) giving[c] = 1; }
     own_t[i] = frame_no; own_ms[i] = net_ms(); p3_want[i] = 0; tgt[i] = 0; p3_leave[i] = 0;
@@ -2516,7 +2522,9 @@ static void own_take(const Event* e)
         (c >= PC_ENE_SLOTS || ene_unpack(&ene[c], estate + ESTATE_ENE, e->u.gr.cmdl, e->u.gr.cmnw)))
         st = 1;
     if (!ok || (!st && !leaving)) {
+        ev_room = e->stg * 256 + e->rom;   /* (the giver's room: we may be in a door to the next one) */
         own_msg(i, c, i < PC_ENE_SLOTS && we_run(i) ? 2 : 0, frame_no);
+        ev_room = -1;
         p3_n[2]++;
         host_log("coop: own: enemy %d from the partner's game does not fit here: refused%s\n", i, we_run(i) ? " (we run it)" : !ok ? "" : " (its state)");
         return;
@@ -2539,7 +2547,9 @@ static void own_took(int i)
     own_ours(i, c < PC_ENE_SLOTS ? c : -1);
     own_t[i] = frame_no; p3_want[i] = 0; tgt[i] = 0;
     p3_n[1]++;
+    ev_room = run_room & 0xFFFF;   /* (the room of the enemy: we may be in a door out of it) */
     own_msg(i, c, 6, frame_no);   /* "we run it": the giver stops (and drops what it showed of us before this frame) */
+    ev_room = -1;
     host_log("coop: own: enemy %d is ours now\n", i);
 }
 /* the partner's EV_ENEOWN 0, 1, 2, 6 */
@@ -2670,9 +2680,19 @@ static void own_frame(void)
             continue;
         }
         if (!we_run(i)) { p3_want[i] = p3_leave[i] = 0; continue; }
-        if (giving[i] || own_grab[i] || (ep->flg & 0x81) != 0x1 || event_driven(ep)) continue;   /* (an event of ours drives it: it runs here) */
+        if (giving[i] && !(ep->flg & 0x80) && frame_no - own_t[i] > 300) {   /* (no answer to a hand-over in 10 s: ours as before) */
+            int c = own_child(ep);
+            giving[i] = 0; if (c < PC_ENE_SLOTS) giving[c] = 0;
+            host_log("coop: own: enemy %d: no answer to its hand-over, it runs on here\n", i);
+        }
+        if (giving[i] || own_grab[i] || (ep->flg & 0x81) != 0x1 || (event_driven(ep) && !door)) continue;   /* (an event of ours drives it: it runs
+                                                    here, until we leave the room: then our event ends) */
         if (leave) {
-            int st = own_work(ep) && hin_ok(i, 1), need = st ? estate_events(ene_len(ep, own_child(ep))) : 1;
+            int st, need;
+            hin_any_event = door;
+            st = own_work(ep) && hin_ok(i, 1);
+            hin_any_event = 0;
+            need = st ? estate_events(ene_len(ep, own_child(ep))) : 1;
             if (p3_ref_t[i] && frame_no + 1 - p3_ref_t[i] < (unsigned int)P3_HOLD) continue;   /* (refused: again later) */
             if (budget < need) continue;
             if (!st && !door && ++p3_leave[i] < LEAVE_WAIT) continue;   /* (in a menu: it may come into a state to go) */
@@ -3344,7 +3364,7 @@ static int hin_ok(int k, int any)
 {
     BH_PWORK* ep = &ene[k];
     int c = own_child(ep);
-    if (k >= (int)sys->ewk_n || (ep->flg & 0x81) != 0x1 || !own_work(ep) || !ep->mode0 || event_driven(ep) || hold_family(ep) ||
+    if (k >= (int)sys->ewk_n || (ep->flg & 0x81) != 0x1 || !own_work(ep) || !ep->mode0 || (event_driven(ep) && !hin_any_event) || hold_family(ep) ||
         own_grab[k] || ghost.slot == k)
         return 0;
     if (!own_p3(ep)) return hin_state_ok(k, any);
@@ -3465,7 +3485,8 @@ static void hin_apply(const Event* e)
 static void gone_frame(void)
 {
     static int was;
-    int now = same_room() && rx.busy != BUSY_DOOR;
+    int now = same_room() && rx.busy != BUSY_DOOR && room_ready() && run_room == (coop_room_key() | my_case() << 16);   /* (not in our door:
+                                                    our enemies are the old room's then) */
     if (hin_gen != enemy_room_gen) { hin_gen = enemy_room_gen; hin_alone = 0; memset(hin, 0, sizeof(hin)); }
     /* our enemies run alone with the host known in game in another room (not while a rejoin's session starts: no pose yet, and its
        game state reloads our room) */
