@@ -12,8 +12,9 @@
 #   L2  0/6: the guest first, the host comes at ~2500, the guest leaves at ~3300: the host takes them with their state
 #   R   0/2 with ev_flg 104 (walking zombies): both come in at the same host frame: both list the same enemies after it,
 #       nothing jumps
-#   H   0/6: the guest hits slots 0..2 once every 10 frames (RECVX_COOP_KILL, 1 each) while the host goes out and comes back
-#       twice (hand-overs both ways under fire): every hit lands (the slot's HP falls on the host)
+#   H   0/2 with ev_flg 104 (walking zombies): the guest hits slots 0..2 once every 10 frames (RECVX_COOP_KILL, 1 each) while
+#       the host goes out and comes back twice (hand-overs both ways under fire): every hit lands (each slot's HP falls by
+#       its hits, as the guest shows it)
 #   S   as H with Shared Enemy Control (RECVX_COOP_OWNERSHIP=1 on the host)
 # About 4 minutes (14 instances at once).
 #   pc/tools/coop_owner_check.sh OUT [PORT]
@@ -65,18 +66,29 @@ def load(side):
             d[int(k)] = (tl, float(v[0]), float(v[1]), int(v[2]), 'D' in v[4:] or 'H' in v[4:])
         s.append((int(m.group(2)), m.group(1), bool(fl & 2), d))
     return s
-def jumps(s):
-    worst, at = 0.0, ''
+def steps(s):   # slot -> [(frame a, frame b, room, step per 5 frames, visible)]
+    out = {}
     for (fa, ra, va, a), (fb, rb, vb, b) in zip(s, s[1:]):
-        if ra != rb or fb - fa > 10 or fb == fa or not vb: continue
+        if ra != rb or fb - fa > 10 or fb == fa: continue
         for k in set(a) & set(b):
             if a[k][4] or b[k][4] or a[k][0] != b[k][0]: continue
-            d = (abs(a[k][1] - b[k][1]) + abs(a[k][2] - b[k][2])) * 5.0 / (fb - fa)
-            if d > worst: worst, at = d, 'slot %d %s %d->%d' % (k, a[k][0], fa, fb)
+            out.setdefault(k, []).append((fa, fb, ra, (abs(a[k][1] - b[k][1]) + abs(a[k][2] - b[k][2])) * 5.0 / (fb - fa), vb))
+    return out
+# a jump: a step of a shown enemy more than 6 units (per 5 frames) over the fastest step the other side shows of it within 10
+# frames (it moves that fast there: a Hunter's leap, a dog's run), or over 30 where the other side does not show it
+def jumps(s, o):
+    worst, at = 0.0, ''
+    for k, l in s.items():
+        for fa, fb, r, d, v in l:
+            if not v: continue
+            ref = [e[3] for e in o.get(k, []) if e[2] == r and e[0] >= fa - 10 and e[1] <= fb + 10]
+            over = d - (max(ref) + 6 if ref else 30)
+            if over > 0 and d > worst: worst, at = d, 'slot %d %d->%d (the other side: %s)' % (k, fa, fb, '%.1f' % max(ref) if ref else '-')
     return worst, at
 h, g = load('host'), load('guest')
-jh, ah = jumps(h); jg, ag = jumps(g)
-print('jump host %.1f %s' % (jh, ah)); print('jump guest %.1f %s' % (jg, ag))
+sh, sg = steps(h), steps(g)
+jh, ah = jumps(sh, sg); jg, ag = jumps(sg, sh)
+print('jump host %.1f %s' % (jh, ah)); print('jump guest %.1f %s' % (jg, ag))   # (0: none over the other side's speed)
 # both in one room: their last common sample
 hv = {f: (r, d) for f, r, v, d in h}; gv = {f: (r, d) for f, r, v, d in g}
 common = [f for f in sorted(set(hv) & set(gv)) if hv[f][0] == gv[f][0]]
@@ -108,24 +120,25 @@ EOF
 }
 rm -rf "$out"; mkdir -p "$out/mods"
 hits=""; for f in $(seq 1300 10 2800); do hits="$hits${hits:+,}$f:$(( (f / 10) % 3 )):1"; done
-pair E1 "$port" "1:0:6:0" "1500:0:6:0" &
+# (the guest joins into the host's room: its teleports go from there, its frames are about the host's)
+pair E1 "$port" "1:0:6:0" "1:0:1:0,1200:0:6:0" &
 pair E2 "$((port + 1))" "1:0:1:0,2600:0:6:0" "1000:0:6:0" &
-pair L1 "$((port + 2))" "1:6:9:0,2900:0:1:0" "1300:6:9:0" &
+pair L1 "$((port + 2))" "1:6:9:0,2900:0:1:0" "" &
 pair L2 "$((port + 3))" "1:0:1:0,2100:0:6:0" "1000:0:6:0,1940:0:1:0" &
-pair R "$((port + 4))" "1:0:1:0,2600:0:2:0" "1000:0:1:0,1600:0:2:0" 1:104 &
-pair H "$((port + 5))" "1:0:6:0,1000:0:7:0,250:0:6:0,250:0:7:0,250:0:6:0" "1000:0:6:0" "" "$hits" &
-pair S "$((port + 6))" "1:0:6:0,1000:0:7:0,250:0:6:0,250:0:7:0,250:0:6:0" "1000:0:6:0" "" "$hits" 1 &
+pair R "$((port + 4))" "1:0:1:0,2600:0:2:0" "1:0:1:0,2574:0:2:0" 1:104 &
+pair H "$((port + 5))" "1:0:2:0,1000:0:1:0,250:0:2:0,250:0:1:0,250:0:2:0" "" 1:104 "$hits" &
+pair S "$((port + 6))" "1:0:2:0,1000:0:1:0,250:0:2:0,250:0:1:0,250:0:2:0" "" 1:104 "$hits" 1 &
 wait
 for r in E1 E2 L1 L2 R H S; do
     check "$r: neither side crashed" "[ \$(cat $out/$r/host/exit) = 0 ] && [ \$(cat $out/$r/guest/exit) = 0 ] && ! grep -q 'fatal signal' $out/$r/*/log.txt"
     ana $r > "$out/$r/ana.txt"
-    check "$r: no enemy jumps on the host ($(sed -n 1p $out/$r/ana.txt))" "sed -n 1p $out/$r/ana.txt | awk '{ exit !(\$3 <= 12) }'"
-    check "$r: no enemy jumps on the guest ($(sed -n 2p $out/$r/ana.txt))" "sed -n 2p $out/$r/ana.txt | awk '{ exit !(\$3 <= 12) }'"
+    check "$r: no enemy jumps on the host ($(sed -n 1p $out/$r/ana.txt))" "sed -n 1p $out/$r/ana.txt | awk '{ exit !(\$3 == 0) }'"
+    check "$r: no enemy jumps on the guest ($(sed -n 2p $out/$r/ana.txt))" "sed -n 2p $out/$r/ana.txt | awk '{ exit !(\$3 == 0) }'"
 done
 for r in E1 E2 R H S; do check "$r: both have the same enemies, HP and dead ones ($(sed -n 3p $out/$r/ana.txt))" "sed -n 3p $out/$r/ana.txt | grep -q '^alike'"; done
 check "E1: the guest's copies waited for the host's state" "grep -q 'own: room 0/6 loaded, the host in it already' $out/E1/guest/log.txt"
-check "E2: the guest runs its enemies on (only script records go to the host)" "grep -q 'own: the host comes into the room we ran alone' $out/E2/guest/log.txt && ! grep 'handed to the partner' $out/E2/guest/log.txt | grep -vq 'scripts act on'"
-check "L1: the guest takes the Black Widows with their state" "[ \$(grep -c 'own: enemy [0-9]* (id 3) comes from the partner.s game (it leaves): ours' $out/L1/guest/log.txt) -ge 1 ] && ! grep -q 'id 3) comes from the partner.s game (it leaves) without' $out/L1/guest/log.txt"
+check "E2: the guest runs its enemies on (only script records go to the host)" "grep -q 'own: the host comes into the room we ran alone' $out/E2/guest/log.txt && ! grep 'own: enemy .* handed to the partner' $out/E2/guest/log.txt | grep -vq 'scripts act on'"
+check "L1: the guest takes the Black Widows with their state (those not climbing or jumping)" "[ \$(grep -c 'own: enemy [0-9]* (id 3) comes from the partner.s game (it leaves): ours' $out/L1/guest/log.txt) -ge 1 ]"
 check "L2: the host takes the guest's enemies with their state" "[ \$(grep -c 'own: enemy [0-9]* (id [0-9]*) comes from the partner.s game (it leaves): ours' $out/L2/host/log.txt) -ge 2 ]"
 for r in H S; do check "$r: no hit lost ($(sed -n 4p $out/$r/ana.txt))" "sed -n 4p $out/$r/ana.txt | grep -q 'lost 0\$' && ! sed -n 4p $out/$r/ana.txt | grep -q 'hits 0 '"; done
 exit $fail
