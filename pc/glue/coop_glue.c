@@ -2590,7 +2590,7 @@ static void own_room_msg(const Event* e)
     }
     if (is_host && kind == ROOM_DONE) {   /* every claim of the guest came: the rest is ours */
         int n = 0;
-        if (!claim_wait) { if (!host_verdict++) own_msg(0, ROOM_HOST, 5, frame_no); return; }
+        if (!claim_wait) return;   /* (each claim had its answer: ours run here) */
         for (i = 0; i < PC_ENE_SLOTS; i++)
             if (prov[i] && !hin_qt[i]) {   /* (a claim still waiting for our copy to be set up keeps it: hin_answer) */
                 if (i < (int)sys->ewk_n && (ene[i].flg & 0x81) == 0x1) { own_set(i, 1); own_ours(i, -1); n++; }
@@ -3412,17 +3412,17 @@ static void hin_answer(int i, int last)
     /* (the players' room files differ: the same type in another look is taken too, each game showing its own look; its state
        runs on its own motions and model, which ene_unpack checks, instead of jumping back to our start position) */
     other = (ep->id | ep->mdlver << 8) != e->u.gr.flg_b && ep->id == (e->u.gr.flg_b & 0xFF) && enemy_room_differs();
-    /* (protocol 56) only in a room the guest was in first (prov: ours wait for its claims); else the host's room: refused, and
-       the guest told (both came at once) */
-    ok = here && room_ready() && (prov[i] || (owned[i] && claim_wait)) && i < (int)sys->ewk_n && (ep->flg & 0x81) == 0x1 && ep->mode0 && (dead || !(ep->flg & 0x2)) &&
+    /* (protocol 56) one the guest runs as we see it (prov: we came into its room and ours wait for its claims; or one we handed
+       it); one we run is ours: refused (both came at once, or both loaded the room again at a Retry), its copy shows ours */
+    ok = here && room_ready() && (prov[i] || owned[i]) && i < (int)sys->ewk_n && (ep->flg & 0x81) == 0x1 && ep->mode0 && (dead || !(ep->flg & 0x2)) &&
          ((ep->id | ep->mdlver << 8) == e->u.gr.flg_b || other) && !own_grab[i] && own_child(ep) == c && !event_driven(ep) &&
          (c >= PC_ENE_SLOTS || (c < (int)sys->ewk_n && (ene[c].flg & 0x1)));
     r.type = EV_ENEOWN; r.idx = i; r.u.gr.child = c; r.u.gr.state = ok ? 4 : 2;
     r.u.gr.mdl = r.u.gr.cmdl = -1; r.u.gr.mnw = r.u.gr.cmnw = MNW_KEEP;
     queue_event(&r);
     if (!ok) {
-        if (here && !claim_wait && !prov[i]) { if (!host_verdict++) own_msg(0, ROOM_HOST, 5, frame_no); }
-        else if (here && i < (int)sys->ewk_n && (ep->flg & 0x1)) { own_set(i, 1); own_ours(i, -1); }   /* (ours: it shows as our game has it) */
+        if (here && i < (int)sys->ewk_n && (ep->flg & 0x1)) { own_set(i, 1); own_ours(i, -1); }   /* (ours, as our game has it: the guest's
+                                                    copy shows it from now, 2) */
         host_log("coop: hand-in: the guest's enemy %d (id %d model %d) is not ours here (id %d model %d): ours runs\n", i, e->u.gr.flg_b & 0xFF, e->u.gr.flg_b >> 8, ep->id, ep->mdlver);
         return;
     }
@@ -3464,7 +3464,7 @@ static void gone_frame(void)
        game state reloads our room) */
     if (!now && tx_in_game && room_ready() && !(sys->cb_flg & 0x5) && have_peer && have_rx && (rx.flags & PF_IN_GAME) && rx.busy != BUSY_DOOR && !partner_here())
         hin_alone = 1, claimed = 0;   /* (its next coming in is claimed again) */
-    if (now && !was && hin_alone && dflt == 1) claim_room();
+    if (now && !was && dflt == 1) claim_room();   /* (once per coming in: both came at once, both reloaded it at a Retry) */
     if (now) hin_alone = 0;
     if (!now || (gone_t && !--gone_t)) memset(gone_mask, 0, sizeof(gone_mask));
     was = now;

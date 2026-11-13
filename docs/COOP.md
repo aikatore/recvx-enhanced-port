@@ -933,8 +933,8 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   work of them stale: a Black Widow jumped 47 units). Who is first is decided at each room load (`coop_room_loaded`, also
   the same room again): the partner in the room then (in game there, or in its menu, the item box or a scene; not in a door:
   `BUSY_DOOR`) makes us second, else we run them. Both coming in at once: the host decides, it ran the room unless the guest
-  was in the room when the host's room loaded, and tells a guest that thought otherwise (EV_ENEOWN 5 `COOP_ROOM_HOST`; its
-  copies then show the host's). A slot that comes up later (an extra at the room's first frame, a spawned enemy, a slot
+  was in the room when the host's room loaded, and refuses the claims of a guest that thought otherwise (EV_ENEOWN 2, also
+  after both loaded the room again at a Retry; its copies then show the host's). A slot that comes up later (an extra at the room's first frame, a spawned enemy, a slot
   used again) is the room's runner's (`dflt`); a linked part (a zombie's upper half and limbs, a Black Widow's legs) always
   goes with its body. The records the room's scripts act on (`enemyopt_glue.c enemy_rec_scripted`) are the host's whenever it
   plays in the room: a guest that runs one hands it to the host when the host comes (its state rules: `hin_ok`, the table
