@@ -4657,6 +4657,9 @@ static void follow(void)
     if (!follow_pending || view) return;   /* a regroup waits until the host is back */
     if (partner_here()) { follow_pending = 0; return; }
     if (!tx_in_game || (sys->gm_flg & 0x9) || (sys->cb_flg & 0x1)) return;   /* as the door trigger */
+    /* not out of our game over: a regroup at the end of the host's scene after its Retry ("Game over: Both") pulled us
+       while gameover.c still ran (its face models half released) and crashed; its game state takes us there */
+    if (go_running()) return;
     if (plp->mode0 == 4 || plp->mode0 == 6) return;   /* not out of a grab */
     if (!room_exists(rx.stg, rx.rom, -1) || rx.pos < 0 || rx.pos >= 60) {   /* a room this build does not have: stay */
         host_log("coop: the host's room %d/%d entry %d does not exist here: not following\n", rx.stg, rx.rom, rx.pos);
