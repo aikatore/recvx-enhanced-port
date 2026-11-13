@@ -1456,6 +1456,8 @@ static int ene_modes_ok(const BH_PWORK* ep, int type, const unsigned char* m, co
     case 10: return x0[1] < 4 && ep->mdl[x0[1]].objP;   /* its flipbook frame: mlwP = &mdl[x0[1]] */
     case 15: return m[0] != 1 || m[1] < 5;         /* Move_func[5] by mode1 */
     case 23: return x0[0x69] < 6;
+    case 12: return (unsigned int)*(const int*)(x0 + 0x1C) <= 16;   /* the head's turn, divided over its frames left (en12 LookPlayaer: 16, counted down) */
+    case 16: return (unsigned int)*(const int*)(x0 + 0x64) <= 7;    /* his laser's points, EXP0_P(0..7) (en16 AddEffPos; effsub2 draws them) */
     case 71: return m[3] < 4 && ep->mdl[m[3]].objP;   /* its flipbook frame: mlwP = &mdl[mode3] */
     }
     return 1;
@@ -1776,7 +1778,7 @@ void coop_room_loaded(void)
     second = partner_present();
     run_room = coop_room_key() | my_case() << 16;
     owned_room = coop_room_key();
-    load_frame = frame_no;
+    load_frame = rdy_t = frame_no;
     host_coming = 0;
     dflt = second ? is_host : !is_host;
     for (i = 0; i < PC_ENE_SLOTS; i++) owned[i] = owned_was[i] = (unsigned char)dflt;
@@ -2847,6 +2849,11 @@ static void own_frame(void)
         host_log("coop: p3: test: give %d, hold %d, hit %d\n", P3_GIVE, P3_HOLD, P3_HIT);
     if (!coop_on || echo_delay || !sys || !plp || run_room < 0) return;
     me = coop_room_key() | my_case() << 16;
+    /* (protocol 57) the frames count from our first one in the room, not from its load: a door longer than 30 frames took the
+       enemy our entry event drives back at once, from where its record put it (the guest's state not applied yet: 55 units).
+       Before the returns below (and from coop_room_loaded): a room entered without a door (a loaded save, a scripted change)
+       had the grace of the last room used up */
+    if (!room_ready() || run_room != me) rdy_t = frame_no;
     /* the partner in the room our enemies are of (also while we are in a door out of it) */
     pres = have_peer && have_rx && (rx.stg * 256 + (unsigned char)rx.rom) == (run_room & 0xFFFF) && (!rx.rcase || rx.rcase - 1 == (run_room >> 16)) &&
            rx.busy != BUSY_DOOR && ((rx.flags & PF_IN_GAME) || rx.busy != BUSY_NONE);
@@ -2916,9 +2923,6 @@ static void own_frame(void)
     paused_n = paused ? paused_n + 1 : 0;
     leave = runs && (door || !tx_in_game || paused_n >= PAUSE_LEAVE) && !frozen;
     budget = (int)(COOP_RING * 3 / 4) - (int)(ring.next - ring.head);
-    /* (protocol 57) the frames count from our first one in the room, not from its load: a door longer than 30 frames took the
-       enemy our entry event drives back at once, from where its record put it (the guest's state not applied yet: 55 units) */
-    if (!room_ready() || run_room != me) rdy_t = frame_no;
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
         BH_PWORK* ep = &ene[i];
         if (own_grab[i] && !we_run(i) && (!(ep->flg & 0x1) || (frame_no - own_t[i] > 90 && !ply_busy(&ply2)))) own_grab[i] = 0;   /* (no word of its end) */

@@ -1370,16 +1370,19 @@ static int pick(int cur, float d0, float d1, int b0, int b1, int f0, int f1, int
     return coop_pick_target(cur, &in);
 }
 /* coop_ene_modes_ok: a partner's type and modes never index past the tables of the types that change hands
-   (en01 en01b en04 en05 en09 en26; protocol 54 the hand-in's en03 en06 en07 en08 en10 en11 en19 en20 en21 en22 en23 en24 en25), nor a
-   NULL entry (en19's Mode0[4]); what the game itself runs passes */
+   (en01 en01b en04 en05 en09 en26; protocol 54 the hand-in's en03 en06 en07 en08 en10 en11 en19 en20 en21 en22 en23 en24 en25;
+   protocol 57 the bosses en02 en12 en16 en17 en54 en55), nor a NULL entry (en19's Mode0[4], en16's [2..4], the knights' [2] [4]);
+   what the game itself runs passes */
 static void test_ene_modes(void)
 {
-    static const struct { int id, types, m2[4], brain; } T[] = {   /* the decomp's table sizes (Nage of en05: none) */
+    static const struct { int id, types, m2[4], brain, nul; } T[] = {   /* the decomp's table sizes (Nage of en05: none) */
         { 4, 3, { 13, 2, 3, 1 }, 12 }, { 5, 8, { 18, 1000, 14, 9 }, 0 }, { 9, 11, { 15, 2, 11, 1 }, 12 }, { 26, 1000, { 17, 1, 16, 1 }, 0 },
         { 3, 2, { 20, 2, 13, 6 }, 0 }, { 6, 1, { 11, 1, 2, 5 }, 0 }, { 7, 2, { 9, 2, 1000, 7 }, 0 }, { 8, 1000, { 3, 1000, 1000, 1000 }, 0 },
         { 10, 1000, { 3, 1000, 1000, 1000 }, 0 }, { 11, 5, { 10, 1000, 1000, 1000 }, 0 }, { 19, 3, { 1000, 1000, 1000, 1000 }, 0 },
         { 20, 1000, { 8, 1000, 1000, 1000 }, 0 }, { 21, 1000, { 9, 1, 1000, 1 }, 0 }, { 22, 1, { 7, 1000, 3, 2 }, 6 },
         { 23, 2, { 13, 1, 8, 4 }, 0 }, { 24, 1, { 6, 1000, 1000, 1000 }, 0 }, { 25, 1000, { 4, 1000, 1000, 1000 }, 0 },
+        { 2, 1000, { 6, 1000, 2, 2 }, 0 }, { 12, 2, { 8, 1, 1, 1 }, 0 }, { 16, 1000, { 3, 1000, 1000, 1000 }, 0, 0x1C },
+        { 17, 1000, { 7, 1000, 1, 1000 }, 7 }, { 54, 1, { 1, 1000, 1, 1000 }, 0, 0x14 }, { 55, 1, { 1, 1000, 1, 1000 }, 0, 0x14 },
     };
     const int nt = (int)(sizeof(T) / sizeof(T[0]));
     int k, type, m0, m1, m2, up, bad = 0;
@@ -1398,7 +1401,7 @@ static void test_ene_modes(void)
                     for (k = 0; k < nt; k++)
                         if (coop_ene_modes_ok(T[k].id, type, m0, m1, m2, 0) &&
                             (type >= T[k].types || m0 > 5 || (m0 >= 1 && m0 <= 4 && m2 >= T[k].m2[m0 - 1]) || (m0 == 1 && m1 == 1 && T[k].brain && m2 >= T[k].brain) ||
-                             (T[k].id == 19 && m0 == 4)))
+                             (T[k].id == 19 && m0 == 4) || (m0 < 8 && (T[k].nul >> m0 & 1))))
                             bad++;
                 }
     CHECK(bad == 0);
@@ -1412,7 +1415,18 @@ static void test_ene_modes(void)
     CHECK(coop_ene_modes_ok(7, 1, 1, 1, 8, 0) && !coop_ene_modes_ok(7, 1, 1, 1, 9, 0) && coop_ene_modes_ok(7, 1, 3, 0, 200, 0));   /* a bat: Damage has no table */
     CHECK(coop_ene_modes_ok(19, 2, 5, 0, 0, 0) && !coop_ene_modes_ok(19, 0, 4, 0, 0, 0) && !coop_ene_modes_ok(19, 3, 1, 0, 0, 0));   /* the Tyrant: NULL Mode0[4] */
     CHECK(!coop_ene_modes_ok(24, 0, 6, 0, 0, 0));   /* a baby spider inside its mother (Mode0[6]) never takes a partner's state */
-    CHECK(coop_ene_modes_ok(2, 255, 255, 255, 255, 0));   /* not a type that changes hands */
+    CHECK(coop_ene_modes_ok(13, 255, 255, 255, 255, 0));   /* not a type that changes hands */
+    /* (protocol 57) the bosses: their real modes pass, past their tables or a NULL Mode0 entry not */
+    CHECK(coop_ene_modes_ok(2, 1, 1, 1, 5, 0) && coop_ene_modes_ok(2, 0, 4, 0, 1, 0) && !coop_ene_modes_ok(2, 0, 1, 0, 6, 0) &&
+          !coop_ene_modes_ok(2, 0, 3, 0, 2, 0) && !coop_ene_modes_ok(2, 0, 6, 0, 0, 0));   /* the Gulp Worm */
+    CHECK(coop_ene_modes_ok(12, 1, 1, 1, 1, 0) && coop_ene_modes_ok(12, 0, 1, 0, 7, 0) && coop_ene_modes_ok(12, 0, 2, 0, 0, 0) &&
+          !coop_ene_modes_ok(12, 2, 1, 1, 1, 0) && !coop_ene_modes_ok(12, 0, 1, 0, 8, 0) && !coop_ene_modes_ok(12, 0, 4, 0, 1, 0));   /* Alexia 1 */
+    CHECK(coop_ene_modes_ok(16, 1, 1, 1, 2, 0) && coop_ene_modes_ok(16, 0, 5, 0, 9, 0) && !coop_ene_modes_ok(16, 0, 1, 0, 3, 0) &&
+          !coop_ene_modes_ok(16, 0, 2, 0, 0, 0) && !coop_ene_modes_ok(16, 0, 3, 0, 0, 0) && !coop_ene_modes_ok(16, 0, 4, 0, 0, 0));   /* Alfred */
+    CHECK(coop_ene_modes_ok(17, 0, 1, 1, 6, 0) && coop_ene_modes_ok(17, 0, 3, 0, 0, 0) && coop_ene_modes_ok(17, 0, 2, 0, 50, 0) &&
+          !coop_ene_modes_ok(17, 0, 1, 1, 7, 0) && !coop_ene_modes_ok(17, 0, 3, 0, 1, 0));   /* Steve */
+    CHECK(coop_ene_modes_ok(54, 0, 1, 0, 0, 0) && coop_ene_modes_ok(55, 0, 3, 0, 0, 0) && !coop_ene_modes_ok(54, 1, 1, 0, 0, 0) &&
+          !coop_ene_modes_ok(55, 0, 1, 0, 1, 0) && !coop_ene_modes_ok(54, 0, 2, 0, 0, 0) && !coop_ene_modes_ok(55, 0, 4, 0, 0, 0));   /* the knights */
 }
 
 static void test_target(void)
