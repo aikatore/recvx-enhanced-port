@@ -87,8 +87,9 @@ void coop_test_aids(CoopTest* t)
             int ln = snprintf(line, sizeof(line), "coop: test: enemies in %d/%d at host frame %u:", sys->stg_no, sys->rom_no, t->clock);
             for (k = 0; k < (int)sys->ewk_n && k < PC_ENE_SLOTS && ln < (int)sizeof(line) - 48; k++)
                 if ((ene[k].flg & 0x81) == 0x1 && ene[k].id >= 1 && ene[k].id <= 30)
-                    ln += snprintf(line + ln, sizeof(line) - ln, " %d:%d.%d@%.0f,%.0f,%d,%d%s%s", k, ene[k].id, ene[k].mdlver, ene[k].px, ene[k].pz, ene[k].hp, ene[k].mode0,
-                                   ene[k].flg & 0x2 ? ",D" : "", (ene[k].stflg & 0x1000000) || coop_enemy_waiting(k) ? ",H" : "");   /* (H: hidden, or waiting for the runner's state) */
+                    ln += snprintf(line + ln, sizeof(line) - ln, " %d:%d.%d@%.0f,%.0f,%d,%d%s%s%s", k, ene[k].id, ene[k].mdlver, ene[k].px, ene[k].pz, ene[k].hp, ene[k].mode0,
+                                   ene[k].flg & 0x2 ? ",D" : "", (ene[k].stflg & 0x1000000) || coop_enemy_waiting(k) ? ",H" : "",
+                                   t->owned[k] ? ",G" : "");   /* (H: hidden, or waiting for the runner's state; G: the guest's game runs it) */
             host_log("%s\n", line);
             ep = ep[n] == ',' ? ep + n + 1 : NULL;
         }
