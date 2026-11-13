@@ -4356,11 +4356,16 @@ static void trade_msg(const char* fmt, unsigned int entry);
 
 /* event.c bhItmCk: we said "yes" to an item whose spot flag the partner's pickup had set meanwhile (its EV_FLAGS
    came while our "Will you take it?" was open): the game added ours anyway and sets no flag, so no pickup of ours
-   is seen. Shared loot: the partner was first, a pool item goes back out. Key items stay (the partner's EV_PICKUP
-   gives one to both anyway), as does an event's item (its flag came from the partner's copy of the event). */
+   is seen. Shared loot: the partner was first, a pool item goes back out. Key items stay, and the partner's EV_PICKUP
+   of that spot (it gives one to both) gives none here (`late_both`, also for a spot whose flag the host's EV_FLAGS
+   brought while ours was not sent yet: before, both taking a key at once left the guest two), as does an event's item
+   (its flag came from the partner's copy of the event). */
+static short late_both[4];              /* 1 + it_flg bits of for-both items our game added late (the partner's pickup gives none) */
+static unsigned int late_n;
 void coop_item_late(int bit)
 {
     int item = sys ? (sys->sb_id == 130 ? 35 : sys->sb_id) : 0;
+    if (item > 0 && item < 156 && for_both(item)) late_both[late_n++ & 3] = (short)(bit + 1);
     if (item <= 0 || item >= 156 || individual() || for_both(item) || event_gave(item)) return;
     give_back(item, BACK_FIRST);
     host_log("coop: took item %d of flag %d, but the partner had taken it first: ours goes back\n", item, bit);
@@ -4563,6 +4568,8 @@ static int apply_session_event(const Event* e)
             if (w >= IT_FLG && w < IT_FLG + 16 && !individual() && (c.u.fl.set[j] & f[w] & ~last[w])) {   /* we took that spot too, not sent yet */
                 int item = sys->sb_id == 130 ? 35 : sys->sb_id;
                 if (is_host) raced[w - IT_FLG] |= c.u.fl.set[j] & f[w] & ~last[w];
+                else if (item > 0 && item < 156 && for_both(item))   /* ours is that one: the host's EV_PICKUP of it gives none */
+                    late_both[late_n++ & 3] = (short)((w - IT_FLG) * 32 + __builtin_clz(c.u.fl.set[j] & f[w] & ~last[w]) + 1);
                 else if (item > 0 && item < 156 && !for_both(item) && !event_gave(item)) {
                     give_back(item, BACK_FIRST);
                     host_log("coop: the host took item %d of flag word %d as we did: ours goes back\n", item, w);
@@ -4608,7 +4615,11 @@ static int apply_session_event(const Event* e)
             host_log("coop: the partner's pickup of item %d ignored (individual loot)\n", e->u.pk.item);
             return 1;
         }
-        if (e->u.pk.item && !give_item(e->u.pk.item)) {
+        for (i = 0; b >= 0 && i < 4 && late_both[i] != b + 1; i++) ;
+        if (b >= 0 && i < 4 && e->u.pk.item) {   /* (coop_item_late: ours is that one) */
+            late_both[i] = 0;
+            host_log("coop: the partner took item %d (flag %d) as our game added it: not twice\n", e->u.pk.item, b);
+        } else if (e->u.pk.item && !give_item(e->u.pk.item)) {
             /* no room: the item stays in our room (flag cleared here only, so the partner
                keeps it set; our later pickup of it is not passed on) */
             if (b >= 0 && b < 512) { f[w] &= ~m; last[w] &= ~m; left_behind[b >> 5] |= m; }

@@ -1378,7 +1378,9 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
     the same at once.
   * Giving back (`give_back`) waits until that player is in control (not in a menu or the status
     screen) and takes out the amount a pickup of that item adds (`getbulletmax`); "the partner took
-    <item> first". Key items are not given back (both get them anyway).
+    <item> first". Key items are not given back (both get them anyway); the partner's `EV_PICKUP`
+    of a spot whose key (or other for-both item) this game added too - late, or with its flag not
+    sent yet (`late_both`) - gives none, so both taking a key at once leaves each one copy.
 * **Duplicate Weapons and Ribbons** (shared loot, `OPT_IMPORTANT`): the kinds in `important_kinds[]`
   (`coop_glue.c`: weapons, `itemdata[].type & 0x1`; ink ribbons, item 31). `bhItmCk` reports each pickup
   (`coop_item_taken`: its `it_flg` bit and trigger); one of those kinds marks the bit in
@@ -1900,7 +1902,6 @@ the session's code. A takeover needs a non-zero tag that matches.
   "Yes" presses: a player still in the status screen after taking has not sent its pickup yet.
 * Shared loot, a pool item from the partner's event that this game replayed: given back by amount as
   above, only while the replay's window is open.
-* A key item both take at the same moment may end up twice in the joiner's inventory.
 * A key put into the item box is not "used up" for the partner.
 * Two voices of the partner within one lost datagram's frames play only the last.
 * Enemy options changed in game: a joiner that loads a room before the change arrives builds that
