@@ -1230,7 +1230,9 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   `En19ActTbl` row. Up to 0x204 bytes of `exp0` (the Tyrant's); an enemy without a child sends its own size (protocol
   54: 1408 + its `exp0`, a zombie with its upper half 2 x 1924), at most half the event ring per frame (a room of 72 ants
   goes over a few frames). The receiver takes it only within its type's tables (`coop_ene_modes_ok`, and `ene_modes_ok`'s
-  checks of the work: a spider's surface, a bat's place on the player, the ants' flipbook frames). In 0/2 with `ev_flg`
+  checks of the work: a spider's surface, a bat's place on the player, the ants' flipbook frames; the bosses' since protocol
+  57: their Mode0 and per-mode2 tables, Alfred's and the knights' NULL Mode0 entries, Alexia 1's head-turn count, Alfred's
+  laser points). In 0/2 with `ev_flg`
   104 the host's kill of a handed-in walking zombie sets its `ed_flg` through the room's `DieCk` in both games. Logged: "own:
   the host comes into the room we ran alone: N of our enemies go on as they are, D of them dead", "own: enemy N (id T)
   handed to the partner's game (...)".

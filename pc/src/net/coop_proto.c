@@ -1038,8 +1038,9 @@ int coop_pick_target(int cur, const CoopTgtIn* in)
 int coop_ene_modes_ok(int id, int type, int m0, int m1, int m2, int upper)
 {
     /* per mode0 1..4 (Move, Nage, Damage, Die) the size of the table mode2 indexes (255: none); Init (0) and the event
-       (5) index none by mode2. brain: mode0 1 with mode1 1 runs the Brain first, its table by mode2 too */
-    static const struct { uint8_t id, types, m2[4], brain; } t[] = {
+       (5) index none by mode2. brain: mode0 1 with mode1 1 runs the Brain first, its table by mode2 too. nul: the mode0s
+       whose Mode0[] entry is NULL (bit per mode0) */
+    static const struct { uint8_t id, types, m2[4], brain, nul; } t[] = {
         { 4, 3, { 13, 2, 3, 1 }, 12 },      /* en04: Move/Nage/Damage/DieType[3], BrainMode2[12], MoveMode2[13] ... */
         { 5, 8, { 18, 255, 14, 9 }, 0 },    /* en05: BrainType[8] (mode1 1, by type), MoveMode2[18], DamageMode2[14], DeadMode2[9] */
         { 9, 11, { 15, 2, 11, 1 }, 12 },    /* en09: MoveType[11], BrainMode2[12], MoveMode2[15] ... */
@@ -1052,7 +1053,7 @@ int coop_ene_modes_ok(int id, int type, int m0, int m1, int m2, int upper)
         { 10, 255, { 3, 255, 255, 255 }, 0 },  /* en10 */
         { 11, 5, { 10, 255, 255, 255 }, 0 },   /* en11: its aim by type 0..4 */
         { 15, 255, { 255, 255, 255, 255 }, 0 },   /* en15: Move_func[5] by mode1 (coop_glue.c ene_modes_ok) */
-        { 19, 3, { 255, 255, 255, 255 }, 0 },  /* en19: BrainType[3], CheckDmgLvl[3] ... by type; Mode0[4] is NULL (below) */
+        { 19, 3, { 255, 255, 255, 255 }, 0, 1 << 4 },   /* en19: BrainType[3], CheckDmgLvl[3] ... by type; Mode0[4] is NULL */
         { 20, 255, { 8, 255, 255, 255 }, 0 },  /* en20 */
         { 21, 255, { 9, 1, 255, 1 }, 0 },      /* en21: its Damage has no table */
         { 22, 1, { 7, 255, 3, 2 }, 6 },        /* en22: InitType[1] ... by type, BrainMode2[6] */
@@ -1060,11 +1061,18 @@ int coop_ene_modes_ok(int id, int type, int m0, int m1, int m2, int upper)
         { 24, 1, { 6, 255, 255, 255 }, 0 },    /* en24: BrainType[1] by type; mode0 6 (in its mother) is past the check's 5 */
         { 25, 255, { 4, 255, 255, 255 }, 0 },  /* en25 */
         { 71, 255, { 255, 255, 255, 255 }, 0 },   /* en71: all empty (its flipbook: coop_glue.c) */
+        /* protocol 57, the bosses (own_types p3 2; their work indices: coop_glue.c ene_modes_ok) */
+        { 2, 255, { 6, 255, 2, 2 }, 0 },       /* en02 Gulp Worm: MoveMode2[6], DamageMode2[2], DeadMode2[2]; its Nage is empty */
+        { 12, 2, { 8, 1, 1, 1 }, 0 },          /* en12 Alexia 1: BrainType[2] by type (mode1 != 0), MoveMode2[8], Nage/Damage/DieMode2[1] */
+        { 16, 255, { 3, 255, 255, 255 }, 0, 0x1C },   /* en16 Alfred: MoveMode2[3]; Mode0[2..4] are NULL (BrainType[0] only) */
+        { 17, 255, { 7, 255, 1, 255 }, 7 },    /* en17 Steve: BrainMode2[7], MoveMode2[7], DamageMode2[1] (its *Type[1] by 0) */
+        { 54, 1, { 1, 255, 1, 255 }, 0, 0x14 },   /* en54/55 knights: MoveType/DamageType[1] by type, Move/DamageMode2[1]; */
+        { 55, 1, { 1, 255, 1, 255 }, 0, 0x14 },   /* Mode0[2] and [4] are NULL */
     };
     unsigned int k;
     for (k = 0; k < sizeof(t) / sizeof(t[0]) && t[k].id != id; k++) {}
     if (id != 1 && k == sizeof(t) / sizeof(t[0])) return 1;
-    if (m0 < 0 || m0 > 5 || m1 < 0 || m2 < 0 || type < 0 || (id == 19 && m0 == 4)) return 0;
+    if (m0 < 0 || m0 > 5 || m1 < 0 || m2 < 0 || type < 0 || (id != 1 && t[k].nul >> m0 & 1)) return 0;
     if (id == 1) {   /* en01: the *Type[16]; types 2 3 6 7 9 (MVType02, DGType02) add 10 to mode2 when moving or hit */
         static const uint8_t n[4] = { 17, 4, 17, 4 };
         static const uint32_t nul[4] = { 1u << 13, 1u << 3, 3u << 12, 0 };   /* MoveMode2W[13], NageMode2W[3], DamageMode2W[12..13] */
