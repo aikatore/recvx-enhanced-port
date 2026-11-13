@@ -215,6 +215,7 @@ int   pc_biorand_box_any(void);                /* ... sub1.c ItemBoxChange: in a
 int   pc_battle_unlocked(void);               /* host.c: setting "Battle Game unlocked" (event.c bhCk: every Battle Game character) */
 int   pc_difficulty_select(void);             /* host.c: setting "Difficulty select" (adv.c CheckButton: NEW GAME opens the difficulty menu) */
 void  coop_fx_particle(struct BH_PWORK* ewP, int lnk, const void* offP, const void* dirP, unsigned int col, unsigned int dst, int typ, int mk2);   /* effsub3.c bhSetEffParticle(Mk2) */
+void  coop_fx_pool(struct BH_PWORK* ewP, const void* posP, int ay, const void* tabP, int bank);   /* effsub3.c bhSetBloodPoolLnk (protocol 57) */
 /* "You appear as" (pc/glue/actor_glue.c): another model drawn in place of the player / of the
    played character's cutscene double; appear_on: in use without co-op (coop_control_remote runs) */
 extern int actor_on, appear_on;

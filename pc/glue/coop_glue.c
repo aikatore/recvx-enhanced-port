@@ -99,6 +99,7 @@ static O_WRK p2obj[3];                  /* [2]: hair / Wesker's piece, as sys->o
 static ML_WORK no_model;                /* stands in for a weapon slot that has none yet */
 static int p2_chr = -1, p2_costume, p2_mfile = -1, p2_wpn = -1, p2_fail = -1, p2_show, p2_drawn;
 static int p2_busy, p2_seen_room = -1;  /* the partner is busy (BUSY_*); the room it was last shown in */
+static int p2_seen_gen = -1;            /* ... and its room load (enemy_room_gen) */
 static float p2_pitch;                  /* the partner's aim pitch shown (radians, Pose.pflg) */
 static int frozen;                      /* both players are in the trade screen: the enemies stand still (coop_trade_frozen) */
 
@@ -747,7 +748,12 @@ void coop_control_remote(void)
         load_weapon(rx.wpnr_no);
         if (rx.wpnr_no >= 0 && rx.wpnr_no < 23 && WpnTab[rx.wpnr_no].seno0) partner_arms(WpnTab[rx.wpnr_no].snd_wpno);   /* before its first shot */
     }
-    if (p2_busy && p2_busy != BUSY_TRADE) { set = ply2.mnwP; mtn = ply2.mtn_no; goto pose; }   /* the last pose */
+    if (p2_busy && p2_busy != BUSY_TRADE) {   /* the last pose */
+        /* (not one of another room load: a room or an enemy motion set of the load before it, freed - a Retry of the room, the
+           guest crashed in bhSetMotion showing the partner after the host's game over in 9/32) */
+        if (p2_seen_gen != enemy_room_gen && ply2.mnwP != ply2.mnwPb) return;
+        set = ply2.mnwP; mtn = ply2.mtn_no; goto pose;
+    }
 
     set = rx.mset == MSET_OWN ? ply2.mnwPb : rx.mset == MSET_ROOM ? sys->rmthp :
           rx.mset >= 0 && rx.mset < (int)sys->ewk_n && rx.mset < PC_ENE_SLOTS && (ene[rx.mset].flg & 0x1) ? ene[rx.mset].mnwP : NULL;
@@ -762,6 +768,7 @@ void coop_control_remote(void)
         ply2.hokan_rate = rx.hokan_rate;
     }
     p2_seen_room = coop_room_key();
+    p2_seen_gen = enemy_room_gen;
     ply2.mnwP = set;
     ply2.mtn_no = mtn;
     ply2.frm_no = rx.frm_no;
@@ -998,6 +1005,7 @@ static unsigned int pose_seq[PC_ENE_SLOTS];       /* guest: the host frame of th
 static unsigned char step_ran[PC_ENE_SLOTS];      /* the slot's last step ran its AI here (else a puppet's) */
 static unsigned char gave_grab[PC_ENE_SLOTS];     /* its step here just handed its grab of the stand-in over (grab_out) */
 static CoopXfer estate_x;               /* EV_ESTATE chunks into estate_zin[] */
+static int aid_m12 = -1;                /* test aid RECVX_COOP_NO_EMBRACE: Alexia 1's modes before her step (coop_enemy_end) */
 static unsigned short xfer_tid;         /* our last transfer id (blob, estate) */
 static void queue_event(Event* e);
 static int same_room(void);
@@ -1060,12 +1068,14 @@ static unsigned char take_how[PC_ENE_SLOTS];     /* ... 1 the giver left the roo
 static uint32_t keep_from[PC_ENE_SLOTS];         /* the partner's first frame of its run of a slot we stopped running (EV_ENEOWN 6) */
 static unsigned char seen[PC_ENE_SLOTS];         /* this room load: the slot showed a state, ours or the partner's (else hidden) */
 static unsigned char hid[PC_ENE_SLOTS];          /* hidden by us: 1 | its mdflg 1 << 1 | its flg 0x60, put back */
+static unsigned char evd[PC_ENE_SLOTS];          /* guest: an event of ours drives the partner's enemy: it took the runner's state, runs here */
 static unsigned char act_was[PC_ENE_SLOTS];      /* the slot was in use at our last frame */
 static unsigned char prov[PC_ENE_SLOTS];         /* host: the guest's until its claims say (we came into the room it ran) */
 static int claim_wait;                            /* host: frames left to wait for the guest's claims */
 static int claimed, host_verdict;                /* guest: claims sent for this room load; host: our verdict sent */
 static int run_room = -1;                        /* the room (key | case << 16) of our ownership table: the room load whose enemies they are */
 static unsigned int load_frame;                  /* our frame of that room load */
+static unsigned int rdy_t;                       /* host: our last frame before the room was ready (own_frame) */
 #define TAKE_STALE 15                   /* frames (own_frame) */
 #define PAUSE_LEAVE 8                            /* frames our game stops its enemies (a scene, a message) before we hand them over */
 #define AWAY_GRACE 45                            /* frames the partner may be away (a door's hand-over on its way) before we run all */
@@ -1119,7 +1129,11 @@ static void owners_sync(void)
         if (we_run(i) || !sys || i >= (int)sys->ewk_n || !(ene[i].flg & 0x1) || !playout.started || !P || frame_no - run_q[i][0] > 2) continue;
         own_win[i] = 1; win_st[2]++;
         for (k = 1; k >= 0; k--) {   /* the older one a frame before */
-            EneSnap e = run_snap[i][k];
+            /* (protocol 57) a grab we handed over (own_grab: grab_out) holds the zombie where it grabbed: seeded still (the newest
+               state twice), not carried on at its lunge's speed - when the victim's game refuses the grab (another zombie holds
+               it already) ours runs it on from where it stood. Before, it was carried on for a few frames and stepped back
+               3 to 4 units when the refusal came */
+            EneSnap e = run_snap[i][own_grab[i] ? 0 : k];
             uint32_t at = P - (run_q[i][0] - run_q[i][k]);
             if (k && run_q[i][1] + 1 != run_q[i][0]) continue;
             if (e.mtn_seq) e.mtn_seq = at - (run_q[i][k] - e.mtn_seq);   /* (the anchor in the partner's frames) */
@@ -1161,6 +1175,7 @@ static int finite3(float x, float y, float z)
 {
     return fabsf(x) < 1e6f && fabsf(y) < 1e6f && fabsf(z) < 1e6f;
 }
+static int fins_n(const float* f, int n) { while (n--) if (!(fabsf(*f++) < 1e6f)) return 0; return 1; }
 
 /* Protocol 48: the types whose state can change hands (docs/COOP.md "Engaged-player ownership": which types and why the
    others stay with the host); protocol 54: every type the hand-in takes over (docs/COOP.md "The hand-in"). exp0: the size
@@ -1170,7 +1185,7 @@ static int finite3(float x, float y, float z)
    on), which go as their table and index (atr_enc) and become the receiver's same record. p3: Shared Enemy Control
    hands it over between attacks (own_movable); the others change hands only at the hand-in. Before (protocol 47) every
    hand-over copied the zombie's 0xB0 bytes less a 0x24-byte pointer head, which only the zombie has. */
-typedef struct { unsigned char id, p3; unsigned short exp0, keep[6][2], atr[3]; } OwnType;
+typedef struct { unsigned char id, p3; unsigned short exp0, keep[6][2], atr[3]; unsigned int rmf; } OwnType;   /* p3 2: a boss (rmf below) */
 static const OwnType own_types[] = {
     { 1, 1, 0xB0, { { 0x00, 0x28 }, { 0x74, 0x78 } } },     /* zombie: 0x00..0x23 its parts (en01 bhEne01_Init), 0x24 its eff[] shadow,
                                                                0x74 the stairs (ATR_WORK*: their in-use mark is the setter's) */
@@ -1180,8 +1195,9 @@ static const OwnType own_types[] = {
     { 9, 1, 0x7C, { { 0x50, 0x58 } } },                     /* Bandersnatch: 0x50 wall, 0x54 jump or climb target (ATR_WORK*) */
     { 26, 1, 0xA0, { { 0x70, 0x74 } } },                    /* anatomist: 0x70 (ATR_WORK*) */
     /* the hand-in only (protocol 54) */
-    { 3, 0, 0xF0, { { 0x80, 0xE4 } }, { 0x60, 0x64 } },     /* Black Widow (en03): 0x80 its 8 legs, 0xA8 its 15 dormant babies; 0x60 the
-                                                               surface it is on, 0x64 the one it climbs to */
+    { 3, 0, 0xF0, { { 0x80, 0xA0 }, { 0xA8, 0xE4 } }, { 0x60, 0x64 } },   /* Black Widow (en03): 0x80 its 8 legs, 0xA8 its 15 dormant babies; 0x60 the
+                                                               surface it is on, 0x64 the one it climbs to; 0xA0 its legs off go along
+                                                               (protocol 57, bw_pack) */
     { 6, 0, 0xB0, { { 0x18, 0x1C }, { 0x34, 0x6C }, { 0x84, 0x88 } } },   /* moth (en06): 0x18 its last wall hit, 0x34 its 14 wing parts,
                                                                0x84 its eff[] shadow */
     { 7, 0, 0x44, { { 0 } }, { 0x20, 0x24 } },              /* bat (en07): the floor or ceiling box it hangs from, and its copy */
@@ -1202,6 +1218,20 @@ static const OwnType own_types[] = {
     { 24, 0, 0x48, { { 0x28, 0x48 } } },                    /* baby spider (en24): 0x28 its own game's player's feet (the stomp) */
     { 25, 0, 0x0C, { { 0x04, 0x0C } } },                    /* ceiling trap (en25): 0x04 its moving wall, 0x08 its own game's crush */
     { 71, 0, 0x04 },                                        /* ant C (en71) */
+    /* (protocol 57) bosses: their state goes only when their runner leaves the room through a door (p3 2: never at the hand-in,
+       in a menu or by Shared Enemy Control - their rooms' scripts drive the fights); rmf: the bits of sys->rm_flg their steps set
+       for the room's script (they go along). Before, they went without their state and the partner's game ran them on from
+       their puppet's modes with its own stale work (the Gulp Worm jumped 188 units, a fight could start again). The works from
+       their en*.c Inits; the parts (Gulp Worm's segments, Steve's arms, the knights' links) are the receiver's own children */
+    { 2, 2, 0x90, { { 0x28, 0x70 }, { 0x7C, 0x80 } }, { 0x74 }, 0x1 },   /* Gulp Worm (en02): 0x28 its 18 segments, 0x74 a floor (memo),
+                                                               0x7C its moving wall; rm_flg 0x1 (MV00 clears, MV02/03 set) */
+    { 12, 2, 0xB0, { { 0x18, 0x1C }, { 0x20, 0x24 }, { 0x28, 0x68 } }, { 0 }, 0x1 },   /* Alexia 1 (en12): 0x18 a joint_tree row (set from
+                                                               her motion), 0x20 her fire manager (eff[] 262), 0x28 her 16 fires (274);
+                                                               rm_flg 0x1 (MV07) */
+    { 16, 2, 0x68, { { 0x00, 0x04 } } },                    /* Alfred (en16): 0x00 his laser sight (eff[] 270) */
+    { 17, 2, 0x54, { { 0x40, 0x44 } } },                    /* Monster Steve (en17): 0x40 a wall (rewritten every step); his arms are
+                                                               exp2/exp3 (BH_PWORK: ours), exp1 his trails (drawing only: ours) */
+    { 54, 2, 0 }, { 55, 2, 0 },                             /* Steve's knights (en54/55): no work */
 };
 static const OwnType* own_type(const BH_PWORK* ep)
 {
@@ -1210,7 +1240,9 @@ static const OwnType* own_type(const BH_PWORK* ep)
         if (own_types[k].id == ep->id) return &own_types[k];
     return NULL;
 }
-static int own_p3(const BH_PWORK* ep) { const OwnType* t = own_type(ep); return t && t->p3; }
+static int own_p3(const BH_PWORK* ep) { const OwnType* t = own_type(ep); return t && t->p3 == 1; }
+/* (protocol 57) a boss of own_types: goes with its state only when its runner leaves through a door */
+static int own_boss(const BH_PWORK* ep) { const OwnType* t = own_type(ep); return t && t->p3 == 2; }
 /* its work is there (the fish has none) */
 static int own_work(const BH_PWORK* ep) { const OwnType* t = own_type(ep); return t && (!t->exp0 || ep->exp0); }
 static int own_kept(const OwnType* t, unsigned int off)
@@ -1283,8 +1315,86 @@ static int child_here(int i, int c)
     int h = i >= 0 && i < PC_ENE_SLOTS ? own_child(&ene[i]) : 255;
     return c < PC_ENE_SLOTS && h < PC_ENE_SLOTS ? h : c;
 }
-/* bytes of one enemy's state: its work and exp0; a zombie's goes with its upper half's after ESTATE_ENE (ESTATE_PLY) */
-static int ene_len(const BH_PWORK* ep, int c) { const OwnType* t = own_type(ep); return c < PC_ENE_SLOTS ? ESTATE_PLY : (int)sizeof(BH_PWORK) + (t ? t->exp0 : 0); }
+/* (protocol 57) a Black Widow's legs (en03: 8 linked works, id 31, at exp0 0x80; each moves the object BrokenParts[k] of its
+   body's model): a leg shot off (bhEne03_DamageInit: exp0 0xA0 + k, its object's matrix set free, owP flg 0x3 and its two
+   children's 0x2; on its death every leg, bhEne03_DD03) flies, lands and lies by its own step (bhEne03s_MV00) on that matrix.
+   A leg off goes with its body's state as a record after the body's (ESTATE_ENE): its object's flags and matrix, the leg's
+   modes, counters, place and its work (0xD4 bytes of plain values). Before, a Black Widow with a leg off went without its
+   state (the receiver's would have had the leg back) and ran on from its puppet's pose with its own stale work */
+#define BW_LEGS 8
+#define BW_LEG_X0 0xD4
+typedef struct { unsigned char on, oflg[3], mode[4]; int ct0, ct3, azp; float p[3], ar[4], mtx[16]; unsigned char x0[BW_LEG_X0]; } BwLeg;
+static const unsigned char bw_parts[BW_LEGS] = { 10, 16, 22, 28, 7, 13, 19, 25 };   /* en03.c BrokenParts */
+static BH_PWORK* bw_leg(const BH_PWORK* ep, int k)
+{
+    BH_PWORK* l = ep->exp0 ? *(BH_PWORK**)(ep->exp0 + 0x80 + 4 * k) : NULL;
+    int s = ene_slot(l);
+    return s < PC_ENE_SLOTS && (const char*)l == (const char*)&ene[s] && l->id == 31 && l->lkwkp == (const unsigned char*)ep && l->exp0 ? l : NULL;
+}
+static O_WORK* bw_obj(const BH_PWORK* ep, int k) { return ep->mlwP && ep->mlwP->owP && ep->mlwP->obj_num > bw_parts[k] + 2 ? &ep->mlwP->owP[bw_parts[k]] : NULL; }
+static void bw_pack(const BH_PWORK* ep, unsigned char* out)
+{
+    int k, j;
+    for (k = 0; k < BW_LEGS; k++) {
+        BH_PWORK* l = bw_leg(ep, k);
+        O_WORK* o = bw_obj(ep, k);
+        BwLeg r;
+        if (!l || !o || !(o->flg & 0x1)) continue;   /* (on: its object's matrix is free, the leg is off) */
+        memset(&r, 0, sizeof(r));
+        r.on = 1;
+        for (j = 0; j < 3; j++) r.oflg[j] = (unsigned char)(o[j].flg & 0x3);
+        r.mode[0] = l->mode0; r.mode[1] = l->mode1; r.mode[2] = l->mode2; r.mode[3] = l->mode3;
+        r.ct0 = l->ct0; r.ct3 = l->ct3; r.azp = l->azp;
+        r.p[0] = l->px; r.p[1] = l->py; r.p[2] = l->pz;
+        r.ar[0] = l->ar; r.ar[1] = l->ah; r.ar[2] = l->car; r.ar[3] = l->cah;
+        memcpy(r.mtx, o->mtx, sizeof(r.mtx));
+        memcpy(r.x0, l->exp0, BW_LEG_X0);
+        memcpy(out + k * sizeof(BwLeg), &r, sizeof(r));
+        host_log("coop: Black Widow %d: its leg %d (off, mode %d.%d) goes with its state\n", (int)(ep - ene), k, r.mode[0], r.mode[3]);
+    }
+}
+static int bw_legs_ok(const BH_PWORK* ep, const unsigned char* in)
+{
+    int k;
+    for (k = 0; k < BW_LEGS; k++) {
+        BwLeg r;
+        memcpy(&r, in + k * sizeof(BwLeg), sizeof(r));
+        if (!r.on) continue;
+        if (!bw_leg(ep, k) || !bw_obj(ep, k) || r.on != 1 || r.mode[0] < 1 || r.mode[0] > 2 || r.mode[2] || r.mode[3] > 3 ||
+            !finite3(r.p[0], r.p[1], r.p[2]) || !fins_n(r.ar, 4) || !fins_n(r.mtx, 16) || !fins_n((const float*)(r.x0 + 4), (0xC4 - 4) / 4) ||
+            (unsigned int)*(const int*)(r.x0 + 0xC4) > 2)
+            return 0;
+    }
+    return 1;
+}
+static void bw_unpack(BH_PWORK* ep, const unsigned char* in)
+{
+    int k, j;
+    for (k = 0; k < BW_LEGS; k++) {
+        BH_PWORK* l = bw_leg(ep, k);
+        O_WORK* o = bw_obj(ep, k);
+        BwLeg r;
+        memcpy(&r, in + k * sizeof(BwLeg), sizeof(r));
+        if (!r.on || !l || !o) continue;
+        for (j = 0; j < 3; j++) o[j].flg |= r.oflg[j];
+        memcpy(o->mtx, r.mtx, sizeof(r.mtx));
+        l->mode0 = r.mode[0]; l->mode1 = r.mode[1]; l->mode2 = r.mode[2]; l->mode3 = r.mode[3];
+        l->ct0 = r.ct0; l->ct3 = r.ct3; l->azp = r.azp;
+        l->px = r.p[0]; l->py = r.p[1]; l->pz = r.p[2];
+        l->ar = r.ar[0]; l->ah = r.ar[1]; l->car = r.ar[2]; l->cah = r.ar[3];
+        memcpy(l->exp0, r.x0, BW_LEG_X0);
+        ep->mdflg |= 0x20;
+        host_log("coop: Black Widow %d: its leg %d is off here too (mode %d.%d)\n", (int)(ep - ene), k, r.mode[0], r.mode[3]);
+    }
+}
+_Static_assert(ESTATE_ENE + BW_LEGS * (int)sizeof(BwLeg) <= ESTATE_SIZE, "EV_ESTATE: a Black Widow with its legs");
+/* bytes of one enemy's state: its work and exp0; a zombie's goes with its upper half's after ESTATE_ENE (ESTATE_PLY), a Black
+   Widow with its legs off (protocol 57) */
+static int ene_len(const BH_PWORK* ep, int c)
+{
+    const OwnType* t = own_type(ep);
+    return c < PC_ENE_SLOTS ? ESTATE_PLY : ep->id == 3 ? ESTATE_ENE + BW_LEGS * (int)sizeof(BwLeg) : (int)sizeof(BH_PWORK) + (t ? t->exp0 + (t->rmf ? 4 : 0) : 0);
+}
 static void ene_mask(unsigned char* w);
 static void ene_pack(BH_PWORK* ep, unsigned char* out)
 {
@@ -1298,6 +1408,8 @@ static void ene_pack(BH_PWORK* ep, unsigned char* out)
     memcpy(x, ep->exp0, t->exp0);
     for (k = 0; k < 3 && t->atr[k]; k++) { uint32_t w = atr_enc(*(ATR_WORK**)(ep->exp0 + t->atr[k])); memcpy(x + t->atr[k], &w, 4); }
     if (ep->id == 19) { uint32_t w = ty_act_enc(*(void**)(ep->exp0 + 0x48)); memcpy(x + 0x48, &w, 4); }
+    if (ep->id == 3) bw_pack(ep, out + ESTATE_ENE);
+    if (t->rmf) { uint32_t w = sys->rm_flg & t->rmf; memcpy(x + t->exp0, &w, 4); }   /* (a boss: its bits of the room's flags) */
 }
 
 /* The sender's enemy state over ours, by an allowlist of BH_PWORK fields: the state the enemy's
@@ -1360,12 +1472,17 @@ static int ene_unpack(BH_PWORK* ep, const unsigned char* in, int mdl, int mnw)
     if (!finite3(r->px, r->py, r->pz) || !finite3(r->pxb, r->pyb, r->pzb) || r->hp < -10000 || r->hp > 100000 ||
         !ene_modes_ok(ep, r->type, &r->mode0, ep->exp0 && t ? x : NULL) || (mdl >= 0 && (mdl >= 16 || !ep->mdl[mdl].objP)) ||
         /* (no motion set: the baby spider's frm_no counts its model frames, mdl[frm_no + 2] of its mother's) */
-        (!set && !ep->mnwP && !ep->mnwPb ? r->frm_no < 0 : !mtn_ok(ep, set, r->mtn_no, r->frm_no)))
+        (!set && !ep->mnwP && !ep->mnwPb ? r->frm_no < 0 : !mtn_ok(ep, set, r->mtn_no, r->frm_no))) {
+        if (trace) fprintf(stderr, "coop: enemy %d (id %d): its state does not fit (modes %d %d %d %d type %d, motion %u frame %d of set %d: %s, model %d)\n", (int)(ep - ene), ep->id,
+                           r->mode0, r->mode1, r->mode2, r->mode3, r->type, r->mtn_no, r->frm_no >> 16, mnw,
+                           set && mtn_ok(ep, set, r->mtn_no, r->frm_no) ? "here" : "not here", mdl);
         return 0;
+    }
     for (k = 0; ep->exp0 && t && k < 3 && t->atr[k]; k++) {   /* its collision records here, or it is kept as ours */
         memcpy(&w, x + t->atr[k], 4);
         if (!atr_dec(w, &a[k])) a[k] = *(ATR_WORK**)(ep->exp0 + t->atr[k]);
     }
+    if (ep->id == 3 && ep->exp0 && t && !bw_legs_ok(ep, in + ESTATE_ENE)) return 0;
     if (ep->id == 19 && ep->exp0) {   /* the Tyrant: its action's code, and its claws' effects if it shows them (en19 Mv13/14) */
         memcpy(&w, x + 0x48, 4);
         if (w > 50 || ((*(const int*)(x + 0x40) & 0x80000008) == 0x80000008 && !(*(void**)(ep->exp0 + 0x1DC) && *(void**)(ep->exp0 + 0x1E0)))) return 0;
@@ -1384,7 +1501,9 @@ static int ene_unpack(BH_PWORK* ep, const unsigned char* in, int mdl, int mnw)
         for (k = 0; k < 3 && t->atr[k]; k++) *(ATR_WORK**)(ep->exp0 + t->atr[k]) = a[k];
         if (ep->id == 19) { memcpy(&w, x + 0x48, 4); *(void**)(ep->exp0 + 0x48) = w ? En19ActTbl[w - 1].prgP : NULL; }
         if (ep->id == 22) *(unsigned int*)(ep->exp0 + 8) = (*(unsigned int*)(ep->exp0 + 8) & ~0x81000u) | keep22;   /* (its light: ours) */
+        if (t->rmf) { memcpy(&w, x + t->exp0, 4); sys->rm_flg = (sys->rm_flg & ~t->rmf) | (w & t->rmf); }
     }
+    if (ep->id == 3) bw_unpack(ep, in + ESTATE_ENE);
     if (ep->id == 9 && ep->mlwP && ep->mlwP->objP && ep->mlwP->obj_num > 10)   /* the Bandersnatch's arm as its rest lengths */
         for (k = 0; k < 4; k++) ep->mlwP->objP[7 + k].pos[0] = *(float*)(ep->exp0 + 4 * k);   /* (en09 MV00; a puppet never moved it) */
     return 1;
@@ -1480,7 +1599,7 @@ static void larva_laid(unsigned int bits, int partner)
    linked lower body runs the same modes (en01 copies them at every change): it goes along. */
 static void unhold(BH_PWORK* ep, int dead)
 {
-    if (!dead && ep->id != 1 && own_type(ep) && ep->mode0) {   /* (Phase 3: another type the partner's game ran, back from a puppet's
+    if (!dead && ep->id != 1 && own_type(ep) && !own_boss(ep) && ep->mode0) {   /* (Phase 3: another type the partner's game ran, back from a puppet's
                                                                state - its own work is as it last ran here: its Move from the start) */
         *(int*)&ep->mode0 = 1;
         return;
@@ -1626,7 +1745,7 @@ static void own_reset(int put)
     memset(owned_child, 255, sizeof(owned_child));
     memset(own_grab, 0, sizeof(own_grab)); memset(own_ms, 0, sizeof(own_ms)); memset(own_wait, 0, sizeof(own_wait));
     memset(giving, 0, sizeof(giving)); memset(take_at, 0, sizeof(take_at)); memset(take_how, 0, sizeof(take_how));
-    memset(keep_from, 0, sizeof(keep_from)); memset(seen, 0, sizeof(seen)); memset(hid, 0, sizeof(hid));
+    memset(keep_from, 0, sizeof(keep_from)); memset(seen, 0, sizeof(seen)); memset(hid, 0, sizeof(hid)); memset(evd, 0, sizeof(evd));
     memset(act_was, 0, sizeof(act_was)); memset(prov, 0, sizeof(prov)); memset(p3_leave, 0, sizeof(p3_leave)); memset(p3_want, 0, sizeof(p3_want));
     memset(hin_t, 0, sizeof(hin_t)); memset(hin_qt, 0, sizeof(hin_qt)); memset(p3_ref_t, 0, sizeof(p3_ref_t));
     defer_n = 0;
@@ -2334,6 +2453,7 @@ static int enemy_begin(BH_PWORK* ep)
             return 1;
         }
         if (ep->mode0) fx_begin(1);   /* what its step starts goes to the guest (EV_FX); not its initialising step */
+        if (ep->id == 12) aid_m12 = *(int*)&ep->mode0;   /* (test aid RECVX_COOP_NO_EMBRACE, coop_enemy_end) */
         h_mode0 = plp->mode0;
         examining = !(sys->sp_flg & 0x2);   /* (coop_enemies_run) */
         if (conv_grab[i] && (ep->mode0 != 2 || !(ep->flg & 0x1))) conv_grab[i] = 0;
@@ -2395,10 +2515,22 @@ int coop_partner_step(void) { return swap_plp != NULL; }
 void coop_enemy_end(BH_PWORK* ep)
 {
     int i = ep - ene, swapped = swap_plp != NULL;
+    static int no_emb = -1;
     if (i < 0 || i >= PC_ENE_SLOTS) return;
+    /* test aid RECVX_COOP_NO_EMBRACE=1 (both sides): Alexia 1's embrace (en12 BR00 -> NG00) kills its victim whatever its health
+       (the dead flag at its frame 60; in single player the game over follows), about every 320 frames in a fight at close
+       range: her step that starts it is undone (her modes as before it, the victim's busy flag off), so the boss tests run on */
+    if (no_emb < 0) no_emb = getenv("RECVX_COOP_NO_EMBRACE") && atoi(getenv("RECVX_COOP_NO_EMBRACE"));
+    if (no_emb && ep->id == 12 && we_run(i) && ep->mode0 == 2 && !ep->mode1 && !ep->mode2 && !ep->mode3 && aid_m12 >= 0 && (aid_m12 & 0xFF) != 2) {
+        *(int*)&ep->mode0 = aid_m12;
+        if (plp) { plp->flg &= ~0x10004u; plp->stflg &= ~0x10000u; }
+    }
+    aid_m12 = -1;
     /* (protocol 56) one the partner runs whose state has not come: hidden right after its Init, before this frame draws it (an
        extra coming up at the room's first frame stood one frame at its spot) */
-    if (!seen[i] && !we_run(i) && ep->mode0 && run_room >= 0 && !echo_delay && !event_driven(ep)) hide_on(i, ep);
+    if (!seen[i] && !we_run(i) && ep->mode0 && run_room >= 0 && !echo_delay && (is_host || !event_driven(ep))) hide_on(i, ep);   /* (protocol 57: the
+                                                    host's event does not run it before it takes it back - its copy stood a frame where
+                                                    its record put it at the host's entry: a boss's part 100 units off) */
     if (fx_open == 1) { fx_end(ep, 0); fx_arm(ep); }
     aim_restore();
     if (i == gease.slot && gease.n > 0 && !swapped && plp) grab_ease(ep);
@@ -2418,7 +2550,14 @@ void coop_enemy_end(BH_PWORK* ep)
         if ((grab || react) && coop_atk_note(&atk[i][1], frame_no))
             host_log("coop: loop guard: enemy %d (id %d) started %d attacks on the partner within %u frames: it leaves the partner alone for %u frames\n",
                      i, ep->id, COOP_LOOP_N, COOP_LOOP_WIN, COOP_LOOP_COOL);
-        if (grab && ep->id == 1 && !(ep->flg & 0x80) && ep->exp0 && holding(ep) && have_peer)
+        if (grab && ep->id == 1 && !(ep->flg & 0x80) && ep->exp0 && holding(ep) && have_peer && giving[i]) {
+            /* (protocol 57) handed to the partner's game, its answer not here yet: the partner runs it from the state we sent
+               and its own step grabs its player itself; ours lets go (our copy shows the partner's from its answer on). Before,
+               the grab went over as well (EV_GRAB): the partner took the zombie twice and both games ran it (jumps of 40 units
+               with Shared Enemy Control) */
+            pc_enemy_unhold(ep);
+            host_log("coop: enemy %d grabs the partner while its hand-over is under way: the partner's game runs it, ours lets go\n", i);
+        } else if (grab && ep->id == 1 && !(ep->flg & 0x80) && ep->exp0 && holding(ep) && have_peer)
             grab_out(i, ep);   /* the client's game runs the grab */
         else if (dh > 0 || react || grab || kill) {
             Event e = { 0 };
@@ -2616,8 +2755,9 @@ static void own_take(const Event* e)
     take_how[i] = (unsigned char)(leaving | (st ? 0 : 2));
     if (st) { seen[i] = 1; hid[i] = 0; }   /* (its state is shown from now: the snapshots of the frames before it change only what they carry) */
     if (c < PC_ENE_SLOTS) { take_at[c] = take_at[i]; take_how[c] = take_how[i]; if (st) { seen[c] = 1; hid[c] = 0; } }
-    host_log("coop: own: enemy %d (id %d) comes from the partner's game%s%s: ours from its frame %u\n", i, ep->id, leaving ? " (it leaves)" : "",
-             st ? "" : " without its state", take_at[i]);
+    host_log("coop: own: enemy %d (id %d) comes from the partner's game%s%s%s: ours from its frame %u\n", i, ep->id, leaving ? " (it leaves)" : "",
+             st ? "" : " without its state", st || !e->u.gr.tid ? "" : !own_work(ep) ? " (no work here)" : event_driven(ep) ? " (an event of ours drives it)" :
+             !estate_take(e->u.gr.tid, ene_len(ep, c)) ? " (its transfer)" : " (it does not fit here)", take_at[i]);
 }
 /* a hand-over to us is ours: the playout shows its frame (or the partner is not in the room any more) */
 static void own_took(int i)
@@ -2750,13 +2890,13 @@ static void own_frame(void)
             /* (a boss or its part, no type of the hand-overs, coming up while both play in the room: the host's, as the
                host runs the fight - its entry script re-arms it. Before, the guest's game ran Alexia 2's babies that came up
                after the host's coming, the host's too: two runners, their HP apart for good) */
-            owned[i] = (unsigned char)(!own_type(&ene[i]) && (is_host ? pres && !(sys->cb_flg & 0x1) : claimed && have_rx && partner_here()) ? 0 : dflt);   /* (host: not in
+            owned[i] = (unsigned char)((!own_type(&ene[i]) || own_boss(&ene[i])) && (is_host ? pres && !(sys->cb_flg & 0x1) : claimed && have_rx && partner_here()) ? 0 : dflt);   /* (host: not in
                                                     our door's fade, the room's load, whose enemies the claims sort out; guest: once the
                                                     host came, it claimed what it runs) */
             if (we_run(i)) { seen[i] = 1; hide_off(i); }
         }
         act_was[i] = (unsigned char)act;
-        if (act && !seen[i] && !we_run(i) && ene[i].mode0 && run_room == me && !event_driven(&ene[i])) hide_on(i, &ene[i]);
+        if (act && !seen[i] && !we_run(i) && ene[i].mode0 && run_room == me && (is_host || !event_driven(&ene[i]))) hide_on(i, &ene[i]);
     }
     /* host: the guest's claims did not come */
     if (claim_wait && !--claim_wait) {
@@ -2776,11 +2916,16 @@ static void own_frame(void)
     paused_n = paused ? paused_n + 1 : 0;
     leave = runs && (door || !tx_in_game || paused_n >= PAUSE_LEAVE) && !frozen;
     budget = (int)(COOP_RING * 3 / 4) - (int)(ring.next - ring.head);
+    /* (protocol 57) the frames count from our first one in the room, not from its load: a door longer than 30 frames took the
+       enemy our entry event drives back at once, from where its record put it (the guest's state not applied yet: 55 units) */
+    if (!room_ready() || run_room != me) rdy_t = frame_no;
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
         BH_PWORK* ep = &ene[i];
         if (own_grab[i] && !we_run(i) && (!(ep->flg & 0x1) || (frame_no - own_t[i] > 90 && !ply_busy(&ply2)))) own_grab[i] = 0;   /* (no word of its end) */
         /* (once the guest's state of it is here: before, the host's copy was taken back from where its record put it) */
-        if (is_host && !we_run(i) && !own_grab[i] && !take_at[i] && (seen[i] || frame_no - load_frame > 30) && (ep->flg & 0x1) && event_driven(ep)) {
+        /* (not while we leave: the event ends in our door, the partner runs it on; before, our door gave it and took it back every
+           other frame, the partner's game refusing the gives as it ran it) */
+        if (is_host && !door && !we_run(i) && !own_grab[i] && !take_at[i] && (seen[i] || frame_no - rdy_t > 30) && (ep->flg & 0x1) && event_driven(ep)) {
             seen[i] = 1; hide_off(i);
             p3_takeback(i, 0, "an event of ours drives it");
             continue;
@@ -2801,7 +2946,7 @@ static void own_frame(void)
             need = st ? estate_events(ene_len(ep, own_child(ep))) : 1;
             if (p3_ref_t[i] && frame_no + 1 - p3_ref_t[i] < (unsigned int)P3_HOLD) continue;   /* (refused: again later) */
             if (budget < need) continue;
-            if (!st && !door && !own_type(ep)) continue;   /* (a boss or a part without a work we can send: it stays ours while our menu
+            if (!st && !door && (!own_type(ep) || own_boss(ep))) continue;   /* (a boss or a part without a work we can send: it stays ours while our menu
                                                     or scene stops it, as in single player; given without its state the partner's game ran
                                                     it on from its puppet's pose, its Move from the start - Alexia's fight reset there) */
             if (!st && !door && ++p3_leave[i] < LEAVE_WAIT) continue;   /* (in a menu: it may come into a state to go) */
@@ -2902,7 +3047,7 @@ static int fx_ref_out(const void* p)   /* a pointer as a reference for the partn
     if (!p) return FX_NONE;
     if (w >= ene && w < ene + PC_ENE_SLOTS) return (const char*)w == (const char*)&ene[w - ene] ? (int)(w - ene) : -1;
     if (w == fx_me()) return FX_SENDER;
-    if (w == &ply2) return FX_RECEIVER;
+    if (w == &ply2 || w == &ghost.pw) return FX_RECEIVER;   /* (ghost: the copy of the partner's stand-in a boss's hold plays on - Alexia's embrace sets it alight) */
     return -1;
 }
 static BH_PWORK* fx_ref_in(int r)      /* a partner's reference as our work, NULL: not here */
@@ -2955,6 +3100,32 @@ void coop_fx_particle(BH_PWORK* ewP, int lnk, const void* offP, const void* dirP
     if (!coop_check_event(&e, is_host)) fx_queue(&e);
 }
 
+/* (protocol 57) effsub3.c bhSetBloodPoolLnk: a blood pool (effect 300: two eff[] entries, the second its vertex work) goes as
+   the call itself (its table's values, the offset added to the position). Before, it was "work not of the enemy that started
+   it": a pool under a dying enemy showed only in the game that ran it */
+int bhSetBloodPoolLnk(BH_PWORK* ewP, NJS_POINT3* posP, int ay, BP_WORK* tabP, int pal_bnk);
+void coop_fx_pool(BH_PWORK* ewP, const void* posP, int ay, const void* tabP, int bank)
+{
+    const BP_WORK* t = tabP;
+    const float* p = posP;
+    Event e;
+    int ref = fx_ref_out(ewP), k;
+    if (!fx_open || ref < 0 || !p || !t) return;
+    memset(&e, 0, sizeof(e));
+    e.type = EV_FX;
+    e.stg = sys->stg_no;
+    e.rom = sys->rom_no;
+    coop_fx_put(&e.idx, &e.u.fxb.refs, FXR_IDX, ref);
+    e.u.fxb.id = FX_POOL;
+    e.u.fxb.bank = (uint8_t)bank;
+    e.u.fxb.ay = ay;
+    e.u.fxb.srd_dir = t->srd_dir; e.u.fxb.srd_pos = t->srd_pos; e.u.fxb.bld_spd = t->bld_spd;
+    for (k = 0; k < 5; k++) { e.u.fxb.srt_spd[k] = t->srt_spd[k]; e.u.fxb.srt_dir[k] = t->srt_dir[k]; }
+    e.u.fxb.pos[0] = p[0] + t->off_pos.x; e.u.fxb.pos[1] = p[1] + t->off_pos.y; e.u.fxb.pos[2] = p[2] + t->off_pos.z;
+    if (!coop_check_event(&e, is_host)) fx_queue(&e);
+    else fx_note(300, "pool out of range");
+}
+
 /* one new eff[] entry to the partner (owner: the enemy or player whose step started it) */
 static void fx_send(O_WRK* op, BH_PWORK* owner, int player)
 {
@@ -2962,7 +3133,7 @@ static void fx_send(O_WRK* op, BH_PWORK* owner, int player)
     Event e;
     int link = fx_ref_out(op->lkwkp);   /* also without the link flag: the vomit keeps its zombie there (its sound) */
     const char* why = NULL;
-    if (op->id == FX_PARTICLE || op->id == 301) return;   /* went as the call (coop_fx_particle) */
+    if (op->id == FX_PARTICLE || op->id == 301 || op->id == 300) return;   /* went as the call (coop_fx_particle, coop_fx_pool) */
     memset(&e, 0, sizeof(e));
     e.type = EV_FX;
     e.stg = sys->stg_no;
@@ -2974,12 +3145,23 @@ static void fx_send(O_WRK* op, BH_PWORK* owner, int player)
         if (coop_check_event(&e, is_host)) why = "burst out of range";
     } else {
         int own = fx_ref_out(owner), txp = fx_mdl(owner, op->txp[0], 1), mlw = op->id < 400 && op->mlwP == &sys->efm[op->id] ? -1 : fx_mdl(owner, op->mlwP, 0), ex = fx_ref_out(op->exp0);
+        const FxRule* rl = coop_fx_rule(op->id);
+        int x1 = 0, k;
         if (player && (fx_gunfire(op->id) || link == FX_SENDER)) return;   /* the partner makes these itself */
+        /* (protocol 57) exp1 an eff[] entry its owner's work points at (Alexia 1's burning blood: her fire manager, en12 Init
+           EXP0_I(0x20)): sent as that word, the receiver's copy of the owner has its own. Before, it went as "pointers": only the
+           game that ran her saw her blood */
+        if (rl && (rl->refs & FXF_EXP1) && op->exp1 && own >= 0 && own < PC_ENE_SLOTS && owner->exp0)
+            for (k = 0; k < FX_X1_MAX && !x1; k++)
+                if (*(unsigned char**)(owner->exp0 + 4 * k) == op->exp1) x1 = k + 1;
+        if (rl && (rl->refs & FXF_AO))
+            for (k = 0; k < 3; k++) { float a = (&op->aox)[k]; e.u.fx.ao[k] = (int16_t)lrintf((a < -1 ? -1 : a > 1 ? 1 : a) * 16384); }
+        e.u.fx.x1 = (uint8_t)x1;
         if (op->id >= 400) why = "number";
         else if (link < 0) why = "follows something unknown";
         else if (txp < -1 || mlw < -1 || ex < 0) why = "texture, model or work not of the enemy or player that started it";
         else if (op->mtx != (float(*)[16])op->mtxbuf || op->pvp != op->pv || op->tvp != op->tv || memcmp(op->mtxbuf, zero, sizeof(op->mtxbuf))) why = "matrix set by its caller";
-        else if (op->exp1 || op->exp2 || op->exp3 || op->mskp || op->obj_a || op->obj_b || op->mnwP || op->mnwPb || op->mtn_tp || op->objbak || op->func) why = "pointers";
+        else if ((op->exp1 && !x1) || op->exp2 || op->exp3 || op->mskp || op->obj_a || op->obj_b || op->mnwP || op->mnwPb || op->mtn_tp || op->objbak || op->func) why = "pointers";
         else if (memcmp(op->mdl, zero, sizeof(op->mdl)) || memcmp(op->skp, zero, sizeof(op->skp)) || memcmp(op->mbp, zero, sizeof(op->mbp)) || memcmp(op->txp + 1, zero, 15 * sizeof(op->txp[0]))) why = "models";
         else if ((op->stflg >> 16) || op->lkono < 0 || op->lkono >= 64 || fabsf(op->sx) >= 127 || fabsf(op->sy) >= 127 || fabsf(op->sz) >= 127) why = "flags or scale";
         coop_fx_put(&e.idx, &e.u.fx.refs, FXR_IDX, link);
@@ -3056,7 +3238,7 @@ static int apply_fx(const Event* e)
     const BH_PWORK *lk, *own, *ex;
     EF_WORK ef;
     NJS_POINT3 off;
-    O_WRK* op;
+    O_WRK *op, *x1p = NULL;
     int k, n, ix = coop_fx_get(e->idx, e->u.fx.refs, FXR_IDX), owner = coop_fx_get(e->u.fx.owner, e->u.fx.refs, FXR_OWNER),
         exp0 = coop_fx_get(e->u.fx.exp0, e->u.fx.refs, FXR_EXP0);   /* (the generic entry's; a particle call has its own refs) */
     if (!sys || !rom || e->stg != sys->stg_no || e->rom != sys->rom_no || !in_session_game() || (sys->cb_flg & 0x1) || !fx_heap()) return 1;   /* another room: gone */
@@ -3082,6 +3264,23 @@ static int apply_fx(const Event* e)
         BH_PWORK* w = fx_ref_in(e->idx);
         if (w && w->id == 9 && w->mlwP && w->mlwP->objP && w->mlwP->obj_num > 10)
             for (k = 0; k < 4; k++) w->mlwP->objP[7 + k].pos[0] = e->u.fxa.len[k];
+        return 1;
+    }
+    if (e->u.fx.id == FX_POOL) {   /* (protocol 57) a blood pool: the call again here */
+        int pix = coop_fx_get(e->idx, e->u.fxb.refs, FXR_IDX);
+        BH_PWORK* w = pix == FX_NONE ? NULL : fx_ref_in(pix);
+        BP_WORK t;
+        NJS_POINT3 p3;
+        uint32_t was[16];
+        if (pix != FX_NONE && !w) return 1;
+        memset(&t, 0, sizeof(t));
+        t.srd_dir = e->u.fxb.srd_dir; t.srd_pos = e->u.fxb.srd_pos; t.bld_spd = e->u.fxb.bld_spd;
+        for (k = 0; k < 5; k++) { t.srt_spd[k] = e->u.fxb.srt_spd[k]; t.srt_dir[k] = e->u.fxb.srt_dir[k]; }
+        memcpy(&p3, e->u.fxb.pos, sizeof(p3));
+        fx_slots(was);
+        bhSetBloodPoolLnk(w, &p3, e->u.fxb.ay, &t, e->u.fxb.bank);
+        for (k = 0; k < 512; k++) if (fx_new(was, k)) fx_mirror[k] = 1;
+        if (trace) fprintf(stderr, "coop: fx %d in (blood pool, follows %d)\n", FX_POOL, pix);
         return 1;
     }
     if (e->u.fx.id == FX_PARTICLE) {
@@ -3111,7 +3310,12 @@ static int apply_fx(const Event* e)
     if (lk && (!lk->mlwP || !lk->mlwP->owP || e->u.fx.lkono >= (int)lk->mlwP->obj_num)) return 1;   /* (with or without flg 0x80: steps read its nodes) */
     if ((e->u.fx.id == 260 && (owner >= PC_ENE_SLOTS || own->id != 6 || e->u.fx.txp != 1 || own->mdl[1].texP->nbTexture < 5)) ||   /* the moth's powder cycles textures 1..4 */
         (e->u.fx.id == 356 && (ix >= PC_ENE_SLOTS || lk->id != 1 || lk->mlwP->obj_num <= 10)) ||   /* a zombie's head (its node 10) */
-        (e->u.fx.id == 397 && (exp0 >= PC_ENE_SLOTS || ex->id != 15 || !ex->exp0))) return 1;   /* the en15 whose poison it is (its exp0 is read and written) */
+        (e->u.fx.id == 397 && (exp0 >= PC_ENE_SLOTS || ex->id != 15 || !ex->exp0)) ||   /* the en15 whose poison it is (its exp0 is read and written) */
+        (e->u.fx.x1 && (owner >= PC_ENE_SLOTS || !own || own->id != 12 || !own->exp0))) return 1;   /* (protocol 57) Alexia 1's work: her fire manager */
+    if (e->u.fx.x1) {   /* an eff[] entry of ours, alive */
+        x1p = *(O_WRK**)(own->exp0 + 4 * (e->u.fx.x1 - 1));
+        if (x1p < eff || x1p >= eff + 512 || (const char*)x1p != (const char*)&eff[x1p - eff] || !(x1p->flg & 0x1)) return 1;
+    }
     memset(&ef, 0, sizeof(ef));
     ef.flg = e->u.fx.flg;
     ef.id = e->u.fx.id; ef.type = e->u.fx.type; ef.flr_no = e->u.fx.flr_no; ef.mdlver = e->u.fx.mdlver;
@@ -3129,6 +3333,8 @@ static int apply_fx(const Event* e)
     if (e->u.fx.txp >= 0) op->txp[0] = own->mdl[e->u.fx.txp].texP;
     if (e->u.fx.mlw >= 0) op->mlwP = (ML_WORK*)&own->mdl[e->u.fx.mlw];
     op->exp0 = (unsigned char*)ex;
+    if (x1p) op->exp1 = (unsigned char*)x1p;
+    if (coop_fx_rule(op->id) && (coop_fx_rule(op->id)->refs & FXF_AO)) { op->aox = e->u.fx.ao[0] / 16384.0f; op->aoy = e->u.fx.ao[1] / 16384.0f; op->aoz = e->u.fx.ao[2] / 16384.0f; }
     fx_mirror[k] = 1;
     if (op->id == 356 && lk && lk->id == 1 && lk->exp0 && !(lk->flg & 0x80))   /* en01.c's head burst: the zombie's head is gone here too */
         *(int*)(lk->exp0 + 0x78) = -1;                                          /* (its exp0 is not in the snapshots; "Head blow-offs") */
@@ -3420,7 +3626,10 @@ static int gone_dead(const BH_PWORK* ep)   /* a killed enemy (not a linked part,
 static unsigned char hin[PC_ENE_SLOTS];          /* guest: 1 claimed, 2 the host shows it as ours */
 static int hin_alone, hin_gen = -1;              /* guest: our game ran this room load's enemies with the host elsewhere */
 /* not claimed: what the host's fresh copy is as well (a bat asleep, a baby spider still inside its mother), and the Tyrant of
-   a fight whose room script talks to it (type 1, rm_flg 0x1F: en19 Br01) */
+   a fight whose room script talks to it (type 1, rm_flg 0x1F: en19 Br01). (protocol 57) A boss of own_types (one whose work
+   goes at a leave) is claimed: the guest runs its fight on when the host comes back into the room; before, the host's copy took
+   it over with its own work from its Init and its entry scene handed that back to the guest (the Gulp Worm stood a frame at its
+   start, its fight's state reset) */
 static int hin_wanted(const BH_PWORK* ep)
 {
     return !(ep->id == 7 && ep->type == 1) && !(ep->id == 24 && ep->mode0 == 6) && !(ep->id == 19 && ep->type == 1);
@@ -3431,15 +3640,14 @@ static int hin_state_ok(int k, int any)
 {
     BH_PWORK* ep = &ene[k];
     const unsigned char* x = ep->exp0;
-    int m0 = ep->mode0, m1 = ep->mode1, m2 = ep->mode2, dead = (ep->flg & 0x2) && m0 == 4, j;
+    int m0 = ep->mode0, m1 = ep->mode1, m2 = ep->mode2, dead = (ep->flg & 0x2) && m0 == 4;
+    if (own_boss(ep)) return hin_leave && hin_any_event;   /* (protocol 57) a boss: at a door of its runner's, in any state */
     if (m0 == 5 && any && ep->id != 19) return 1;   /* in the common event mode (bhEne_Event: a room's hidden moths, ants, Spotters
                                                        waiting for their event; what it runs on is its work), as the p3 types */
     switch (ep->id) {
     case 3:   /* Black Widow: on the floor or the ceiling (flg 0x2000000: one that started there, en03 BR02), idle, walking, turning
-                 or chasing (no dive, jump, attack, grab, change of surface), no leg shot off (its legs are its own game's children:
-                 the host's would come back) */
-        for (j = 0; j < 8; j++)
-            if (x[0xA0 + j]) return 0;
+                 or chasing (no dive, jump, attack, grab, change of surface); its legs shot off go with it (protocol 57, bw_pack;
+                 before, it stayed with the game that shot them, and went without its state when that one left) */
         /* we leave: any state but its grab (its leader's grab block, exp1, is our game's) goes with it - its dive, jump, climb
            and change of surface go on from where they are (their surfaces go as records, atr_enc). Before, it went without
            its state and the partner's game ran it on from its puppet's pose with its own stale work: 47-unit jumps (1 in 3) */
@@ -3735,6 +3943,21 @@ static void apply_snapshots(void)
         if (at == COOP_AT_NONE) continue;
         hist_applied[k] = from;
         play_st.at[at]++;
+        /* (protocol 57) the guest: an enemy the host runs that an event of ours drives (our own entry scene, bhEtask's work) runs
+           here meanwhile; taken in our scene (cinema), it starts from the runner's state (this frame's snapshot) and, when our event lets go, is eased back
+           to the runner's (OUTAGE_EASE) from where our event left it. Before, it started from where its record put it (its own
+           HP) and jumped to the runner's at the event's end: 101 units (a Sweeper in 1/12), 7 to 25 in a scene that held it */
+        if (!is_host && (ene[t].flg & 0x1)) {
+            if (!event_driven(&ene[t])) evd[t] = 0;
+            else if (!evd[t] && !(sys->cb_flg & 0x4)) {}   /* (only one our scene takes: a fight's event tasks that hold an enemy as
+                                                    their work in play - Alexia 2's babies - run it here as before) */
+            else if (evd[t]++) {
+                if (evd[t] > 2) evd[t] = 2;
+                shown_p[k][0] = ene[t].px; shown_p[k][1] = ene[t].py; shown_p[k][2] = ene[t].pz; shown_ay[k] = ene[t].ay;
+                shown_local[k] = frame_no - 2; shown_seq[k] = 0; ease_n[k] = 0;
+                continue;
+            }
+        }
         if (!ease_n[k] && shown_local[k] > load_frame &&
             (frame_no - shown_local[k] > 1 || (shown_seq[k] && (int32_t)(P - shown_seq[k]) > COOP_PO_EXTRA))) {   /* held meanwhile (OUTAGE_EASE: not
                                                     shown, or the same frame shown again while nothing came) */
@@ -3766,7 +3989,7 @@ static void apply_snapshots(void)
            collision) has not run yet; it must run first, so only wake it like the host's and
            let our loop run that step. Room loads run enemy steps themselves (bhInitEvent), so
            most are initialised before the first snapshot. */
-        if (!(ep->flg & 0x1) || (!is_host && (event_driven(ep) || grips_us(ep) || runs_here(ep)))) continue;
+        if (!(ep->flg & 0x1) || (!is_host && ((event_driven(ep) && !evd[t]) || grips_us(ep) || runs_here(ep)))) continue;
         /* the slot layouts differ (an enemy whose Init ran at another moment, a child the other side made, e.g. moths
            and their leader): another type here, or a part linked to a parent there but without one here. Its flags,
            modes and motion would turn a hidden helper without a model into one drawn (bhCalcModel crashed on its NULL

@@ -73,6 +73,8 @@ static Event fx_sample(int id)
     else coop_fx_put(&e.u.fx.owner, &e.u.fx.refs, FXR_OWNER, FX_NONE);
     if (s->refs & FXF_EXP0) e.u.fx.exp0 = 5;
     else coop_fx_put(&e.u.fx.exp0, &e.u.fx.refs, FXR_EXP0, FX_NONE);
+    if (s->refs & FXF_EXP1) { e.u.fx.x1 = 9; e.u.fx.owner = 1; e.u.fx.refs &= ~FXR_OWNER; }   /* (Alexia 1's fire manager: her exp0 0x20) */
+    if (s->refs & FXF_AO) e.u.fx.ao[1] = 16384;
     e.u.fx.s[0] = e.u.fx.s[1] = e.u.fx.s[2] = 256;
     return e;
 }
@@ -357,8 +359,14 @@ static void test_events(void)
             CHECK((coop_check_event(&e, 1) == COOP_OK) == (coop_fx_rule(id) != NULL));
             n += coop_fx_rule(id) != NULL;
         }
-        CHECK(n == 41);
+        CHECK(n == 42);
 #define BADFX(id_, stmt) do { Event e_ = fx_sample(id_); Event* e = &e_; CHECK(coop_check_event(e, 1) == COOP_OK); stmt; CHECK(coop_check_event(e, 1) == COOP_BAD_FIELD); } while (0)
+        BADFX(265, e->u.fx.x1 = 0);                          /* (protocol 57) its exp1: a word of its owner's work */
+        BADFX(265, e->u.fx.x1 = FX_X1_MAX + 1);
+        BADFX(265, coop_fx_put(&e->u.fx.owner, &e->u.fx.refs, FXR_OWNER, FX_SENDER));   /* (a player has no such work) */
+        BADFX(265, e->u.fx.ao[0] = 20000);
+        BADFX(5, e->u.fx.x1 = 1);                            /* no other effect has one */
+        BADFX(5, e->u.fx.ao[2] = 1);
         e = fx_sample(5);   /* the review's crafted entry: effect 195, type 65535, active, mode0 0, scale z 512, nothing referenced, txp = mlw = -1 */
         e.u.fx.id = 195; e.u.fx.type = 65535; e.u.fx.s[2] = 512;
         CHECK(coop_check_event(&e, 1) == COOP_BAD_FIELD);
@@ -449,6 +457,19 @@ static void test_events(void)
         e.idx = 255; CHECK(coop_check_event(&e, 0) != COOP_OK); e.idx = 3;
         e.u.fxk.d[2] = 2; CHECK(coop_check_event(&e, 0) != COOP_OK); e.u.fxk.d[2] = 0;
         e.u.fxk.d[1] = NAN; CHECK(coop_check_event(&e, 0) != COOP_OK);
+    }
+    {   /* (protocol 57) a blood pool's call */
+        Event e = ev(EV_FX);
+        memset(&e.u, 0, sizeof(e.u));
+        e.u.fxb.id = FX_POOL; e.u.fxb.bank = 1; e.u.fxb.srt_dir[4] = 15; e.u.fxb.bld_spd = 0.06f; e.u.fxb.pos[0] = 40;
+        coop_fx_put(&e.idx, &e.u.fxb.refs, FXR_IDX, FX_NONE);
+        CHECK(coop_check_event(&e, 1) == COOP_OK && coop_check_event(&e, 0) == COOP_OK);
+        e.u.fxb.srt_dir[2] = 16; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxb.srt_dir[2] = -1; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxb.srt_dir[2] = 3;
+        e.u.fxb.bank = 4; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxb.bank = 3;
+        e.u.fxb.srt_spd[1] = NAN; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxb.srt_spd[1] = 0.5f;
+        e.u.fxb.pos[2] = 20000; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxb.pos[2] = 0;
+        e.u.fxb.refs = 0; e.idx = 7; CHECK(coop_check_event(&e, 1) == COOP_OK);   /* (it follows enemy 7) */
+        e.idx = 255; CHECK(coop_check_event(&e, 1) != COOP_OK);
     }
     {   /* a particle call */
         Event e = ev(EV_FX);
@@ -1071,9 +1092,10 @@ static int sane(const Event* e)
         if (e->u.ts.give && (((e->u.ts.give >> 16) & 0xFF) == 0 || (e->u.ts.give & 0xFFFF) > 999)) return 0;
     }
     if (e->type == EV_FX && e->u.fx.id != FX_BURST) {   /* what it follows: a slot 0..254 or FX_* */
-        int r = coop_fx_get(e->idx, e->u.fx.id == FX_PARTICLE ? e->u.fxp.refs : e->u.fx.id == FX_ARM ? 0 : e->u.fx.refs, FXR_IDX);
+        int r = coop_fx_get(e->idx, e->u.fx.id == FX_PARTICLE ? e->u.fxp.refs : e->u.fx.id == FX_POOL ? e->u.fxb.refs : e->u.fx.id == FX_ARM ? 0 : e->u.fx.refs, FXR_IDX);
         if (r == 255 || r > FX_NONE) return 0;
     }
+    if (e->type == EV_FX && e->u.fx.id == FX_POOL) { for (k = 0; k < 5; k++) if ((uint32_t)e->u.fxb.srt_dir[k] > 15) return 0; return e->u.fxb.bank <= 3; }
     if (e->type == EV_FX && (e->u.fx.id >= 400 || (e->u.fx.id != FX_BURST && e->u.fx.lkono >= 64))) return 0;
     if (e->type == EV_FX && e->u.fx.id == FX_BURST && (e->u.fxr.w[0] > 32 || e->u.fxr.w[4] > 600)) return 0;
     if (e->type == EV_FX && e->u.fx.id == FX_PARTICLE && (e->u.fxp.typ >= FX_PTCL_TYPES || e->u.fxp.lnk >= 64)) return 0;

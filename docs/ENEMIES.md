@@ -241,9 +241,11 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   host takes it back after ~10 s without its snapshots); its player slides into the grab over 8 frames. A Cerberus's or
   anatomist's grab of the stand-in, sent as a hit, keeps the partner its victim to the grab's end (their grab steps act on
   whichever player `plp` is).
-* **Bosses** (no type of the hand-overs: Gulp Worm, Alexia and her parts, Alfred, Steve, the Tyrant of a fight ...) stay
-  with their runner while its menu or scene stops them (as in single player), and one that comes up while both play in the
-  room is the host's game's; they go to the partner only when the runner leaves through a door (without their state).
+* **Bosses** (no type of Shared Enemy Control or the hand-in: Gulp Worm, Alexia and her parts, Alfred, Steve, the Tyrant of a
+  fight ...) stay with their runner while its menu or scene stops them (as in single player), and one that comes up while both
+  play in the room is the host's game's; they go to the partner only when the runner leaves through a door: since protocol 57
+  the Gulp Worm, Alexia 1, Alfred and Steve with his knights with their state (and their bits of the room's flags), the rest
+  (Alexia 2 and her parts) without it.
 * **Outages**: a puppet held during a network outage is eased to its runner's state when the datagrams come again
   (COOP.md "The partner gone").
 * **Kills while the guest runs the room**: the host coming in shows the guest's dead as they lie there (claimed with the
