@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory() as tmp:
     if not iso or not os.path.exists(iso): print("voice_plan: no RECVX_ISO, skipped"); sys.exit(77)
     assert run(tmp, iso, 7, out, "cast_random = 1\ncast_assign = 1\n") == 0
     d = json.load(open(out))
-    assert d["version"] == 1 and d["seed"] == 7 and d["options"]["voices"] == 1 and d["options"]["cast"] == 1, d["options"]
+    assert d["version"] == 2 and d["seed"] == 7 and d["options"]["voices"] == 1 and d["options"]["cast"] == 1, d["options"]
     n = 0
     for s in d["scenes"]:
         assert s["room"].startswith("RM_") and isinstance(s["script"], str) and s["disc"] in (1, 2) and s["lines"]
@@ -30,6 +30,7 @@ with tempfile.TemporaryDirectory() as tmp:
             n += 1
             assert l["order"] == i and l["disc"] == s["disc"] and l["orig_ms"] > 0 and l["played_ms"] >= 0, l
             assert isinstance(l["played_known"], bool) and (l["group"] is None or isinstance(l["group"], int)) and l["group_part"] >= 0
+            assert l["drawn_as"] is None or isinstance(l["drawn_as"], str), l   # (version 2: the model the speaker is drawn as)
             r = l["repl"]
             assert r["kind"] in KINDS and isinstance(r["fade"], bool) and isinstance(r["why"], str), r
             if r["kind"] in ("line", "grunt", "original"): assert r["disc"] in (1, 2) and r["vid"] >= 0 and r["ms"] > 0, r

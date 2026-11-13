@@ -55,10 +55,17 @@ runs = [log([(1000, 1020, 500, 1, 30, 2000), (2000, 1020, 520, 1, 40, 1500), (40
             # its span 3.5 s (12 cut by 60); 60 not to its end before the run's: unknown
         log([(0, 40, 100, 1, 10, 900), (500, 40, 120, 1, 60, 4000), (6000, 40, 300, 1, 11, 600), (6300, 40, 320, 1, 50, 1000)], 300),   # the group's first
             # part on its own: its own 0.5 s (against the parts' 4.5 s); a later part on its own: cut, against its own length
-        log([(0, 50, 700, 1, 30, 2000), (500, 50, 720, 1, 40, 1500)], 300, slow=True)]   # a run that fell behind the clock: left out
+        log([(0, 50, 700, 1, 30, 2000), (500, 50, 720, 1, 40, 1500)], 300, slow=True),   # a run that fell behind the clock: left out
+        # the voice slot's player (RECVX_CAST_TRACE) where logged: how long the sound really played. 1/70: StopVoice at 1.5 s fades
+        # it out until 1.9 s; 1/71: the sound ends by itself
+        "[   0.000] voicetime: 0 on room 0060 ofs 100 line 1/70 (2000 ms) played -1\n[   0.000] adxt: start 0/70 (48000 Hz, 1 ch, 96000 samples, loop 0) voice 1 talk 1\n"
+        "[   1.500] voicetime: 1500 stop\n[   1.900] adxt: stop talk 1 at 1900 of 2000 ms\n"
+        "[   2.000] voicetime: 2000 on room 0060 ofs 120 line 1/71 (800 ms) played -1\n[   2.000] adxt: start 0/71 (48000 Hz, 1 ch, 38400 samples, loop 0) voice 1 talk 1\n"
+        "[   2.800] adxt: end talk 1 (800 ms)\n[   2.900] voicetime: 2900 stop\n[  10.000] test: exit at frame 300\n"]
 rows2, played = run(groups, lines, runs)
 assert rows2 == rows, rows2   # (the logs change nothing of the lines')
-assert played == [(30, 3800, 10, 3500, 3500), (40, 100, 10, 500, 500), (40, 300, 11, 300, 300), (1020, 500, 30, 1000, 1000),
+assert played == [(30, 3800, 10, 3500, 3500), (40, 100, 10, 500, 500), (40, 300, 11, 300, 300), (60, 100, 70, 1900, 1500), (60, 120, 71, 800, 900),
+                  (1020, 500, 30, 1000, 1000),
                   (1020, 520, 40, 1500, 2000), (1020, 540, 60, 0, 0)], played   # (by
     # room file and offset)
 print("voice_curation: ok")

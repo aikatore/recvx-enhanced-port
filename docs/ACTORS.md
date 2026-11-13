@@ -1394,13 +1394,17 @@ off in many scenes (in 1020 a gap it gives as 2.1 s is 7.4 s in the game).
   `RECVX_VOICE_TIME=1` logs each line's start (`voicetime: <game ms> on room 0030 ofs 3856 line 1/31 (438 ms) played
   -1`: game frames at 30 a second, so a busy machine does not shorten an `AdxCk` wait) and each `StopVoice`. A line plays
   until the next event, at most its length; unknown where the run ended first, or where two runs differ by more than
-  0.1 s (another case or character).
+  0.1 s (another case or character). With `RECVX_CAST_TRACE=1` too, the voice slot's ADX player logs where it stopped
+  (`adxt: stop talk 1 at <ms> of <ms> ms`) or that it ended: `--measure` keeps that as the line's played time (a single
+  line). Checked against it (2026-11-13, six scenes, 138 lines): the next-event measure agrees within 80 ms for 132; the
+  other six are long lines faded out by a `StopVoice` with a fade, 0.1-0.2 s longer by the player. RM_0030's 1/30 plays
+  whole (2446 of 2446 ms), 1/34 is cut (4906 of 5224).
 * **Updating it**: the logs into `voice_played.json` beside `voice_curation.json` (runs whose frames fell behind the
   clock left out), then the table as before:
 
 ```
 python3 pc/tools/voice_curation.py --measure /path/to/recvx-voice-tool/voice_played.json LOGS.../log.txt   # (headless runs:
-#   RECVX_VOICE_TIME=1 RECVX_TEST_SCENE=400:RM_<room>:<level>:<event> RECVX_EXIT_FRAME=7000, every scene of RECVX_SCENE_LIST
+#   RECVX_VOICE_TIME=1 RECVX_CAST_TRACE=1 RECVX_TEST_SCENE=400:RM_<room>:<level>:<event> RECVX_EXIT_FRAME=7000, every scene of RECVX_SCENE_LIST
 #   with a line)
 python3 pc/tools/voice_curation.py /path/to/recvx-voice-tool/voice_curation.json
 ```
@@ -1411,28 +1415,39 @@ python3 pc/tools/voice_curation.py /path/to/recvx-voice-tool/voice_curation.json
 cutscene line with that seed (the voice tool shows it next to the original), without starting the game, and exits (2:
 no disc image or no `--out`). The cast options are recvx.ini's (`--save-dir`), the voice lines on; nothing is written
 there. It runs the game's own choice (`voices.c voice_choose`, as `pc_voice_on`: the cooldown over the lines said, the
-grunts, the groups, the played lengths, the cut and fade) over the room files' scripts in story order as far as the
-numbers give it (stage 0..9, in each the room files, in each scd0, scd1 and the events in turn). A playthrough meets
-the scenes in another order, some twice and some never, so from some point on its picks differ (the history). The
-speaker's look: Claire's and Chris's the player's look for them, everyone else's the cast's pick (`cast_model`, "Random
-per cutscene" per room file) while the cast is on, else themselves; every record counted as drawn, no character other
-than Claire or Chris played, no imports. The JSON (`version` 1):
+grunts, the groups, the played lengths, the line's exact length as `adx_length_ms` reads it, the cut and fade) over the
+room files' scripts in story order as far as the numbers give it (stage 0..9, in each the room files, in each scd0,
+scd1 and the events in turn). A playthrough meets the scenes in another order, some twice and some never, so from some
+point on its picks differ (the history: which lines are in their cooldown); what each scene's speakers are drawn as,
+and so whose lines they say, does not depend on it. The speaker's look as `cast_room` gives it (`cast_want`, the same
+code, over the room file's records): Claire's and Chris's records the player's look for them (`coop_look_model`; played,
+the double shows the same), everyone else's the cast's pick while the cast is on, the records `kept` as themselves,
+the display slots filled in record order (one past the sixth model: itself). Not known without playing: a record not
+there at the room load (the game draws it as itself), a model that fails to load, the imports, co-op (a guest has the
+host's options; the partner's character counts as played), Steve or Wesker played (no scene with a line plays as
+them). Checked against the game: headless scene runs with the cast and the voice lines on (RECVX_TEST_SCENE,
+`RECVX_CAST_TRACE`'s "voices:" lines) agree line for line on the kind, whose voice and, with each script starting
+afresh (test aid `RECVX_VOICE_PLAN_FRESH=1`: nothing said before it, as in a scene run), the replacement; ctest
+`voice_plan_game` (needs `RECVX_ISO`, about two minutes) runs three. The JSON (`version` 2; the voice tool reads 1 too):
 
 ```
-{"version":1,"seed":7,"options":{"voices":1,"cast":1,"cast_assign":1,"cast_all":0,"cast_enemy":1,"mouths":1},
+{"version":2,"seed":7,"options":{"voices":1,"cast":1,"cast_assign":1,"cast_all":0,"cast_enemy":1,"mouths":1},
  "scenes":[{"room":"RM_0030","script":"event 6","disc":1,"lines":[
-   {"disc":1,"vid":31,"speaker":"Steve","order":6,"orig_ms":432,"played_ms":3480,"played_known":true,"group":31,
-    "group_part":0,"repl":{"kind":"line","disc":2,"vid":104,"speaker_of_line":"Chris","ms":1640,"cut_ms":null,
-    "fade":false,"why":"picked"}}, ...]}]}
+   {"disc":1,"vid":31,"speaker":"Steve","drawn_as":"Chris","order":6,"orig_ms":438,"played_ms":3480,"played_known":true,
+    "group":31,"group_part":0,"repl":{"kind":"line","disc":2,"vid":104,"speaker_of_line":"Chris","ms":1640,
+    "cut_ms":null,"fade":false,"why":"picked"}}, ...]}]}
 ```
 
 `script` as the voice tool names it (`scd0`, `scd1`, `event N`); `speaker` the line's character (null: none of the cast,
-no speaker); `orig_ms` the file's length as the game reads it (8 ms steps); `played_ms` the table's time (a group's
+no speaker); `drawn_as` the character of the model the speaker is drawn as in that scene (whose lines it says; a model
+of no character: its name, "Hunter"; null: drawn as itself); `orig_ms` the file's length as the game reads it;
+`played_ms` the table's time (a group's
 first part: the span), else the file's length (`played_known` false: no row, the line plays whole or was not measured); `group` the file of the group's first part while its parts follow it there, `group_part` 0.. ; `repl.kind`
 `line`, `grunt`, `quiet` (nothing plays), `enemy` (the enemy model's sounds), `original` (the line keeps its voice:
 `repl` is the line itself), `group_silent` (a later part: the first part's line plays on); `cut_ms` where a longer
 line is stopped (the next line's start, faded out by then; or the end of the time and grace, faded from there), with
-`fade` true; `why` the reason, as the log's. ctest `voice_plan` checks the shape with `RECVX_ISO` (skipped without).
+`fade` true; `why` the reason, as the log's. ctest `voice_plan` checks the shape with `RECVX_ISO` (skipped without),
+`voice_plan_game` the lines against the game's.
 
 ### In a cutscene
 

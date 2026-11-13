@@ -9,14 +9,18 @@ def measure(out, logs):
     """the voicetime lines of each log (cast_glue.c pc_voice_on, pc_voice_stop: game ms, 30 frames a second) -> voice_played.json;
     a run whose frames fell behind the clock (under 97 %: an AdxCk wait then ends in fewer frames) left out"""
     R = re.compile(r"^\[ *([0-9.]+)\] voicetime: (\d+) (?:on room (\d+) ofs (-?\d+) line (\d+)/(\d+) \((-?\d+) ms\)|stop)")
+    RA = re.compile(r"adxt: (?:start \d+/(\d+) .* talk 1$|stop talk 1 at (\d+) of \d+ ms|end talk 1 )")   # (RECVX_CAST_TRACE: the voice slot's player)
     runs = []
     for p in logs:
-        ev, real, end = [], [], 0
+        ev, real, end, cur = [], [], 0, None
         for l in open(p, errors="replace"):
             m = R.match(l)
             if m:
                 ev.append([int(m[2])] + ([int(m[i]) for i in range(3, 8)] if m[3] else []))
                 real.append(float(m[1]))
+            elif (a := RA.search(l.rstrip("\n"))):   # how long the line's sound really played (element 6): stopped at, or its end
+                if a[1]: cur = next((e for e in reversed(ev) if len(e) == 6 and e[4] == int(a[1])), None)
+                elif cur is not None: cur.append(int(a[2]) if a[2] else cur[5]); cur = None
             elif "test: exit at frame" in l: end = int(l.split()[-1]) * 1000 // 30
         if len(ev) > 1 and (ev[-1][0] - ev[0][0]) < 1000 * (real[-1] - real[0]) * 0.97:   # (the game slower than the clock: a busy machine)
             print("voice_curation.py: %s: the frames fell behind, left out" % p); continue
@@ -67,7 +71,7 @@ for r in runs:
     j = 0
     while j < len(on):
         i = on[j]
-        t, room, ofs, disc, vid, ms = ev[i]
+        t, room, ofs, disc, vid, ms = ev[i][:6]
         k, g = (disc, vid), [(disc, vid)]
         while g[-1] in nxt: g.append((disc, nxt[g[-1]]))
         n = len(g) if len(g) > 1 and k not in part and [tuple(ev[x][3:5]) for x in on[j:j + len(g)]] == g else 1   # (its parts follow)
@@ -78,6 +82,7 @@ for r in runs:
         elif t + full + GRACE_MS <= r["end"]: gap = full + GRACE_MS   # (nothing after it: no limit)
         else: gap = None   # (the run ended first)
         v = None if gap is None else (tl - t) + min(msl, gap - (tl - t))
+        if n == 1 and len(ev[i]) > 6: v = min(ev[i][6], ms)   # (the sound's own stop or end, where the run logged it)
         if gap is not None: gap = min(gap, full + GRACE_MS)
         if len(g) > 1 and k not in part: heads.add((room, ofs, vid))
         seen.setdefault((room, ofs, vid), []).append((v, gap, full, n))

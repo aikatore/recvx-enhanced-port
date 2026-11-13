@@ -91,12 +91,27 @@ void cast_release(void)
     memset(lost_logged, 0, sizeof(lost_logged));
 }
 
+/* the model record k (type id, model version ver) of room file room is given (cast_room; the --voice-plan export reads the
+   records from the room file): -1 none (drawn as itself); *c its character or creature (-1 none); *why set where kept[]
+   keeps it */
+static int cast_want(const EnemyOpts* o, int room, int k, int id, int ver, int imports, int* c, const char** why)
+{
+    unsigned scene = o->cast_assign ? (unsigned)room + 1 : 0;
+    int j;
+    if ((*c = cast_character(id, ver)) < 0) *c = cast_creature(room, k, id);   /* (a creature only a cutscene shows) */
+    if (*c < 0 && cast_scene_zombie(room, k, id)) *c = CAST_CROWD;   /* (a zombie only a cutscene shows) */
+    if (*c < 0 || (*c >= 2 && !o->cast)) return -1;
+    for (j = 0; j < (int)(sizeof(kept) / sizeof(kept[0])); j++)
+        if (kept[j].room == room && kept[j].rec == k) { *why = kept[j].why; return -1; }
+    return *c < 2 ? coop_look_model(*c) : *c == CAST_CROWD ? cast_crowd_model((unsigned)o->seed, scene, id, ver, o->cast_all, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off)
+           : cast_model((unsigned)o->seed, scene, *c, o->cast_all, imports, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off);   /* (Claire's, Chris's: never cast) */
+}
+
 /* enemyopt_glue.c, the end of the room load */
 void cast_room(const EnemyOpts* o)
 {
     int want[RECS], k, j, n = 0, room = room_file_now(), imports;
     char custom[40], enemies[48];
-    unsigned scene;
     if (getenv("RECVX_CAST_TRACE")) {   /* test aid: the game's state at each room load (the same with the cast on and off) */
         const unsigned char* b = (const unsigned char*)sys->ev_flg;
         unsigned h = 2166136261u;
@@ -109,19 +124,15 @@ void cast_room(const EnemyOpts* o)
     if (o && o->voices) voices_want();   /* "Randomize Voice Lines": the lines for the room files now (read at the start already, else now) */
     if (!o || !rom || (!o->cast && !g_appear_per)) { cast_release(); return; }   /* ("Per Character": Claire's and Chris's looks without the cast) */
     imports = import_count(o);
-    scene = o->cast_assign ? (unsigned)room + 1 : 0;
     for (k = 0; k < rom->ene_n && k < RECS; k++) {
         BH_PWORK* ep = &ene[k];
+        const char* why = NULL;
         int c;
         want[k] = -1;
-        if ((c = cast_character(ep->id, ep->mdlver)) < 0) c = cast_creature(room, k, ep->id);   /* (a creature only a cutscene shows) */
-        if (c < 0 && cast_scene_zombie(room, k, ep->id)) c = CAST_CROWD;   /* (a zombie only a cutscene shows) */
-        if (!(ep->flg & 0x1) || !ep->mlwP || c < 0 || (c >= 2 && !o->cast)) continue;   /* (the character played's doubles too: played()) */
-        for (j = 0; j < (int)(sizeof(kept) / sizeof(kept[0])) && !(kept[j].room == room && kept[j].rec == k); j++);
-        if (j < (int)(sizeof(kept) / sizeof(kept[0]))) { host_log("cast: room %04d record %d (type %d) stays: %s\n", room, k, ep->id, kept[j].why); continue; }
-        want[k] = c < 2 ? coop_look_model(c) : c == CAST_CROWD ? cast_crowd_model((unsigned)o->seed, scene, ep->id, ep->mdlver, o->cast_all, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off)
-                : cast_model((unsigned)o->seed, scene, c, o->cast_all, imports, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off);   /* (Claire's, Chris's: never cast) */
-        rec_chr[k] = (unsigned char)c;
+        if (!(ep->flg & 0x1) || !ep->mlwP) continue;   /* (the character played's doubles too: played()) */
+        want[k] = cast_want(o, room, k, ep->id, ep->mdlver, imports, &c, &why);
+        if (why) host_log("cast: room %04d record %d (type %d) stays: %s\n", room, k, ep->id, why);
+        if (c >= 0) rec_chr[k] = (unsigned char)c;
     }
     cast_release();   /* (normally all went with the last room's textures; their buffer is free again) */
     for (k = 0; k < rom->ene_n && k < RECS; k++) {
@@ -691,23 +702,47 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
    the groups, the played lengths), over the room files' scripts in story order as far as the numbers give it: the stages 0..9,
    in each its room files and their scripts in turn. A playthrough meets them in another order (and some twice, some never),
    so its picks, which depend on the lines said before, differ from some point on. The speaker's look as cast_room gives it
-   (Claire's and Chris's: the player's look for them; the others' cast_model while the cast is on; drawn as themselves else)
-   with every record drawn; no game running: no Steve or Wesker played, no records kept as themselves (kept[]), no imports. */
-typedef struct { int room; VoiceOnAt v; } PlanLine;
+   (plan_room: cast_want over the room file's records, the kept ones, the display slots in record order); no game running:
+   every record taken as there at the room load, no imports, no co-op, no Steve or Wesker played (no scene with a line is
+   played as them). */
+typedef struct { int room, m; const char* why; VoiceOnAt v; } PlanLine;   /* m: the model its speaker is drawn as, -1 itself (why: kept) */
 static struct { PlanLine* l; int n, cap; } plan;
 static VoiceSaid plan_said;
 static int plan_age(const VoiceLine* l) { return voice_said_age(&plan_said, l); }
+static unsigned plan_rd32(const unsigned char* d, long n, long o) { return o >= 0 && o <= n - 4 ? d[o] | d[o + 1] << 8 | d[o + 2] << 16 | (unsigned)d[o + 3] << 24 : 0; }
 static void plan_room(int room, const unsigned char* d, int n, void* ud)
 {
+    const EnemyOpts* o = ud;
     VoiceOnAt v[256];
-    int c = voice_room_lines(room, d, n, coop_insn_len_raw, v, 256), i;
-    (void)ud;
+    int c = voice_room_lines(room, d, n, coop_insn_len_raw, v, 256), i, k, j, ch, want[RECS], slot[RECS], sm[CSLOTS], ns = 0;
+    const char* why[RECS];
+    long rm = plan_rd32(d, n, 0x10), ep = plan_rd32(d, n, rm + 2 * 4);
+    int nr = (int)plan_rd32(d, n, rm + 0x80 + 2 * 4);
     if (plan.n + c > plan.cap) {
         PlanLine* q = realloc(plan.l, sizeof(PlanLine) * (size_t)(plan.n + c + 1024));
         if (!q) return;
         plan.l = q; plan.cap = plan.n + c + 1024;
     }
-    for (i = 0; i < c; i++) { plan.l[plan.n].room = room; plan.l[plan.n++].v = v[i]; }
+    for (k = 0; k < RECS; k++) {   /* every record given a model as cast_room gives it (cast_want; the room file's records, all
+        taken as there at the room load), then the display slots in record order as cast_room fills them */
+        long r = ep + k * 0x24L;   /* (ETTY_WORK: type at 4, model version at 9) */
+        why[k] = NULL; want[k] = slot[k] = -1;
+        if (k >= nr || !ep || r + 0x24 > n) continue;
+        want[k] = cast_want(o, room, k, d[r + 4] | d[r + 5] << 8, d[r + 9], 0, &ch, &why[k]);
+        if (want[k] < 0) continue;
+        for (j = 0; j < ns && sm[j] != want[k]; j++);
+        if (j == ns && ns < CSLOTS) sm[ns++] = want[k];
+        if (j < ns) slot[k] = j; else why[k] = "no display slot left";
+    }
+    for (i = 0; i < c; i++) {
+        PlanLine* p = &plan.l[plan.n++];
+        int sp = v[i].sp;
+        p->room = room; p->v = v[i]; p->m = -1; p->why = NULL;
+        if (v[i].own < 0 || sp < 0 || sp >= RECS) continue;
+        if (v[i].own < 2) p->m = coop_look_model(v[i].own);   /* (Claire's, Chris's records: the player's look; played, the double's, the same) */
+        else if (slot[sp] >= 0) p->m = want[sp];
+        else p->why = why[sp];
+    }
 }
 static void plan_scan(int room, const unsigned char* d, int n, void* ud) { (void)ud; voice_scan_room(room, d, n, coop_insn_len_raw); }
 static int plan_cmp(const void* a, const void* b)
@@ -728,17 +763,17 @@ int voice_plan_export(int seed, const char* path)
     for (d = 0; d < 2; d++) ADXF_LoadPartitionNw(VOICE_PT + d, d ? (char*)"\\VOICE2.AFS" : (char*)"\\VOICE1.AFS", NULL, NULL);   /* (file_ms) */
     if (room_each(plan_scan, NULL) <= 0) { host_log("voice plan: cannot read the room files\n"); return -1; }
     voice_scan_done();   /* (the catalogue, as voices_want's scan, without voices.cache) */
-    room_each(plan_room, NULL);
+    room_each(plan_room, &o);
     qsort(plan.l, (size_t)plan.n, sizeof(PlanLine), plan_cmp);
     if (!(f = pc_fopen(path, "w"))) { host_log("voice plan: cannot write %s\n", path); return -1; }
-    fprintf(f, "{\"version\":1,\"seed\":%d,\"options\":{\"voices\":1,\"cast\":%d,\"cast_assign\":%d,\"cast_all\":%d,\"cast_enemy\":%d,\"mouths\":%d},\"scenes\":[",
+    fprintf(f, "{\"version\":2,\"seed\":%d,\"options\":{\"voices\":1,\"cast\":%d,\"cast_assign\":%d,\"cast_all\":%d,\"cast_enemy\":%d,\"mouths\":%d},\"scenes\":[",
             seed, o.cast, o.cast_assign, o.cast_all, o.cast_enemy, g_voice_mouths);
     for (i = 0; i < plan.n; i++) {
         const PlanLine* p = &plan.l[i];
         const VoiceOnAt* v = &p->v;
         const VoiceCurated* cv = voice_curated(v->disc, v->vid);
         int first = !i || p->room != plan.l[i - 1].room || v->script != plan.l[i - 1].v.script;
-        int ms = file_ms(v->disc, v->vid), gap, pl = voice_played_ms(p->room, v->ofs, v->vid, &gap), m = -1, chr = -1, k, full;
+        int ms = adx_length_ms(VOICE_PT + v->disc - 1, v->vid), gap, pl = voice_played_ms(p->room, v->ofs, v->vid, &gap), m = -1, chr = -1, k, full;
         unsigned short want = (unsigned short)gpart_;
         const char *kind = "original", *why = NULL;
         VoiceChoice ch = { 0 };
@@ -747,6 +782,7 @@ int voice_plan_export(int seed, const char* path)
             plan_script(f, v->script);
             fprintf(f, ",\"disc\":%d,\"lines\":[", v->disc);
             order = 0; want = 0xFFFF; head = -1;
+            if (getenv("RECVX_VOICE_PLAN_FRESH")) plan_said.n = 0;   /* test aid: each script as if nothing was said before (a headless scene run) */
         }
         gpart_ = 0xFFFF;
         if (v->own == -2) why = "none of the cast says it, checked by hand";
@@ -754,15 +790,14 @@ int voice_plan_export(int seed, const char* path)
         else if (v->sp < 0) why = "no speaker";
         else if (v->own < 0) why = "not a story character";
         else {
-            m = v->own < 2 ? coop_look_model(v->own) : o.cast ? cast_model((unsigned)seed, o.cast_assign ? (unsigned)p->room + 1 : 0, v->own, o.cast_all, 0,
-                                                                         enemy_cast_off(), o.cast_enemy, o.cast_enemy_off) : -1;
+            m = p->m;   /* (plan_room: as cast_room gives it) */
             chr = voice_model_chr(m);
             if (chr < 0 && m >= 0 && voice_creature(m, 0, &k, (unsigned char[64]){ 0 }, 64) > 0) { kind = "enemy"; why = "shown as an enemy: its sounds"; }
             else if (chr == v->own) {
                 for (k = 0; k < voice_count(chr); k++)
                     if (voice_line(chr, k)->disc == v->disc && voice_line(chr, k)->vid == v->vid) { voice_said_add(&plan_said, voice_line(chr, k)); break; }
                 why = "shown as its own character";
-            } else if (chr < 0) why = m < 0 ? "drawn as itself" : "shown as a model without lines";
+            } else if (chr < 0) why = m >= 0 ? "shown as a model without lines" : p->why ? p->why : "drawn as itself";
             else if (cv && cv->flags & VOICE_PART && v->vid == want) { gpart_ = cv->next; kind = "group_silent"; why = "a later part of a group: the line in place of its first plays on"; }
             else {
                 gpart_ = cv && cv->next != 0xFFFF && !(cv->flags & VOICE_PART) ? cv->next : 0xFFFF;
@@ -778,6 +813,8 @@ int voice_plan_export(int seed, const char* path)
         else head = -1;
         fprintf(f, "%s{\"disc\":%d,\"vid\":%d,\"speaker\":", order ? "," : "", v->disc, v->vid);
         if (v->own >= 0) fprintf(f, "\"%s\"", cast_name(v->own)); else fprintf(f, "null");
+        if (m < 0) fprintf(f, ",\"drawn_as\":null");   /* (the character of the model it is drawn as; a model of none: its name) */
+        else fprintf(f, ",\"drawn_as\":\"%s\"", chr >= 0 ? cast_name(chr) : m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?");
         fprintf(f, ",\"order\":%d,\"orig_ms\":%d,\"played_ms\":%d,\"played_known\":%s,\"group\":", order++, ms, pl >= 0 ? pl : ms, pl >= 0 ? "true" : "false");
         if (head >= 0) fprintf(f, "%d", head); else fprintf(f, "null");
         fprintf(f, ",\"group_part\":%d,\"repl\":{\"kind\":\"%s\",", head >= 0 ? part_k : 0, kind);
