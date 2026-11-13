@@ -2162,6 +2162,14 @@ void coop_enemy_end(BH_PWORK* ep)
                 e.u.ph.mode[0] = 2; e.u.ph.mode[1] = bhCdirCheck(v->ay, ep->ay) == 0 ? 0 : 1; e.u.ph.mode[2] = 1; e.u.ph.mode[3] = 0;
                 e.u.ph.flg_set |= 4;
                 if (ep->id == 4) ep->ct0 = 0;   /* Cerberus lets go after its first bite instead of biting the air for 2 s */
+                if (ep->id == 9 && ep->exp0) {   /* the Bandersnatch lets go as its NG00's end does: its hold bits (0x04400000) and the
+                    link its step set on the stand-in (PlyDG00/01: 0x200000, 0x800000) stayed, bhEne09_PlayerLink dragged our own
+                    player to its hand every step and its NG01 set our player's modes at its end */
+                    *(int*)(ep->exp0 + 0x18) &= ~(0x04000000 | 0x800000 | 0x400000 | 0x200000 | 0x100);
+                    ep->mode0 = 1; ep->mode1 = ep->mode2 = ep->mode3 = 0;
+                    ep->flg |= 0x60;   /* (hittable, the player collides with it: as its NG00 and its missed grab) */
+                    ep->flg2 &= ~1;
+                }
                 host_log("coop: enemy %d (id %d) grabs the partner: sent as a hit\n", i, ep->id);
             }
             if (kill) host_log("coop: enemy %d (id %d) kills the partner\n", i, ep->id);
