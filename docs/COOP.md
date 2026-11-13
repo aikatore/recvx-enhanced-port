@@ -935,7 +935,8 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   `BUSY_DOOR`) makes us second, else we run them. Both coming in at once: the host decides, it ran the room unless the guest
   was in the room when the host's room loaded, and refuses the claims of a guest that thought otherwise (EV_ENEOWN 2, also
   after both loaded the room again at a Retry; its copies then show the host's). A slot that comes up later (an extra at the room's first frame, a spawned enemy, a slot
-  used again) is the room's runner's (`dflt`); a linked part (a zombie's upper half and limbs, a Black Widow's legs) always
+  used again) is the room's runner's (`dflt`; a boss or a part of no hand-over type that comes up while both play in the
+  room - Alexia 2's babies - is the host's game's, which runs the fight); a linked part (a zombie's upper half and limbs, a Black Widow's legs) always
   goes with its body. The records the room's scripts act on (`enemyopt_glue.c enemy_rec_scripted`) are the host's whenever it
   plays in the room: a guest that runs one hands it to the host when the host comes (its state rules: `hin_ok`, the table
   of "The guest's room"), and gets it back when the host leaves. Shared Enemy Control moves the common enemies between the
@@ -968,11 +969,17 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   hand-over: 43 to 74 units there and back with Shared Enemy Control). A giver that leaves stops running it at once (its game
   does not step its enemies any more); its enemies are the room's until its next room loads (`run_room`), so the hand-over
   may take a few frames of its door. One not in a state to go with its state (`hin_ok`: a grab, stairs, mid-attack for most
-  types) goes without it after `LEAVE_WAIT` (15) frames of the menu, at once in a door; the receiver lets it go from its
+  types) goes without it after `LEAVE_WAIT` (15) frames of the menu, at once in a door (a boss or a part without a work we
+  send, no type of `own_types`, does not go in a menu or scene at all: it stays the runner's, stopped as in single player;
+  before, the partner's game ran it on from its puppet's pose, its Move from the start - Alexia's fight reset); the receiver lets it go from its
   puppet (`unhold`: a zombie stands, another type starts its Move), and a hit its copy had not taken yet goes after it. An
   enemy an event of the leaver drives goes too in a door (the event ends there). Refused (EV_ENEOWN 0): the giver runs it on
   (2: the receiver runs it already); no answer in 10 s: the same. The replies are stamped with the enemy's room (a receiver
-  in its door is in the next one already). As many as three quarters of the event ring hold go per frame; a whole room fits (a zombie with its upper
+  in its door is in the next one already). Not taken during a network outage (the giver runs it on meanwhile), and one whose
+  frame F the playout passed more than `TAKE_STALE` (15) frames ago (it came after an outage or a long resend) is refused
+  while its giver stays in the room: the giver runs it on and gives it again later with its state then. Before, it was taken
+  from F after the outage, and the giver's view of it went back to F (11 units after a 5 s outage). A Black Widow goes
+  with its state when its runner leaves in any state but its grab ("The hand-in" table, the leave column). As many as three quarters of the event ring hold go per frame; a whole room fits (a zombie with its upper
   half about 14 events).
 * **Hits** (`hit_send`, `hit_apply`): our hit on a puppet goes to its runner as EV_ENE_HIT, taken off our copy. Protocol 56:
   a hit reaches the game that runs the enemy, once: applied there when it runs it (not while it runs it on only as the giver
@@ -981,9 +988,16 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   Before, a hit on an enemy the receiver did not run was dropped: 2 of 120 scripted hits on a LAN, 15 of 120 at 80 ms around
   grabs and hand-overs.
 * **The partner gone**: a partner in game in another room, or away from the room (a door, a load) for `AWAY_GRACE` (45)
-  frames without having handed its enemies over, leaves them to us (`own_takeover`: each runs on from what we showed of it, let
+  frames without having handed its enemies over, leaves them to us (not the host coming into the guest's room: from its
+  claim, `COOP_ROOM_CLAIM`, until it plays there, `host_coming`; before, a door's fade of 45 frames gave the guest back what
+  its claims had left to the host, the bosses of Alexia 2's room ran in both games and their HP went apart) (`own_takeover`: each runs on from what we showed of it, let
   go); so does the end of its session or a new one. A network outage (no datagram for 3 s) holds them as they were until the
   partner is back or the session ends (15 s): before, the guest ran them on and they jumped back when the host's state came.
+  The runner's game plays its enemies on meanwhile (its own player fights them as before); when the partner's datagrams come
+  again, a puppet that stood still (an outage of 3 s or more, which resets the playout, or a shorter one, after which the
+  same frame had been shown again) is eased from where it stood to the runner's state (`OUTAGE_EASE`: about a frame per 0.6
+  units, its pose blended in over 8 frames by the motion's own interpolation, `hokan`), within the room load it was shown
+  in; before, it jumped there in one frame (up to 28 units after 2 s, 24 after 5 s, in 0/2 and 0/6, relay and P2P).
 * **Targeting** (the runner's game): each enemy goes for one player at a time (`coop_pick_target`, re-decided at
   every step; a linked part goes for its parent's). Before the rule: an enemy linked to a player
   (`lkwkp`: the moth's larva, en27, rides on the player it was laid on and plays that player's motions)
@@ -1016,7 +1030,13 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   reaction becomes `EV_PLY_HIT`; everything else is undone. Grabs other than the zombie's arrive as
   a hit with the grab's own damage; the grabber lets go (Cerberus after its first bite, the
   Bandersnatch at once: its hold and link bits, `exp0` 0x18 0x04400000 / 0x200000 / 0x800000, cleared
-  and back to its Brain - before, `bhEne09_PlayerLink` dragged the host's own player to its hand).
+  and back to its Brain - before, `bhEne09_PlayerLink` dragged the host's own player to its hand). A Cerberus
+  (also its pounce, NG01, which holds in mode 6) or an anatomist plays its grab on to its end on the stand-in
+  (`conv_grab`: the partner stays its victim; its hold's damage goes as hits), and lets go as its grab's end does
+  (`grab_let_go`) when the partner goes: its steps act on whichever player `plp` is (the anatomist's hold takes 30 at
+  frames 25 and 60, Cerberus's link `bhEne04_PlayerLink` puts that player in its mouth), and the target rule let go of a
+  partner farther than 3 m, which made our own player the victim of the rest of the grab (found by reading en04.c and
+  en26.c; not seen in the test runs, where the partner stayed near).
   The dead flag (`flg` 2) an enemy sets on the stand-in (Alexia's embrace, the Tyrant's last
   blow; in single player the game over) is the partner's death: the hit takes all its health (not
   for a grab sent as a hit). A player held in its own game (mode 4/6) takes no `EV_PLY_HIT`, as in
@@ -1089,7 +1109,11 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   host's proxy, and of its flags the ones the enemy changed there, plus the planted foot
   (`flg` 0x40000, `bhFixPosition`) the grab's start lets go of: the proxy never has it, and an
   aimed weapon or the knife left ours set, which moved the player off the zombie every frame of
-  the grab. The host takes a slot back after 300 joiner frames without snapshots; when the victim leaves the room it hands the
+  the grab. The grab's place is where the runner's game saw the victim, a path's time ago: the victim's player stays where
+  it is and slides to the grab's place over `GRAB_EASE` (8) frames (`grab_ease`, after the holder's step: on top of where
+  its link, `bhEne01_PlayerLink`, puts the player); the zombie is where the giver's game had it (moving it instead made it
+  jump in the giver's game). Before, the player was put there at once (2 to 3 units in a frame, 10 when it had stepped
+  back from a hit). The host takes a slot back after 300 joiner frames without snapshots; when the victim leaves the room it hands the
   zombie over as any other. A grab started while the joiner's enemy ran its own AI keeps running locally until it
   lets go.
 * **Safety nets**: a player in a grab state with no enemy holding it for 15 frames is let go (150
@@ -1189,7 +1213,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
 
   | type | goes with its state | stays the joiner's meanwhile |
   |---|---|---|
-  | Black Widow (3) | on the floor or the ceiling (also one that started there, `flg` 0x2000000), idle, walking, turning, chasing (Brain on); dead | a dive, jump, attack, grab or change of surface; once a leg is shot off (its legs are its own game's children: the host's would be whole) |
+  | Black Widow (3) | on the floor or the ceiling (also one that started there, `flg` 0x2000000), idle, walking, turning, chasing (Brain on); dead. Its runner leaving: any state but its grab (`mode0` 2; the grab block, `exp1`, is the leader's in each game), its dive, jump, climb and change of surface go on from where they are (their surfaces go as records) | a dive, jump, attack, grab or change of surface; once a leg is shot off (its legs are its own game's children: the host's would be whole). Before, the leaver's went without its state then and the receiver ran it on from its puppet's pose with its own stale work: jumps of up to 47 units, about 1 leave in 3 |
   | moth (6) | perched, flying, closing in; dead | its grab (no moth may hold the player: `exp1`), take-off, landing, crawling wingless |
   | bat (7) | hanging awake, chasing, hovering, circling; dead | latched on (`flg` 0x1000), dropping, knocked back, going up to hang; the swarm's leader while its pause runs (`exp1[6]`, `[7]`: only it counts down). Asleep (type 1): not claimed |
   | fish (8), ants B (20) and C (71) | always | - |
@@ -2032,7 +2056,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_KILL="hostframe:slot[:damage],..."` | A lethal hit (or one of that damage) on our enemy in that slot, as the weapon code leaves it. |
 | `RECVX_COOP_OWNERSHIP=0\|1` | Host: forces "Shared Enemy Control" (engaged-player ownership) off (0: the host runs the enemies, only zombie grabs of the joiner go over) or on (1), whatever the setting says; the joiner follows the host's rule either way. |
 | `RECVX_COOP_ALIVE="hostframe,..."` | Log the room's living, shown enemies (slot:type), how many `ed_flg` bits are set, and `rm_flg` (a kill-count door's bit). |
-| `RECVX_COOP_ENEPOS="hostframe,..."` | Log the room's enemies (not linked parts): slot:type.look@x,z,hp,mode0, `D` dead, `H` hidden (also one of ours waiting for the runner's state, protocol 56; `coop_handin_check.sh`, `coop_owner_check.sh`). |
+| `RECVX_COOP_ENEPOS="hostframe,..."` | Log the room's enemies (not linked parts): slot:type.look@x,z,hp,mode0, `D` dead, `H` hidden (also one of ours waiting for the runner's state, protocol 56; `coop_handin_check.sh`, `coop_owner_check.sh`), `G` the guest's game runs it. |
 | `RECVX_COOP_WARP="hostframe:x:z,..."` | Both players to x/z at that host frame. |
 | `RECVX_COOP_VOMIT="hostframe,..."` | Host: the walking zombie nearest the partner vomits. |
 | `RECVX_COOP_CRAWL="hostframe,..."` | Host: its walking zombies become crawlers (as a knock-down with little health left), which crawl towards their target and grab its legs. |
