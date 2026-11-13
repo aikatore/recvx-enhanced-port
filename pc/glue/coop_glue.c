@@ -1564,6 +1564,7 @@ static int wall_between(const BH_PWORK* p, const BH_PWORK* q)
     return hit;
 }
 
+static int grips_us(BH_PWORK* ep);
 /* client: the host's enemy grabbed us. Taken only as a whole: the transfer the grab names is
    complete, the slot holds a zombie here (en01, the only grab handed over) with the same linked
    child, the state is plausible and its position not behind a wall; otherwise the host gets the
@@ -1575,6 +1576,20 @@ static void grab_in(const Event* e)
     BH_PWORK* ep;
     int i = e->idx, c;
     unsigned int x;
+    /* late: our own copy of that enemy grabbed us meanwhile (its step ran here: the host left mid-attack and our game took
+       over, or its snapshot of the grab's start). Before, refused: the enemy became the host's puppet frozen in its grab
+       while our player played the grab with nobody holding it, and the failsafe saw that puppet as the holder. Our game
+       runs that grab: it is ours, handed back at its end as any grab of the host's */
+    for (c = 0; c < (int)sys->ewk_n && c < PC_ENE_SLOTS && (c == i || !(ene[c].flg & 0x1) || !grips_us(&ene[c])); c++) ;   /* (another holds us: c) */
+    if (i < PC_ENE_SLOTS && i < (int)sys->ewk_n && e->stg == sys->stg_no && e->rom == sys->rom_no && (ene[i].flg & 0x1) && ene[i].id == 1 &&
+        (plp->mode0 == 4 || plp->mode0 == 6) && holding(&ene[i]) && step_ran[i] && !we_run(i) && (c >= (int)sys->ewk_n || c >= PC_ENE_SLOTS)) {
+        c = ene_slot(ene[i].exp1);
+        own_set(i, 1);
+        if (c < PC_ENE_SLOTS) own_set(c, 1);
+        own_grab[i] = 1; own_t[i] = frame_no; owned_room = coop_room_key();
+        host_log("coop: enemy %d grabs us, as our copy of it does already: ours runs it\n", i);
+        return;
+    }
     if (i >= PC_ENE_SLOTS || i >= (int)sys->ewk_n || e->stg != sys->stg_no || e->rom != sys->rom_no || !(ene[i].flg & 0x1) ||
         !tx_in_game || (sys->cb_flg & 0x5) || plp->mode0 == 3 || plp->mode0 == 4 || plp->mode0 == 6 || plp->hp < 0 || we_run(i) ||
         (a->px - plp->px) * (a->px - plp->px) + (a->pz - plp->pz) * (a->pz - plp->pz) > 10.0f * 10.0f) {   /* late: we moved on */
@@ -1640,7 +1655,6 @@ static void move_player(float x, float z)
     if (e) { e->fpx += dx; e->bpx += dx; e->bpxb += dx; e->spx += dx; e->plx += dx; e->fpz += dz; e->bpz += dz; e->bpzb += dz; e->spz += dz; e->plz += dz; }
 }
 
-static int grips_us(BH_PWORK* ep);
 static int event_driven(const BH_PWORK* ep);
 /* our player out of a grab, as en01 releases it */
 static void player_let_go(void)
