@@ -969,8 +969,10 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   does not step its enemies any more); its enemies are the room's until its next room loads (`run_room`), so the hand-over
   may take a few frames of its door. One not in a state to go with its state (`hin_ok`: a grab, stairs, mid-attack for most
   types) goes without it after `LEAVE_WAIT` (15) frames of the menu, at once in a door; the receiver lets it go from its
-  puppet (`unhold`: a zombie stands, another type starts its Move). Refused (EV_ENEOWN 0): the giver runs it on (2: the receiver
-  runs it already). As many as three quarters of the event ring hold go per frame; a whole room fits (a zombie with its upper
+  puppet (`unhold`: a zombie stands, another type starts its Move), and a hit its copy had not taken yet goes after it. An
+  enemy an event of the leaver drives goes too in a door (the event ends there). Refused (EV_ENEOWN 0): the giver runs it on
+  (2: the receiver runs it already); no answer in 10 s: the same. The replies are stamped with the enemy's room (a receiver
+  in its door is in the next one already). As many as three quarters of the event ring hold go per frame; a whole room fits (a zombie with its upper
   half about 14 events).
 * **Hits** (`hit_send`, `hit_apply`): our hit on a puppet goes to its runner as EV_ENE_HIT, taken off our copy. Protocol 56:
   a hit reaches the game that runs the enemy, once: applied there when it runs it (not while it runs it on only as the giver
