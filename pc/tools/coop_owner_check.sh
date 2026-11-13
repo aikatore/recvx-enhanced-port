@@ -7,8 +7,9 @@
 #       and then moved (no step over 12 units in 5 frames from its first frame in the room)
 #   E2  0/6: the guest there from ~1000, the host comes at ~3000: on the host nothing jumps either; the guest runs them on
 #       (only records the room's scripts act on go to the host)
-#   L1  6/9 (Black Widows): both there (the host first), the host leaves at ~3300: the guest takes each Black Widow with its
-#       state, nothing jumps on the guest (before: the guest ran them from a puppet's pose, its own work stale)
+#   L1  6/9 (Black Widows): both there (the host first), the host leaves at ~3300: the guest takes each Black Widow (with its
+#       state unless it is mid-attack), nothing jumps on the guest (before: the guest ran them from a puppet's pose, its own work
+#       stale: one jumped 47 units)
 #   L2  0/6: the guest first, the host comes at ~2500, the guest leaves at ~3300: the host takes them with their state
 #   R   0/2 with ev_flg 104 (walking zombies): both come in at the same host frame: both list the same enemies after it,
 #       nothing jumps
@@ -138,7 +139,7 @@ done
 for r in E1 E2 R H S; do check "$r: both have the same enemies, HP and dead ones ($(sed -n 3p $out/$r/ana.txt))" "sed -n 3p $out/$r/ana.txt | grep -q '^alike'"; done
 check "E1: the guest's copies waited for the host's state" "grep -q 'own: room 0/6 loaded, the host in it already' $out/E1/guest/log.txt"
 check "E2: the guest runs its enemies on (only script records go to the host)" "grep -q 'own: the host comes into the room we ran alone' $out/E2/guest/log.txt && ! grep 'own: enemy .* handed to the partner' $out/E2/guest/log.txt | grep -vq 'scripts act on'"
-check "L1: the guest takes the Black Widows with their state (those not climbing or jumping)" "[ \$(grep -c 'own: enemy [0-9]* (id 3) comes from the partner.s game (it leaves): ours' $out/L1/guest/log.txt) -ge 1 ]"
+check "L1: the guest takes every Black Widow (with its state, or let go where it is when mid-attack)" "[ \$(grep -c 'own: enemy [0-9]* (id 3) comes from the partner.s game (it leaves)' $out/L1/guest/log.txt) = \$(grep -c 'own: enemy [0-9]* (id 3) handed to the partner.s game (we leave' $out/L1/host/log.txt) ] && grep -q 'own: enemy [0-9]* (id 3) comes from the partner.s game (it leaves)' $out/L1/guest/log.txt"
 check "L2: the host takes the guest's enemies with their state" "[ \$(grep -c 'own: enemy [0-9]* (id [0-9]*) comes from the partner.s game (it leaves): ours' $out/L2/host/log.txt) -ge 2 ]"
 for r in H S; do check "$r: no hit lost ($(sed -n 4p $out/$r/ana.txt))" "sed -n 4p $out/$r/ana.txt | grep -q 'lost 0\$' && ! sed -n 4p $out/$r/ana.txt | grep -q 'hits 0 '"; done
 exit $fail

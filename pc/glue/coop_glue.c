@@ -3617,8 +3617,10 @@ static void apply_snapshots(void)
             if (!(s->stflg & 0x1000000) && !(s->flg & 0x2)) continue;   /* the host has not hidden it yet */
             gone_mask[t >> 5] &= ~(1u << (t & 31));
         }
-        if (!ep->mode0) {
-            ep->stflg = (ep->stflg & ~0x41000000) | (s->stflg & 0x41000000);
+        if (!ep->mode0) {   /* (woken as the runner's, never put to sleep or hidden before its Init: a hidden one's Init does not run,
+                                and the next zombie's Init reads its work - bhEne01_GetWalkMotion - a crash at a room load, protocol 56
+                                sends the snapshots all the time) */
+            ep->stflg &= ~(0x41000000u & ~s->stflg);
             continue;
         }
         if (!s->mode[0]) continue;   /* a new enemy there whose Init has not run: ours ran, it would run again (its children twice) */
