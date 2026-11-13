@@ -96,6 +96,7 @@ int  enemy_rec_scripted(int slot);           /* the room's scripts act on that r
 void spawn_replay(void);                        /* host: every added enemy of the room again (coop_spawn_note) */
 void coop_spawn_note(int slot, const SpawnNote* n);   /* coop_glue.c: host -> guest, if it is in our room; guest -> host: its own extras */
 void coop_extras_done(int room, int count);     /* coop_glue.c, guest: its extras of this load sent (SPAWN_NOTE_XDONE) */
+void coop_room_loaded(void);                    /* coop_glue.c: every room load (also the same room again): the old load's ownership goes */
 void coop_extra_corpse(int slot);               /* coop_glue.c, host: gx_follow made an extra the guest killed (dead and hidden
                                                    until the guest hands its corpse in) */
 int  coop_partner_in_room(void);                /* coop_glue.c: the co-op partner plays in our room (its copy of it runs) */

@@ -908,6 +908,7 @@ void enemy_room_finished(void)
 {
     const EnemyOpts* o;
     enemy_room_gen++;
+    coop_room_loaded();
     variant_room();   /* (the slots' enemy variants) */
     extras_room();    /* "Extra Item Boxes and Herbs": their walls and triggers (extras_glue.c) */
     if (!rom || !sys) return;

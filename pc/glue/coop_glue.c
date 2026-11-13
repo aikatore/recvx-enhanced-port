@@ -1464,6 +1464,16 @@ static void owned_drop(void)
     owned_room = -1;
 }
 
+/* every room load (bhFinishRoom), also of the same room again (a Retry, a loaded save): what the partner's game ran was the
+   old load's. The host's drop only came with another room key, so a Retry of the same room kept a slot the guest ran
+   (a grab of the host's zombie) as the guest's: our fresh copy never ran its first step (en01 InitType11) and crashed on
+   its empty work. The new copies are not let go (unhold): fresh. The guest's go back (grab_check: another load's) */
+void coop_room_loaded(void)
+{
+    owned_room = -1;
+    if (is_host) owned_drop();
+}
+
 /* host, after the step of an enemy targeting the proxy that started a grab on it */
 static void grab_out(int i, BH_PWORK* ep)
 {
