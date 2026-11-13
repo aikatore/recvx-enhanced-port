@@ -412,7 +412,18 @@ code, token or key is logged.
 4. **Relay fallback.** No path after 2 s: RELAY frames through the server. Punching continues
    every 500 ms for 10 s; a confirmation then switches to direct without a reconnect. Later
    punches are ignored. **Server Relay** never punches.
-5. **Close.** CLOSE from the host, or `room_timeout` without its keepalive; the joiner's place
+5. **Direct to relay.** A confirmed direct path that brings nothing for 1.5 s while the server
+   answered a keepalive in the last 7 s (the game sends every frame), or relayed game data while
+   nothing came directly for 250 ms (the partner lost the path toward us: it relays already), puts
+   the session on the relay: the same keys, counters and token, so the game sees a stall of about
+   1.5 s and no reconnect. The server needs nothing new: it relays for any member of a room at any
+   time (also after a `--take-over`, which carries the relay counters). A new punching round
+   starts as in step 4 (every 500 ms for 10 s, punches taken again in that window); a
+   confirmation goes back to direct. After a game-thread stall of over 1 s the 1.5 s count
+   restarts, but the partner of a game that stalls that long falls back too and returns by
+   punching. With the server gone as well, the session stays on the direct path (nothing better
+   to switch to).
+6. **Close.** CLOSE (sent twice; the second, finding its room or member gone, is dropped without a log line) from the host, or `room_timeout` without its keepalive; the joiner's place
    frees after `member_timeout`.
 
 **Lost room.** A waiting host without keepalive answers for 5 s registers again (new keys, new
@@ -598,7 +609,7 @@ added without a protocol change. IPv6 would help players behind CGNAT who have n
 | test | what |
 |---|---|
 | ctest `rdv` (`pc/tests/test_rdv.c`) | protocol and server core: messages, crypto, room codes, hijacks, passwords, rejoin/KICK, limits, config parser (the shipped example must equal the defaults), metrics, log privacy, amplification invariant, the handover state (round trip; truncated, corrupted and other-format blobs) |
-| ctest `rdv_client` (`pc/tests/test_rdv_client.c`) | the client (`rendezvous.c`) against the server core on a fake network and clock: INTRO checks, epochs, downgrades, relay/direct switching, restarts, stalls, DNS |
+| ctest `rdv_client` (`pc/tests/test_rdv_client.c`) | the client (`rendezvous.c`) against the server core on a fake network and clock: INTRO checks, epochs, downgrades, relay/direct switching both ways (a direct path that dies mid-session), restarts, stalls, DNS |
 | ctest `rdv_fuzz` (`pc/tests/fuzz_rdv.c`, Linux) | parser, server and client state machines under AddressSanitizer + UBSan, 300,000 inputs; libFuzzer-ready with `clang -fsanitize=fuzzer -DRDV_LIBFUZZER` |
 | ctest `rdv_paths` (`pc/server/test_paths.sh`, Linux) | a local server and two `recvx-client`s: punched, Via server, relay fallback, passwords, loss, plaintext, sustained relay delivery |
 | ctest `rdv_nat` (`pc/server/test_nat.sh`, Linux) | cone/symmetric NATs, same router, netem, in rootless network namespaces (skipped without user namespaces) |

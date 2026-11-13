@@ -27,11 +27,15 @@ const NetAddr rdv_peer = { 0, 0xFFFF };
 #define ORPHAN_IDLE_MS 10000            /* host: the direct session of a lost room is over */
 #define PUNCH_EVERY_MS 50
 #define PUNCH_MORE_MS 10000             /* after the relay switch: punching goes on, slower */
+#define FALLBACK_MS 1500                /* a direct path silent this long (the game sends every frame): back to the relay */
+#define RELAYS_MS 250                   /* ... at once when the partner relays and nothing came direct for this long */
+#define SERVER_OK_MS 7000               /* the server answered a keepalive this recently: the relay is there */
 
 static RdvConfig cfg;
 static int st, relay, heard, confirmed, path_lan, have_ses, e2e, pw_used, n_cand, lan_cand, attempt, keys_ok, orphan, flags;
 static uint32_t t_start, t_sent, t_ka, t_ack, t_intro, t_punch, t_rx, relay_ctr;
 static uint32_t t_unans, t_frame;       /* the first keepalive since the server's last answer (0: none); the last rdv_frame */
+static uint32_t t_dir;                  /* the last authenticated datagram (punch or game) straight from the partner */
 static uint32_t nonce, room_id, member_seq;
 static uint32_t kick_seq;               /* host: the member we removed (its KICK goes again while the server still shows it) */
 static uint64_t req_id;
@@ -325,6 +329,7 @@ static void confirm(const NetAddr* a)
 {
     if (confirmed || cfg.force_relay) return;
     confirmed = 1;
+    t_dir = net_ms();
     path = *a;
     path_lan = lan_cand >= 0 && same(a, &cand[lan_cand]);
     relay = 0;
@@ -333,6 +338,21 @@ static void confirm(const NetAddr* a)
     send_punch(a);   /* one "I hear you" back: the partner may still wait for it (it gets no answer) */
     set_path_status();
     host_log("rdv: direct path to the partner %s%s after %u ms\n", net_addr_str(a), path_lan ? " (LAN)" : "", net_ms() - t_intro);
+}
+
+/* the direct path died mid-session (a router, a firewall, a NAT mapping that expired): the
+   session goes on through the relay - same keys, same counters, the game sees a short stall - and
+   a new punching round (as after the first relay switch) brings it back to a direct path */
+static void fall_back(const char* why)
+{
+    uint32_t now = net_ms();
+    confirmed = heard = path_lan = 0;
+    relay = 1;
+    st = RDV_ST_RELAY;
+    t_intro = now - (uint32_t)cfg.punch_ms;   /* punches are taken (and sent, slower) for PUNCH_MORE_MS again */
+    t_punch = now - 10 * PUNCH_EVERY_MS;
+    set_path_status();
+    host_log("rdv: %s (%u ms): using the relay\n", why, now - t_dir);
 }
 
 /* the partner proved it has the same keys (a punch MAC or an authenticated datagram): both sides
@@ -404,7 +424,7 @@ static void on_intro(const RdvMsg* m)
     if (!cfg.host) relay_ctr = 0;   /* the server's replay window is per token: the joiner's is new, the host's stays */
     n_cand = 0;
     lan_cand = -1;
-    t_ack = t_rx = net_ms();
+    t_ack = t_rx = t_dir = net_ms();
     if (from_rdv(&m->pub, &pub)) {
         same_nat = m->pub.fam == my_pub.fam && !memcmp(m->pub.ip, my_pub.ip, 16);
         if (same_nat && from_rdv(&m->lan, &lan) && lan.ip) { lan_cand = n_cand; cand[n_cand++] = lan; }   /* behind the same router */
@@ -497,6 +517,7 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
             if (crypto_verify16(mac, m.mac)) return -1;
             if (!heard) host_log("rdv: heard the partner at %s\n", net_addr_str(from));
             heard = 1;
+            t_dir = net_ms();
             keys_confirmed();
             if (m.flags & 1) confirm(from);
             else send_punch(from);   /* it has not heard us yet: an answer it can confirm the path with */
@@ -535,6 +556,7 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
             return -1;
         case RDV_RELAY:
             if (!room_id || m.room_id != room_id || (n = game_in(buf, cap, m.payload, m.payload_len)) < 0) return -1;
+            if (confirmed && net_ms() - t_dir > RELAYS_MS) fall_back("the partner relays, nothing direct");   /* our direct datagrams likely do not reach it either */
             *from = rdv_peer;
             return n;
         default: return -1;
@@ -543,13 +565,14 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
     if (!have_ses) return 0;
     if (magic == RDV_E2E_MAGIC) {   /* direct and authenticated: the partner sends here, so it heard us */
         if (!e2e || (n = game_in(buf, cap, buf, n)) < 0) return 0;   /* not with our keys: maybe a direct joiner's (coop_glue.c CoopDirect) */
+        t_dir = net_ms();
         confirm(from);
         *from = rdv_peer;
         return n;
     }
     if (confirmed && same(from, &path) && !memcmp(buf, "COOP", 4)) {   /* unencrypted session: the path only */
         if (e2e) return -1;
-        t_rx = net_ms();
+        t_rx = t_dir = net_ms();
         *from = rdv_peer;
         return n;
     }
@@ -576,7 +599,7 @@ void rdv_frame(void)
 {
     uint32_t now = net_ms();
     int k;
-    if (now - t_frame > 1000) t_unans = 0;   /* a stall: what was sent before it waits afresh */
+    if (now - t_frame > 1000) { t_unans = 0; t_dir = now; }   /* a stall: what was sent before it waits afresh, the partner gets a fresh FALLBACK_MS */
     t_frame = now;
     switch (st) {
     case RDV_ST_RESOLVE: {
@@ -637,7 +660,11 @@ void rdv_frame(void)
             return;
         }
         if (now - t_ka >= KA_MS) send_keepalive();
-        if (confirmed || cfg.force_relay) return;
+        if (cfg.force_relay) return;
+        if (confirmed) {   /* direct: silent for FALLBACK_MS while the server answers -> the relay */
+            if (now - t_dir > FALLBACK_MS && now - t_ack < SERVER_OK_MS) fall_back("the direct path went silent");
+            return;
+        }
         if (st == RDV_ST_PUNCHING && now - t_intro >= (uint32_t)cfg.punch_ms) {
             relay = 1;
             st = RDV_ST_RELAY;

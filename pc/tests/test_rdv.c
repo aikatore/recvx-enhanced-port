@@ -377,11 +377,16 @@ static void test_server(void)
     /* the joiner leaves: the room takes a new one; the host closes: the code is gone, and kept back */
     {
         RdvMsg cl = { .type = RDV_CLOSE, .room_id = r.room_id };
+        uint64_t fg = srv_stats()->drop_foreign;
         memcpy(cl.token, q.token, 16);
         ask(&joiner, &cl, &r2);
+        ask(&joiner, &cl, &r2);   /* the game's second CLOSE: its place is gone already, no foreign drop */
+        CHECK(srv_stats()->drop_foreign == fg && srv_stats()->members == 0);
         CHECK(join(&evil, r.code, NULL, &r2) == RDV_INTRO);
         memcpy(cl.token, r.token, 16);
         ask(&host, &cl, &r2);
+        ask(&host, &cl, &r2);     /* ... and the room's */
+        CHECK(srv_stats()->drop_foreign == fg);
         CHECK(join(&joiner, r.code, NULL, &r2) == RDV_ERROR && r2.err == RDV_E_NO_ROOM);
     }
 

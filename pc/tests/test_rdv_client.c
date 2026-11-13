@@ -48,8 +48,11 @@ void net_resolve_cancel(NetResolve* r) { (void)r; }
 typedef struct { NetAddr to; uint8_t b[RDV_DGRAM_MAX + 64]; int n; } Pkt;
 static Pkt cli_out[512];        /* what the client sent */
 static int ncli;
+static NetAddr PEER;
+static int to_peer;             /* datagrams the client sent straight to PEER (punches, direct) */
 int net_send(const NetAddr* to, const void* buf, int len)
 {
+    to_peer += to->ip == PEER.ip && to->port == PEER.port;
     if (ncli < 512 && len <= (int)sizeof(cli_out[0].b)) { cli_out[ncli].to = *to; memcpy(cli_out[ncli].b, buf, len); cli_out[ncli].n = len; ncli++; }
     return 1;
 }
@@ -65,7 +68,7 @@ static NetAddr na(uint32_t ip, int port) { NetAddr a; a.ip = htonl(ip); a.port =
 static RdvAddr ra(const NetAddr* a) { RdvAddr r; memset(&r, 0, sizeof(r)); r.fam = 4; memcpy(r.ip, &a->ip, 4); r.port = ntohs(a->port); return r; }
 static int same(const NetAddr* a, const NetAddr* b) { return a->ip == b->ip && a->port == b->port; }
 
-static NetAddr SRV, CLI, PEER, PEER2;
+static NetAddr SRV, CLI, PEER2;
 static int drop_to_client_type;   /* a CVXS type the network holds back on the way to the client (0: none) */
 static uint8_t held[RDV_DGRAM_MAX];
 static int held_n;
@@ -463,6 +466,67 @@ static void test_paths(void)
         rdv_input(&from, b, n, sizeof(b));
         CHECK(rdv_state() == RDV_ST_RELAY);
     }
+    rdv_stop();
+
+    /* the direct path dies mid-session (docs/SERVER.md "Direct to relay"): the relay takes over with
+       the same keys and counters, a new punching round brings the direct path back */
+    reset_server();
+    rdv_start(&c);
+    run(200);
+    snprintf(room, sizeof(room), "%s", rdv_room());
+    peer_new(&p1, PEER);
+    CHECK(peer_join(&p1, room, NULL) == RDV_INTRO);
+    pump();
+    CHECK(peer_send(&p1, 0, "COOP direct") > 0 && rdv_state() == RDV_ST_DIRECT);
+    run(1000);
+    CHECK(peer_send(&p1, 0, "COOP still") > 0 && rdv_state() == RDV_ST_DIRECT);   /* 1 s apart: no fallback */
+    run(1600);   /* silent, the server answers keepalives */
+    CHECK(rdv_state() == RDV_ST_RELAY && !strcmp(rdv_path(), "relay"));
+    {
+        uint64_t ctr = rdv_session_state()->tx_ctr;
+        peer_got = 0;
+        rdv_send("COOPafter", 10);
+        pump();
+        CHECK(peer_got == 1 && !strcmp((char*)peer_last, "COOPafter") && srv_stats()->relay_out_dgrams == 1);
+        CHECK(rdv_session_state()->tx_ctr == ctr + 1);   /* the session's counters go on */
+    }
+    peer_send(&p1, 1, "COOPrelayed");
+    CHECK(srv_stats()->relay_out_dgrams == 2);
+    {   /* punching again: the partner's "I hear you" -> direct */
+        uint8_t b[64];
+        RdvMsg m = { .type = RDV_PUNCH, .flags = 1, .room_id = p1.room_id, .attempt = 9 };
+        NetAddr from = PEER;
+        int n = rdv_build(b, sizeof(b), &m);
+        to_peer = 0;
+        run(600);
+        rdv_punch_mac(p1.ses.punch, b, n - 16, b + n - 16);
+        rdv_input(&from, b, n, sizeof(b));
+        CHECK(rdv_state() == RDV_ST_DIRECT);
+        CHECK(to_peer > 0);   /* the client punches again (every 500 ms) */
+    }
+    /* the partner relays while nothing comes direct: it lost the path toward us, we follow at once */
+    run(300);
+    CHECK(rdv_state() == RDV_ST_DIRECT);
+    peer_send(&p1, 1, "COOPrelaying");
+    CHECK(rdv_state() == RDV_ST_RELAY);
+    rdv_stop();
+
+    /* the server gone too: no switch to a relay that is not there */
+    reset_server();
+    rdv_start(&c);
+    run(200);
+    snprintf(room, sizeof(room), "%s", rdv_room());
+    peer_new(&p1, PEER);
+    CHECK(peer_join(&p1, room, NULL) == RDV_INTRO);
+    pump();
+    CHECK(peer_send(&p1, 0, "COOP direct") > 0 && rdv_state() == RDV_ST_DIRECT);
+    reset_server();   /* knows the room no longer: keepalives go unanswered */
+    {
+        int i;
+        for (i = 0; i < 8; i++) { peer_send(&p1, 0, "COOP on"); run(1000); }
+    }
+    run(1600);
+    CHECK(rdv_state() == RDV_ST_DIRECT);
     rdv_stop();
 }
 

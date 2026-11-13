@@ -37,6 +37,7 @@ typedef struct Room {
     uint8_t relayed, relaying;  /* this session went through the relay; it does now (verbose log) */
     uint64_t pw_fail_start, pw_last_ms;  /* wrong passwords for this room within a minute (whatever the address), the last one */
     int pw_fails;
+    uint8_t gone_token[16];     /* the last joiner's token: its second CLOSE finds it gone (not carried over by --take-over) */
     Member m[2];                /* 0 host, 1 joiner */
 } Room;
 
@@ -383,6 +384,7 @@ static void member_leaves(Room* r, const char* why, uint64_t now)
 {
     V("room %s: the joiner left (%s)", rname(r), why);
     session_end(r);
+    memcpy(r->gone_token, r->m[1].token, 16);
     memset(&r->m[1], 0, sizeof(r->m[1]));
     r->relayed = r->relaying = 0;
     st.members--;
@@ -592,7 +594,12 @@ static void on_keepalive(const RdvAddr* from, const RdvMsg* q, uint64_t now)
 static void on_close(const RdvAddr* from, const RdvMsg* q, uint64_t now)
 {
     int side;
-    Room* r = owner(from, q, &side);
+    Room* r = room_by_id(q->room_id);
+    /* the game sends every CLOSE twice (UDP may drop one): the second finds its room or its member
+       gone already. Nothing to do, and no foreign drop (it was logged and counted as one at the end
+       of every session) */
+    if (!r || !crypto_verify16(r->gone_token, q->token)) return;
+    r = owner(from, q, &side);
     if (!r) { V("CLOSE with a wrong room or token%s%s, dropped", WHO(from)); return; }
     if (side == 0) { st.closed++; close_room(r, now, "closed by the host"); }
     else member_leaves(r, "closed", now);

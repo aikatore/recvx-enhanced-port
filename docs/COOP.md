@@ -154,7 +154,7 @@ at the title is pulled into that game.
 
 | Mode (`coop_conn`) | What it does |
 |---|---|
-| **Automatic** (0, default; lobby RELAY *Only if needed*) | With a server set (the default, eu.cvxenhanced.de): the host opens a room on the server and still takes direct joins; a joiner with a room code tries a direct path first (UDP hole punching, about 2 s), then the server's relay; a direct path found later is taken over without reconnecting. A joiner with an address connects directly. Without a server (the field cleared): exactly Direct. |
+| **Automatic** (0, default; lobby RELAY *Only if needed*) | With a server set (the default, eu.cvxenhanced.de): the host opens a room on the server and still takes direct joins; a joiner with a room code tries a direct path first (UDP hole punching, about 2 s), then the server's relay; a direct path found later is taken over without reconnecting, and a direct path that dies mid-session (1.5 s silent) moves to the relay the same way, then back to direct if punching works again ([SERVER.md](SERVER.md) "Connection flow"). A joiner with an address connects directly. Without a server (the field cleared): exactly Direct. |
 | **Direct** (1) | Address and join code only; never contacts a server. |
 | **Server Relay** (2; RELAY *Always*) | Always through the relay: predictable, slower. |
 
