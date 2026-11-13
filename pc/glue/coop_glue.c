@@ -1217,6 +1217,15 @@ static uint32_t ty_act_enc(void* f)
 }
 /* the slot that changes hands with an enemy: a zombie's upper half (en01: exp1); 255 none */
 static int own_child(const BH_PWORK* ep) { return ep->id == 1 && ep->exp0 ? ene_slot(ep->exp1) : 255; }
+/* the upper half the partner names for its zombie i (its slot), as ours: a mod's room file that gives a record another look
+   (another count of linked parts) shifts the slots of every later upper half between the two games; before, every later
+   zombie's hand-in, grab and hand-over was refused (jumps, other HP) and the snapshots of an upper half posed another
+   zombie's (torn zombies). A zombie has one: the partner's names ours. */
+static int child_here(int i, int c)
+{
+    int h = i >= 0 && i < PC_ENE_SLOTS ? own_child(&ene[i]) : 255;
+    return c < PC_ENE_SLOTS && h < PC_ENE_SLOTS ? h : c;
+}
 /* bytes of one enemy's state: its work and exp0; a zombie's goes with its upper half's after ESTATE_ENE (ESTATE_PLY) */
 static int ene_len(const BH_PWORK* ep, int c) { const OwnType* t = own_type(ep); return c < PC_ENE_SLOTS ? ESTATE_PLY : (int)sizeof(BH_PWORK) + (t ? t->exp0 : 0); }
 static void ene_pack(BH_PWORK* ep, unsigned char* out)
@@ -1602,7 +1611,7 @@ static void grab_in(const Event* e)
     set = !e->u.gr.pset ? plp->mnwPb : e->u.gr.mnw >= 0 && e->u.gr.mnw < COOP_MNW_MAX && ep->mnwPb ? ep->mnwPb + e->u.gr.mnw
                                      : e->u.gr.mnw == MNW_ROOM ? sys->rmthp : ep->mnwP;
     if (!estate_x.done || estate_x.tid != e->u.gr.tid || estate_x.total != ESTATE_SIZE || ep->id != 1 || !ep->exp0 ||
-        c != e->u.gr.child || (c < PC_ENE_SLOTS && !(ene[c].flg & 0x1)) || !finite3(a->px, a->py, a->pz) || !mtn_ok(ep, set, a->mtn_no, a->frm_no) ||
+        c != child_here(i, e->u.gr.child) || (c < PC_ENE_SLOTS && !(ene[c].flg & 0x1)) || !finite3(a->px, a->py, a->pz) || !mtn_ok(ep, set, a->mtn_no, a->frm_no) ||
         wall_between(plp, a) || !ene_unpack(ep, estate, e->u.gr.mdl, e->u.gr.mnw)) {
         host_log("coop: enemy %d grabs us, but its state does not fit here\n", i);
         grab_back(i, 0, e->u.gr.child);
@@ -2322,7 +2331,7 @@ static void p3_give(int i, const char* why)
    0 one we handed over was refused (it is ours again, as we left it); 2 one we ran was taken back (the host's time-out) */
 static void p3_apply(const Event* e)
 {
-    int i = e->idx, c = e->u.gr.child;
+    int i = e->idx, c = child_here(e->idx, e->u.gr.child);
     BH_PWORK* ep = &ene[i];
     Event r = { 0 };
     if (!sys || !plp || i >= PC_ENE_SLOTS) return;
@@ -2857,6 +2866,7 @@ static void snap_of(EneSnap* s, BH_PWORK* ep, int i)
     s->hokan_count = (int16_t)ep->hokan_count; s->hokan_rate = ep->hokan_rate; s->hp = ep->hp;
     s->id = ep->id < 100 ? ep->id : 0;
     s->root = (ep->flg & 0x1) ? root_flag(ep) : 0;
+    s->link = (ep->flg & 0x80) && ene_slot(ep->lkwkp) < PC_ENE_SLOTS ? ene_slot(ep->lkwkp) + 1 : 0;   /* (protocol 55) */
     memcpy(s->watr, &ep->watr, sizeof(s->watr));
 }
 
@@ -3073,7 +3083,7 @@ static unsigned char hin_qt[PC_ENE_SLOTS];        /* 1 + frames waited, 0 none *
 static void hin_answer(int i, int last)
 {
     const Event* e = &hin_q[i];
-    int c = e->u.gr.child, ok, here, other, dead = e->u.gr.stflg_b == 1;
+    int c = child_here(i, e->u.gr.child), ok, here, other, dead = e->u.gr.stflg_b == 1;
     BH_PWORK* ep = &ene[i];
     Event r = { 0 };
     here = e->stg == sys->stg_no && e->rom == sys->rom_no;
@@ -3291,21 +3301,25 @@ static void apply_snapshots(void)
         EneSnap cur, at_was;
         EneSnap* s = &cur;
         BH_PWORK* ep;
-        int at = coop_hist_at(&hist[k], P, hist_applied[k], &cur, &from);
-        if (we_run(k)) continue;
-        if (own_win[k] && own_seed[k] && (int32_t)(from - own_seed[k]) > 0 && at != COOP_AT_NONE) {   /* the new runner's first one shown */
-            own_win[k] = 0;
+        int at = coop_hist_at(&hist[k], P, hist_applied[k], &cur, &from), t = k, p;
+        /* (protocol 55) a zombie's upper half: the one of the same zombie here (child_here), its slot may be another */
+        if (at != COOP_AT_NONE && (cur.flg & 0x80) && cur.id == 1 && cur.link && (p = cur.link - 1) < n && ene[p].id == 1 && (ene[p].flg & 0x1) &&
+            own_child(&ene[p]) < n && ene[own_child(&ene[p])].lkwkp == (unsigned char*)&ene[p])
+            t = own_child(&ene[p]);
+        if (we_run(t)) continue;
+        if (own_win[t] && own_seed[t] && (int32_t)(from - own_seed[t]) > 0 && at != COOP_AT_NONE) {   /* the new runner's first one shown */
+            own_win[t] = 0;
             if (shown_seq[k]) {   /* where we carried it on: from there, halved each frame (the blend back below goes on) */
                 float dx = shown_p[k][0] - cur.px, dy = shown_p[k][1] - cur.py, dz = shown_p[k][2] - cur.pz;
                 int16_t da = (int16_t)(uint16_t)(shown_ay[k] - cur.ay);
                 win_st[3] += (unsigned int)(100 * sqrtf(dx * dx + dz * dz));
-                if (cur.mtn_no == (int32_t)ene[k].mtn_no && ene[k].frm_no > cur.frm_no) win_st[4] += (ene[k].frm_no - cur.frm_no) >> 16;
+                if (cur.mtn_no == (int32_t)ene[t].mtn_no && ene[t].frm_no > cur.frm_no) win_st[4] += (ene[t].frm_no - cur.frm_no) >> 16;
                 if (fabsf(dx) + fabsf(dy) + fabsf(dz) < 20.0f) { cur.px += dx * 0.5f; cur.py += dy * 0.5f; cur.pz += dz * 0.5f; }
                 if (da && cur.ay >= 0 && cur.ay < 0x10000) cur.ay = (cur.ay + da / 2) & 0xFFFF;
                 shown_seq[k] = 0;   /* (no blend back from a seed this frame) */
             }
         }
-        if (own_win[k]) win_st[at == COOP_AT_NONE ? 1 : 0]++;
+        if (own_win[t]) win_st[at == COOP_AT_NONE ? 1 : 0]++;
         if (at == COOP_AT_NONE) continue;
         hist_applied[k] = from;
         play_st.at[at]++;
@@ -3318,8 +3332,8 @@ static void apply_snapshots(void)
         }
         shown_seq[k] = at == COOP_AT_OLD ? 0 : P;
         shown_p[k][0] = cur.px; shown_p[k][1] = cur.py; shown_p[k][2] = cur.pz; shown_ay[k] = cur.ay;
-        ep = &ene[k];
-        own_wait[k] = 0;
+        ep = &ene[t];
+        own_wait[t] = 0;
         /* Only enemies set up in our room (bhSetEnemy clears a slot when it takes it; free
            slots keep stale or zero work). mode0 0: its own initialising step (model,
            collision) has not run yet; it must run first, so only wake it like the host's and
@@ -3331,19 +3345,19 @@ static void apply_snapshots(void)
            modes and motion would turn a hidden helper without a model into one drawn (bhCalcModel crashed on its NULL
            mlwP, moths in 5/82) or run another type's code with them (the linked flag crashed bhControlEnemy) */
         if (((s->flg & 0x1) && s->id != ep->id) || ((s->flg & 0x80) && !ep->lkwkp)) { mismatch++; continue; }
-        if (!is_host && (gone_has(k) || ((ep->flg & 0x80) && gone_has(ene_slot(ep->lkwkp))))) {   /* named dead (EV_GONE) */
+        if (!is_host && (gone_has(t) || ((ep->flg & 0x80) && gone_has(ene_slot(ep->lkwkp))))) {   /* named dead (EV_GONE) */
             if (!(s->stflg & 0x1000000) && !(s->flg & 0x2)) continue;   /* the host has not hidden it yet */
-            gone_mask[k >> 5] &= ~(1u << (k & 31));
+            gone_mask[t >> 5] &= ~(1u << (t & 31));
         }
         if (!ep->mode0) {
             ep->stflg = (ep->stflg & ~0x41000000) | (s->stflg & 0x41000000);
             continue;
         }
         if (!s->mode[0]) continue;   /* a new enemy there whose Init has not run: ours ran, it would run again (its children twice) */
-        snap_at[k] = frame_no;
-        snap_root[k] = s->root;
-        snap_neck[k] = s->neck;
-        pose_seq[k] = P;
+        snap_at[t] = frame_no;
+        snap_root[t] = s->root;
+        snap_neck[t] = s->neck;
+        pose_seq[t] = P;
         mnw_set(ep, s->mnw);
         if (at != COOP_AT_EXACT && s->mtn_seq && !(s->mtn_md & 0x1) && mtn_ok(ep, ep->mnwP, s->mtn_no, 0)) {   /* the anchor's frame (coop_hist_at), in the motion's loop */
             int64_t len = (int64_t)ep->mnwP[s->mtn_no].frm_num << 16;
@@ -3356,7 +3370,7 @@ static void apply_snapshots(void)
            a hand-over: not taken; their type is ours, the snapshot carries none) */
         if (!own_type(ep) || ene_modes_ok(ep, ep->type, s->mode, ep->exp0)) { ep->mode0 = s->mode[0]; ep->mode1 = s->mode[1]; ep->mode2 = s->mode[2]; ep->mode3 = s->mode[3]; }
         if (trace && (ep->flg & 0x82) == 0x2 && !(ep->stflg & 0x1000000) && !(s->flg & 0x2) && !(s->stflg & 0x1000000))
-            fprintf(stderr, "coop: enemy %d dead here, alive in the host's game: alive again\n", k);
+            fprintf(stderr, "coop: enemy %d dead here, alive in the host's game: alive again\n", t);
         /* not the host's hit marker (flg & 4): it would come back as a hit of ours */
         ep->flg = s->flg & ~0x4; ep->flg2 = s->flg2 & ~0x4; ep->stflg = s->stflg; ep->mdflg = s->mdflg;
         /* morphing (mdflg 2) draws between the shapes obj_a and obj_b, which only the enemy's own code picks (Alexia's
@@ -3367,7 +3381,7 @@ static void apply_snapshots(void)
         ep->mtn_no = s->mtn_no; ep->frm_no = s->frm_no; ep->mtn_md = s->mtn_md; ep->hp = s->hp;
         memcpy(&ep->watr, s->watr, sizeof(s->watr));
         if (anc_stats && at == COOP_AT_EXACT) {   /* RECVX_COOP_STATS: would the slot's last anchor have given this frame (what extrapolation shows)? */
-            struct anc* a = &anc[k];
+            struct anc* a = &anc[t];
             if (a->seq && a->seq != from && a->mseq == s->mtn_seq && a->mtn == s->mtn_no && !(s->mtn_md & 0x1)) {
                 int64_t len = mtn_ok(ep, ep->mnwP, ep->mtn_no, 0) ? (int64_t)ep->mnwP[ep->mtn_no].frm_num << 16 : 0;
                 int64_t f = a->frm0 + (int64_t)(from - a->mseq) * a->add, e;
@@ -7268,7 +7282,7 @@ static int apply_event(const Event* e)
             }
             return 1;
         }
-        if (!e->u.gr.state || c != e->u.gr.child || !estate_x.done || estate_x.tid != e->u.gr.tid || estate_x.total != ene_len(&ene[i], c) ||
+        if (!e->u.gr.state || c != child_here(i, e->u.gr.child) || !estate_x.done || estate_x.tid != e->u.gr.tid || estate_x.total != ene_len(&ene[i], c) ||
             !ene_unpack(&ene[i], estate, e->u.gr.mdl, e->u.gr.mnw)) {
             pc_enemy_unhold(&ene[i]);
             host_log("coop: enemy %d is back from the partner without its grab state: released\n", i);

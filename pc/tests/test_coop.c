@@ -1088,6 +1088,7 @@ static void snap_new(EneSnap* s, int idx)   /* a valid enemy state */
     s->px = frnd(-3000, 3000); s->py = frnd(-50, 50); s->pz = frnd(-3000, 3000); s->ay = rnd() & 0xFFFF;
     for (k = 0; k < 6; k++) s->watr[k] = (&s->px)[k % 3] + frnd(-8, 8);
     s->watr[6] = 2.0f; s->root = rnd() % 4;
+    s->link = (s->flg & 0x80) ? 1 + rnd() % 128 : 0;   /* (protocol 55) */
 }
 static void snap_step(EneSnap* s, uint32_t seq)   /* a frame of it: walks, turns, animates; now and then a new motion or a hit */
 {
