@@ -1047,6 +1047,7 @@ static unsigned char prov[PC_ENE_SLOTS];         /* host: the guest's until its 
 static int claim_wait;                            /* host: frames left to wait for the guest's claims */
 static int claimed, host_verdict;                /* guest: claims sent for this room load; host: our verdict sent */
 static int run_room = -1;                        /* the room (key | case << 16) of our ownership table: the room load whose enemies they are */
+static unsigned int load_frame;                  /* our frame of that room load */
 #define PAUSE_LEAVE 8                            /* frames our game stops its enemies (a scene, a message) before we hand them over */
 #define AWAY_GRACE 45                            /* frames the partner may be away (a door's hand-over on its way) before we run all */
 static unsigned char hin_qt[PC_ENE_SLOTS];       /* (the guest's room, below) */
@@ -1636,6 +1637,7 @@ void coop_room_loaded(void)
     second = partner_present();
     run_room = coop_room_key() | my_case() << 16;
     owned_room = coop_room_key();
+    load_frame = frame_no;
     dflt = second ? is_host : !is_host;
     for (i = 0; i < PC_ENE_SLOTS; i++) owned[i] = owned_was[i] = (unsigned char)dflt;
     if (second && is_host) {
@@ -2232,7 +2234,8 @@ static int enemy_begin(BH_PWORK* ep)
     }
     if (!we_run(i)) {   /* the partner's game runs it: a puppet of its snapshots */
         /* mode0 0: the enemy's own initialising step; an event of ours drives it, or it holds our player: it runs here */
-        if (!ep->mode0 || (!is_host && (event_driven(ep) || grips_us(ep) || runs_here(ep)))) return 0;
+        if (!ep->mode0) return 0;
+        if (!is_host && (event_driven(ep) || grips_us(ep) || runs_here(ep))) { if (!seen[i]) { seen[i] = 1; hide_off(i); } return 0; }   /* (shown: it runs here) */
         /* (protocol 56) the runner's state of it has not come yet (we came into its room): hidden and still, not shown at
            the room's start position and then snapped to where it is */
         if (!seen[i]) { hide_on(i, ep); return 1; }
@@ -2309,7 +2312,7 @@ void coop_enemy_end(BH_PWORK* ep)
     if (i < 0 || i >= PC_ENE_SLOTS) return;
     /* (protocol 56) one the partner runs whose state has not come: hidden right after its Init, before this frame draws it (an
        extra coming up at the room's first frame stood one frame at its spot) */
-    if (!seen[i] && !we_run(i) && ep->mode0 && run_room >= 0 && !echo_delay) hide_on(i, ep);
+    if (!seen[i] && !we_run(i) && ep->mode0 && run_room >= 0 && !echo_delay && !event_driven(ep)) hide_on(i, ep);
     if (fx_open == 1) { fx_end(ep, 0); fx_arm(ep); }
     aim_restore();
     if (swap_plp) {
@@ -2637,7 +2640,7 @@ static void own_frame(void)
             if (we_run(i)) { seen[i] = 1; hide_off(i); }
         }
         act_was[i] = (unsigned char)act;
-        if (act && !seen[i] && !we_run(i) && ene[i].mode0 && run_room == me) hide_on(i, &ene[i]);
+        if (act && !seen[i] && !we_run(i) && ene[i].mode0 && run_room == me && !event_driven(&ene[i])) hide_on(i, &ene[i]);
     }
     /* host: the guest's claims did not come */
     if (claim_wait && !--claim_wait) {
@@ -2661,7 +2664,11 @@ static void own_frame(void)
         BH_PWORK* ep = &ene[i];
         if (own_grab[i] && !we_run(i) && (!(ep->flg & 0x1) || (frame_no - own_t[i] > 90 && !ply_busy(&ply2)))) own_grab[i] = 0;   /* (no word of its end) */
         /* (once the guest's state of it is here: before, the host's copy was taken back from where its record put it) */
-        if (is_host && !we_run(i) && !own_grab[i] && !take_at[i] && seen[i] && (ep->flg & 0x1) && event_driven(ep)) { p3_takeback(i, 0, "an event of ours drives it"); continue; }
+        if (is_host && !we_run(i) && !own_grab[i] && !take_at[i] && (seen[i] || frame_no - load_frame > 30) && (ep->flg & 0x1) && event_driven(ep)) {
+            seen[i] = 1; hide_off(i);
+            p3_takeback(i, 0, "an event of ours drives it");
+            continue;
+        }
         if (!we_run(i)) { p3_want[i] = p3_leave[i] = 0; continue; }
         if (giving[i] || own_grab[i] || (ep->flg & 0x81) != 0x1 || event_driven(ep)) continue;   /* (an event of ours drives it: it runs here) */
         if (leave) {
