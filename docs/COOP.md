@@ -947,7 +947,9 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   enemies at its first frame there (the playout's frames: `snap_room`, the partner's room of the kept snapshots). Before,
   the coming player's own copies stood at the room's start positions (and the guest's ran their own AI) until the
   runner's first snapshot or the hand-in answer, then jumped: 5 to 16 visible frames, up to 205 units at 80 ms. The guest's
-  own entry scene no longer runs the host's enemies locally either (only one its event drives: `event_driven`).
+  own entry scene no longer runs the host's enemies locally either (only one its event drives: `event_driven`, which is shown
+  and runs in its game; the host takes back one its own event drives, once the guest's state of it came or 30 frames into
+  the room).
 * **The guest's room**: the host that comes into a room the guest runs asks for the guest's claims (EV_ENEOWN 5
   `COOP_ROOM_CLAIM`); its copies are the guest's meanwhile (`prov`), shown as the guest's snapshots say. The guest claims each
   enemy it runs (EV_ENEOWN 3, see "The hand-in" below for what is claimed) and says when it is done (5 `COOP_ROOM_DONE`); the
