@@ -364,7 +364,11 @@ two of you always stay at the same point.
 * When either of you dies, the partner gets the game over screen too: at once when it is in control; a
   partner in a menu, a cutscene or a door gets it when it is back in control. Being in another room makes
   no difference.
-* Only the host is asked "Retry? Yes / No". The joiner's screen stays on YOU DIED until the host answers.
+* Only the host is asked "Retry? Yes / No". The joiner's screen stays on YOU DIED until the host answers,
+  and after a Yes until the host's game state comes, which the host sends once it is in control (after a
+  cutscene at its continue point). A regroup or "Follow host" never pulls a joiner out of its game over
+  screen: the game state takes it there (before, a regroup at the end of that cutscene pulled it and its
+  game crashed).
 * **Yes**: both start again from the host's continue point, together in that room, each with the items
   it had at that point. What either of you collected since lies there again, used keys are back, and the
   world and both inventories match. A joiner that joined after that point gets the items it joined with.
@@ -938,12 +942,19 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   partner's shots bring theirs in `EV_ENE_HIT`, and the stand-in, which has no aim of its own,
   carries the host's.
 * **Loop guard (host)**: an enemy that starts its third attack (hit reaction or grab) on the same
-  player within 90 frames is in a loop - nothing in the game attacks that fast - and leaves that
-  player alone for 60 frames (logged: `loop guard: enemy N ... started 3 attacks`).
+  player within 60 frames is in a loop (a grab started again as soon as the failsafe let it go) -
+  nothing in the game attacks that fast; a Hunter's swipes come 36 to 40 frames apart - and leaves
+  that player alone for 60 frames (logged: `loop guard: enemy N ... started 3 attacks`).
 * **Damage to the partner**: what the enemy step did to `ply2` is diffed. An hp loss or a hit
   reaction becomes `EV_PLY_HIT`; everything else is undone. Grabs other than the zombie's arrive as
-  a hit. The dead flag (`flg` 2) an enemy sets on the stand-in (Alexia's embrace, the Tyrant's last
-  blow; in single player the game over) is the partner's death: the hit takes all its health. For
+  a hit with the grab's own damage; the grabber lets go (Cerberus after its first bite, the
+  Bandersnatch at once: its hold and link bits, `exp0` 0x18 0x04400000 / 0x200000 / 0x800000, cleared
+  and back to its Brain - before, `bhEne09_PlayerLink` dragged the host's own player to its hand).
+  The dead flag (`flg` 2) an enemy sets on the stand-in (Alexia's embrace, the Tyrant's last
+  blow; in single player the game over) is the partner's death: the hit takes all its health (not
+  for a grab sent as a hit). A player held in its own game (mode 4/6) takes no `EV_PLY_HIT`, as in
+  single player, where a held player is no other enemy's target (under loss the sender may not see
+  the hold yet). For
   the round trip until the partner's pose shows the hit (`HIT_BUSY`, 15 frames) the stand-in counts as
   busy (`flg` 4), as the hit player does: a blow lasting several frames hits once.
 * **Boss holds (host)**: some holds play a sequence on their victim and end only when its motion has
@@ -1133,7 +1144,16 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   (... a mod in one mods folder?): its enemies may not match", and the hand-in takes the same type in another look too
   (each game shows its own look; `ene_unpack` checks its model and motions), instead of the joiner's zombie jumping 136
   units back to the host's start position. Records that differ in type stay apart as before (the snapshots skip a slot
-  holding another type). Not yet shown in the lobby or on screen (a translated message).
+  holding another type). Not yet shown in the lobby or on screen (a translated message). A look with another count of
+  linked parts shifts the slots of every later zombie's upper half between the games (protocol 55): the upper half a
+  partner names in `EV_GRAB`, `EV_ENEOWN` and `EV_UNGRAB` is taken as the same zombie's here (`child_here`), and a
+  snapshot of an upper half (`EneSnap.link`: 1 + its parent's slot) poses that zombie's upper half here. Before, every
+  later zombie's hand-in was refused (jumps, other HP) and the upper halves of host-run zombies posed other zombies'.
+* **Room loads**: each room load (`enemy_room_finished` -> `coop_room_loaded`), also of the same room again (a Retry,
+  a loaded save), ends what the partner's game ran of the old load: the host drops it all (its fresh copies are not
+  let go), the joiner hands its own back (`grab_check`: another load's). Before, only another room key dropped it, and
+  a Retry of the room where the joiner ran a grab of the host's zombie crashed the host (its fresh copy never ran its
+  first step).
 * **Engaged-player ownership** (protocol 48; 47 had zombies only, 46 was the first prototype): the host's lobby rule
   "Shared Enemy Control" (`g_coop.shared_enemies`, ini `coop_shared_enemies`, off by default, changeable at the title
   and in the lobby, locked once the session's game runs (`coop_session_game`: not at the title, in the lobby or the attract demo; back at the title the session
@@ -1378,7 +1398,9 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
     the same at once.
   * Giving back (`give_back`) waits until that player is in control (not in a menu or the status
     screen) and takes out the amount a pickup of that item adds (`getbulletmax`); "the partner took
-    <item> first". Key items are not given back (both get them anyway).
+    <item> first". Key items are not given back (both get them anyway); the partner's `EV_PICKUP`
+    of a spot whose key (or other for-both item) this game added too - late, or with its flag not
+    sent yet (`late_both`) - gives none, so both taking a key at once leaves each one copy.
 * **Duplicate Weapons and Ribbons** (shared loot, `OPT_IMPORTANT`): the kinds in `important_kinds[]`
   (`coop_glue.c`: weapons, `itemdata[].type & 0x1`; ink ribbons, item 31). `bhItmCk` reports each pickup
   (`coop_item_taken`: its `it_flg` bit and trigger); one of those kinds marks the bit in
@@ -1603,7 +1625,7 @@ bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows t
 list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
 `EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
 the Bandersnatch and the anatomist too (each type's `exp0` with its pointer words kept, the `type` field taken), never for a
-record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). 54: every type outside the boss fights is handed in, the dead ones too (`EV_ENEOWN` state 3 `stflg_b` 1), with up to 0x204 bytes of `exp0` (an enemy without a child its own size, `ATR_WORK` pointers as table and index); the extras the joiner killed are made dead on the host; `SPAWN_NOTE_DONE` carries the room's records' hash ("Room files that differ"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). 54: every type outside the boss fights is handed in, the dead ones too (`EV_ENEOWN` state 3 `stflg_b` 1), with up to 0x204 bytes of `exp0` (an enemy without a child its own size, `ATR_WORK` pointers as table and index); the extras the joiner killed are made dead on the host; `SPAWN_NOTE_DONE` carries the room's records' hash ("Room files that differ"). 55: `EneSnap.link` (1 + a linked part's parent slot, in the `SQ_ID` field's bits 16..23): a zombie's upper half is matched by its zombie, not by its slot ("Room files that differ"). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1900,7 +1922,6 @@ the session's code. A takeover needs a non-zero tag that matches.
   "Yes" presses: a player still in the status screen after taking has not sent its pickup yet.
 * Shared loot, a pool item from the partner's event that this game replayed: given back by amount as
   above, only while the replay's window is open.
-* A key item both take at the same moment may end up twice in the joiner's inventory.
 * A key put into the item box is not "used up" for the partner.
 * Two voices of the partner within one lost datagram's frames play only the last.
 * Enemy options changed in game: a joiner that loads a room before the change arrives builds that

@@ -499,14 +499,16 @@ static const char* rec_become(int k, const ActorModel* m, const SpawnNote* n, in
 }
 
 /* the partner's result for this room file (the partner plays in it), if it is all here: 1 = made */
-static int follow_host(int room)
+static int follow_slot(int room)
 {
-    int h, i, j, k, made = 0;
+    int h;
     for (h = 0; h < HRES_MAX && !(hres[h].room1 == room + 1 && hres[h].n == hres[h].want); h++);
-    if (h == HRES_MAX) {
-        host_log("enemies: room %04d: no randomizer result of the %s's for it (loaded before the %s's): our own draws\n", room, partner(), partner());
-        return 0;
-    }
+    if (h == HRES_MAX) host_log("enemies: room %04d: no randomizer result of the %s's for it (loaded before the %s's): our own draws\n", room, partner(), partner());
+    return h < HRES_MAX ? h : -1;
+}
+static void follow_host(int room, int h)
+{
+    int i, j, k, made = 0;
     for (i = 0; i < hres[h].n; i++) {
         SpawnNote n = hres[h].note[i];
         ActorModel am = { coop_is_guest() ? "host's randomizer" : "guest's randomizer", n.room, n.rec, n.id, n.mdlver, 0, 0 };
@@ -524,7 +526,6 @@ static int follow_host(int room)
         host_log("enemies: room %04d record %d: -> type %d model %d%s (as the %s's)\n", room, k, n.id, n.mdlver, n.variant ? " (a variant)" : "", partner());
     }
     host_log("enemies: room %04d: %d of the %s's %d changes made, the other records as they are\n", room, made, partner(), hres[h].n);
-    return 1;
 }
 
 /* boss arenas: their scripts wait for the boss's death or drive it; nothing in these rooms changes */
@@ -804,8 +805,11 @@ static void randomize(const EnemyOpts* o)
     int ln = 0;
     unsigned off = 0;   /* Custom: the base kinds at Off (an event's record takes no look of those either) */
     for (k = 0; custom && k < KINDS; k++) off |= (unsigned)!o->rate[k] << k;
+    /* follow: the partner's result for this room is here (it plays in it). Our draws still run, dry (no record changes), for the
+       room's kinds its extras draw from (rk): before, the follow returned with rk of an older load and the extras came as copies
+       of the records, unrandomized, other enemies than the partner's (a host back in a room the guest stayed in) */
+    int follow = coop_partner_in_room() ? follow_slot(room) : -1;
     res_n = 0;
-    if (coop_partner_in_room() && follow_host(room)) return;
     for (k = 0; k < rom->ene_n && k < 128; k++) {
         BH_PWORK* ep = &ene[k];
         if (!(ep->flg & 0x1)) continue;
@@ -829,7 +833,7 @@ static void randomize(const EnemyOpts* o)
     ln = 0;
     for (k = 0; k < rom->ene_n && k < 128; k++)   /* Types per Room: the kinds of the records that keep theirs */
         if ((ene[k].flg & 0x1) && cls[k] != 1) in_set(st.set, &st.nset, kind_of(kt, ene[k].id, ene[k].mdlver));
-    if (!nc) { rk = st; return; }
+    if (!nc) { rk = st; if (follow >= 0) follow_host(room, follow); return; }
     if (!wild) mild_kinds(o, kt, nk, st.mild);   /* Mild: up to two kinds for the room's free records */
     for (k = 0; k < rom->ene_n && k < 128; k++) {
         BH_PWORK save = ene[k];
@@ -866,7 +870,8 @@ static void randomize(const EnemyOpts* o)
         n.type = m->id == save.id ? save.type : 0;   /* the same type keeps its variant (an event's or a lying zombie's) */
         n.variant = v ? v->id : 0;
         n.px = save.px; n.py = save.py; n.pz = save.pz; n.ay = save.ay; n.flr = save.flr_no;
-        if ((why = rec_become(k, m, &n, guest ? SPAWN_LOADING | SPAWN_DICTATED : SPAWN_LOADING))) {   /* softlock-safe fallback: the original
+        if (follow >= 0) why = NULL;   /* (dry: as the partner's, which made it) */
+        else if ((why = rec_become(k, m, &n, guest ? SPAWN_LOADING | SPAWN_DICTATED : SPAWN_LOADING))) {   /* softlock-safe fallback: the original
                                                                                                        record as it was (the guest keeps it too: not in the result) */
             host_log("enemies: record %d stays %d (%s)%s\n", k, save.id, why, guest ? "; the host's may differ" : "");
             if (!guest) in_set(st.set, &st.nset, kind_of(kt, save.id, save.mdlver));
@@ -875,6 +880,7 @@ static void randomize(const EnemyOpts* o)
             continue;
         }
         in_set(st.set, &st.nset, kd);
+        if (follow >= 0) { st.cost += kcost - slot_cost(save.id); st.heavy += v && v->heavy; continue; }
         res_rec[res_n] = (unsigned char)k; res_note[res_n] = n; res_note[res_n++].pad = SPAWN_NOTE_RAND;   /* (coop_rand_result) */
         rand_src[k] = m;   /* (the room file still says the old type: extra enemies copy from here) */
         rand_var[k] = v ? v->id : 0;
@@ -886,6 +892,7 @@ static void randomize(const EnemyOpts* o)
                       cls[k] == 2 ? ", event enemy: same type" : "");
     }
     rk = st;
+    if (follow >= 0) { follow_host(room, follow); return; }
     for (k = 0; k < rom->ene_n && k < 128 && ln < (int)sizeof(line) - 16; k++)
         if ((ene[k].flg & 0x1) && ene[k].id < 31) ln += snprintf(line + ln, sizeof(line) - ln, " %d:%d.%d", k, ene[k].id, ene[k].mdlver);
     host_log("enemies: room %04d: %d of %d records randomized (seed %d, %s%s, %d kinds, limit %d%s), now%s\n", room, made, nc, o->seed, variety_name(o->variety),
@@ -908,6 +915,7 @@ void enemy_room_finished(void)
 {
     const EnemyOpts* o;
     enemy_room_gen++;
+    coop_room_loaded();
     variant_room();   /* (the slots' enemy variants) */
     extras_room();    /* "Extra Item Boxes and Herbs": their walls and triggers (extras_glue.c) */
     if (!rom || !sys) return;

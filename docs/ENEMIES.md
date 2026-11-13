@@ -211,6 +211,9 @@ Details in [COOP.md](COOP.md); what matters for enemies:
   load goes along as notes too (protocol 52; the guest's too since 53): `SPAWN_NOTE_DONE` (the room file, how many
   follow), then a `SPAWN_NOTE_RAND` per record it changed; a load of that room while the partner plays in it makes
   exactly those changes and keeps every other record (`follow_host`), whatever its own story flags would classify.
+  Its own draws still run then, dry (no record changes), for the room's kinds its extra enemies draw from (`rk`):
+  before, a load that followed the partner's result made its extras as unrandomized copies of the records (a host back
+  in a room the guest stayed in, or a host's Continue with the guest there, had a zombie where the guest had a Cerberus).
 * **A guest there first** (protocol 53): a guest that loads a room with the host elsewhere draws the room's randomizer
   result and its extra enemies itself, as the host would (the same seed, room file and story state), and sends both
   (its extras as `EV_SPAWN` notes with their slots, then `SPAWN_NOTE_XDONE` with the room file and their count;

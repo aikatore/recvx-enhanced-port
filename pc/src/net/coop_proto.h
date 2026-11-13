@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 54                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 55                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -83,7 +83,9 @@ extern "C" {
                                                of up to 0x204 bytes of exp0, one without a child its own size, ATR_WORK pointers
                                                as table and index), dead ones too (EV_ENEOWN state 3 stflg_b 1: the corpse),
                                                the extras the guest killed are made dead on the host, and SPAWN_NOTE_DONE
-                                               carries the room's records' hash (variant, id << 8 | mdlver: "room file differs") */
+                                               carries the room's records' hash (variant, id << 8 | mdlver: "room file differs");
+                                           55: EneSnap.link (a linked part's parent slot): the players' slots of a zombie's upper
+                                               half differ when their room files give a record another look */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per datagram (the receiver's check; a frame sends up to 96: coop_glue.c EV_BURST) */
 #define COOP_SNAP_BUDGET 2400           /* enemy snapshot bytes per frame (records past it wait, by priority) */
@@ -436,6 +438,7 @@ typedef struct EneSnap {
                                            mtn_md 1, back and forth): the sender re-anchors whenever that would not hold */
     int32_t mtn_frm0;
     uint32_t neck;                      /* SNAP_NECK: node 11's ang[1] | node 8's << 16 (16 bits each) */
+    uint8_t link;                       /* protocol 55: 1 + the slot of the enemy a linked part hangs on (lkwkp), 0 none */
 } EneSnap;
 
 /* ---------------------------------------------------------------- snapshots, protocol 45
@@ -625,11 +628,13 @@ enum { COOP_TGT_FREE, COOP_TGT_ATTACK, COOP_TGT_HOLD };
 typedef struct CoopTgtIn { float d[2]; unsigned char busy[2], front[2], commit; } CoopTgtIn;
 int coop_pick_target(int cur, const CoopTgtIn* in);
 /* The loop guard: attacks one enemy starts on one player (a hit reaction or a grab). The
-   COOP_LOOP_N-th within COOP_LOOP_WIN frames is a loop - nothing in retail attacks that fast (a grab
-   alone lasts longer) - and coop_atk_note returns 1: the enemy then leaves that player alone (busy for
-   it) for COOP_LOOP_COOL frames. */
+   COOP_LOOP_N-th within COOP_LOOP_WIN frames is a loop - a grab started again as soon as the failsafe let
+   it go (15 frames), about every 20 frames; nothing in retail attacks that fast (a grab alone lasts
+   longer) - and coop_atk_note returns 1: the enemy then leaves that player alone (busy for it) for
+   COOP_LOOP_COOL frames. The window was 90 frames: a Hunter's swipes, 36 to 40 frames apart, tripped it
+   and the Hunter left its victim alone in the middle of its normal attacks. */
 #define COOP_LOOP_N 3
-#define COOP_LOOP_WIN 90u
+#define COOP_LOOP_WIN 60u
 #define COOP_LOOP_COOL 60u
 typedef struct CoopAtk { unsigned int t0, until; unsigned char n; } CoopAtk;
 int coop_atk_note(CoopAtk* a, unsigned int now);

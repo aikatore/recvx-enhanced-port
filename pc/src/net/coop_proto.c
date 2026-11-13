@@ -90,14 +90,14 @@ void coop_snap_quant(const EneSnap* s, CoopSnapQ* q)
     v[SQ_FLG] = (int32_t)s->flg; v[SQ_FLG2] = (int32_t)s->flg2; v[SQ_STFLG] = (int32_t)s->stflg; v[SQ_MDFLG] = (int32_t)s->mdflg;
     v[SQ_HP] = s->hp;
     v[SQ_MDL] = (int32_t)((uint32_t)(uint8_t)s->mdl | (uint32_t)(uint16_t)s->mnw << 8);
-    v[SQ_ID] = s->id | s->root << 8;
+    v[SQ_ID] = s->id | s->root << 8 | s->link << 16;
     v[SQ_NECK] = (int32_t)s->neck;
 }
 int coop_snap_dequant(const CoopSnapQ* q, int idx, EneSnap* s)
 {
     const int32_t* v = q->v;
     int k;
-    if ((uint32_t)v[SQ_MDL] >> 24 || (uint32_t)v[SQ_ID] >> 16 || v[SQ_HOKC] != (int16_t)v[SQ_HOKC] ||
+    if ((uint32_t)v[SQ_MDL] >> 24 || (uint32_t)v[SQ_ID] >> 24 || v[SQ_HOKC] != (int16_t)v[SQ_HOKC] ||
         v[SQ_FRM] < 0 || v[SQ_FRM] >= 1 << 23 || v[SQ_MFRM] < 0 || v[SQ_MFRM] >= 1 << 23) return 0;
     memset(s, 0, sizeof(*s));
     s->idx = (uint8_t)idx;
@@ -112,7 +112,7 @@ int coop_snap_dequant(const CoopSnapQ* q, int idx, EneSnap* s)
     s->flg = (uint32_t)v[SQ_FLG]; s->flg2 = (uint32_t)v[SQ_FLG2]; s->stflg = (uint32_t)v[SQ_STFLG]; s->mdflg = (uint32_t)v[SQ_MDFLG];
     s->hp = v[SQ_HP];
     s->mdl = (int8_t)(v[SQ_MDL] & 0xFF); s->mnw = (int16_t)(v[SQ_MDL] >> 8 & 0xFFFF);
-    s->id = (uint8_t)v[SQ_ID]; s->root = (uint8_t)(v[SQ_ID] >> 8);
+    s->id = (uint8_t)v[SQ_ID]; s->root = (uint8_t)(v[SQ_ID] >> 8); s->link = (uint8_t)(v[SQ_ID] >> 16);
     s->neck = (uint32_t)v[SQ_NECK];
     return 1;
 }

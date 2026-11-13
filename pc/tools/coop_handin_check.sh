@@ -11,13 +11,15 @@
 #      its room script's DieCk counts it (ed_flg) in both games
 #   M  as D without the randomizer, the guest with a modded RM_0020 (record 1 another look, record 2 moved; made from the
 #      disc image into OUT at run time): both warn that the room files differ, the zombie of another look is handed in
+#   M2 5/63 without the randomizer, the guest's RM_5630 with record 2 in a look of another count of linked parts (41 -> 7):
+#      the later zombies' upper halves sit in other slots (protocol 55): every zombie is handed in, none refused
 #   T1..T4 the types without Shared Enemy Control's hand-over (protocol 54): bats and Spotters (0/13), ants (9/17), Black
 #      Widows (6/9), Tyrants (1/0, the randomizer's Custom rates: only Tyrants)
 # RECVX_COOP_ENEPOS logs every enemy (slot, type, look, where, HP, mode, dead) every 5 host frames around the entry (2900..3300).
 # Checks: the guest has its extras and the randomizer's types before the host comes; the host makes the guest's (no
 # second set); afterwards both list the same slots, types, HP and dead ones, positions within 6 units (a Hunter on the
 # move); on the guest no enemy moves more than 12 units in 5 frames around the entry (before: the room's start
-# positions); each type of T1..T4 goes to the host's game with its state. About 4 minutes (18 instances at once).
+# positions); each type of T1..T4 goes to the host's game with its state. About 4 minutes (20 instances at once).
 #   pc/tools/coop_handin_check.sh OUT [PORT]
 # Environment: RECVX_ISO (disc image), RECVX_BIN (binary, default build/pc/recvx).
 out=$1; port=${2:-48481}
@@ -96,6 +98,12 @@ python3 -c "
 import json, sys; d = json.load(open(sys.argv[1])); e = d['enemies']; e[1]['mdlver'] = 32; e[2]['px'] -= 30; e[2]['pz'] += 10
 json.dump(d, open(sys.argv[2], 'w'))" "$out/rm0020.json" "$out/rm0020_mod.json" &&
 python3 "$root/pc/tools/rdx.py" --iso "$iso" build 0020 "$out/rm0020_mod.json" -o "$out/mods_guest/RM_0020.RDX" > /dev/null || echo "FAIL: M's room file not made"
+mkdir -p "$out/mods_guest2"
+python3 "$root/pc/tools/rdx.py" --iso "$iso" dump 5630 -o "$out/rm5630.json" > /dev/null &&
+python3 -c "
+import json, sys; d = json.load(open(sys.argv[1])); d['enemies'][2]['mdlver'] = 7
+json.dump(d, open(sys.argv[2], 'w'))" "$out/rm5630.json" "$out/rm5630_mod.json" &&
+python3 "$root/pc/tools/rdx.py" --iso "$iso" build 5630 "$out/rm5630_mod.json" -o "$out/mods_guest2/RM_5630.RDX" > /dev/null || echo "FAIL: M2's room file not made"
 rates="enemy_variety = 2\nenemy_rates = 1:0 4:0 9:0 5.0:0 5.1:0 3:0 26:0 19:5 23:0 7:0 11:0 v1:0\n"
 pair A "$port" 0:2 1700:3 &
 pair B "$((port + 1))" 0:6 1700:1 &
@@ -106,10 +114,11 @@ pair T1 "$((port + 5))" 0:13 "" &
 pair T2 "$((port + 6))" 9:17 "" &
 pair T3 "$((port + 7))" 6:9 "" &
 pair T4 "$((port + 8))" 1:0 "" "$rates" &
+pair M2 "$((port + 9))" 5:63 "" "enemy_random = 0\n" "" "" "$out/mods_guest2" &
 wait
-for r in A B C D M T1 T2 T3 T4; do
+for r in A B C D M M2 T1 T2 T3 T4; do
     check "$r: neither side crashed" "[ \$(cat $out/$r/host/exit) = 0 ] && [ \$(cat $out/$r/guest/exit) = 0 ] && ! grep -q 'fatal signal' $out/$r/*/log.txt"
-    cmp $r $([ $r = M ] && echo 1) > "$out/$r/cmp.txt"
+    cmp $r $([ ${r:0:1} = M ] && echo 1) > "$out/$r/cmp.txt"
     check "$r: afterwards both have the same enemies, HP and dead ones, within 6 units ($(head -1 $out/$r/cmp.txt))" "[ \"\$(head -1 $out/$r/cmp.txt)\" = alike ]"
     check "$r: on the guest nothing jumps when the host comes in ($(tail -1 $out/$r/cmp.txt))" "tail -1 $out/$r/cmp.txt | awk '{ exit !(\$2 <= 12) }'"
 done
@@ -123,6 +132,7 @@ check "D: the walking zombies go to the host with their state" "[ \$(grep -c 'ha
 check "D: the host's kill of a handed-in zombie counts in its script and the guest's (ed_flg)" "grep -q 'host frame 3450, ed_flg 1 bits' $out/D/host/log.txt && grep -q 'host frame 3450, ed_flg 1 bits' $out/D/guest/log.txt"
 check "M: both say the room files differ" "grep -q 'room file RM_0020 differs between the players' $out/M/host/log.txt && grep -q 'room file RM_0020 differs between the players' $out/M/guest/log.txt"
 check "M: the zombie in another look is handed in" "grep -q 'hand-in: enemy 1 as the guest.s game has it (in another look here' $out/M/host/log.txt"
+check "M2: no zombie refused at the hand-in ($(grep -c 'is not ours here' $out/M2/host/log.txt))" "! grep -q 'is not ours here' $out/M2/host/log.txt && grep -q 'hand-in: enemy 5 as the guest' $out/M2/host/log.txt"
 check "T1: bats and Spotters go with their state ($(given T1))" "[ '$(given T1)' = '7 11 ' ]"
 check "T2: ants go with their state ($(given T2))" "given T2 | grep -qw 10 && given T2 | grep -qw 71"
 check "T3: Black Widows go with their state ($(given T3))" "given T3 | grep -qw 3"
