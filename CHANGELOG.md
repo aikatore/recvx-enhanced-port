@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Co-op**: more synchronization fixes, including boss fights and blood effects.
+
 ## 0.7.8 (2026-11-13)
 
 ### Fixes
