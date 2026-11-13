@@ -938,8 +938,9 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   partner's shots bring theirs in `EV_ENE_HIT`, and the stand-in, which has no aim of its own,
   carries the host's.
 * **Loop guard (host)**: an enemy that starts its third attack (hit reaction or grab) on the same
-  player within 90 frames is in a loop - nothing in the game attacks that fast - and leaves that
-  player alone for 60 frames (logged: `loop guard: enemy N ... started 3 attacks`).
+  player within 60 frames is in a loop (a grab started again as soon as the failsafe let it go) -
+  nothing in the game attacks that fast; a Hunter's swipes come 36 to 40 frames apart - and leaves
+  that player alone for 60 frames (logged: `loop guard: enemy N ... started 3 attacks`).
 * **Damage to the partner**: what the enemy step did to `ply2` is diffed. An hp loss or a hit
   reaction becomes `EV_PLY_HIT`; everything else is undone. Grabs other than the zombie's arrive as
   a hit. The dead flag (`flg` 2) an enemy sets on the stand-in (Alexia's embrace, the Tyrant's last

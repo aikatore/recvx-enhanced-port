@@ -1398,6 +1398,11 @@ static void test_target(void)
         /* attacks spread wider than the window never trip it (a retail pace: a grab, then another) */
         memset(&a, 0, sizeof(a));
         { unsigned int t; int hit = 0; for (t = 100; t < 5000; t += COOP_LOOP_WIN / 2 + 1) hit |= coop_atk_note(&a, t); CHECK(!hit); }
+        /* a Hunter's swipes, 36 frames apart, are no loop; a grab started again every 20 frames is */
+        memset(&a, 0, sizeof(a));
+        { unsigned int t; int hit = 0; for (t = 100; t < 5000; t += 36) hit |= coop_atk_note(&a, t); CHECK(!hit); }
+        memset(&a, 0, sizeof(a));
+        CHECK(!coop_atk_note(&a, 100) && !coop_atk_note(&a, 120) && coop_atk_note(&a, 140));
         memset(&a, 0, sizeof(a));
         CHECK(!coop_atk_cooling(&a, 0) && !coop_atk_cooling(&a, 12345));
     }
