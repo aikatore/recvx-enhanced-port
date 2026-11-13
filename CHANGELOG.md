@@ -8,6 +8,8 @@
   away, instead of them appearing only once the host arrives.
 - In co-op, enemies of every kind no longer jump back to their starting points when the host enters a room the guest
   is already fighting in, and enemies the guest killed lie in the same place for both players.
+- In co-op, when the direct connection between the players breaks, the game now switches to the relay server and
+  carries on instead of losing the session, and goes back to the direct connection once it works again.
 
 ## 0.7.7 (2026-11-12)
 
