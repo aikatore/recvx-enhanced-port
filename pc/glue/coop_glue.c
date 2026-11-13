@@ -1616,7 +1616,8 @@ static void own_reset(int put)
     dflt = -1;
     owned_room = run_room = -1;
 }
-static void owned_drop(void) { own_reset(1); }
+/* the partner is gone (it left, timed out, a new session of it): every enemy of our room ours, the room's ownership kept */
+static void owned_drop(void) { if (coop_on && sys && run_room >= 0) own_takeover("it left the session"); else own_reset(1); }
 
 /* the partner is in our room: in game there, or busy there (its menu, the item box, a scene, the trade screen; a door or
    the title say BUSY_NONE out of game) */
@@ -7755,7 +7756,7 @@ static void stop(void)
     coop_ring_reset(&ring); in_last = 0; snaps_reset(); proxy_ok = 0; ver_msg[0] = 0;
     coop_xfer_init(&blob_x, blob_in, sizeof(blob_in));
     coop_xfer_init(&estate_x, estate_zin, sizeof(estate_zin)); estate_tid = 0;
-    owned_drop();
+    own_reset(1);   /* (single player again: the hidden ones shown) */
     peer_sid = blob_end = 0;
     blob_due = need_blob = pop_pending = popping = follow_pending = 0;
     host_room = -1;
