@@ -345,6 +345,9 @@ static struct {
     const void* mexp;                   /* ... its face state then, and the lips */
     const unsigned char* mlip;
     int gnext, gpt;                     /* an inserted group (lines said as one): its next part's file, -1 none; its partition */
+    int snd;                            /* what sounds in the line's place: 0 nothing (quiet), 1 the inserted line, 2 an enemy's sounds */
+    unsigned char hush[RECS];           /* the records whose lips came with the line replaced (the speaker's, a LipSet in the
+                                           original's time): pc_voice_tick holds their mouths shut but the speaker's while snd sounds */
 } vl = { .gnext = -1 };
 
 /* the display slot record k is drawn by now (ACTOR_CAST + its cast slot, ACTOR_DOUBLE), -1 itself */
@@ -401,7 +404,7 @@ static void mouth_stop(void)
    programs found there (voice_creature_plan, from the seed and the line as voice_pick: one for a short line, filling it;
    up to three a short gap apart in half of a longer one), on SE slot 10 (the shell casings', idle in cutscenes),
    unpositioned and at full volume as every line on the disc is (mode 1). No ADX plays; the script waits the original
-   line's time (pc_voice_playing); the mouth moves with the original line's lips where the model has a face. It ends by
+   line's time (pc_voice_playing); the mouth moves with the original line's lips while they sound, where the model has a face. It ends by
    itself, at the next line, StopVoice, a room change, or VOICE_GRACE_MS after the original's end (cr.cap: a longer one
    where none of its sounds is short enough). */
 int  snd_xbank_load(int key);                    /* audio/snd_iop.c */
@@ -431,6 +434,24 @@ static void cr_play(int prog)
     pc_se_xbank = 0;
 }
 
+/* test aid (RECVX_MOUTH_TRACE=1; 2 every face): each tick a mouth moves or a line is on, per such record whether its lips run, the jaw
+   (degrees, the last face computed), and what sounds: the voice slot, a creature's sound, the line's state */
+uint64_t gs_frame_count(void);
+static void mouth_trace(void)
+{
+    int k;
+    for (k = 0; k < RECS && rom && k < rom->ene_n; k++) {
+        const BH_PWORK* ep = &ene[k];
+        int lips;
+        if (!ep->mskp || !ep->exp0 || !ep->exp1 || !ep->exp2) continue;
+        lips = (((const int*)ep->exp0)[0] & 0x4) != 0;
+        if (!lips && !(vl.on && k == vl.rec) && atoi(getenv("RECVX_MOUTH_TRACE")) < 2) continue;   /* (2: every face) */
+        host_log("mouth: frame %d rec %d lips %d jaw %.1f | voice %d fading %d creature %d line %d%s\n", (int)gs_frame_count(), k, lips,
+                 ((const MASK_WORK*)ep->exp1)->param.jawang, AdxPlayFlag[1] != 0, vl.fading, cr.n && SDL_GetTicks() < cr.end,
+                 vl.on && k == vl.rec ? vl.on : 0, vl.on && vl.hush[k] ? " hushed" : "");
+    }
+}
+
 void pc_voice_tick(void)
 {
     uint64_t now = SDL_GetTicks();
@@ -452,6 +473,16 @@ void pc_voice_tick(void)
         if (++cr.k < cr.seq_n) { cr_play(cr.seq[cr.k]); cr.end = now + (uint64_t)cr.len[cr.k]; }
         else cr.n = 0;
     }
+    if (vl.on) {   /* a mouth moves only with what sounds: never with a line the scene no longer says (the original's lips past
+        a shorter line's end, in place of a quiet one, a second speaker's in the same file), nor past a cut line's fade */
+        int sounds = vl.snd == 1 ? AdxPlayFlag[1] && !vl.fading : vl.snd == 2 ? cr.n : 0, k;
+        for (k = 0; k < RECS && rom && k < rom->ene_n; k++)
+            if (vl.hush[k] && (k != vl.rec || !sounds) && ene[k].mskp && ene[k].exp0 && ene[k].exp2 && ((int*)ene[k].exp0)[0] & 0x4) {
+                ((int*)ene[k].exp0)[0] &= ~0x4;   /* (as a lip entry's end: bhControlMask) */
+                ((LIP_WORK*)ene[k].exp2)->flag = 0;
+            }
+    }
+    if (getenv("RECVX_MOUTH_TRACE")) mouth_trace();
 }
 
 static int creature_line(unsigned seed, int m, int disc, int vid, int sp, int own)
@@ -476,6 +507,7 @@ static int creature_line(unsigned seed, int m, int disc, int vid, int sp, int ow
     }
     cr.last = cr.seq[cr.seq_n - 1]; cr.last_m = m;
     vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = NULL; vl.t0 = SDL_GetTicks();   /* (the script waits the original's time) */
+    vl.snd = 2; vl.hush[sp] = 1;
     if (ms > 0 && ms < VOICE_SHORT_MS && cr.len[0] > ms + VOICE_GRACE_MS) {   /* a gasp, and none of its sounds is as short: quiet */
         host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) is a short sound and %s has none: quiet\n", room_file_now(), sp, cast_name(own), disc, vid, ms, actor_model(m)->name);
         return 1;
@@ -527,6 +559,7 @@ static int line_age(const VoiceLine* l) { return voice_said_age(&said, l); }
 static int quiet(int sp, int ms)
 {
     vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = NULL; vl.t0 = SDL_GetTicks();   /* (an inserted line before it plays on: vl.cap) */
+    vl.snd = 0; vl.hush[sp] = 1;
     return -1;
 }
 
@@ -614,6 +647,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
              lip >= 0 ? "with its lips" : sure ? "the speaker checked by hand: " : "no lips in the script (the speaker is the VoiceOn's record): ",
              lip >= 0 ? (l->lip ? "" : " (none: the script's)") : why ? "a still mouth, " : "Talking Mouths: its lips added", why ? why : "");
     vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = lip >= 0 ? l->lip : NULL; vl.t0 = SDL_GetTicks();
+    vl.snd = 1; vl.hush[sp] = 1;
     vl.gnext = lc && lc->next != 0xFFFF ? lc->next : -1; vl.gpt = VOICE_PT + l->disc - 1;   /* (a group: its parts in order, pc_voice_tick) */
     if (before && l->lip && ene[sp].exp0 && ene[sp].exp2) {   /* (the LipSet ran already: its lips now, afresh) */
         ((int*)ene[sp].exp0)[268] = (int)(uintptr_t)l->lip;
@@ -631,6 +665,7 @@ void pc_voice_lip(BH_PWORK* pp, int rec)
     if (pre.skip == bhCetask) pre.skip = NULL;   /* (the line before's) */
     else { pre.task = bhCetask; pre.end = bhScePtr; pre.rec = rec; }
     if (vl.mouth && rec == vl.mouth - 1) mouth_stop();   /* (the script's own lips for that record: they start afresh) */
+    if (pp >= ene && pp < ene + RECS) vl.hush[pp - ene] = vl.on == 1;   /* (in the original's time: its lips; later another line's) */
     if (vl.on != 1 || !vl.lip || rec != vl.rec || !pp->exp0 || !pp->exp2) return;
     ((int*)pp->exp0)[268] = (int)(uintptr_t)vl.lip;   /* (bhSetLip's: the entry LipStart plays) */
     if (getenv("RECVX_CAST_TRACE")) host_log("voices: record %d moves its mouth with the inserted line's lips (bank %d)\n", rec, ((int*)pp->exp0)[4]);
@@ -656,6 +691,7 @@ static void voice_end(void)
         vl.cap = 0; vl.fading = 0;
     }
     vl.on = 0;
+    memset(vl.hush, 0, sizeof vl.hush);
     if (vl.mouth) mouth_stop();
     if (cr.n) { cr.n = 0; StopSe(CR_SLOT); }   /* (an enemy's sound stops as the line would) */
 }
