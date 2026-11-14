@@ -122,6 +122,25 @@ static int lip_entry(const unsigned char* d, long n, int k, const unsigned char*
     return 0;
 }
 
+/* the phoneme for a tick this loud: the scenes' lips over their lines' sound (the catalogue's 341 lines with lips, mean |sample| in
+   1/30 s, audio_adx_levels' scale, while each shows): 0 the shut mouth (in 76 % of its ticks under 12), 2 at 57 on average,
+   4 80, 3 88, 5 97, 1 106 (the widest) */
+static int lip_phoneme(int lv) { return lv < 12 ? 0 : lv < 68 ? 2 : lv < 84 ? 4 : lv < 97 ? 3 : 1; }
+
+int voice_lips_make(const unsigned char* lv, int n, unsigned char* out, int max)
+{
+    int o = 0, i = 0;
+    while (i < n && o + 3 <= max) {
+        int ph = lip_phoneme(lv[i]), j = i + 1, t;
+        while (j < n && (lip_phoneme(lv[j]) == ph || j - i < 2)) j++;   /* (a shape held 2 ticks at least: no flutter) */
+        for (t = (j - i) * 2; t > 0 && o + 3 <= max; t -= 254) { out[o++] = (unsigned char)ph; out[o++] = (unsigned char)(t < 254 ? t : 254); }
+        i = j;
+    }
+    if (!o) return 0;
+    out[o++] = 0xFF;
+    return o;
+}
+
 void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const unsigned char*))
 {
     long rom = rd32(d, n, 0x10), base = rd32(d, n, 0x1C), ep = rd32(d, n, rom + 2 * 4);

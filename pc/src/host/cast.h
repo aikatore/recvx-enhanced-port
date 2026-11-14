@@ -140,6 +140,10 @@ int voice_lipset(const unsigned char* p, int n, int (*insn)(const unsigned char*
    two lines of the disc whose mouth starts first (Claire's cry behind the glass in RM_3130, one in RM_6051) */
 int voice_lipset_before(const unsigned char* p, const unsigned char* von, int (*insn)(const unsigned char*));
 int voice_model_chr(int m);   /* the story character (cast_character) model m ("You appear as" actor index) is, -1: none (no lines) */
+/* a lip entry (pairs phoneme 0..5, time in 1/60 s; 0xFF last, as VoiceLine.lip) for a sound of n ticks of 1/30 s whose loudness
+   per tick is lv (audio_adx_levels: 0..255 for 0..1/4 of full scale): the mouth shut in its pauses, wider the louder (the
+   phonemes as loud as the scenes' lips show them); into out (max bytes); its length, 0 none */
+int voice_lips_make(const unsigned char* lv, int n, unsigned char* out, int max);
 void voice_scan_room(int room, const unsigned char* d, int n, int (*insn)(const unsigned char*));   /* an expanded room file */
 void voice_scan_done(void);
 /* every VoiceOn of an expanded room file in its scripts' order (scd0, scd1, the events; the --voice-plan export): the script
