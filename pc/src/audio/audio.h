@@ -16,6 +16,7 @@ float    audio_movie_gain(void);           /* the movie stream's gain: input vol
 void     audio_movie_close(void);
 /* an ADX stream of `size` bytes at byte `base` of a file (the disc image, a mods file); a voice id or -1 */
 int      audio_stream_start_adx(const char* path, uint64_t base, uint32_t size, int vol_cdb);
+int      audio_adx_levels(const char* path, uint64_t base, uint32_t size, unsigned char* out, int max);   /* loudness per 1/30 s */
 void     audio_stream_stop(int voice);
 void     audio_stream_pause(int voice, int paused);
 void     audio_stream_volume(int voice, int vol_cdb);

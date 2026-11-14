@@ -168,18 +168,14 @@ static void SDLCALL feed(void* userdata, SDL_AudioStream* stream, int additional
     if (v->ended) SDL_FlushAudioStream(stream);
 }
 
-int audio_stream_start_adx(const char* path, uint64_t base, uint32_t size, int vol_cdb)
+/* v reads the ADX file of `size` bytes at byte `base` of the open file f: its header parsed, at its first frame; 0 not one
+   decode_frames reads */
+static int adx_open(AdxVoice* v, FILE* f, uint64_t base, uint32_t size)
 {
     uint8_t hdr[SECTOR] = { 0 };
-    AdxVoice* v = NULL;
-    int id = -1;
-    for (int i = 0; i < MAX_VOICES; i++) if (!voices[i].used) { v = &voices[i]; id = i; break; }
-    if (!v || !dev) return -1;
     memset(v, 0, sizeof(*v));
-    v->f = pc_fopen(path, "rb");
-    if (!v->f) return -1;
-    v->base = base; v->size = size;
-    if (fseeko(v->f, (off_t)v->base, SEEK_SET) != 0 || fread(hdr, 1, SECTOR, v->f) < 0x34 || hdr[0] != 0x80) { fclose(v->f); return -1; }
+    v->f = f; v->base = base; v->size = size;
+    if (fseeko(v->f, (off_t)v->base, SEEK_SET) != 0 || fread(hdr, 1, SECTOR, v->f) < 0x34 || hdr[0] != 0x80) return 0;
     v->data_ofs = be16(hdr + 2) + 4;
     v->frame_bytes = hdr[5] ? hdr[5] : 18;
     v->channels = hdr[7] ? hdr[7] : 1;
@@ -200,10 +196,47 @@ int audio_stream_start_adx(const char* path, uint64_t base, uint32_t size, int v
     }
     if (v->channels > 2 || v->frame_bytes != 18) {   /* decode_frames: 2 channels of 18-byte frames */
         host_log("adx: %u channels of %u-byte frames not supported\n", v->channels, v->frame_bytes);
-        fclose(v->f);
-        return -1;
+        return 0;
     }
     v->pos_byte = v->data_ofs;
+    return 1;
+}
+
+/* how loud the ADX file (as audio_stream_start_adx takes it) is in each 1/30 s from its start, up to max of them: the mean
+   |sample| of its first channel, 0..255 for 0..1/4 of full scale (speech in the voice files: about 40..110, a pause under 12);
+   the count, -1 unreadable (the voice lines' mouths: cast_glue.c line_lips) */
+int audio_adx_levels(const char* path, uint64_t base, uint32_t size, unsigned char* out, int max)
+{
+    AdxVoice v;
+    int16_t pcm[64];
+    int n = 0, got, k, per;
+    uint64_t sum = 0, cnt = 0;
+    FILE* f = pc_fopen(path, "rb");
+    if (!f) return -1;
+    if (!adx_open(&v, f, base, size) || v.loop || v.rate < 30) { fclose(f); return -1; }
+    per = (int)(v.rate / 30);
+    while (n < max && (got = decode_frames(&v, pcm)) > 0)
+        for (k = 0; k < got; k++) {
+            sum += (uint64_t)(pcm[k * 2] < 0 ? -pcm[k * 2] : pcm[k * 2]);
+            if (++cnt == (uint64_t)per || (k == got - 1 && v.decoded >= v.total)) {
+                uint64_t l = sum * 4 * 255 / cnt / 32768;
+                if (n < max) out[n++] = (unsigned char)(l > 255 ? 255 : l);
+                sum = cnt = 0;
+            }
+        }
+    fclose(f);
+    return n;
+}
+
+int audio_stream_start_adx(const char* path, uint64_t base, uint32_t size, int vol_cdb)
+{
+    AdxVoice* v = NULL;
+    FILE* f;
+    int id = -1;
+    for (int i = 0; i < MAX_VOICES; i++) if (!voices[i].used) { v = &voices[i]; id = i; break; }
+    if (!v || !dev) return -1;
+    if (!(f = pc_fopen(path, "rb"))) return -1;
+    if (!adx_open(v, f, base, size)) { fclose(f); return -1; }
     {
         SDL_AudioSpec src = { SDL_AUDIO_S16, 2, (int)v->rate };
         SDL_AudioSpec dst = { SDL_AUDIO_S16, 2, 48000 };

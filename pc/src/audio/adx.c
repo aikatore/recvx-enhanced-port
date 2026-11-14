@@ -436,6 +436,20 @@ int adx_length_ms(int ptid, int fid)
     return (int)((uint64_t)be32(hdr + 12) * 1000 / be32(hdr + 8));
 }
 
+/* file fid of partition ptid as ADXT_StartAfs plays it (a mods file first): its loudness per 1/30 s (audio_adx_levels) */
+int adx_levels(int ptid, int fid, unsigned char* out, int max)
+{
+    uint32_t lsn = 0, size;
+    char name[64], path[512];
+    FILE* hf = NULL;
+    if (ptid >= 0 && ptid < MAX_PT && pt[ptid].name[0]) {
+        snprintf(name, sizeof(name), "%s/%d", pt[ptid].name, fid);
+        hf = mod_open_path(name, &size, path, sizeof path, NULL);
+    }
+    if (hf) { fclose(hf); return audio_adx_levels(path, 0, size, out, max); }
+    return adx_afs_locate(ptid, fid, &lsn, &size) ? audio_adx_levels(g_config.iso_path, (uint64_t)lsn * SECTOR, size, out, max) : -1;
+}
+
 static uint64_t played_samples(AdxTalk* t)
 {
     uint64_t now = t->paused ? t->pause_ns : SDL_GetTicksNS();

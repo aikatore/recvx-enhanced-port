@@ -702,6 +702,17 @@ int main(void)
         }
         CHECK(seen == 0xC && voice_creature_plan(1, 1020, 1, 40, len, 0, 5000, 1000, -1, at, 3) == 0);
     }
+    {   /* voice_lips_make: shut in the pauses, open with the sound, a shape held 2 ticks at least, as long as the sound, 0xFF last */
+        unsigned char lv[600], out[1300];
+        int n, t, k;
+        memset(lv, 0, sizeof lv);
+        memset(lv + 10, 100, 20); lv[15] = 50; memset(lv + 40, 30, 1); memset(lv + 100, 120, 500);
+        n = voice_lips_make(lv, 600, out, sizeof out);
+        CHECK(n > 0 && n % 2 == 1 && out[n - 1] == 0xFF && out[0] == 0 && out[1] == 20 && out[2] == 1);   /* (shut 10 ticks, then the widest) */
+        for (k = 0, t = 0; k < n - 1; k += 2) { CHECK(out[k] <= 5 && out[k + 1] >= 4 && out[k + 1] <= 254); t += out[k + 1]; }
+        CHECK(t == 1200 && out[n - 3] == 1);   /* (1/60 s: 600 ticks; the long loud end split under 255) */
+        CHECK(voice_lips_make(lv, 0, out, sizeof out) == 0 && voice_lips_make(lv, 600, out, 5) <= 5);
+    }
     printf("cast: ok\n");
     return 0;
 }

@@ -1306,9 +1306,8 @@ file, character (-1 none of the cast), flags `VOICE_CONFIRMED`, `VOICE_EXCLUDE`,
 group's next part (`voice_curated`, `cast.h`). The rules:
 
 * **Speaker checked** (`VOICE_CONFIRMED`): the line is that character's, over the `LipSet`'s or the record's guess.
-  In the catalogue it is that character's line, also without a `LipSet` (no lips: it is inserted with a still mouth,
-  or with the script's own lips where the original moves one, as "Talking Mouths" has it: `the inserted line has no
-  lips`). As an original, the record of that character in the room says it (the first one of that character; none
+  In the catalogue it is that character's line, also without a `LipSet` (no lips of its own: it is inserted with lips
+  made from its sound, "Voice lines" "Lips made from the sound"). As an original, the record of that character in the room says it (the first one of that character; none
   there: the line stays, `its speaker, checked by hand, is not in the room`), and it is replaced when that one is shown
   as another; Talking Mouths counts its speaker as sure. "None of the cast" (narration, radio, crowds, creatures): never
   inserted and never replaced.
@@ -1620,6 +1619,32 @@ line is stopped (the next line's start, faded out by then; or the end of the tim
   1002, 1020, 6060, 9350, seed 1): face-ticks with lips running and nothing sounding 1361 before, 0 now; the
   speaker's lips while its line sounds the same (5953 before, 5965 now). The jaw still moves in silence where the
   scene's expression moves it (Claire's in 1020 after her grunt), as in the game with the option off.
+* **A group's later parts** (lines said as one): the line in place of the first part plays on through them, and so
+  does its mouth (`vl.part`: the part counts as sounding while that line does, `snd` 1; its `LipSet` neither stops
+  Talking Mouths nor restarts the lips running). Before, the part was a quiet line, so its speaker's mouth was held
+  shut while the line still played: with the joined sets (`672045a2`, Steve's main gate in 0030, then 14 sets in
+  `d2272510`) and `d887a9bb`'s rule, whole later parts had a still mouth (4 lines in 0030 alone).
+* **Lips made from the sound** (`cast_glue.c line_lips`): an inserted line without lips of its own (a line checked by
+  hand that no scene moves a mouth with: 143 of the catalogue's lines, "from no scene" mostly) and an inserted group
+  (the scene's lips of its first part do not cover the rest) get a lip entry made from their sound, the first time
+  they are picked: `adx_levels` (`audio/adx.c`, the file as `ADXT_StartAfs` plays it, a mods file first) decodes it
+  to its loudness per 1/30 s (`audio.c audio_adx_levels`), `voice_lips_make` (`voices.c`) turns that into phonemes:
+  shut in the pauses, wider the louder, each shape held 2 ticks at least, as long as the sound. The phonemes' levels
+  come from the scenes' own lips over their lines (the catalogue's 341 lines with lips: phoneme 0 is the shut mouth,
+  76 % of its ticks near silence; 2, 4, 3, 5, 1 at mean levels 57, 80, 88, 97, 106 of 255). Under 2 ms and a few KB
+  per line, kept for the game in memory: nothing is written, nothing derived from the disc goes in the repository, and
+  a mods file's sound gets its own lips. The script's lips of the original line no longer move the mouth for an
+  inserted line (log: `with its lips (made from its sound)` where it said `(none: the script's)`), and Talking Mouths
+  gives these lines a mouth too (no more `the inserted line has no lips`). Lines keep the scenes' lips where they have
+  them.
+* **Measured** (`RECVX_TEST_SCENE`, 12 scenes: 0030, 0040, 1002, 1020, 6060, 9350, 0000, 3000, 6000, 9150, 1130,
+  7220; the user's settings and the voice tool's "Everyone swapped"; a test-aid trace per tick of every face's lips and
+  the voice slot's position, the sound's loudness there from the file): of the ticks the speaker's line sounds
+  (Talking Mouths' unsure speakers left out), the speaker's lips ran in 83.6 % (swapped) / 85.8 % (the user's) on
+  main, 95.7 / 96.2 % now; lines of 8 ticks or more with the mouth never moving 22 / 15 on main, 3 / 2 now (a speaker
+  not drawn, a line of none of the cast). The versions before (0.7.6, 0.7.7, 0.7.8, `76080597`) were at 83..88 % with
+  14..20 such lines (the lines without lips of their own), but with lips running in silence 8..11 per 100 ticks (the
+  script's lips past a shorter line), 2.4..4.9 since `d887a9bb`. The joined sets raised the still lines to 24 / 15.
 * **Subtitles** stay the script's: the original line's text (`MessageSet` is its own op, timed by the script; the US and
   European English rooms have no subtitles at all). The text tells the story while the voice is the joke; the inserted
   line's subtitle would be another room's message, in some languages a message the room does not have.
@@ -1720,8 +1745,8 @@ lobby's CUTSCENE CAST page, TALKING MOUTHS; shown while the voice lines are on; 
 
 * **What moves it**: the inserted line's own lip entry. Every catalogue line from a `LipSet` has one (none of the 450
   lip entries the disc's lines use is a still mouth: each has phonemes other than 0), and it came with that line from
-  its own scene, so it fits the sound. No mouth is made from the sound's loudness: a line checked by hand that no
-  `LipSet` moves has none, and keeps a still mouth (`the inserted line has no lips`). (The
+  its own scene, so it fits the sound. A line checked by hand that no `LipSet` moves, and a group, get lips made from
+  their sound ("Lips made from the sound" above). (The
   game's own lines without lips, with the voice lines off, are left alone; they have no lip entry, so they would need
   one made from the sound, as `imp_face` does for the player's voice.)
 * **When**: `cast_glue.c mouth_add`, from `pc_voice_on` for an inserted line without a `LipSet`, if all hold:

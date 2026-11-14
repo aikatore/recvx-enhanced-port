@@ -361,7 +361,8 @@ static struct {
     const void* mexp;                   /* ... its face state then, and the lips */
     const unsigned char* mlip;
     int gnext, gpt;                     /* an inserted group (lines said as one): its next part's file, -1 none; its partition */
-    int snd;                            /* what sounds in the line's place: 0 nothing (quiet), 1 the inserted line, 2 an enemy's sounds */
+    int part;                           /* a later part of a group said as one is on: the line in place of its first plays on */
+    int snd;                           /* what sounds in the line's place: 0 nothing (quiet), 1 the inserted line, 2 an enemy's sounds */
     unsigned char hush[RECS];           /* the records whose lips came with the line replaced (the speaker's, a LipSet in the
                                            original's time): pc_voice_tick holds their mouths shut but the speaker's while snd sounds */
 } vl = { .gnext = -1 };
@@ -570,6 +571,32 @@ static void voice_parts(void)
         }
 }
 
+/* the lips for line l as its sound goes: those of its scene (they came with it), else made from its sound once, when it is
+   first picked (voice_lips_make over adx_levels: a line no scene moves a mouth with; a group, all its parts, which the
+   scene's lips of its first do not cover); NULL none. A file of a few hundred KB decoded, under a millisecond or two;
+   kept for the game (a few KB) */
+int adx_levels(int ptid, int fid, unsigned char* out, int max);   /* audio/adx.c */
+static const unsigned char* line_lips(const VoiceLine* l)
+{
+    static unsigned char* made[2][2048];   /* (disc, file) */
+    static unsigned char lv[30 * 60];      /* (a minute: the longest line is 28 s) */
+    unsigned char out[sizeof lv * 2 + 1];  /* (a pair per tick at most) */
+    const VoiceCurated* c = voice_curated(l->disc, l->vid);
+    int d = l->disc - 1, n = 0, m, k, vid = l->vid;
+    uint64_t t0 = SDL_GetTicks();
+    if ((l->lip && !(c && c->next != 0xFFFF)) || d < 0 || d > 1 || l->vid >= 2048) return l->lip;
+    if (made[d][l->vid]) return made[d][l->vid];
+    for (k = 0; k < 8 && (m = adx_levels(VOICE_PT + d, vid, lv + n, (int)sizeof lv - n)) > 0; k++) {   /* (a group's parts, in turn) */
+        n += m;
+        if (!(c = voice_curated(l->disc, vid)) || c->next == 0xFFFF) break;
+        vid = c->next;
+    }
+    if (!(m = voice_lips_make(lv, n, out, (int)sizeof out)) || !(made[d][l->vid] = malloc((size_t)m))) return l->lip;
+    memcpy(made[d][l->vid], out, (size_t)m);
+    host_log("voices: line %d/%d's lips made from its sound (%d ms, %d bytes, %d ms to make)\n", l->disc, l->vid, n * 1000 / 30, m, (int)(SDL_GetTicks() - t0));
+    return made[d][l->vid];
+}
+
 /* A group (lines said as one, the voice tool's joined set: voice_curated) as the original: the line in place of its first part
    fills all their time and plays on through the later parts, which stay quiet, while they follow one another (gpart: the next
    one wanted; a part said elsewhere, not right after the one before, is a line of its own). bhVoiceOn stops the line before
@@ -605,6 +632,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     const VoiceLine* l;
     const VoiceCurated *cv = voice_curated(disc, vid), *lc;   /* (checked by hand: docs/ACTORS.md "Lines checked by hand") */
     const char* why;
+    const unsigned char* lips;
     char from[12], cut[64], here[48] = "";
     unsigned short want = gpart;   /* (the next part of a group whose first one was just said) */
     int gn = vl.gnext, full, pl = -1, gap = -1, ofs = rom && rom->evtp ? (int)(next - 8 - (const unsigned char*)rom->evtp) : -1;
@@ -651,7 +679,10 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     if (cv && cv->flags & VOICE_PART && vid == want) {   /* (a group's later part: the line in place of its first takes all their time) */
         gpart = cv->next; vl.gnext = gn;
         host_log("voices: room %04d record %d: line %d/%d (%d ms), a later part of a group said as one: quiet, the line in place of its first plays on\n", room_file_now(), sp, disc, vid, ms);
-        return quiet(sp, ms);
+        quiet(sp, ms);
+        vl.snd = vl.iend ? 1 : 0;   /* (the mouth moves on while that line sounds: its lips, which this part's LipSet does not restart) */
+        vl.part = 1;
+        return -1;
     }
     gpart = cv && cv->next != 0xFFFF && !(cv->flags & VOICE_PART) ? cv->next : 0xFFFF;
     full = gpart != 0xFFFF ? group_ms(disc, vid) : ms;
@@ -668,7 +699,8 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
         return quiet(sp, ms);
     }
     l = ch.l; fit = ch.fit; lms = ch.lms;
-    why = lip < 0 ? mouth_add(sp, vid, l->lip, sure) : NULL;   /* (the catalogue lines have lips, but some checked by hand) */
+    lips = line_lips(l);
+    why = lip < 0 ? mouth_add(sp, vid, lips, sure) : NULL;
     lc = voice_curated(l->disc, l->vid);
     snprintf(from, sizeof from, l->room != VOICE_NO_ROOM ? "RM_%04d" : "no scene", l->room);
     cut[0] = 0;
@@ -681,12 +713,12 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
              lms, l->grunt ? ", a grunt" : "", lc && lc->next != 0xFFFF ? ", a group" : "",
              cut, from,
              lip >= 0 ? "with its lips" : sure ? "the speaker checked by hand: " : "no lips in the script (the speaker is the VoiceOn's record): ",
-             lip >= 0 ? (l->lip ? "" : " (none: the script's)") : why ? "a still mouth, " : "Talking Mouths: its lips added", why ? why : "");
-    vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = lip >= 0 ? l->lip : NULL; vl.t0 = SDL_GetTicks();
+             lip >= 0 ? (!lips ? " (none: the script's)" : lips != l->lip ? " (made from its sound)" : "") : why ? "a still mouth, " : "Talking Mouths: its lips added", why ? why : "");
+    vl.on = 1; vl.rec = sp; vl.ms = ms; vl.lip = lip >= 0 ? lips : NULL; vl.t0 = SDL_GetTicks();
     vl.snd = 1; vl.hush[sp] = 1;
     vl.gnext = lc && lc->next != 0xFFFF ? lc->next : -1; vl.gpt = VOICE_PT + l->disc - 1;   /* (a group: its parts in order, pc_voice_tick) */
-    if (before && l->lip && ene[sp].exp0 && ene[sp].exp2) {   /* (the LipSet ran already: its lips now, afresh) */
-        ((int*)ene[sp].exp0)[268] = (int)(uintptr_t)l->lip;
+    if (before && lips && ene[sp].exp0 && ene[sp].exp2) {   /* (the LipSet ran already: its lips now, afresh) */
+        ((int*)ene[sp].exp0)[268] = (int)(uintptr_t)lips;
         ((LIP_WORK*)ene[sp].exp2)->flag = 0;
         vl.lip = NULL;
     }
@@ -977,7 +1009,7 @@ void pc_voice_lip(BH_PWORK* pp, int rec)
 {
     if (pre.skip == bhCetask) pre.skip = NULL;   /* (the line before's) */
     else { pre.task = bhCetask; pre.end = bhScePtr; pre.rec = rec; }
-    if (vl.mouth && rec == vl.mouth - 1) mouth_stop();   /* (the script's own lips for that record: they start afresh) */
+    if (vl.mouth && rec == vl.mouth - 1 && !vl.part) mouth_stop();   /* (the script's own lips for that record: they start afresh) */
     if (pp >= ene && pp < ene + RECS) vl.hush[pp - ene] = vl.on == 1;   /* (in the original's time: its lips; later another line's) */
     if (vl.on != 1 || !vl.lip || rec != vl.rec || !pp->exp0 || !pp->exp2) return;
     ((int*)pp->exp0)[268] = (int)(uintptr_t)vl.lip;   /* (bhSetLip's: the entry LipStart plays) */
@@ -1009,9 +1041,9 @@ static void voice_end(const char* by)   /* by: what stops an inserted line still
         AdxPlayFlag[1] = 0;
         vl.cap = 0; vl.fading = 0;
     }
-    vl.on = 0;
+    vl.on = 0; vl.part = 0;
     memset(vl.hush, 0, sizeof vl.hush);
-    if (vl.mouth) mouth_stop();
+    if (vl.mouth && by) mouth_stop();   /* (a group's next part: the line in place of it plays on, its mouth too) */
     if (cr.n) { cr.n = 0; StopSe(CR_SLOT); }   /* (an enemy's sound stops as the line would) */
 }
 
