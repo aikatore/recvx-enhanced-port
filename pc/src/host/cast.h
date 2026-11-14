@@ -160,19 +160,18 @@ unsigned voice_cat_hash(void);
    title, whenever the option is turned on or BioRand's choice changes); 0: not now (a build runs, the disc not open yet) */
 int voices_want(void);
 void voices_frame(void);
-/* teleport.c: fn on every room file of the disc and the mods folder (not BioRand's), expanded, as the game loads them; the
-   count, -1 the disc image cannot be read */
+/* teleport.c: fn on every room file the game loads now (the disc's, the mods folder's, BioRand's: biorand_next), expanded;
+   the count, -1 the disc image cannot be read. voices_cat_key: the key of the catalogue published (the room files, the
+   tables), 0 none or a new one being read */
 int room_each(void (*fn)(int room, const unsigned char* d, int n, void* ud), void* ud);
+unsigned voices_cat_key(void);
+void voices_cache_path(char* p, size_t n, const char* name);   /* <save_dir>/name: voices.cache, voices.plan (cast_glue.c) */
 /* cast_glue.c, recvx --voice-plan SEED --out PATH (host.c, headless, the disc open): the Randomize Voice Lines choices of every
-   cutscene line as JSON (docs/ACTORS.md "Voice plan"); 0 written */
+   cutscene line as JSON, the plan the game plays (docs/ACTORS.md "Voice plan"); 0 written */
 int voice_plan_export(int seed, const char* path);
-/* cast_glue.c, at the frame hand-off: the lines said start afresh when a game (re)starts (a new game, a load, a game
-   over's continue: sys->tk_flg 0x20, bhFirstGameStart) and when a co-op session starts (both sides) */
-void voice_said_frame(void);
 unsigned char* voice_cache_save(unsigned key, size_t* size);
 int voice_cache_load(const unsigned char* d, size_t n, unsigned key);
-/* the lines said, the latest last (cast_glue.c: with this seed, across room loads, in the scenes' order, from the game's
-   (re)start or the co-op session's: the same scenes in the same order say the same lines, a reload too): voice_said_add one (the oldest goes when full); voice_said_age, how many other
+/* the lines said, the latest last (cast_glue.c plan_make: the voice plan's, in its story order): voice_said_add one (the oldest goes when full); voice_said_age, how many other
    lines of l's character were said since l, -1 not said */
 #define VOICE_SAID_MAX 256
 typedef struct { const VoiceLine* l[VOICE_SAID_MAX]; int n; } VoiceSaid;
@@ -211,6 +210,9 @@ typedef struct {
 } VoiceChoice;
 VoiceChoice voice_choose(unsigned seed, int room, int disc, int vid, int chr, int ms, int full, int pl, int gap, int grunt,
                          int (*ms_of)(const VoiceLine*), int (*age)(const VoiceLine*));
+/* ... with line l picked already (the voice plan's, cast_glue.c; NULL: quiet): its fit and cut as voice_choose's */
+VoiceChoice voice_choose_as(const VoiceLine* l, int ms, int full, int pl, int gap, int grunt, int (*ms_of)(const VoiceLine*));
+unsigned voice_played_hash(void);   /* the played lengths' table (voice_played_ms), for the voice plan's key */
 /* "Talking Mouths" (ini voice_mouths, default 1; each screen's own): an inserted line in place of one without a LipSet
    moves the speaker's mouth with its lips, where the speaker is sure. voice_sure: in room file room, file vid's VoiceOn
    names record rec, no LipSet follows, and every line of that script with a LipSet moves the mouth of the record it

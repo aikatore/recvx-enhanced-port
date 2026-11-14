@@ -71,7 +71,6 @@ extern NJS_POINT3 PlayerPos;            /* sdfunc.c: where CallPlayerVoice plays
 CoopState g_coop = { .port = COOP_DEFAULT_PORT, .join = "127.0.0.1:7140", .follow = 1, .upnp = 1, .nametag = 1, .items = COOP_ITEMS_HOST, .server = COOP_DEFAULT_SERVER, .trade_freeze = 1, .remember = 1, .peer_rec = -1,
                     .important = 1, .skip_sync = 1, .skip_detector = 1 };
 int coop_on;
-int coop_session_gen;   /* partner sessions so far (session_reset; cast_glue.c voice_said_frame) */
 int appear_on;                          /* co-op off, "You appear as" in use: our-player hooks only */
 
 /* ---------------------------------------------------------------- wire format */
@@ -4189,7 +4188,6 @@ static void grant_forget(void);
 /* a new partner session (or ours restarted): both event streams start again from id 1 */
 static void session_reset(void)
 {
-    coop_session_gen++;
     enemy_partner_forget();   /* (the partner's randomizer results and extras: another session's) */
     if (sys && run_room >= 0) own_takeover("its session restarted"); else own_reset(1);   /* (protocol 56: every enemy of our room ours) */
     defer_n = 0;

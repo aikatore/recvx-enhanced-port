@@ -1414,21 +1414,41 @@ python3 pc/tools/voice_curation.py /path/to/recvx-voice-tool/voice_curation.json
 `recvx <disc image> --save-dir DIR --voice-plan SEED --out plan.json` writes what Randomize Voice Lines makes of every
 cutscene line with that seed (the voice tool shows it next to the original), without starting the game, and exits (2:
 no disc image or no `--out`). The cast options are recvx.ini's (`--save-dir`), the voice lines on; nothing is written
-there. It runs the game's own choice (`voices.c voice_choose`, as `pc_voice_on`: the cooldown over the lines said, the
-grunts, the groups, the played lengths, the line's exact length as `adx_length_ms` reads it, the cut and fade) over the
-room files' scripts in story order as far as the numbers give it (stage 0..9, in each the room files, in each scd0,
-scd1 and the events in turn). A playthrough meets the scenes in another order, some twice and some never, so from some
-point on its picks differ (the history: which lines are in their cooldown); what each scene's speakers are drawn as,
-and so whose lines they say, does not depend on it. The speaker's look as `cast_room` gives it (`cast_want`, the same
-code, over the room file's records): Claire's and Chris's records the player's look for them (`coop_look_model`; played,
-the double shows the same), everyone else's the cast's pick while the cast is on, the records `kept` as themselves,
-the display slots filled in record order (one past the sixth model: itself). Not known without playing: a record not
-there at the room load (the game draws it as itself), a model that fails to load, the imports, co-op (a guest has the
-host's options; the partner's character counts as played), Steve or Wesker played (no scene with a line plays as
-them). Checked against the game: headless scene runs with the cast and the voice lines on (RECVX_TEST_SCENE,
-`RECVX_CAST_TRACE`'s "voices:" lines) agree line for line on the kind, whose voice and, with each script starting
-afresh (test aid `RECVX_VOICE_PLAN_FRESH=1`: nothing said before it, as in a scene run), the replacement; ctest
-`voice_plan_game` (needs `RECVX_ISO`, about two minutes) runs three. The JSON (`version` 2; the voice tool reads 1 too):
+there. **It is the plan the game plays** (`cast_glue.c plan_make`, one code path): the game's own choice
+(`voices.c voice_choose`: the cooldown over the lines said, the grunts, the groups, the played lengths, the line's exact
+length as `adx_length_ms` reads it, the cut and fade) over the room files' scripts in story order as far as the numbers
+give it (stage 0..9, in each the room files, in each scd0, scd1 and the events in turn), the history (which lines are
+in their cooldown) going on in that order. The room files are the ones the game loads (`room_each`: the disc's, the mods
+folder's, BioRand's when it is on). The speaker's look as `cast_room` gives it (`cast_want`, the same code, over the room
+file's records): Claire's and Chris's records the player's look for them (`coop_look_model`; played, the double shows the
+same), everyone else's the cast's pick while the cast is on (from the seed and the room file: the same at every visit),
+the records `kept` as themselves, the display slots filled in record order (one past the sixth model: itself), the
+imports as the game counts them.
+
+**A seed always says the same lines.** With Randomize Voice Lines on, the game makes the plan at a room load (`cast_room
+-> plan_want`, on the game thread while the room loads: about 1.5 s, once per seed and options; never in a cutscene)
+for the inputs it depends on: the catalogue's key (the room files, the lines checked by hand), the played-length table,
+the seed and the cast options in effect (`plan_key`: Character Models on, Model Selection, Model Assignment, Enemy
+Models and both Custom lists, the imports' count and list). It keeps the lines it chose and caches them in
+`<save_dir>/voices.plan` next to `voices.cache` (ids only: room file, VoiceOn offset, line, the character it is said as,
+the line in its place; a few KB; another key is made anew and replaces it). `pc_voice_on` looks a line up by room file
+and the VoiceOn's offset in the script block (`plan_find`) and plays the plan's line, with its fit, cut and fade as
+`voice_choose` gives them for it (`voice_choose_as`). So a scene says the same in every playthrough, replay, load, retry
+and order, and on both co-op screens. There is no history at play time. Not from the plan, picked from the seed and the
+line alone (`voice_choose` without a history: deterministic too): Claire's and Chris's records (each co-op screen shows
+its own player's look for them, so they are kept out of the plan's history, which is then the same on both screens; the
+plan picks theirs the same way), a line the plan does not know (another room file, the speaker shown as another
+character than planned: a model that failed to load, a record not there at the room load, Steve or Wesker played; the
+log says "not in the plan"). Lines before the plan is made (the catalogue still being read at the room load, the options
+changed in the pause menu: the next room load makes it) stay quiet, as before the catalogue is read. An enemy model's
+sounds (`creature_line`) avoid the sound before in the same room visit, which a room load resets.
+
+Co-op: a guest has the host's options and seed (`enemy_opts`, `enemy_cast_off`; imports only while both have the same
+list), so it makes the same plan from the same disc and mods; no protocol change. Checked against the game: headless
+scene runs with the cast and the voice lines on (RECVX_TEST_SCENE, `RECVX_CAST_TRACE`'s "voices:" lines) agree line for
+line on the kind, whose voice and the replacement; ctest `voice_plan_game` (needs `RECVX_ISO`, about three minutes) runs
+three scenes in sessions of their own and, in one more session, one, another, then the first again: every play of a
+scene the same and the plan's. The JSON (`version` 2; the voice tool reads 1 too):
 
 ```
 {"version":2,"seed":7,"options":{"voices":1,"cast":1,"cast_assign":1,"cast_all":0,"cast_enemy":1,"mouths":1},
@@ -1472,8 +1492,9 @@ line is stopped (the next line's start, faded out by then; or the end of the tim
     The previous line stops when the next original starts (`PlayVoiceEx2` stops slot 1). So a speaker never talks on
     past its line with one or several lines of another.
   * **The history**: the lines said are kept in order (`VoiceSaid`, `voice_said_add`, `voice_said_age`: how many of
-    that character's lines came since; the last 256 of all characters) **across room loads**, for the whole game with
-    that enemy seed (another seed starts afresh: `cast_glue.c voice_room`), so the cooldown spans the cutscenes.
+    that character's lines came since; the last 256 of all characters) across the scenes in the voice plan's story
+    order ("Voice plan"), so the cooldown spans the cutscenes; the game plays the plan, so it does not depend on what
+    was played before.
   * **The length a soft preference** within those: a line weighs 1 + 5 r² (r the part of the original's time it fills,
     at most 1: a line that fills it is 6 times as likely as a one-word shout, one filling half 2.25 times), a gasp,
     grunt or shout (shorter than `VOICE_SHORT_MS`, 1.2 s) a tenth of that again in place of a line of 1.2 s or more,

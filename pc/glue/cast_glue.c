@@ -34,7 +34,10 @@ extern int cast_n;                      /* actor_glue.c: hooks run while > 0 */
 unsigned coop_partner_import_id(void);  /* coop_glue.c: the partner's cast_import_id, 0 none */
 int coop_look_model(int c);             /* coop_glue.c: the player's look for Claire or Chris as a model, -1 themselves */
 static void voice_end(const char* by);    /* "Randomize Voice Lines": the line's end (below) */
-static void voice_room(int seed);
+static void voice_room(void);
+static void plan_want(const EnemyOpts* o);   /* the voice plan (below) */
+static int plan_ready(const EnemyOpts* o);
+static int plan_find(int room, int ofs, int vid, int chr, const VoiceLine** l);
 extern unsigned char* bhScePtr;          /* event.c */
 extern BH_SCEWORK* bhCetask;
 static struct { const BH_SCEWORK *task, *skip; const unsigned char* end; int rec; } pre;   /* "Randomize Voice Lines": the last LipSet run
@@ -120,8 +123,9 @@ void cast_room(const EnemyOpts* o)
     }
     voice_end(NULL);   /* (an inserted line going on into this room still fades out at its time) */
     pre.end = NULL;   /* (the last LipSet was the room before's) */
-    voice_room(o ? o->seed : 0);   /* (the sounds said: this room's from now; the lines: this seed's) */
-    if (o && o->voices) voices_want();   /* "Randomize Voice Lines": the lines for the room files now (read at the start already, else now) */
+    voice_room();   /* (the sounds said: this room's from now) */
+    if (o && o->voices && voices_want()) plan_want(o);   /* "Randomize Voice Lines": the lines for the room files now (read at the start
+        already, else now), the plan for them */
     if (!o || !rom || (!o->cast && !g_appear_per)) { cast_release(); return; }   /* ("Per Character": Claire's and Chris's looks without the cast) */
     imports = import_count(o);
     for (k = 0; k < rom->ene_n && k < RECS; k++) {
@@ -555,16 +559,16 @@ static int group_ms(int disc, int vid)
 }
 static int line_ms(const VoiceLine* l) { return group_ms(l->disc, l->vid); }   /* (voice_pick) */
 
-/* the lines said with this seed (voice_pick: the ones not said first; then none of the character's last few, never one
-   twice in a row), in the order the scenes said them: across room loads, so a character's few short lines do not open
-   every scene; another seed, a game (re)start or a co-op session starts afresh (voice_room, voice_said_frame). The same scenes in the same order with the same seed say the same
-   lines. Also those said in place of Claire's and Chris's, which each co-op screen shows with its own player's look: the
-   two screens pick alike but where one shows them as the character another role is shown as (that one's lines then do
-   not repeat theirs), or one screen said lines in a scene the other did not see */
-extern int coop_session_gen;   /* coop_glue.c */
-static VoiceSaid said;
-static int said_seed;
-static int line_age(const VoiceLine* l) { return voice_said_age(&said, l); }
+/* the voice archives as partitions of their own (the game's 1 is the room's disc's), both for the lengths: 1 loaded, -1 not */
+static int part[2];
+static void voice_parts(void)
+{
+    for (int d = 0; d < 2; d++)
+        if (!part[d]) {
+            ADXF_LoadPartitionNw(VOICE_PT + d, d ? (char*)"\\VOICE2.AFS" : (char*)"\\VOICE1.AFS", NULL, NULL);
+            part[d] = ADXF_GetPtStat(VOICE_PT + d) == 3 ? 1 : -1;   /* (ADXF_STAT_READEND) */
+        }
+}
 
 /* A group (lines said as one, the voice tool's joined set: voice_curated) as the original: the line in place of its first part
    fills all their time and plays on through the later parts, which stay quiet, while they follow one another (gpart: the next
@@ -594,19 +598,19 @@ static int quiet(int sp, int ms)
 
 int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid)
 {
-    static int logged, part[2];
+    static int logged, unplanned;
     const EnemyOpts* o = enemy_opts();
-    int disc = (sys->ss_flg & 0x1) + 1, sp = -1, own, chr, m, lrec, ms, lip, lms, d, before = 0, fit, sure = 0;
+    int disc = (sys->ss_flg & 0x1) + 1, sp = -1, own, chr, m, lrec, ms, lip, lms, before = 0, fit, sure = 0;
     VoiceChoice ch;
     const VoiceLine* l;
     const VoiceCurated *cv = voice_curated(disc, vid), *lc;   /* (checked by hand: docs/ACTORS.md "Lines checked by hand") */
     const char* why;
     char from[12], cut[64], here[48] = "";
     unsigned short want = gpart;   /* (the next part of a group whose first one was just said) */
-    int gn = vl.gnext, full, pl = -1, gap = -1;
+    int gn = vl.gnext, full, pl = -1, gap = -1, ofs = rom && rom->evtp ? (int)(next - 8 - (const unsigned char*)rom->evtp) : -1;
 #define KEEP(why) do { if (getenv("RECVX_CAST_TRACE") || cv) host_log("voices: room %04d line %d/%d kind %d rec %d, speaker %d (%s), shown as %d: stays (%s)\n", room_file_now(), disc, vid, kind, rec, sp, sp >= 0 && sp < RECS ? cast_name(cast_character(ene[sp].id, ene[sp].mdlver)) : "-", m, why); vl.cap = 0; return vid; } while (0)
     if (keep.on) { AdxTInfo[1].Flag = keep.flag; AdxPlayFlag[1] = keep.play; keep.on = 0; }   /* (keep_playing) */
-    if (rom && rom->evtp && !getenv("RECVX_VOICE_WHOLE")) pl = voice_played_ms(room_file_now(), (int)(next - 8 - (const unsigned char*)rom->evtp), vid, &gap);   /* (bhScePtr; test aid: RECVX_VOICE_WHOLE=1 as before, the whole files) */
+    if (ofs >= 0 && !getenv("RECVX_VOICE_WHOLE")) pl = voice_played_ms(room_file_now(), ofs, vid, &gap);   /* (bhScePtr; test aid: RECVX_VOICE_WHOLE=1 as before, the whole files) */
     if (getenv("RECVX_VOICE_TIME"))   /* test aid: each line's start and pc_voice_stop's (game frames as ms at 30 a second), the table's time for it */
         host_log("voicetime: %u on room %04d ofs %d line %d/%d (%d ms) played %d\n", (unsigned)(gs_frame_count() * 1000 / 30), room_file_now(),
                  rom && rom->evtp ? (int)(next - 8 - (const unsigned char*)rom->evtp) : -1, disc, vid, adx_length_ms(PatId[1], vid), pl);
@@ -635,23 +639,15 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     m = shown_model(sp);
     chr = voice_model_chr(m);
     if (own >= 0 && chr < 0 && creature_line((unsigned)o->seed, m, disc, vid, sp, own)) return -1;   /* (bhVoiceOn plays nothing) */
-    if (own >= 0 && chr == own) {   /* the real character says it: in the history too (another role shown as them does not repeat it at once) */
-        for (d = 0; d < voice_count(own); d++)
-            if (voice_line(own, d)->disc == disc && voice_line(own, d)->vid == vid) { voice_said_add(&said, voice_line(own, d)); break; }
-        KEEP("shown as its own character");
-    }
+    if (own >= 0 && chr == own) KEEP("shown as its own character");
     if (own < 0 || chr < 0) KEEP(own < 0 ? "not a story character" : "shown as a model without lines");
     ms = adx_length_ms(PatId[1], vid);
-    if (voice_count(0) < 0) {   /* (the room files are being read: cast_room started it) */
+    if (voice_count(0) < 0 || !plan_ready(o)) {   /* (the room files are being read: cast_room started it; the plan: the next room load makes it) */
         voices_want();
-        if (!logged++) host_log("voices: the lines are not read yet: line %d/%d quiet\n", disc, vid);
+        if (!logged++) host_log("voices: the lines %s: line %d/%d quiet\n", voice_count(0) < 0 ? "are not read yet" : "have no plan for these options yet", disc, vid);
         return quiet(sp, ms);
     }
-    for (d = 0; d < 2; d++)
-        if (!part[d]) {   /* the archives as partitions of their own (the game's 1 is the room's disc's), both for the lengths */
-            ADXF_LoadPartitionNw(VOICE_PT + d, d ? (char*)"\\VOICE2.AFS" : (char*)"\\VOICE1.AFS", NULL, NULL);
-            part[d] = ADXF_GetPtStat(VOICE_PT + d) == 3 ? 1 : -1;   /* (ADXF_STAT_READEND) */
-        }
+    voice_parts();
     if (cv && cv->flags & VOICE_PART && vid == want) {   /* (a group's later part: the line in place of its first takes all their time) */
         gpart = cv->next; vl.gnext = gn;
         host_log("voices: room %04d record %d: line %d/%d (%d ms), a later part of a group said as one: quiet, the line in place of its first plays on\n", room_file_now(), sp, disc, vid, ms);
@@ -659,14 +655,19 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     }
     gpart = cv && cv->next != 0xFFFF && !(cv->flags & VOICE_PART) ? cv->next : 0xFFFF;
     full = gpart != 0xFFFF ? group_ms(disc, vid) : ms;
-    ch = voice_choose((unsigned)o->seed, room_file_now(), disc, vid, chr, ms, full, pl, gap, cv && cv->flags & VOICE_GRUNT, line_ms, line_age);
+    if (own >= 2 && plan_find(room_file_now(), ofs, vid, chr, &l))   /* (the plan's line: the same in every playthrough of the seed) */
+        ch = voice_choose_as(l, ms, full, pl, gap, cv && cv->flags & VOICE_GRUNT, line_ms);
+    else {   /* (Claire's, Chris's records, each screen's own look; a line the plan does not know: a mod's, the speaker shown otherwise
+        than planned): from the seed and the line alone */
+        if (own >= 2 && unplanned++ < 32) host_log("voices: room %04d line %d/%d at %d, shown as %s: not in the plan\n", room_file_now(), disc, vid, ofs, cast_name(chr));
+        ch = voice_choose((unsigned)o->seed, room_file_now(), disc, vid, chr, ms, full, pl, gap, cv && cv->flags & VOICE_GRUNT, line_ms, NULL);
+    }
     if (ch.l && part[ch.l->disc - 1] < 0) { gpart = 0xFFFF; KEEP("the archive did not load"); }
     if (!ch.l) {   /* (not the original's voice) */
         host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) shown as %s: quiet (%s)\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr), ch.why);
         return quiet(sp, ms);
     }
     l = ch.l; fit = ch.fit; lms = ch.lms;
-    voice_said_add(&said, l);   /* (said: back only after others of that character) */
     why = lip < 0 ? mouth_add(sp, vid, l->lip, sure) : NULL;   /* (the catalogue lines have lips, but some checked by hand) */
     lc = voice_curated(l->disc, l->vid);
     snprintf(from, sizeof from, l->room != VOICE_NO_ROOM ? "RM_%04d" : "no scene", l->room);
@@ -697,15 +698,22 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
 #undef KEEP
 }
 
-/* recvx --voice-plan SEED --out PATH (cast.h voice_plan_export; docs/ACTORS.md "Voice plan"): what Randomize Voice Lines makes of
-   every cutscene line with that seed and the cast options of recvx.ini, as pc_voice_on decides it (voice_choose, the lines said,
-   the groups, the played lengths), over the room files' scripts in story order as far as the numbers give it: the stages 0..9,
-   in each its room files and their scripts in turn. A playthrough meets them in another order (and some twice, some never),
-   so its picks, which depend on the lines said before, differ from some point on. The speaker's look as cast_room gives it
-   (plan_room: cast_want over the room file's records, the kept ones, the display slots in record order); no game running:
-   every record taken as there at the room load, no imports, no co-op, no Steve or Wesker played (no scene with a line is
-   played as them). */
-typedef struct { int room, m; const char* why; VoiceOnAt v; } PlanLine;   /* m: the model its speaker is drawn as, -1 itself (why: kept) */
+/* The voice plan (docs/ACTORS.md "Voice plan"): what Randomize Voice Lines makes of every cutscene line with the seed and the
+   cast options in effect, made once over the room files' scripts in story order as far as the numbers give it (the stages
+   0..9, in each its room files and their scripts in turn), as pc_voice_on would decide each (voice_choose, the lines said
+   before in that order: the cooldown, the groups, the played lengths). The game says the plan's line (plan_want, plan_find), so
+   a seed says the same lines in a scene whatever was played before it, replays, loads and co-op too; recvx --voice-plan
+   writes the same plan as JSON. The speaker's look as cast_room gives it (plan_room: cast_want over the room file's records,
+   the kept ones, the display slots in record order), every record taken as there at the room load, no Steve or Wesker played
+   (no scene with a line is played as them). Claire's and Chris's records show each screen's own look for them, so theirs
+   are picked from the seed and the line alone and are not in the history (the plan is the same on both co-op screens). */
+typedef struct {
+    int room, m, chr, ms, pl, chose;   /* m: the model its speaker is drawn as, -1 itself (why: kept), chr its character; ms, pl the
+                                          original's length, its played length (-1 unknown); chose: voice_choose made ch */
+    const char *why, *kind, *res;      /* res: the choice's reason, as the log's */
+    VoiceChoice ch;
+    VoiceOnAt v;
+} PlanLine;
 static struct { PlanLine* l; int n, cap; } plan;
 static VoiceSaid plan_said;
 static int plan_age(const VoiceLine* l) { return voice_said_age(&plan_said, l); }
@@ -728,7 +736,7 @@ static void plan_room(int room, const unsigned char* d, int n, void* ud)
         long r = ep + k * 0x24L;   /* (ETTY_WORK: type at 4, model version at 9) */
         why[k] = NULL; want[k] = slot[k] = -1;
         if (k >= nr || !ep || r + 0x24 > n) continue;
-        want[k] = cast_want(o, room, k, d[r + 4] | d[r + 5] << 8, d[r + 9], 0, &ch, &why[k]);
+        want[k] = cast_want(o, room, k, d[r + 4] | d[r + 5] << 8, d[r + 9], import_count(o), &ch, &why[k]);
         if (want[k] < 0) continue;
         for (j = 0; j < ns && sm[j] != want[k]; j++);
         if (j == ns && ns < CSLOTS) sm[ns++] = want[k];
@@ -737,14 +745,14 @@ static void plan_room(int room, const unsigned char* d, int n, void* ud)
     for (i = 0; i < c; i++) {
         PlanLine* p = &plan.l[plan.n++];
         int sp = v[i].sp;
-        p->room = room; p->v = v[i]; p->m = -1; p->why = NULL;
+        memset(p, 0, sizeof *p);
+        p->room = room; p->v = v[i]; p->m = -1;
         if (v[i].own < 0 || sp < 0 || sp >= RECS) continue;
         if (v[i].own < 2) p->m = coop_look_model(v[i].own);   /* (Claire's, Chris's records: the player's look; played, the double's, the same) */
         else if (slot[sp] >= 0) p->m = want[sp];
         else p->why = why[sp];
     }
 }
-static void plan_scan(int room, const unsigned char* d, int n, void* ud) { (void)ud; voice_scan_room(room, d, n, coop_insn_len_raw); }
 static int plan_cmp(const void* a, const void* b)
 {
     const PlanLine *x = a, *y = b;
@@ -752,19 +760,179 @@ static int plan_cmp(const void* a, const void* b)
     if (x->v.script != y->v.script) return x->v.script - y->v.script;
     return x->v.ofs - y->v.ofs;
 }
-static void plan_script(FILE* f, int s) { if (s < 2) fprintf(f, "\"scd%d\"", s); else fprintf(f, "\"event %d\"", s - 2); }
 
+/* plan.l: every line and its choice; -1 the room files cannot be read */
+static int plan_make(const EnemyOpts* o)
+{
+    int i, k, gpart_ = 0xFFFF;
+    voice_parts();   /* (file_ms) */
+    plan.n = 0; plan_said.n = 0;
+    if (room_each(plan_room, (void*)o) <= 0) return -1;
+    qsort(plan.l, (size_t)plan.n, sizeof(PlanLine), plan_cmp);
+    for (i = 0; i < plan.n; i++) {
+        PlanLine* p = &plan.l[i];
+        const VoiceOnAt* v = &p->v;
+        const VoiceCurated* cv = voice_curated(v->disc, v->vid);
+        int first = !i || p->room != plan.l[i - 1].room || v->script != plan.l[i - 1].v.script, gap, full;
+        unsigned short want = first ? 0xFFFF : (unsigned short)gpart_;   /* (a script: a scene; the lines said go on across them, as across room loads) */
+        p->ms = adx_length_ms(VOICE_PT + v->disc - 1, v->vid); p->pl = voice_played_ms(p->room, v->ofs, v->vid, &gap); p->chr = -1;
+        p->kind = "original";
+        gpart_ = 0xFFFF;
+        if (v->own == -2) p->res = "none of the cast says it, checked by hand";
+        else if (v->own == -3) p->res = "its speaker, checked by hand, is not in the room";
+        else if (v->sp < 0) p->res = "no speaker";
+        else if (v->own < 0) p->res = "not a story character";
+        else {
+            int chr = p->chr = voice_model_chr(p->m);
+            if (chr < 0 && p->m >= 0 && voice_creature(p->m, 0, &k, (unsigned char[64]){ 0 }, 64) > 0) { p->kind = "enemy"; p->res = "shown as an enemy: its sounds"; }
+            else if (chr == v->own) {
+                for (k = 0; v->own >= 2 && k < voice_count(chr); k++)
+                    if (voice_line(chr, k)->disc == v->disc && voice_line(chr, k)->vid == v->vid) { voice_said_add(&plan_said, voice_line(chr, k)); break; }
+                p->res = "shown as its own character";
+            } else if (chr < 0) p->res = p->m >= 0 ? "shown as a model without lines" : p->why ? p->why : "drawn as itself";
+            else if (cv && cv->flags & VOICE_PART && v->vid == want) { gpart_ = cv->next; p->kind = "group_silent"; p->res = "a later part of a group: the line in place of its first plays on"; }
+            else {
+                gpart_ = cv && cv->next != 0xFFFF && !(cv->flags & VOICE_PART) ? cv->next : 0xFFFF;
+                full = gpart_ != 0xFFFF ? group_ms(v->disc, v->vid) : p->ms;
+                p->ch = voice_choose((unsigned)o->seed, p->room, v->disc, v->vid, chr, p->ms, full, p->pl, gap, cv && cv->flags & VOICE_GRUNT, line_ms,
+                                     v->own >= 2 ? plan_age : NULL);
+                p->chose = 1;
+                if (p->ch.l && v->own >= 2) voice_said_add(&plan_said, p->ch.l);
+                if (p->ch.l) { p->kind = p->ch.l->grunt ? "grunt" : "line"; p->res = p->ch.grunts == VOICE_PICK_GRUNTS ? "a grunt for a grunt" : "picked"; }
+                else { p->kind = "quiet"; p->res = p->ch.why; }
+            }
+        }
+    }
+    return plan.n;
+}
+
+/* the game's: the lines of story characters but Claire and Chris the plan chose for, by room file and offset (pc_voice_on),
+   made for the inputs of key (plan_key); cached in <save_dir>/voices.plan (ids only: the room file, the offset, the line,
+   the character it is said as, the line in its place, 0 quiet) */
+typedef struct { int room, ofs, vid, chr; const VoiceLine* l; } PlanPick;
+static PlanPick* picks;
+static int picks_n;
+static unsigned picks_key;
+static int pick_cmp(const void* a, const void* b)
+{
+    const PlanPick *x = a, *y = b;
+    return x->room != y->room ? x->room - y->room : x->ofs - y->ofs;
+}
+static int plan_find(int room, int ofs, int vid, int chr, const VoiceLine** l)
+{
+    PlanPick k = { room, ofs, 0, 0, NULL };
+    const PlanPick* p = picks ? bsearch(&k, picks, (size_t)picks_n, sizeof k, pick_cmp) : NULL;
+    if (!p || p->vid != vid || p->chr != chr) return 0;   /* (another line there, or the speaker shown as another character than planned) */
+    *l = p->l;
+    return 1;
+}
+
+/* what the plan depends on: the catalogue's key (the room files, the lines checked by hand), the played lengths, the seed
+   and the cast options in effect (a co-op guest's: the host's); 0 none yet (the catalogue not read) */
+#define PLAN_FORMAT 1   /* (bump with a change to what the plan picks) */
+static unsigned plan_key(const EnemyOpts* o)
+{
+    int imports = import_count(o);
+    unsigned v[10] = { voices_cat_key(), voice_played_hash(), PLAN_FORMAT, (unsigned)o->seed, (unsigned)o->cast, (unsigned)o->cast_all,
+                       (unsigned)o->cast_assign, (unsigned)o->cast_enemy, (unsigned)imports, imports ? cast_import_id() : 0u }, h = 2166136261u;
+    const unsigned char* b;
+    size_t i;
+    if (!v[0]) return 0;
+    for (b = (const unsigned char*)v, i = 0; i < sizeof v; i++) h = (h ^ b[i]) * 16777619u;
+    for (b = o->cast_enemy_off, i = 0; i < sizeof o->cast_enemy_off; i++) h = (h ^ b[i]) * 16777619u;
+    for (b = enemy_cast_off(), i = 0; i < CAST_OFF_BYTES; i++) h = (h ^ b[i]) * 16777619u;
+    return h ? h : 1;
+}
+
+static int plan_ready(const EnemyOpts* o) { return picks_key && picks_key == plan_key(o); }
+
+#define PLAN_REC 14   /* the file: "RVXP", 1, the key, the count; then each: room u16, offset u32, line u16, character, disc of the line in its place (0 quiet), its file u16, 0 */
+static void plan_path(char* p, size_t n) { voices_cache_path(p, n, "voices.plan"); }
+static int plan_fill(FILE* f, void* ud)
+{
+    unsigned char h[16] = "RVXP", r[PLAN_REC];
+    unsigned key = *(const unsigned*)ud, n = (unsigned)picks_n;
+    int i;
+    for (i = 0; i < 4; i++) { h[4 + i] = (unsigned char)(1u >> 8 * i); h[8 + i] = (unsigned char)(key >> 8 * i); h[12 + i] = (unsigned char)(n >> 8 * i); }
+    if (fwrite(h, 1, sizeof h, f) != sizeof h) return -1;
+    for (i = 0; i < picks_n; i++) {
+        const PlanPick* p = &picks[i];
+        unsigned pv = p->l ? p->l->vid : 0;
+        r[0] = (unsigned char)p->room; r[1] = (unsigned char)(p->room >> 8);
+        r[2] = (unsigned char)p->ofs; r[3] = (unsigned char)(p->ofs >> 8); r[4] = (unsigned char)(p->ofs >> 16); r[5] = (unsigned char)(p->ofs >> 24);
+        r[6] = (unsigned char)p->vid; r[7] = (unsigned char)(p->vid >> 8); r[8] = (unsigned char)p->chr; r[9] = p->l ? p->l->disc : 0;
+        r[10] = (unsigned char)pv; r[11] = (unsigned char)(pv >> 8); r[12] = r[13] = 0;
+        if (fwrite(r, 1, PLAN_REC, f) != PLAN_REC) return -1;
+    }
+    return 0;
+}
+static int plan_load(unsigned key)
+{
+    char path[1100];
+    unsigned char h[16], r[PLAN_REC];
+    unsigned n;
+    int i, k, ok = 1;
+    PlanPick* q;
+    FILE* f;
+    plan_path(path, sizeof path);
+    if (!(f = pc_fopen(path, "rb"))) return 0;
+    n = fread(h, 1, sizeof h, f) == sizeof h ? h[12] | h[13] << 8 | h[14] << 16 | (unsigned)h[15] << 24 : 0;
+    if (!n || n > 65536 || memcmp(h, "RVXP\1\0\0\0", 8) || (unsigned)(h[8] | h[9] << 8 | h[10] << 16 | (unsigned)h[11] << 24) != key ||
+        !(q = calloc(n, sizeof *q))) { fclose(f); return 0; }
+    for (i = 0; ok && i < (int)n; i++) {
+        PlanPick* p = &q[i];
+        int disc, pv;
+        if (fread(r, 1, PLAN_REC, f) != PLAN_REC) { ok = 0; break; }
+        p->room = r[0] | r[1] << 8; p->ofs = (int)(r[2] | r[3] << 8 | r[4] << 16 | (unsigned)r[5] << 24); p->vid = r[6] | r[7] << 8; p->chr = r[8];
+        disc = r[9]; pv = r[10] | r[11] << 8;
+        for (k = 0; disc && k < voice_count(p->chr) && !p->l; k++)   /* (the line in the catalogue now: the key is its) */
+            if (voice_line(p->chr, k)->disc == disc && voice_line(p->chr, k)->vid == pv) p->l = voice_line(p->chr, k);
+        if ((disc && !p->l) || (i && pick_cmp(&q[i - 1], p) >= 0)) ok = 0;
+    }
+    ok = ok && fgetc(f) == EOF;
+    fclose(f);
+    if (!ok) { free(q); return 0; }
+    free(picks); picks = q; picks_n = (int)n;
+    return 1;
+}
+
+/* cast_room (a room load, game thread): the plan for the options in effect now, from voices.plan or made (a second or two,
+   once per seed and options) */
+static void plan_want(const EnemyOpts* o)
+{
+    uint64_t t0 = SDL_GetTicks();
+    unsigned key = plan_key(o);
+    int i, n = 0;
+    char path[1100];
+    PlanPick* q;
+    if (!key || key == picks_key) return;   /* (the catalogue not read yet: the next room load) */
+    if (plan_load(key)) { picks_key = key; host_log("voices: the plan for seed %d from voices.plan, %d lines (%u ms)\n", o->seed, picks_n, (unsigned)(SDL_GetTicks() - t0)); return; }
+    if (plan_make(o) < 0) { host_log("voices: cannot read the room files for the plan\n"); return; }
+    for (i = 0; i < plan.n; i++) n += plan.l[i].chose && plan.l[i].v.own >= 2;
+    if (!(q = calloc((size_t)n + 1, sizeof *q))) return;
+    for (i = 0, n = 0; i < plan.n; i++)
+        if (plan.l[i].chose && plan.l[i].v.own >= 2) q[n++] = (PlanPick){ plan.l[i].room, plan.l[i].v.ofs, plan.l[i].v.vid, plan.l[i].chr, plan.l[i].ch.l };
+    qsort(q, (size_t)n, sizeof *q, pick_cmp);
+    free(picks); picks = q; picks_n = n; picks_key = key;
+    plan_path(path, sizeof path);
+    if (pc_save_file(path, "wb", plan_fill, &key)) host_log("voices: cannot write %s\n", path);
+    host_log("voices: the plan for seed %d made: %d lines, %d chosen (%u ms)\n", o->seed, plan.n, n, (unsigned)(SDL_GetTicks() - t0));
+}
+
+static void plan_script(FILE* f, int s) { if (s < 2) fprintf(f, "\"scd%d\"", s); else fprintf(f, "\"event %d\"", s - 2); }
+static void plan_scan(int room, const unsigned char* d, int n, void* ud) { (void)ud; voice_scan_room(room, d, n, coop_insn_len_raw); }
+
+/* recvx --voice-plan SEED --out PATH (cast.h voice_plan_export, headless): the plan with that seed and the cast options of
+   recvx.ini as JSON */
 int voice_plan_export(int seed, const char* path)
 {
     EnemyOpts o = *enemy_opts();
     FILE* f;
-    int i, d, scenes = 0, order = 0, gpart_ = 0xFFFF, head = -1, part_k = 0, expect = -1;
+    int i, scenes = 0, order = 0, head = -1, part_k = 0, expect = -1;
     o.seed = seed; o.voices = 1;
-    for (d = 0; d < 2; d++) ADXF_LoadPartitionNw(VOICE_PT + d, d ? (char*)"\\VOICE2.AFS" : (char*)"\\VOICE1.AFS", NULL, NULL);   /* (file_ms) */
     if (room_each(plan_scan, NULL) <= 0) { host_log("voice plan: cannot read the room files\n"); return -1; }
     voice_scan_done();   /* (the catalogue, as voices_want's scan, without voices.cache) */
-    room_each(plan_room, &o);
-    qsort(plan.l, (size_t)plan.n, sizeof(PlanLine), plan_cmp);
+    if (plan_make(&o) < 0) { host_log("voice plan: cannot read the room files\n"); return -1; }
     if (!(f = pc_fopen(path, "w"))) { host_log("voice plan: cannot write %s\n", path); return -1; }
     fprintf(f, "{\"version\":2,\"seed\":%d,\"options\":{\"voices\":1,\"cast\":%d,\"cast_assign\":%d,\"cast_all\":%d,\"cast_enemy\":%d,\"mouths\":%d},\"scenes\":[",
             seed, o.cast, o.cast_assign, o.cast_all, o.cast_enemy, g_voice_mouths);
@@ -772,40 +940,13 @@ int voice_plan_export(int seed, const char* path)
         const PlanLine* p = &plan.l[i];
         const VoiceOnAt* v = &p->v;
         const VoiceCurated* cv = voice_curated(v->disc, v->vid);
-        int first = !i || p->room != plan.l[i - 1].room || v->script != plan.l[i - 1].v.script;
-        int ms = adx_length_ms(VOICE_PT + v->disc - 1, v->vid), gap, pl = voice_played_ms(p->room, v->ofs, v->vid, &gap), m = -1, chr = -1, k, full;
-        unsigned short want = (unsigned short)gpart_;
-        const char *kind = "original", *why = NULL;
-        VoiceChoice ch = { 0 };
-        if (first) {   /* (a script: a scene; the lines said go on across them, as across room loads) */
+        const VoiceChoice* ch = &p->ch;
+        int first = !i || p->room != plan.l[i - 1].room || v->script != plan.l[i - 1].v.script, m = p->m, chr = p->chr, ms = p->ms, pl = p->pl;
+        if (first) {
             fprintf(f, "%s{\"room\":\"RM_%04d\",\"script\":", scenes++ ? "]}," : "", p->room);
             plan_script(f, v->script);
             fprintf(f, ",\"disc\":%d,\"lines\":[", v->disc);
-            order = 0; want = 0xFFFF; head = -1;
-            if (getenv("RECVX_VOICE_PLAN_FRESH")) plan_said.n = 0;   /* test aid: each script as if nothing was said before (a headless scene run) */
-        }
-        gpart_ = 0xFFFF;
-        if (v->own == -2) why = "none of the cast says it, checked by hand";
-        else if (v->own == -3) why = "its speaker, checked by hand, is not in the room";
-        else if (v->sp < 0) why = "no speaker";
-        else if (v->own < 0) why = "not a story character";
-        else {
-            m = p->m;   /* (plan_room: as cast_room gives it) */
-            chr = voice_model_chr(m);
-            if (chr < 0 && m >= 0 && voice_creature(m, 0, &k, (unsigned char[64]){ 0 }, 64) > 0) { kind = "enemy"; why = "shown as an enemy: its sounds"; }
-            else if (chr == v->own) {
-                for (k = 0; k < voice_count(chr); k++)
-                    if (voice_line(chr, k)->disc == v->disc && voice_line(chr, k)->vid == v->vid) { voice_said_add(&plan_said, voice_line(chr, k)); break; }
-                why = "shown as its own character";
-            } else if (chr < 0) why = m >= 0 ? "shown as a model without lines" : p->why ? p->why : "drawn as itself";
-            else if (cv && cv->flags & VOICE_PART && v->vid == want) { gpart_ = cv->next; kind = "group_silent"; why = "a later part of a group: the line in place of its first plays on"; }
-            else {
-                gpart_ = cv && cv->next != 0xFFFF && !(cv->flags & VOICE_PART) ? cv->next : 0xFFFF;
-                full = gpart_ != 0xFFFF ? group_ms(v->disc, v->vid) : ms;
-                ch = voice_choose((unsigned)seed, p->room, v->disc, v->vid, chr, ms, full, pl, gap, cv && cv->flags & VOICE_GRUNT, line_ms, plan_age);
-                if (ch.l) { voice_said_add(&plan_said, ch.l); kind = ch.l->grunt ? "grunt" : "line"; why = ch.grunts == VOICE_PICK_GRUNTS ? "a grunt for a grunt" : "picked"; }
-                else { kind = "quiet"; why = ch.why; }
-            }
+            order = 0; head = -1;
         }
         if (cv && cv->next != 0xFFFF && !(cv->flags & VOICE_PART)) { head = v->vid; part_k = 0; expect = cv->next; }   /* (the group: its
             first part's file, while its parts follow it here) */
@@ -817,14 +958,14 @@ int voice_plan_export(int seed, const char* path)
         else fprintf(f, ",\"drawn_as\":\"%s\"", chr >= 0 ? cast_name(chr) : m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?");
         fprintf(f, ",\"order\":%d,\"orig_ms\":%d,\"played_ms\":%d,\"played_known\":%s,\"group\":", order++, ms, pl >= 0 ? pl : ms, pl >= 0 ? "true" : "false");
         if (head >= 0) fprintf(f, "%d", head); else fprintf(f, "null");
-        fprintf(f, ",\"group_part\":%d,\"repl\":{\"kind\":\"%s\",", head >= 0 ? part_k : 0, kind);
-        if (ch.l) fprintf(f, "\"disc\":%d,\"vid\":%d,\"speaker_of_line\":\"%s\",\"ms\":%d,", ch.l->disc, ch.l->vid, cast_name(ch.l->chr), ch.lms);
-        else if (!strcmp(kind, "original")) fprintf(f, "\"disc\":%d,\"vid\":%d,\"speaker_of_line\":%s%s%s,\"ms\":%d,", v->disc, v->vid,
-                                                    v->own >= 0 ? "\"" : "", v->own >= 0 ? cast_name(v->own) : "null", v->own >= 0 ? "\"" : "", ms);
+        fprintf(f, ",\"group_part\":%d,\"repl\":{\"kind\":\"%s\",", head >= 0 ? part_k : 0, p->kind);
+        if (ch->l) fprintf(f, "\"disc\":%d,\"vid\":%d,\"speaker_of_line\":\"%s\",\"ms\":%d,", ch->l->disc, ch->l->vid, cast_name(ch->l->chr), ch->lms);
+        else if (!strcmp(p->kind, "original")) fprintf(f, "\"disc\":%d,\"vid\":%d,\"speaker_of_line\":%s%s%s,\"ms\":%d,", v->disc, v->vid,
+                                                       v->own >= 0 ? "\"" : "", v->own >= 0 ? cast_name(v->own) : "null", v->own >= 0 ? "\"" : "", ms);
         else fprintf(f, "\"disc\":null,\"vid\":null,\"speaker_of_line\":null,\"ms\":null,");
-        if (ch.cut) fprintf(f, "\"cut_ms\":%d,", ch.stop);   /* (faded out by then: the next line's start; past the grace, from then) */
+        if (ch->cut) fprintf(f, "\"cut_ms\":%d,", ch->stop);   /* (faded out by then: the next line's start; past the grace, from then) */
         else fprintf(f, "\"cut_ms\":null,");
-        fprintf(f, "\"fade\":%s,\"why\":\"%s\"}}", ch.cut ? "true" : "false", why ? why : "");
+        fprintf(f, "\"fade\":%s,\"why\":\"%s\"}}", ch->cut ? "true" : "false", p->res ? p->res : "");
     }
     fprintf(f, "%s]}\n", scenes ? "]}" : "");
     fclose(f);
@@ -874,21 +1015,7 @@ static void voice_end(const char* by)   /* by: what stops an inserted line still
     if (cr.n) { cr.n = 0; StopSe(CR_SLOT); }   /* (an enemy's sound stops as the line would) */
 }
 
-static void voice_room(int seed) { if (seed != said_seed) said.n = 0; said_seed = seed; cr.last = -1; }
-void voice_said_frame(void)
-{
-    static int sess, was;
-    /* a game (re)start: bhFirstGameStart's task (a continue sets it in one frame and the task runs in the next), then the game
-       task's start-up (mode 1: memory, the player's files, the save region; a new game or a load from the title gets there in
-       the frame the title ends) */
-    int start = sys && ((sys->tk_flg & 0x20) || sys->mn_md0 == 1);
-    if ((start && !was) || sess != coop_session_gen) {   /* (a reload then says the same lines again) */
-        if (said.n || getenv("RECVX_CAST_TRACE")) host_log("voices: the lines said start afresh (%s, %d said)\n", start ? "a game (re)start" : "a co-op session", said.n);
-        said.n = 0;
-    }
-    was = start;
-    sess = coop_session_gen;
-}
+static void voice_room(void) { cr.last = -1; }
 
 /* StopVoice (sdfunc.c): VoiceOff, a skip, the line before an enemy's sounds; the slot stops or fades as the game asks */
 void pc_voice_stop(void)

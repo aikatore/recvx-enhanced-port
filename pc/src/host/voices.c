@@ -347,6 +347,8 @@ unsigned voice_cat_hash(void)
     return h;
 }
 
+unsigned voice_played_hash(void) { return fnv(2166136261u, (const unsigned char*)played, sizeof played); }
+
 unsigned char* voice_cache_save(unsigned key, size_t* size)
 {
     const Cat* c = cat_now();
@@ -497,8 +499,8 @@ const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr,
 #undef SKIP
 }
 
-VoiceChoice voice_choose(unsigned seed, int room, int disc, int vid, int chr, int ms, int full, int pl, int gap, int grunt,
-                         int (*ms_of)(const VoiceLine*), int (*age)(const VoiceLine*))
+static VoiceChoice choose(const VoiceLine* const* as, unsigned seed, int room, int disc, int vid, int chr, int ms, int full, int pl, int gap,
+                          int grunt, int (*ms_of)(const VoiceLine*), int (*age)(const VoiceLine*))
 {
     VoiceChoice c = { 0 };
     int fit_only, max;
@@ -509,8 +511,9 @@ VoiceChoice voice_choose(unsigned seed, int room, int disc, int vid, int chr, in
     c.grunts = grunt ? VOICE_PICK_GRUNTS : VOICE_PICK_ANY;   /* (a grunt for a grunt) */
     if (!grunt && (full <= 0 || full >= VOICE_SHORT_MS)) c.grunts = VOICE_PICK_SPOKEN;   /* (a spoken line for one: never a grunt) */
     fit_only = full > 0 && full < VOICE_SHORT_MS;   /* (a gasp: one that ends in time, else quiet) */
-    if (!(c.l = voice_pick(seed, room, disc, vid, chr, c.fit, max, ms_of, age,
-                           c.grunts | (fit_only ? VOICE_PICK_FIT : 0)))) {   /* (latent but for grunts: a character with lines has one) */
+    if (as && !(c.l = *as)) { c.why = "quiet in the plan"; return c; }   /* (voice_choose_as: the line the plan picked) */
+    if (!as && !(c.l = voice_pick(seed, room, disc, vid, chr, c.fit, max, ms_of, age,
+                                  c.grunts | (fit_only ? VOICE_PICK_FIT : 0)))) {   /* (latent but for grunts: a character with lines has one) */
         c.why = c.grunts == VOICE_PICK_GRUNTS ? "a grunt, and the character has none" : "no line picked";
         return c;
     }
@@ -519,6 +522,17 @@ VoiceChoice voice_choose(unsigned seed, int room, int disc, int vid, int chr, in
     if (pl > 0 && gap > 0 && c.lms > gap) { c.cut = VOICE_CUT_FADE; c.stop = gap; }   /* (the next line would stop it at once) */
     else if (ms > 0 && c.lms > c.fit + VOICE_GRACE_MS) { c.cut = VOICE_CUT_GRACE; c.stop = c.fit; }
     return c;
+}
+
+VoiceChoice voice_choose(unsigned seed, int room, int disc, int vid, int chr, int ms, int full, int pl, int gap, int grunt,
+                         int (*ms_of)(const VoiceLine*), int (*age)(const VoiceLine*))
+{
+    return choose(NULL, seed, room, disc, vid, chr, ms, full, pl, gap, grunt, ms_of, age);
+}
+
+VoiceChoice voice_choose_as(const VoiceLine* l, int ms, int full, int pl, int gap, int grunt, int (*ms_of)(const VoiceLine*))
+{
+    return choose(&l, 0, 0, 0, 0, -1, ms, full, pl, gap, grunt, ms_of, NULL);
 }
 
 /* ---------------------------------------------------------------- an enemy model's sounds in place of a line
