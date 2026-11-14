@@ -206,32 +206,48 @@ static int ready(void)
            !*(int*)&sys->mn_mode0;
 }
 
-/* Sounds: enemies play their sound ids in SE bank 3, which the room's sound pack fills with its own
-   types' sounds only, and ids collide between types (a Hunter's played zombie sounds). A type the room
-   file has no record of gets the bank 3 of its source room (or of another room with the type) as an
-   extra bank (pc/src/audio/snd_iop.c), released with the room; none to be had: its sounds are silent. */
+/* Sounds: enemies play their sound ids in SE bank 3, which the room's sound pack fills with the
+   programs its own records play, and ids collide between types (a Hunter's played zombie sounds). So
+   an enemy spawned here plays the bank 3 of its look's source room (or of another room with the type)
+   as an extra bank (pc/src/audio/snd_iop.c), released with the room, also when the room has its type:
+   that bank may hold another type's programs at the same numbers (RM_0050: the Cerberus's gate sounds
+   as a zombie's steps), lack the look's voice or be an event enemy's without steps. Its parts play from
+   it too (eneset.c pc_slot_sound); children its code makes and effects play their type's: the room's
+   for a type the room file has, else the first spawned look's; none to be had: silent. */
 int snd_xbank_load(int key);
 void snd_xbank_release(void);
 int pc_enemy_sound_type(int slot);      /* eneset.c */
+int pc_enemy_slot_sound(int slot);
+extern signed char pc_slot_sound[PC_ENE_SLOTS];
 static signed char sound_bank[100];     /* type -> extra bank, -1 none, 0 the room's */
 
 static void sound_release(void) { memset(sound_bank, 0, sizeof(sound_bank)); snd_xbank_release(); }
 
 int spawn_sound_bank(int enemy_no)      /* sdfunc.c RequestEnemySeBasic */
 {
-    int id = pc_enemy_sound_type(enemy_no);
-    return id >= 0 && id < 100 ? sound_bank[id] : 0;
+    int b = pc_enemy_slot_sound(enemy_no), id = pc_enemy_sound_type(enemy_no);
+    return b ? b : id >= 0 && id < 100 ? sound_bank[id] : 0;
 }
 
-static void sound_load(const ActorModel* am)
+/* the room whose bank 3 has the look's sounds: its catalogue room, but for looks whose room has none */
+static int sound_room(const ActorModel* am)
 {
-    int k, b;
+    if (am->id == 1 && am->mdlver == 39) return 9120;   /* zombie Hazmat Suit: RM_3140's bank has the infant albinoid's 3 programs */
+    if (am->id == 1 && am->mdlver == 40) return 3050;   /* zombie Dark Uniform: RM_5700's has its voice empty */
+    if (am->id == 21) return 3140;                      /* infant albinoid: RM_3120's bank is a zombie's */
+    return am->room;
+}
+
+static void sound_load(const ActorModel* am, int slot)
+{
+    int k, b = 0, key = sound_room(am), own = key == room_file_now();   /* (own: a record of this room's file, its bank) */
+    if (!own) b = snd_xbank_load(key);
+    for (k = 0; !b && !own && k < list_n; k++)   /* a source room without a bank 3 (Bandersnatch 2): another room of the type */
+        if (entry(k)->id == am->id && entry(k)->room != key) b = snd_xbank_load(entry(k)->room);
+    pc_slot_sound[slot] = (signed char)b;
     if (am->id >= 100 || sound_bank[am->id]) return;
     for (k = 0; k < rom->ene_n; k++)
-        if (rom->enep[k].id == am->id) return;   /* the room's own type: its bank has the sounds */
-    b = snd_xbank_load(am->room);
-    for (k = 0; !b && k < list_n; k++)   /* a source room without a bank 3 (Bandersnatch 2): another room of the type */
-        if (entry(k)->id == am->id && entry(k)->room != am->room) b = snd_xbank_load(entry(k)->room);
+        if (rom->enep[k].id == am->id) return;   /* the room's own type: its children's and effects' sounds are in its bank */
     sound_bank[am->id] = (signed char)(b ? b : -1);
     if (b) host_log("spawn: type %d plays its sounds from extra bank %d\n", am->id, b);
     else host_log("spawn: type %d: no sound bank found, its sounds are silent\n", am->id);
@@ -389,7 +405,7 @@ const char* spawn_at(const ActorModel* am, const SpawnNote* n, int want, int mod
     }
     for (j = 0; j < ep->mdl_n; j++) sys->memp = bhKeepObjWork(&ep->mdl[j], sys->memp);
     bhCalcModel(ep);
-    sound_load(am);
+    sound_load(am, slot);
     fx_load(am, rec.type);
     spawned[slot] = am->id + 1;
     pc_enemy_mark_added();

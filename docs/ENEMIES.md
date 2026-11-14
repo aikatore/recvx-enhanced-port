@@ -370,18 +370,30 @@ handles from SE port 3. A room's sound pack `RM_SRRC.SPQ` (key `stage*1000 + roo
 with enemies, bank 3 with the room's own types' sounds. List numbers are per type and collide
 between types, so an added type would play another type's sounds.
 
-On the PC, when `spawn_at` realizes a type the room file has no record of (F2 spawner,
-randomizer, co-op guest), `spawn_glue.c sound_load` reads bank 3 of its source room
-(`snd_iop.c snd_xbank_load`; else another catalogue room of the type) into an extra synth bank
-(one per source room, at most 31) and records type -> bank. Each request is attributed when made
-(`sdfunc.c RequestEnemySeBasic` -> `eneset.c pc_enemy_sound_type`): the enemy whose code runs, a
-part or child as its creator, an effect as the type that made it (`effect.c bhSetEffectTb`). Such
-a sound carries the bank in bits 3..7 of the request's port byte (`ps2_sg_sd.c sdSysServer`; 0 on
-the PS2) and `snd_synth.c` plays it from that bank; a type without a bank plays nothing. Everything
-else keeps the room's banks, so vanilla rooms send the same driver commands. `bhSetRoom`
-(`spawn_room_setup`) stops and releases the extra banks. Variants of one type share the first
-one's bank. Player voices in another character's voice use the same 31 banks
-([ACTORS.md](ACTORS.md) "Voices").
+A room's bank 3 holds only what its own records play, so it is no good for an added enemy even of
+a type the room has: RM_0050 (prison courtyard) has Cerberus programs 0..15 where a zombie's are
+(its zombies are event enemies that never walk), so an added zombie's steps (programs 14/15) played
+the Cerberus's gate sound; a zombie look's voice (4 programs per look, `en01.c bhEne01_SePlay`
+`add_seno`) is in the bank only when a record of that look is in the room (else silence); a zombie's
+step (program 14) is a different sample in each room. On the PC, every enemy `spawn_at` realizes (F2
+spawner, extra enemies, randomized records, co-op guest) plays from bank 3 of its look's source room,
+unless that is the room itself: `spawn_glue.c sound_load` reads it (`snd_iop.c snd_xbank_load`;
+else another catalogue room of the type) into an extra synth bank (one per source room, at most 31)
+and puts it in the enemy's slot (`eneset.c pc_slot_sound`, cleared when a slot is taken). Three
+looks take another room's bank, as their catalogue room's lacks their sounds (`sound_room`): zombie
+Hazmat Suit RM_9120 (RM_3140's bank has only the infant albinoid's 3 programs), zombie Dark Uniform
+RM_3050 (RM_5700's has its voice empty), infant albinoid RM_3140 (RM_3120's bank is a zombie's).
+For a type the room file has no record of it also records type -> bank (the first spawned look's).
+Each request is attributed when made (`sdfunc.c RequestEnemySeBasic` -> `spawn_sound_bank`): the
+bank of the spawned enemy whose code runs, or whose part it is (`pc_enemy_slot_sound`); else by type
+(`eneset.c pc_enemy_sound_type`): a child as its creator, an effect as the type that made it
+(`effect.c bhSetEffectTb`). Such a sound carries the bank in bits 3..7 of the request's port byte
+(`ps2_sg_sd.c sdSysServer`; 0 on the PS2) and `snd_synth.c` plays it from that bank; a type without
+a bank plays nothing. The room's records and everything else keep the room's banks, so vanilla rooms
+send the same driver commands. `bhSetRoom` (`spawn_room_setup`) stops and releases the extra banks.
+Variants of one type share the first one's bank for their children and effects. Every Spotter room
+is a Hunter room and the Spotter plays the Hunter's programs 0..2 there; so does an added one (RM_7081's
+bank). Player voices in another character's voice use the same 31 banks ([ACTORS.md](ACTORS.md) "Voices").
 
 ### Effect textures of added types
 
@@ -982,7 +994,7 @@ RM_2000's Bandersnatches (`ev_flg` 168 / 173, their climb), RM_1090's Bandersnat
   that matter (RM_1121's 168, RM_2000's 173: their Bandersnatches' climb) are set on an earlier visit, long synced.
 * Extra enemies stand where the grid has one height per cell: where two floors overlap (a balcony over the floor) the
   first one reached has the cell, so the other gets fewer spots there.
-* Two looks of one type share the first one's sound bank.
+* Two looks of one type share the first one's sound bank for their children's and effects' sounds (each body and its parts play its own look's).
 * A refusal by `spawn_at` keeps the original record; both co-op sides decide the same unless one
   side's memory is fuller.
 * **BioRand with random doors**: each door it connects sets a fixed room case (`RoomCaseNo` before its
@@ -1057,4 +1069,4 @@ Test aids:
 | `RECVX_ENEMY_OOB=seeds` | at the first frame each room runs, the bounds check of the extras' spots (`pc/tools/enemy_bounds_check.sh`: the grid's spots and those of seeds 1..seeds with eight extras, nothing spawns): a line per flagged extra's spot (`reach`, `cam`, `wall`, `water`), then the room's totals and its counts of 8 over the seeds; 0 lists every flagged grid spot instead |
 | `RECVX_ENEMY_FLOORS=n` | n game frames into each room (2: the frame after the extras came), every enemy (ids 1..30) is logged with its position, floor and room-file type, the ground under it as `find_spot` sees it ("Spots", ` slope` on a slope) and the bottom of the box that ground is the top of (a shelf with room below is no crate), its floor's height and what the options did to it (`moved`, `random`, `extra`, `orig`; `other`: a part an enemy's Init put in a slot of its own) |
 | `RECVX_ENEMY_TRACE=dist` | traces enemy steps (co-op targets) |
-| `RECVX_TRACE_SND=1` | logs sound requests and extra banks |
+| `RECVX_TRACE_SND=1` | logs sound requests and extra banks; each enemy request as `tsnd: ene req enemy SLOT type T se ID (bank B prog P) xbank X` (X: 0 the room's bank, -1 silent, else the extra bank of the `snd: extra bank X = RM_....` line) |
