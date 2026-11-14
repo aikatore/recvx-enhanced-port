@@ -364,7 +364,8 @@ static unsigned voices_key(int br)
     return h ? h : 1;
 }
 
-static void cache_path(char* p, size_t n) { snprintf(p, n, "%s/voices.cache", g_config.save_dir); }
+void voices_cache_path(char* p, size_t n, const char* name) { snprintf(p, n, "%s/%s", g_config.save_dir, name); }
+static void cache_path(char* p, size_t n) { voices_cache_path(p, n, "voices.cache"); }
 static int cache_fill(FILE* f, void* ud) { const size_t* b = ud; return fwrite((const void*)b[0], 1, b[1], f) == b[1] ? 0 : -1; }
 
 static void voices_log(const char* how, Uint64 t0)
@@ -386,7 +387,7 @@ int room_each(void (*fn)(int room, const unsigned char* d, int n, void* ud), voi
     unsigned char *out = malloc(cap), *in = malloc(pcap);
     int nf, nmod, i, n = -1;
     if (f && out && in && iso)
-        for (nf = room_files(f, 0, &nmod), n = i = 0; i < nf; i++)
+        for (nf = room_files(f, biorand_next(), &nmod), n = i = 0; i < nf; i++)
             if ((m = room_read(&f[i], iso, &in, &pcap, &out, &cap)) >= 0) { fn(atoi(f[i].name + 3), out, (int)m, ud); n++; }
     if (iso) fclose(iso);
     free(f); free(out); free(in);
@@ -428,6 +429,8 @@ static int SDLCALL vscan(void* ud)
     return 0;
 }
 
+unsigned voices_cat_key(void) { return __atomic_load_n(&vbusy, __ATOMIC_ACQUIRE) ? 0 : vkey; }
+
 int voices_want(void)
 {
     Uint64 t0 = SDL_GetTicks();
@@ -464,7 +467,6 @@ void voices_frame(void)
 {
     static int was, wbr;
     int br;
-    voice_said_frame();
     if (!enemy_opts()->voices || !g_config.iso_path[0]) { was = 0; return; }   /* (in effect: a co-op guest's is the host's) */
     br = biorand_next();
     if (was && br == wbr) return;   /* (asked when turned on and when BioRand's choice changes, until it could be) */
