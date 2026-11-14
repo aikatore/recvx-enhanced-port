@@ -5,6 +5,8 @@
 ### Fixes
 
 - **Co-op**: more synchronization fixes, including boss fights and blood effects.
+- **Extra Enemies** and randomized enemies now play their own sounds in every room, instead of another enemy's sounds
+  (such as a metallic sound for a zombie's steps in the prison courtyard) or no sound at all.
 - **Randomize Voice Lines**: mouths move with the replacement line again (also lines without their own lip movement)
   and no longer move while no sound plays; replacements fit how long the original actually plays in the scene and fade
   out before the next line instead of breaking off, and the same seed now always gives the same lines, also when a
