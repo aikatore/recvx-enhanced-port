@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Co-op**: a guest that generates the host's BioRand game in the lobby now gets into the host's game.
+
 ## 0.7.9 (2026-11-15)
 
 ### Fixes
