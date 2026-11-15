@@ -3,7 +3,7 @@
  * DisplayOptionPlateLevel0, DisplayOptionBg, the sub-screens' way back) and options_glue.c (level 4, closing).
  * Without --new-menu none of this runs: pc_new_menu_on() is 0 and the old OPTION screen is unchanged.
  *
- * PAUSE: RESUME, Camera (Fixed / Third Person, the F5 setting), SETTINGS, GAME SETUP (this game's rules: the same row
+ * PAUSE: RESUME, Camera (Fixed / Over Shoulder, the F5 setting), SETTINGS, GAME SETUP (this game's rules: the same row
  * screen), CO-OP (in a session: the F3 window), SPOILER LOG (the F8 screen, a BioRand game outside co-op), CHEATS AND
  * TOOLS (the same row screen; Advanced Tools opens the F2 window), RETURN TO TITLE (the old question). Select / View
  * (Backspace) opens it as it opened OPTION; with the Modern third-person controller layout its options button (Start)
@@ -147,7 +147,7 @@ enum { I_RESUME, I_CAMERA, I_SETTINGS, I_SETUP, I_COOP, I_SPOILER, I_CHEATS, I_T
 static const char* const items[I_N] = { "RESUME", "Camera", "SETTINGS", "GAME SETUP", "CO-OP", "SPOILER LOG", "CHEATS AND TOOLS", "RETURN TO TITLE" };
 static const char* const item_help[I_N] = {
     "Back to the game.",
-    "Switch between the fixed cameras and the third-person camera (F5).",
+    "Switch between the fixed cameras and the over-the-shoulder camera (F5).",
     "How you like to play: gameplay, camera, controls, display, graphics, audio, language and co-op.",
     "This game's rules: enemies, characters and co-op rules. Changes apply from the next room.",
     "Your co-op session: partner and connection, trading, addresses, leaving.",
@@ -183,7 +183,7 @@ static int camera_row(void) { return menu_setting("Over-the-shoulder Camera"); }
 static const char* item_text(int i, char* buf, int n)
 {
     if (i != I_CAMERA) return items[i];
-    snprintf(buf, n, tr("Camera: %s"), tr(g_tps.on ? "Third Person" : "Fixed"));
+    snprintf(buf, n, tr("Camera: %s"), tr(g_tps.on ? "Over Shoulder" : "Fixed"));
     return buf;
 }
 
