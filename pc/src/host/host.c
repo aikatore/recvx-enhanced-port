@@ -70,6 +70,7 @@ int pc_model_cull(void) { return g_config.model_cull && !tps_cam_active; }
 int pc_frame_blend(void) { return g_config.frame_blend < 0 ? !g_config.interpolate : g_config.frame_blend; }
 int pc_battle_unlocked(void) { return g_config.battle_unlocked; }
 int pc_difficulty_select(void) { return g_config.difficulty_select; }
+int pc_newgame_difficulty(int set) { if (set >= 0 && set <= 2) g_config.newgame_difficulty = set; return g_config.newgame_difficulty; }   /* GAME SETUP's (setup_glue.c) */
 int pc_skip_intro(void) { return g_config.skip_intro; }
 int pc_movie_zoom(void) { return g_config.movie_zoom; }
 int pc_menu_smooth_on(void) { return g_config.menu_smooth && g_config.interpolate; }   /* view_glue.c pc_menu_tag */

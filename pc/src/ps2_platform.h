@@ -55,6 +55,7 @@ typedef struct {
     int  skip_intro;         /* boot straight into the title menu */
     int  battle_unlocked;    /* the title menu offers BATTLE GAME without a cleared game (pc/glue/lobby_glue.c) */
     int  difficulty_select;  /* NEW GAME asks for the difficulty as the PAL/JP versions (adv.c CheckButton) */
+    int  newgame_difficulty; /* the new menu's GAME SETUP > OVERVIEW Difficulty (sys->gm_mode 0 Normal, 1 Easy, 2 Very Easy) */
     int  biorand;            /* BioRand: the pack in <mods>/biorand is served (pc/glue/biorand_glue.c); changed at the title only */
     int  rifle_stack;        /* rifle and assault rifle bullets stack as the other ammo (always while BioRand is on) */
     int  no_ink_ribbon;      /* typewriters save without an ink ribbon and use none (in co-op the host's; pc_no_ink_ribbon) */

@@ -485,10 +485,13 @@ static int look_index(int chr, int own)
 }
 
 /* cast_glue.c: Claire's or Chris's records (c 0, 1) in the cutscenes of a part they are not played in show the player's
-   look for them, as their doubles do while they are: the model, -1 themselves */
+   look for them, as their doubles do while they are, when they have looks of their own (Separate Looks, or this game's
+   random looks per character: biorand_glue.c pc_appear_separate); with one look for both they are themselves (the menu
+   rework's D20: no double of your look): the model, -1 themselves */
 int coop_look_model(int c)
 {
     int kept;
+    if (!pc_appear_separate()) return -1;
     return actor_double_model(look_index(look_of(c), c), c, &kept);
 }
 

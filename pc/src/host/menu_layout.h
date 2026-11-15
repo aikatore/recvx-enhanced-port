@@ -18,7 +18,7 @@ enum { MS_SETTINGS, MS_SETUP, MS_CHEATS, MS_COUNT };   /* screens: OPTION > SETT
 enum {   /* categories; a sub-page (Advanced, the binding pages) has its parent category */
     MC_GAMEPLAY, MC_CAMERA, MC_CONTROLS, MC_DISPLAY, MC_GRAPHICS, MC_AUDIO, MC_LANGUAGE, MC_COOP,
     MC_CAMERA_ADV, MC_PAD_ADV, MC_GRAPHICS_ADV, MC_BIND_KB, MC_BIND_PAD,
-    MC_RULES, MC_ENEMIES, MC_CHARACTERS, MC_COOP_RULES, MC_CHAR_ADV,
+    MC_OVERVIEW, MC_RULES, MC_ENEMIES, MC_CHARACTERS, MC_BIORAND, MC_COOP_RULES, MC_CHAR_ADV, MC_BIO_POOL,
     MC_CHEATS,
     MC_COUNT
 };
@@ -35,7 +35,15 @@ enum {
     ML_WINDOW,     /* opens an F-key window (arg: 2 cheats F2, 3 co-op F3, 4 import F9) */
     ML_TEXT,       /* a co-op text (arg: 0 player name, 1 co-op server); edited in the F3 window for now */
     ML_RETIRED,    /* a table row the new menu no longer shows (ref: its label) */
+    ML_MERGED,     /* a table row shown as part of an ML_VAR row (ref: its label; Model Selection in Story Characters) */
+    ML_VAR,        /* a GAME SETUP row over the game's variables, not one table row (arg: SV_*; setup_glue.c) */
+    ML_BIO,        /* a BioRand generator option (ref: its biorand_opt key; setup_glue.c keeps the options) */
+    ML_ACTION,     /* a GAME SETUP button (arg: SA_*): START GAME, RANDOM SEED, COPY SEED STRING, ... */
+    ML_INFO,       /* lines of text, not selectable (arg: SI_*): OVERVIEW's ACTIVE MODIFIERS */
 };
+enum { SV_GAME_TYPE, SV_DIFFICULTY, SV_PRESET, SV_LOOK, SV_LOOK_MODE, SV_RANDOM_FROM, SV_RANDOM_IMPORTS, SV_STORY, SV_MONSTERS };
+enum { SA_START, SA_ENEMY_SEED, SA_BIO_RANDOM, SA_BIO_COPY, SA_BIO_PASTE, SA_BIO_CHECK };
+enum { SI_MODIFIERS, SI_BIO_ENEMIES };
 enum {
     MLF_ALWAYS = 1,     /* shown even when the row's shown() says no (LANGUAGE: Language without an imported one) */
     MLF_VIBRATION = 2,  /* Vibration Strength merged with OPTION > VIBRATION: 0 = the game's vibration off */
@@ -57,6 +65,11 @@ extern const int menu_rows_n;
 typedef struct MenuPreset { const char* ref; int value; } MenuPreset;   /* GRAPHICS Preset "Original Look": the rows it sets */
 extern const MenuPreset menu_preset[];
 extern const int menu_preset_n;
+/* GAME SETUP Preset (OVERVIEW): the rows it owns (each set to its default first), then Remix's and Chaos's values */
+extern const char* const menu_setup_owned[];
+extern const int menu_setup_owned_n;
+extern const MenuPreset menu_remix[], menu_chaos[];
+extern const int menu_remix_n, menu_chaos_n;
 
 /* defaults: every table row with a variable, as it is before recvx.ini and the command line (main, first) */
 void menu_defaults_capture(void);
@@ -64,8 +77,13 @@ int  menu_default(int setting, int* v);   /* g_settings index: 1 and its default
 int  menu_setting(const char* label);     /* the g_settings index of a label, -1 none */
 
 /* the row screen (pc/glue/ui_rows.c, game thread) */
-enum { UR_STAY, UR_BACK, UR_CLOSE, UR_LEVEL };   /* ui_rows_run: UR_LEVEL + n opens OPTION level n (1-3) */
+enum { UR_STAY, UR_BACK, UR_CLOSE, UR_START, UR_PICK, UR_FLOW, UR_LEVEL };   /* ui_rows_run: UR_START GAME SETUP's START GAME;
+    UR_PICK a look row's picker (ui_rows_pick: its setting); UR_FLOW a BioRand dialog (setup_glue.c); UR_LEVEL + n opens OPTION level n (1-3) */
 void ui_rows_open(int screen, const char* root);   /* at its remembered category and row; root: the breadcrumb's first word */
+void ui_rows_goto(int cat, const MenuRow* m);      /* show category cat, the cursor on row m (NULL: its remembered row) */
+void ui_rows_picker(int on);                       /* the host has the 3D look picker (title mode 30): Confirm on a look row returns UR_PICK */
+const struct Setting* ui_rows_pick(void);          /* UR_PICK's row */
+void ui_rows_say(const char* m);                   /* a message on the help line */
 int  ui_rows_run(int port, int flag);              /* input (flag) and drawing, every frame */
 int  ui_rows_screen(void);
 void ui_rows_close(void);                          /* OPTION closed: the actions chosen run now */
@@ -75,6 +93,30 @@ enum { UG_OK = 1, UG_BACK, UG_DEFAULT, UG_CAT, UG_CHANGE };
 void ui_device(unsigned int press, int kb_used);   /* a press this frame (Pad[].press); kb_used: the mouse or a menu key */
 const char* ui_glyph(int which, char* buf, int n);
 float ui_hint(float x, float y, const char* glyph, const char* word, float fill);   /* returns the next x */
+
+/* GAME SETUP (pc/glue/setup_glue.c, game thread): where it is shown, and its rows that are not table rows. ui_rows.c asks
+   these for every row of a GAME SETUP category (wherever it is shown: NEW GAME, the pause menu, later the lobby). */
+enum { SC_NEWGAME, SC_INGAME, SC_LOBBY_HOST, SC_LOBBY_GUEST };   /* the context: the lobby's for P3 (a guest reads only) */
+extern int g_setup_ctx;
+int  setup_cat_shown(int c);
+int  setup_row_shown(const MenuRow* m, int shown);   /* shown: what the table says */
+const char* setup_row_lock(const MenuRow* m);        /* why it cannot change here and now, else NULL */
+int  setup_custom_list(const MenuRow* m);            /* the Custom list under row m now (cast_list.c 0, 1, 2), -1 none */
+/* ML_VAR and ML_BIO rows */
+int  setup_get(const MenuRow* m);
+void setup_step(const MenuRow* m, int dir);          /* left / right (choices wrap, numbers stop) */
+void setup_set(const MenuRow* m, int v);
+int  setup_choice(const MenuRow* m, int* n);         /* 1: names 0..n-1; 0: a number (setup_range) */
+void setup_range(const MenuRow* m, int* lo, int* hi);
+const char* setup_name(const MenuRow* m, int v, char* buf, int n);
+int  setup_default(const MenuRow* m, int* d);
+const char* setup_label(const MenuRow* m);
+const char* setup_help(const MenuRow* m);
+int  setup_action(const MenuRow* m);                 /* ML_ACTION: UR_* */
+int  setup_info(const MenuRow* m, int line, char* buf, int n, unsigned int* col);   /* ML_INFO: its lines (the count); line's text */
+int  setup_preview(const MenuRow* m, float x, float y, float w);   /* 1: the row's preview drawn (CHARACTERS' who-is-who, OVERVIEW, BIORAND) */
+const char* setup_value(const MenuRow* m, char* buf, int n);   /* a shortcut's own value (Your Character), else NULL */
+const char* setup_summary(char* buf, int n);         /* the modifiers in one line (LOAD GAME's note), "" none */
 
 #ifdef __cplusplus
 }

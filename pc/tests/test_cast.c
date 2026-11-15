@@ -2,6 +2,7 @@
    character's own look, different characters different models, "Random per cutscene" picking again per room. */
 #include "../src/host/cast.h"
 #include "../src/host/actors.h"
+#include "../src/host/enemies.h"
 int coop_insn_len_raw(const unsigned char* p);   /* net/coop_proto.c */
 #include <stdio.h>
 #include <stdlib.h>
@@ -213,7 +214,19 @@ int main(void)
         short pos[64];
         int mdl[64], ne = cast_custom_list(2, 3, pos, mdl, 64), total, seen = 0, tyr = -1, stv = -1, drawn = 0, k;
         char key[64];
-        CHECK(ne == nm + nch && ne <= CAST_ENEMY_BYTES * 8 && cast_custom_count(2, NULL, 3, &total) == ne && total == ne);
+        CHECK(ne == nm + nch && ne < CAST_ENEMY_BYTES * 8 && cast_custom_count(2, NULL, 3, &total) == ne && total == ne);   /* (the last bit:
+            enemies.h's "Cutscene Monsters" without the cast) */
+        {   /* that flag: the creatures cast with the cast, or alone by All Enemies or Custom; it leaves the list's bits alone */
+            EnemyOpts o = { .cast_enemy = CAST_ENEMY_ALL };
+            CHECK(!enemy_cast_creatures(&o));   /* (the default: cast off, All Enemies: nothing, as before) */
+            enemy_cast_alone_set(&o, 1);
+            CHECK(enemy_cast_creatures(&o) && enemy_cast_alone(&o) && cast_custom_count(2, o.cast_enemy_off, 0, NULL) == ne);
+            o.cast_enemy = CAST_ENEMY_SAME; CHECK(!enemy_cast_creatures(&o));
+            o.cast_enemy = CAST_ENEMY_OFF; CHECK(!enemy_cast_creatures(&o));
+            o.cast_enemy = CAST_ENEMY_CUSTOM; CHECK(enemy_cast_creatures(&o));
+            o.cast = 1; o.cast_enemy = CAST_ENEMY_SAME; enemy_cast_alone_set(&o, 0);
+            CHECK(enemy_cast_creatures(&o) && !enemy_cast_alone(&o) && !o.cast_enemy_off[3]);
+        }
         for (k = 0; k < ne; k++) {
             CHECK((k < nm ? in(mons, nm, mdl[k]) : mdl[k] == chars[k - nm]) && pos[k] >= 0 && pos[k] < ne && (pos[k] < nm) == (k < nm) && !(seen & (1 << pos[k])));
             seen |= 1 << pos[k];

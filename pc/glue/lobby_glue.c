@@ -27,6 +27,7 @@
 #include "../../decomp/include/ps2/veronica/prog/ps2_NaView.h"
 #include "../../decomp/include/ps2/veronica/prog/ps2_NaDraw.h"
 #include "../../decomp/include/ps2/veronica/prog/ps2_NinjaCnk.h"
+#include "../src/host/menu_layout.h"
 #include "../src/host/coop.h"
 #include "../src/host/actors.h"
 #include "../src/host/menu_mouse.h"
@@ -51,6 +52,9 @@ void coop_own_from_save(const void* save);
 void bhReturnTitle(void);
 int  pc_biorand_menu(void);             /* biorand_menu.c: the BIORAND screen, once per frame; 1 back to the title menu */
 void pc_biorand_menu_close(void);
+void pc_game_setup_open(int biorand);   /* setup_glue.c: GAME SETUP (--new-menu), NEW GAME's and EXTRA > BIORAND's */
+int  pc_game_setup(void);               /* ... once per frame: 1 back to the title menu, 2 START GAME's new game */
+void pc_game_setup_close(void);
 int  pc_import_menu(void);              /* import_menu.c: the IMPORT screen, once per frame; 1 back to the title menu */
 int  pc_update_menu(void);              /* update_menu.c: the update dialog, once per frame; 1 back to the title menu */
 void pc_update_menu_close(void);
@@ -242,6 +246,17 @@ static void plate_word(int word, float cx, float y, unsigned int col, unsigned i
 static void mp_word(float cx, float y, unsigned int col, unsigned int shadow, float scale) { plate_word(W_MP, cx, y, col, shadow, scale); }
 void pc_title_word_br(float cx, float y, unsigned int col, unsigned int shadow) { plate_word(W_BR, cx, y, col, shadow, 1.0f); }   /* biorand_menu.c */
 void pc_title_word_import(float cx, float y, unsigned int col, unsigned int shadow) { plate_word(W_IM, cx, y, col, shadow, 1.0f); }   /* import_menu.c */
+void pc_tex_keep_original(int texno);
+/* NEW GAME's own plate (texture 1, v 96, as the title menu draws it): GAME SETUP's title (setup_glue.c) */
+void pc_title_word_newgame(float cx, float y, unsigned int col, unsigned int shadow)
+{
+    QUAD q;
+    SetQuadPos(cx - 256.0f, y, 513.0f, 33.0f, &q);
+    SetQuadUv2(0, 96.0f, 513.0f, 33.0f, 1, &q);
+    pc_tex_keep_original(1);
+    AdvEasyDrawTextureS(1, col, &q, 0.5f, 1, shadow);
+    FlushPlate();
+}
 
 /* the rows between the logo (to y 235) and the copyright (from y 396): 4 rows as the game's
    own 4-row layout but 16 higher, 5 rows closer together, 6 closer still and smaller (the letters 7/8 high) */
@@ -266,6 +281,7 @@ static struct {
 static float ex_row_y(int i) { return 304.0f + 32.0f * i; }   /* DisplayNewGamePlate's rows; EXTRA at 272 as MODE SELECT */
 
 static int br_screen;                   /* mode 30 is the BioRand screen (biorand_menu.c), not the lobby */
+static int gs_screen;                   /* ... GAME SETUP (setup_glue.c, --new-menu): NEW GAME, EXTRA > BIORAND */
 static int im_screen;                   /* ... the IMPORT screen (import_menu.c) */
 static int up_screen;                   /* ... the update dialog (update_menu.c) */
 static int qt_screen;                   /* ... EXIT's question (quit_menu) */
@@ -402,7 +418,11 @@ static void extra_input(void)
     if (hit >= 0 && (mt.moved || mt.left) && hit != ex.cur) { ex.cur = hit; CallSystemSe(0, 2); }
     if ((mt.left && hit >= 0) || (press & ok)) {
         switch (ex.row[ex.cur]) {
-        case XR_BIORAND: to_screen(&br_screen); CallSystemSe(0, 3); break;
+        case XR_BIORAND:   /* (the new menu: GAME SETUP with Game Type BioRand, on its BIORAND category) */
+            if (g_new_menu) { pc_game_setup_open(1); to_screen(&gs_screen); }
+            else to_screen(&br_screen);
+            CallSystemSe(0, 3);
+            break;
         case XR_IMPORT: to_screen(&im_screen); CallSystemSe(0, 3); break;
         default:   /* BATTLE GAME, as CheckButton's ModeCommandId 3 */
             ap->AppMode = 1;
@@ -451,6 +471,13 @@ void pc_title_mouse(int level, int flag)
     }
     if (mt.left && hit >= 0) Pad[ap->PortId].press |= BTN_START;
     else if (mt.right) Pad[ap->PortId].press |= AdvGetCancelButton();
+    if (level == 0 && g_new_menu && ap->ModeCommandId[(int)ap->Cursor[0]] == 1 && (Pad[ap->PortId].press & (BTN_START | AdvGetOkButton()))) {
+        Pad[ap->PortId].press &= ~(BTN_START | AdvGetOkButton());   /* NEW GAME (--new-menu): GAME SETUP (setup_glue.c), not the difficulty menu */
+        pc_game_setup_open(0);
+        to_screen(&gs_screen);
+        CallSystemSe(0, 3);
+        return;
+    }
     if (level == 0 && ap->ModeCommandId[(int)ap->Cursor[0]] >= TITLE_EXTRA && (Pad[ap->PortId].press & (BTN_START | AdvGetOkButton()))) {
         Pad[ap->PortId].press &= ~(BTN_START | AdvGetOkButton());
         if (ap->ModeCommandId[(int)ap->Cursor[0]] == TITLE_EXIT) { qt.sel = 1; to_screen(&qt_screen); }   /* EXIT: its question */
@@ -1913,9 +1940,10 @@ static void lobby_close(int keep)
 void pc_lobby_close(void)
 {
     if (br_screen) pc_biorand_menu_close();
+    if (gs_screen) pc_game_setup_close();
     if (im_screen) pc_import_menu_close();
     if (up_screen) pc_update_menu_close();
-    br_screen = im_screen = up_screen = qt_screen = 0;
+    br_screen = gs_screen = im_screen = up_screen = qt_screen = 0;
     lobby_close(0);
 }
 
@@ -1955,11 +1983,25 @@ static void mp_frame(void)
     AdvDwawOnePictureEx(0, 0xFFFFFFFF);
     rect(0, 0, 640, 480, 0xB0000000, Z_DIM);
     rect(304, 64, 640, 384, 0x70000000, Z_DIM + 0.0005f);
-    plate_word(W_BR, 320.0f, 16.0f, 0xFFFFFFFF, 192, 1.0f);
+    if (gs_screen) pc_title_word_newgame(320.0f, 6.0f, 0xFFFFFFFF, 192);   /* (GAME SETUP's look rows) */
+    else plate_word(W_BR, 320.0f, 16.0f, 0xFFFFFFFF, 192, 1.0f);
     draw_previews();
     draw_models();
     rect(0, 384, 640, 480, 0x60000000, Z_FRONT);
-    text_wrap(24, 390, 584, row_help(lb.row), 0.5f, 0xFFA0D0FF, 2);
+    text_wrap(24, 390, gs_screen ? 400 : 584, row_help(lb.row), 0.5f, 0xFFA0D0FF, 3);
+    if (gs_screen && lb.pick < appear_count()) {   /* GAME SETUP's look picker: the voice and the animations the look gets */
+        static const char* const who[4] = { "Claire", "Chris", "Steve", "Wesker" };
+        int chr = appear_at(lb.pick), v = appear_voice(chr), a;
+        char t[96];
+        if (chr >= COOP_CHR_ACTOR && chr <= COOP_CHR_MAX) a = actor_models[chr - COOP_CHR_ACTOR].anim;
+        else if (chr >= 1 && chr < COOP_CHR_ACTOR) a = appear_part_anim(chr - 1);
+        else if (chr > COOP_CHR_MAX && chr - COOP_CHR_IMPORT < ACTOR_IMPORT_MAX && chr != COOP_CHR_CINE) a = actor_imports[chr - COOP_CHR_IMPORT].anim;
+        else a = ANIM_PLAYED;
+        text(440, 388, tr("VOICE"), 0.5f, 0xFFD6B668);
+        text(440, 404, v >= 0 ? tr(who[v]) : tr("The character played"), 0.48f, 0xFFC8C8C2);
+        snprintf(t, sizeof(t), tr("Animations: %s"), tr(a == ANIM_MALE ? "a man's (Chris's)" : a == ANIM_FEMALE ? "a woman's (Claire's)" : a == ANIM_IDLE ? "its own" : "the character played"));
+        text(440, 420, t, 0.44f, 0xFFC8C8C2);
+    }
     AdvEasySetTextureList(0);
 }
 
@@ -1982,6 +2024,13 @@ int pc_lobby(void)
     if (im_screen) {   /* the IMPORT screen (import_menu.c): 1 back to the menu */
         title_font();
         if ((r = pc_import_menu())) im_screen = 0;
+        return r;
+    }
+    if (gs_screen) {   /* GAME SETUP (setup_glue.c): 1 back to the menu, 2 its new game; a look row's model page over it */
+        title_font();
+        if (mp_set && mp_end) mp_close();   /* (the frame after: the press that ended it is not the screen's) */
+        if (mp_set) { mp_frame(); return 0; }
+        if ((r = pc_game_setup())) gs_screen = 0;
         return r;
     }
     if (br_screen) {   /* the BioRand screen (biorand_menu.c): 1 back to the menu, or to the lobby it was offered from */

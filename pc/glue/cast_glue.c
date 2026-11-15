@@ -13,8 +13,11 @@
  *    links to its hands go to the model's hands (as for the cutscene double).
  * Nothing else changes: the record keeps its type, its motions, collision and script. Claire and Chris are never
  * cast: the doubles of the character played are "You appear as"'s (actor_doubles), and the other one's records are
- * given the player's look for that character instead of a pick (coop_look_model; cast.c cast_role). With "Character
- * Models" Per Character (g_appear_per) that part runs with the cast off too: Claire's and Chris's records only.
+ * given the player's look for that character instead of a pick (coop_look_model; cast.c cast_role), only with
+ * separate looks for Claire and Chris ("Separate Looks" / Per Character, or this game's random looks per character:
+ * pc_appear_separate); with one look for both the other one is themselves (the menu rework's D20; before, the cast on gave them
+ * the one look too). That part runs with the cast off too, and so do the creatures and scene zombies when "Cutscene
+ * Monsters" is chosen without the cast (enemies.h enemy_cast_creatures).
  */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
@@ -33,6 +36,7 @@ extern int coop_on;
 extern int cast_n;                      /* actor_glue.c: hooks run while > 0 */
 unsigned coop_partner_import_id(void);  /* coop_glue.c: the partner's cast_import_id, 0 none */
 int coop_look_model(int c);             /* coop_glue.c: the player's look for Claire or Chris as a model, -1 themselves */
+int pc_appear_separate(void);           /* biorand_glue.c: Claire and Chris have looks of their own */
 static void voice_end(const char* by);    /* "Randomize Voice Lines": the line's end (below) */
 static void voice_room(void);
 static void plan_want(const EnemyOpts* o);   /* the voice plan (below) */
@@ -103,7 +107,7 @@ static int cast_want(const EnemyOpts* o, int room, int k, int id, int ver, int i
     int j;
     if ((*c = cast_character(id, ver)) < 0) *c = cast_creature(room, k, id);   /* (a creature only a cutscene shows) */
     if (*c < 0 && cast_scene_zombie(room, k, id)) *c = CAST_CROWD;   /* (a zombie only a cutscene shows) */
-    if (*c < 0 || (*c >= 2 && !o->cast)) return -1;
+    if (*c < 0 || (*c >= 2 && *c < CAST_CHARACTERS && !o->cast) || (*c >= CAST_CHARACTERS && !enemy_cast_creatures(o))) return -1;
     for (j = 0; j < (int)(sizeof(kept) / sizeof(kept[0])); j++)
         if (kept[j].room == room && kept[j].rec == k) { *why = kept[j].why; return -1; }
     return *c < 2 ? coop_look_model(*c) : *c == CAST_CROWD ? cast_crowd_model((unsigned)o->seed, scene, id, ver, o->cast_all, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off)
@@ -126,7 +130,8 @@ void cast_room(const EnemyOpts* o)
     voice_room();   /* (the sounds said: this room's from now) */
     if (o && o->voices && voices_want()) plan_want(o);   /* "Randomize Voice Lines": the lines for the room files now (read at the start
         already, else now), the plan for them */
-    if (!o || !rom || (!o->cast && !g_appear_per)) { cast_release(); return; }   /* ("Per Character": Claire's and Chris's looks without the cast) */
+    if (!o || !rom || (!o->cast && !pc_appear_separate() && !enemy_cast_creatures(o))) { cast_release(); return; }   /* (separate looks: Claire's and
+        Chris's without the cast; "Cutscene Monsters" alone: the creatures') */
     imports = import_count(o);
     for (k = 0; k < rom->ene_n && k < RECS; k++) {
         BH_PWORK* ep = &ene[k];
@@ -168,7 +173,7 @@ void cast_room(const EnemyOpts* o)
     if (o->cast_all == 2) snprintf(custom, sizeof(custom), "custom models: %d checked", cast_custom_count(0, enemy_cast_off(), imports, NULL));
     snprintf(enemies, sizeof(enemies), "enemy models: %s", o->cast_enemy == CAST_ENEMY_SAME ? "same as cast" : o->cast_enemy == CAST_ENEMY_ALL ? "all enemies" : o->cast_enemy == CAST_ENEMY_OFF ? "off" : "");
     if (o->cast_enemy == CAST_ENEMY_CUSTOM) snprintf(enemies, sizeof(enemies), "enemy models: %d checked", cast_custom_count(2, o->cast_enemy_off, 0, NULL));
-    if (!o->cast) { host_log("cast: room %04d: %d records of Claire or Chris drawn as your look for them (Per Character)\n", room, n); return; }
+    if (!o->cast) { host_log("cast: room %04d: %d records drawn as your look for Claire or Chris (separate looks) or as other monsters (%s, without the cast)\n", room, n, enemies); return; }
     host_log("cast: room %04d: %d records drawn as other models in cutscenes (seed %d, %s, %s%s, %s)\n", room, n, o->seed,
              o->cast_assign ? "random per cutscene" : "fixed", o->cast_all == 2 ? custom : o->cast_all ? "all models" : "cutscene models", imports ? ", imported models" : "", enemies);
 }
@@ -861,7 +866,7 @@ static int plan_find(int room, int ofs, int vid, int chr, const VoiceLine** l)
 
 /* what the plan depends on: the catalogue's key (the room files, the lines checked by hand), the played lengths, the seed
    and the cast options in effect (a co-op guest's: the host's); 0 none yet (the catalogue not read) */
-#define PLAN_FORMAT 1   /* (bump with a change to what the plan picks) */
+#define PLAN_FORMAT 2   /* (bump with a change to what the plan picks; 2: the looks and monsters of D20, coop_look_model, cast_want) */
 static unsigned plan_key(const EnemyOpts* o)
 {
     int imports = import_count(o);

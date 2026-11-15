@@ -13,6 +13,7 @@ set(NOT_IN_TABLE
     enemy_custom_set   # ini only: so was Enemy Models' list with its characters (config.c cast_default)
     dyn_res            # ini only (prototype, branch perfexp-renderer-gpu): Internal Resolution Auto's dynamic resolution (gs_gl.c drs_update)
     borderless_extra   # ini only: the Windows borderless window's overhang past the monitor (settings.c), a driver workaround
+    newgame_difficulty # the new menu's GAME SETUP > OVERVIEW Difficulty (menu_layout.c, setup_glue.c); the old menu has Difficulty Select
 )
 file(READ "${SRC}/src/host/config.c" config)
 file(READ "${SRC}/src/host/settings.c" table)   # rows, and the get/set helpers of rows such as Window size

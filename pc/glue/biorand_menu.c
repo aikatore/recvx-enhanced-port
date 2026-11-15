@@ -23,6 +23,9 @@
  * coop_biorand_offer): it asks to generate the host's seed string (A_HOST), downloads the CLI first when there is none
  * (A_DOWNLOAD), offers the newest CLI when the host's digest differs (A_DIGEST), generates, and returns to where it
  * came from (coop_biorand_reply).
+ * The new menu's GAME SETUP (setup_glue.c) uses the dialogs alone (pc_biorand_flow, bm.flow): START GAME with Game Type
+ * BioRand asks once (A_FLOW: generate, and download BioRand first when it is not there), downloads, generates and starts
+ * the game; Check for BioRand Updates asks A_CHECK. GAME SETUP draws the screen under them.
  * Game thread. */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
@@ -78,7 +81,7 @@ static const char* const diff_btn[] = { "NORMAL", "EASY", "VERY EASY", "CANCEL" 
 
 enum { BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };
 enum { BS_MENU, BS_ASK, BS_WORK, BS_RESULT, BS_PICK };
-enum { A_DOWNLOAD, A_CHECK, A_NEWER, A_GEN, A_HOST, A_DIGEST, A_DISK };
+enum { A_DOWNLOAD, A_CHECK, A_NEWER, A_GEN, A_HOST, A_DIGEST, A_DISK, A_FLOW };
 #define GEN_WARN_MB 5120     /* GENERATE warns below this much free space (BRDL_GEN_FREE_MB, 4 GB, is what a run takes) */
 /* the pages; DOORS..ENEMIES show biorand_opt[]'s groups BOG_DOORS..BOG_ENEMIES (the same numbers) */
 enum { PG_SEED, PG_DOORS, PG_ITEMS, PG_ENEMIES, PG_PORT, PG_N };
@@ -159,6 +162,7 @@ static struct {
     int host, warned, done;             /* the host's seed (co-op guest; bm.o and bm.str are its, not saved); the CLI
                                            digest warning was asked; it was generated */
     char dig[16];                       /* the host's CLI digest, first hex digits ("" unknown) */
+    int flow, flow_d;                   /* GAME SETUP's dialogs alone (pc_biorand_flow): 1 START GAME (difficulty flow_d), 2 check for updates */
 } bm;
 
 static Row rows[MAX_ROWS];
@@ -172,6 +176,7 @@ static const char* const ask_text[] = {
     NULL,   /* A_HOST: gen_text() */
     "Your BioRand version differs from the host's. Download the latest version first? The host should update too. No uses your installed version.",
     NULL,   /* A_DISK: disk_text() */
+    NULL,   /* A_FLOW: flow_text() */
 };
 
 static void ask(int a) { bm.state = BS_ASK; bm.ask = a; bm.sel = 1; }   /* No first */
@@ -207,6 +212,15 @@ static const char* gen_text(void)
     return t;
 }
 
+/* GAME SETUP's START GAME: the one question (generating replaces the installed game; a download needs consent too) */
+static const char* flow_text(void)
+{
+    static char t[400];
+    if (bm.have) snprintf(t, sizeof(t), tr("Generate BioRand seed %d now? It replaces the installed BioRand game and may briefly use about 6 GB of memory."), bm.o.Seed);
+    else snprintf(t, sizeof(t), tr("BioRand is not installed. Download it from GitHub (about 7 MB, verified) and generate seed %d? It replaces the installed BioRand game."), bm.o.Seed);
+    return t;
+}
+
 /* the free space (looked at on GENERATE's OK, look_mods): not enough is an error, close to it a warning; unknown neither */
 static const char* disk_why(void)
 {
@@ -225,6 +239,7 @@ static const char* disk_text(void)
     return t;
 }
 
+static int start(int d);
 /* GENERATE's Yes: the CLI starts (biorand.c biorand_generate) */
 static void gen_start(void)
 {
@@ -250,6 +265,11 @@ static int gen_end(const BrdlStatus* s)
         host_log("biorand menu: the host's seed %s; the pack says seed %d\n", bm.done ? "generated" : "cancelled", biorand_seed());
         return 1;
     }
+    if (s->state == BRDL_GENERATED && bm.flow == 1) {   /* GAME SETUP's START GAME: the game starts */
+        host_log("biorand menu: generated %s for GAME SETUP; the pack says seed %d\n", bm.str, biorand_seed());
+        bm.state = BS_MENU;   /* (the job is over: nothing to cancel on closing) */
+        return start(bm.flow_d);
+    }
     if (s->state == BRDL_GENERATED) {
         host_log("biorand menu: generated %s; the pack says seed %d\n", bm.str, biorand_seed());
         snprintf(m, sizeof(m), tr("BioRand seed %d is ready. Choose START to play it.%s%s"), bm.gen_seed,
@@ -261,6 +281,19 @@ static int gen_end(const BrdlStatus* s)
 }
 
 static const char* row_why(const Row* r);
+static void work(int install);
+/* GAME SETUP's START GAME, its question answered: the CLI first, then GENERATE's checks and the CLI */
+static int flow_next(void)
+{
+    const Row g = { K_GEN, 0 };
+    if (!bm.have) { work(1); return 0; }
+    look_mods();
+    if (row_why(&g)) result(row_why(&g), 1);
+    else if (disk_why()) result(disk_why(), 1);
+    else if (disk_low()) ask(A_DISK);
+    else gen_start();
+    return 0;
+}
 /* the host's seed (bm.host): the CLI first, the digest's question once, then GENERATE's checks and the CLI */
 static int host_next(void)
 {
@@ -304,6 +337,7 @@ static int work_end(void)
     case BRDL_INSTALLED:
         bm.have = 1;
         if (bm.host) return host_next();
+        if (bm.flow == 1) return flow_next();
         result("BioRand installed.", 0);
         break;
     case BRDL_CURRENT: result("BioRand is up to date.", 0); break;
@@ -322,6 +356,7 @@ static int choose(int yes)
         if (yes && bm.ask == A_GEN && disk_low()) { ask(A_DISK); return 0; }
         if (yes && (bm.ask == A_GEN || bm.ask == A_DISK)) { gen_start(); return 0; }
         if (bm.ask == A_HOST) return yes ? host_next() : to_menu();
+        if (bm.ask == A_FLOW) return yes ? flow_next() : 1;
         if (!yes && bm.ask == A_DIGEST) return host_next();   /* with our CLI */
         if (yes) { work(bm.ask != A_CHECK); return 0; }
         return bm.ask == A_DOWNLOAD ? 1 : to_menu();
@@ -737,7 +772,7 @@ static int click(int i, float x)
 }
 
 /* the dialog's texts and box (the box as tall as its text; the progress one fixed, its text changes) */
-static const char* ask_msg(void) { return bm.ask == A_GEN || bm.ask == A_HOST ? gen_text() : bm.ask == A_DISK ? disk_text() : ask_text[bm.ask]; }
+static const char* ask_msg(void) { return bm.ask == A_GEN || bm.ask == A_HOST ? gen_text() : bm.ask == A_DISK ? disk_text() : bm.ask == A_FLOW ? flow_text() : ask_text[bm.ask]; }
 static const char* result_head(void) { return bm.err ? "BIORAND - ERROR" : "BIORAND"; }
 /* START's question: the pack's seed; whether the options shown are not what it was generated with */
 static const char* pick_text(void)
@@ -1201,6 +1236,46 @@ int pc_biorand_menu(void)
         else pc_ui_dialog(y0, y1, Z_BOX, result_head(), bm.msg, 0.55f, bm.err ? 0xFFFFC060 : 0xFFC0C0C0, 4, "OK", NULL, 0, 0);
     }
     AdvEasySetTextureList(0);   /* the title's texture list again (the font set its own) */
+    if (r) pc_biorand_menu_close();
+    return r;
+}
+
+/* GAME SETUP (setup_glue.c): its dialogs alone, over its screen. what 1: START GAME with difficulty d (the options are
+   recvx.ini's biorand_seed, as GAME SETUP saved them): asks once, then downloads BioRand if needed, generates and starts;
+   2: Check for BioRand Updates */
+void pc_biorand_flow_open(int what, int d)
+{
+    memset(&bm, 0, sizeof(bm));
+    bm.open = 1;
+    bm.flow = what;
+    bm.flow_d = d;
+    bm.top = 1;
+    bm.seed_i = biorand_opt_find("Seed");
+    biorand_opts_load(&bm.o);
+    biorand_seed_encode(&bm.o, bm.str, sizeof(bm.str));
+    look_mods();
+    bm.have = biorand_cli_present();
+    ask(what == 1 ? A_FLOW : bm.have ? A_CHECK : A_DOWNLOAD);
+    host_log("biorand menu: GAME SETUP's %s, the CLI is %s, seed string %s\n", what == 1 ? "START GAME" : "update check", bm.have ? "there" : "missing", bm.str);
+}
+
+/* once per frame while it runs: 0 on, 1 back to GAME SETUP (done, cancelled, an error shown), 2 START's new game (sys->gm_mode
+   set, BioRand on for it) */
+int pc_biorand_flow(void)
+{
+    int r = 0;
+    bm.blink++;
+    if (bm.state == BS_WORK) r = work_end();
+    if (!r && bm.state != BS_MENU) r = input();
+    if (!r && bm.state == BS_MENU) r = 1;   /* (to_menu: the dialogs are over) */
+    if (!r && bm.state == BS_WORK) draw_work();
+    else if (!r) {
+        float y0, y1;
+        dlg_box(&y0, &y1);
+        if (bm.state == BS_ASK) pc_ui_dialog(y0, y1, Z_BOX, NULL, ask_msg(), 0.55f, 0xFFFFFFFF, 5, "YES", "NO", bm.sel, 0);
+        else pc_ui_dialog(y0, y1, Z_BOX, result_head(), bm.msg, 0.55f, bm.err ? 0xFFFFC060 : 0xFFC0C0C0, 4, "OK", NULL, 0, 0);
+    }
+    AdvEasySetTextureList(0);
     if (r) pc_biorand_menu_close();
     return r;
 }

@@ -22,11 +22,14 @@ const MenuCat menu_cats[MC_COUNT] = {
     [MC_GRAPHICS_ADV] = { MS_SETTINGS, "ADVANCED", MC_GRAPHICS },
     [MC_BIND_KB] = { MS_SETTINGS, "KEYBOARD AND MOUSE", MC_CONTROLS },
     [MC_BIND_PAD] = { MS_SETTINGS, "CONTROLLER", MC_CONTROLS },
+    [MC_OVERVIEW] = { MS_SETUP, "OVERVIEW", -1 },
     [MC_RULES] = { MS_SETUP, "RULES", -1 },
     [MC_ENEMIES] = { MS_SETUP, "ENEMIES", -1 },
     [MC_CHARACTERS] = { MS_SETUP, "CHARACTERS", -1 },
+    [MC_BIORAND] = { MS_SETUP, "BIORAND", -1 },
     [MC_COOP_RULES] = { MS_SETUP, "CO-OP RULES", -1 },
     [MC_CHAR_ADV] = { MS_SETUP, "ADVANCED", MC_CHARACTERS },
+    [MC_BIO_POOL] = { MS_SETUP, "ITEM POOL AND WEAPONS", MC_BIORAND },
     [MC_CHEATS] = { MS_CHEATS, "CHEATS AND TOOLS", -1 },
 };
 
@@ -161,6 +164,20 @@ const MenuRow menu_rows[] = {
     { MC_COOP, "CONNECTION", ML_SET, "Connection", .names = N("Automatic", "Direct (IP Address)", "Always Relay") },
     { MC_COOP, NULL, ML_TEXT, NULL, 1, "Co-op Server", .help = "The server for room codes and the relay. Edit it in MULTIPLAYER or the co-op window (F3)." },
 
+    /* ---------------------------------------------------------------- GAME SETUP > OVERVIEW (NEW GAME opens it on START GAME) */
+    { MC_OVERVIEW, NULL, ML_VAR, NULL, SV_GAME_TYPE, "Game Type", N("Standard", "BioRand"),
+      .help = "Standard: the game with the modifiers below. BioRand: doors and items randomized by BioRand (the BIORAND category); START GAME generates it if needed." },
+    { MC_OVERVIEW, NULL, ML_VAR, NULL, SV_DIFFICULTY, "Difficulty", N("Normal", "Easy", "Very Easy"),
+      .help = "The game's difficulty. Easy and Very Easy give more ammunition and take less damage." },
+    { MC_OVERVIEW, NULL, ML_VAR, NULL, SV_PRESET, "Preset", N("Original", "Remix", "Chaos", "Custom"),
+      .help = "Original: no modifiers. Remix: rearranged and extra enemies, more item boxes and herbs. Chaos: wild and event enemies, "
+              "any model in cutscenes, voices follow the look. Custom: your own." },
+    { MC_OVERVIEW, NULL, ML_SHORTCUT, "Character Model", MC_CHARACTERS, "Your Character",
+      .help = "Your look, and who looks like whom in cutscenes. Shortcut: GAME SETUP > CHARACTERS." },
+    { MC_OVERVIEW, "ACTIVE MODIFIERS", ML_INFO, NULL, SI_MODIFIERS },
+    { MC_OVERVIEW, NULL, ML_ACTION, NULL, SA_START, "START GAME",
+      .help = "Start a new game with these rules. Your choices are kept for the next game." },
+
     /* ---------------------------------------------------------------- GAME SETUP > RULES */
     { MC_RULES, NULL, ML_SET, "Free Typewriter Saves", .label = "Save Without Ink Ribbons" },
     { MC_RULES, NULL, ML_SET, "Extra Item Boxes and Herbs" },
@@ -173,25 +190,88 @@ const MenuRow menu_rows[] = {
     { MC_ENEMIES, NULL, ML_SET, "Enemy Selection", .label = "Enemy Pool" },
     { MC_ENEMIES, NULL, ML_SET, "Types per Room", .label = "Max Enemy Types per Room" },
     { MC_ENEMIES, NULL, ML_SET, "Randomize Event Enemies" },
-    { MC_ENEMIES, NULL, ML_SET, "Enemy Seed", .label = "Enemy Randomizer Seed" },
+    { MC_ENEMIES, NULL, ML_SET, "Enemy Seed", .label = "Enemy Randomizer Seed",
+      .help = "The same seed gives the same enemies, cutscene looks and random look. Confirm: type a number. In co-op, the host's seed counts." },
+    { MC_ENEMIES, NULL, ML_ACTION, NULL, SA_ENEMY_SEED, "RANDOM SEED", .help = "Pick a new Enemy Randomizer Seed." },
 
-    /* ---------------------------------------------------------------- GAME SETUP > CHARACTERS (§8; the merged rows come with P2) */
-    { MC_CHARACTERS, "YOU", ML_SET, "Character Models", .label = "Claire and Chris", .names = N("Same Look", "Separate Looks") },
-    { MC_CHARACTERS, NULL, ML_SET, "Character Model", .label = "Your Look" },
-    { MC_CHARACTERS, NULL, ML_SET, "Claire's Model", .label = "Claire's Look" },
-    { MC_CHARACTERS, NULL, ML_SET, "Chris's Model", .label = "Chris's Look" },
-    { MC_CHARACTERS, NULL, ML_SET, "Custom Cutscene Model", .label = "In Cutscenes", .names = N("Original Character", "Your Look") },
+    /* ---------------------------------------------------------------- GAME SETUP > CHARACTERS (proposal §8: who looks like whom) */
+    { MC_CHARACTERS, "YOU", ML_VAR, NULL, SV_LOOK, "You Look Like", N("Original", "Chosen Model", "Random"),
+      .help = "Original: Claire or Chris. Chosen Model: any look, e.g. Wesker. Random: picked at a new game from the Enemy Randomizer "
+              "Seed (BioRand: its seed) and kept in its saves; choosing a look in game drops it." },
+    { MC_CHARACTERS, NULL, ML_MERGED, "Character Models" },   /* (Claire and Chris below) */
+    { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_LOOK_MODE, "Claire and Chris", N("Same Look", "Separate Looks"),
+      .help = "Same Look: one look for whoever you play; the other stays original in cutscenes. Separate Looks: each has their own, "
+              "also in the other's cutscenes. Random gives Steve's section one too." },
+    { MC_CHARACTERS, NULL, ML_SET, "Character Model", .label = "Your Look", .help = "Your look for whoever you play. Your co-op partner sees it too." },
+    { MC_CHARACTERS, NULL, ML_SET, "Claire's Model", .label = "Claire's Look", .help = "Claire's look, also in the cutscenes of Chris's part." },
+    { MC_CHARACTERS, NULL, ML_SET, "Chris's Model", .label = "Chris's Look", .help = "Chris's look, also in the cutscenes of Claire's part." },
+    { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_RANDOM_FROM, "Random From", N("Story Characters", "Any Model", "Custom"),
+      .help = "Story Characters: the cast's talking models. Any Model: also creatures, zombies and player files. Custom: the looks you check." },
+    { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_RANDOM_IMPORTS, "Include Imported Models", N("Off", "On"),
+      .help = "Imported characters can be your random look too." },
+    { MC_CHARACTERS, NULL, ML_SET, "Custom Cutscene Model", .label = "In Cutscenes", .names = N("Original Character", "Your Look"),
+      .help = "Your Look: cutscenes show your look. Original Character: cutscenes show Claire or Chris as in the original game." },
     { MC_CHARACTERS, NULL, ML_PAGE, NULL, MC_CHAR_ADV, "Advanced", .help = "Match Model Animations and Animated Faces." },
     { MC_CHAR_ADV, NULL, ML_SET, "Match Model Animations" },
     { MC_CHAR_ADV, NULL, ML_SET, "Animated Faces (Experimental)" },
-    { MC_CHARACTERS, "STORY CHARACTERS IN CUTSCENES", ML_SET, "Randomize Cutscene Cast", .label = "Story Characters", .names = N("Original", "Swapped") },
-    { MC_CHARACTERS, NULL, ML_SET, "Model Selection", .label = "Their Looks From", .names = N("Story Characters", "Any Model", "Custom") },
-    { MC_CHARACTERS, NULL, ML_SET, "Model Assignment", .label = "Keep Their Look", .names = N("Whole Game", "New Each Scene") },
-    { MC_CHARACTERS, NULL, ML_SET, "Include Imported Models" },
-    { MC_CHARACTERS, "MONSTERS IN CUTSCENES", ML_SET, "Enemy Models", .label = "Cutscene Monsters",
-      .names = N("Like Story Characters", "Any Monster", "Custom", "Original") },
-    { MC_CHARACTERS, "VOICES", ML_SET, "Randomize Voice Lines", .label = "Voices Follow the Look" },
-    { MC_CHARACTERS, NULL, ML_SET, "Talking Mouths", .label = "Extra Mouth Movement" },
+    { MC_CHARACTERS, NULL, ML_WINDOW, NULL, 4, "Import Characters",
+      .help = "Add characters from Resident Evil Outbreak File 2 as looks. Opens the import window (F9). Shortcut: EXTRA > IMPORT." },
+    { MC_CHARACTERS, "STORY CHARACTERS IN CUTSCENES", ML_VAR, NULL, SV_STORY, "Story Characters", N("Original", "Swapped", "Any Model", "Custom"),
+      .help = "Steve, Wesker, Alfred, Alexia and Rodrigo in cutscenes. Swapped: each other's looks, e.g. Alfred as Steve. Any Model: "
+              "also creatures, e.g. Rodrigo as a Hunter. Claire and Chris follow YOU." },
+    { MC_CHARACTERS, NULL, ML_MERGED, "Randomize Cutscene Cast" },
+    { MC_CHARACTERS, NULL, ML_MERGED, "Model Selection" },
+    { MC_CHARACTERS, NULL, ML_SET, "Model Assignment", .label = "Keep Their Look", .names = N("Whole Game", "New Each Scene"),
+      .help = "Whole Game: Steve keeps one look all game. New Each Scene: a new look in every cutscene." },
+    { MC_CHARACTERS, NULL, ML_SET, "Include Imported Models", .help = "Imported characters can be story characters' looks too. In co-op, both players need the same ones." },
+    { MC_CHARACTERS, "MONSTERS IN CUTSCENES", ML_VAR, NULL, SV_MONSTERS, "Cutscene Monsters", N("Original", "Any Monster", "Like Story Characters", "Custom"),
+      .help = "Monsters only cutscenes show, e.g. the Tyrant on the plane. Like Story Characters takes their choice. Monsters you "
+              "fight are ENEMIES'." },
+    { MC_CHARACTERS, NULL, ML_MERGED, "Enemy Models" },
+    { MC_CHARACTERS, "VOICES", ML_SET, "Randomize Voice Lines", .label = "Voices Follow the Look",
+      .help = "Anyone who looks like another character speaks with their lines, e.g. Steve as Wesker says Wesker's; as a monster, he "
+              "makes its sounds. Works with every look on this page." },
+    { MC_CHARACTERS, NULL, ML_SET, "Talking Mouths", .label = "Extra Mouth Movement", .flags = MLF_ALWAYS,
+      .help = "Moves mouths for new lines where the original had none. Yours alone: each co-op screen has its own." },
+
+    /* ---------------------------------------------------------------- GAME SETUP > BIORAND (Game Type BioRand; biorand_opts.c's rows by key) */
+    { MC_BIORAND, "SEED", ML_BIO, "Seed" },
+    { MC_BIORAND, NULL, ML_ACTION, NULL, SA_BIO_RANDOM, "RANDOM SEED", .help = "Pick a new seed. START GAME generates the game for it (about 20 s) if needed." },
+    { MC_BIORAND, NULL, ML_ACTION, NULL, SA_BIO_COPY, "COPY SEED STRING", .help = "Copy the seed string to share the seed and BioRand options." },
+    { MC_BIORAND, NULL, ML_ACTION, NULL, SA_BIO_PASTE, "PASTE SEED STRING", .help = "Paste a seed string to use its seed and BioRand options." },
+    { MC_BIORAND, "DOORS", ML_BIO, "RandomDoors", .label = "Randomize Doors" },
+    { MC_BIORAND, NULL, ML_BIO, "AreaCount", .label = "Number of Segments" },
+    { MC_BIORAND, NULL, ML_BIO, "AreaSize", .label = "Segment Size" },
+    { MC_BIORAND, NULL, ML_BIO, "PrioritiseCutscenes", .label = "Prioritise Rooms with Cutscenes" },
+    { MC_BIORAND, "ITEMS", ML_BIO, "RandomItems", .label = "Randomize Items" },
+    { MC_BIORAND, NULL, ML_BIO, "AlternativeRoutes", .label = "Allow Alternative Routes" },
+    { MC_BIORAND, NULL, ML_BIO, "HiddenKeyItems", .label = "Hidden Key Items" },
+    { MC_BIORAND, NULL, ML_PAGE, NULL, MC_BIO_POOL, "Item Pool and Weapons", .help = "Placement, the item pool's shares, the start inventory and the weapons BioRand may place." },
+    { MC_BIO_POOL, NULL, ML_BIO, "Segmented", .label = "Segmented Placement" },
+    { MC_BIO_POOL, NULL, ML_BIO, "ShuffleItems", .label = "Custom Item Pool" },
+    { MC_BIO_POOL, NULL, ML_BIO, "RatioGunpowder", .label = "Gunpowder Probability" },
+    { MC_BIO_POOL, NULL, ML_BIO, "RatioAmmo", .label = "Ammo Probability" },
+    { MC_BIO_POOL, NULL, ML_BIO, "RatioHealth", .label = "Health Probability" },
+    { MC_BIO_POOL, NULL, ML_BIO, "RatioInkRibbons", .label = "Ink Ribbon Probability" },
+    { MC_BIO_POOL, NULL, ML_BIO, "AmmoQuantity", .label = "Ammo Average Quantity" },
+    { MC_BIO_POOL, NULL, ML_BIO, "RandomInventory", .label = "Random Inventory" },
+    { MC_BIO_POOL, NULL, ML_BIO, "Weapon0", .label = "Weapon 1" },
+    { MC_BIO_POOL, NULL, ML_BIO, "Weapon1", .label = "Weapon 2" },
+    { MC_BIO_POOL, "WEAPONS", ML_BIO, "EnabledWeapons[0]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[1]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[2]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[3]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[4]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[5]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[6]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[7]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[8]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[9]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[10]" },
+    { MC_BIO_POOL, NULL, ML_BIO, "EnabledWeapons[11]" },
+    { MC_BIORAND, "ENEMIES", ML_INFO, NULL, SI_BIO_ENEMIES },
+    { MC_BIORAND, "BIORAND PROGRAM", ML_ACTION, NULL, SA_BIO_CHECK, "Check for BioRand Updates",
+      .help = "Check GitHub for the latest BioRand generator and offer to download it." },
 
     /* ---------------------------------------------------------------- GAME SETUP > CO-OP RULES */
     { MC_COOP_RULES, NULL, ML_SET, "Loot Sharing" },
@@ -234,6 +314,22 @@ const MenuPreset menu_preset[] = {
     { "Lighting and Fog", 0 },
 };
 const int menu_preset_n = (int)(sizeof(menu_preset) / sizeof(menu_preset[0]));
+
+/* GAME SETUP Preset (proposal §1.4, D2): the rows it owns, put to their defaults first (Original is all of them there),
+   then Remix's or Chaos's values. Not the Enemy Randomizer Seed, Extra Mouth Movement (yours), BioRand, co-op rules or SETTINGS. */
+const char* const menu_setup_owned[] = {
+    "Free Typewriter Saves", "Extra Item Boxes and Herbs", "Headshots & Piercing",
+    "Extra Enemies", "Rearranged Enemies", "Enemy Randomizer", "Enemy Selection", "Types per Room", "Randomize Event Enemies",
+    "Randomize Cutscene Cast", "Model Selection", "Enemy Models", "Model Assignment", "Include Imported Models", "Randomize Voice Lines",
+};
+const int menu_setup_owned_n = (int)(sizeof(menu_setup_owned) / sizeof(menu_setup_owned[0]));
+const MenuPreset menu_remix[] = { { "Rearranged Enemies", 1 }, { "Extra Enemies", 2 }, { "Extra Item Boxes and Herbs", 1 } };
+const int menu_remix_n = (int)(sizeof(menu_remix) / sizeof(menu_remix[0]));
+const MenuPreset menu_chaos[] = {   /* (Enemy Selection 1: Wild; Model Selection 1: All Models, the cast's "Any Model") */
+    { "Enemy Randomizer", 1 }, { "Enemy Selection", 1 }, { "Randomize Event Enemies", 1 }, { "Randomize Cutscene Cast", 1 }, { "Model Selection", 1 },
+    { "Randomize Voice Lines", 1 },
+};
+const int menu_chaos_n = (int)(sizeof(menu_chaos) / sizeof(menu_chaos[0]));
 
 int menu_setting(const char* label)
 {

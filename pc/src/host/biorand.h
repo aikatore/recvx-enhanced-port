@@ -67,9 +67,19 @@ int  pc_biorand_save_differs(const void* save);    /* a save region (card bytes)
 void pc_biorand_save_accept(void* save);           /* loaded anyway: its words become the current state */
 const char* pc_biorand_ask(int line);              /* the warning's lines 0..2 (after save_differs) */
 /* "Randomize Played as" (biorand_glue.c, save words BR_APPEAR, BR_APPEAR2): the looks this game was given, -1 none (the user's own) */
-void pc_biorand_appear_new(void);                  /* a new game: picked from the pack's seed, or none */
+/* a random look ("Randomize Character Model", the new menu's You Look Like = Random), any game since the menu rework (D3):
+   picked from the pack's seed in a BioRand game, else from the enemy seed (EnemyOpts.seed) + a fixed offset; a co-op
+   guest's from the host's seed + its player slot, not stored (D19) */
+void pc_biorand_appear_new(void);                  /* a new game: picked now into the save words, or none */
 int  pc_biorand_appear(int ply);                   /* in game: the picked "You appear as" chr of character ply (0 Claire, 1 Chris, 2 Steve, 3 as Chris; -1 the one played now), -1 none */
 void pc_biorand_appear_drop(void);                 /* the user chose a look in game: this game's picks go */
+int  pc_appear_separate(void);                     /* Claire and Chris have looks of their own: this game's random looks per
+                                                      character, else "Character Models" Per Character (the new menu's Separate Looks) */
+/* the picks for seed (3: Claire, Chris, Steve's section; Per Character, else one) as the game makes them: 0 none (an empty
+   Custom pool); for the menu's preview and tests */
+int  pc_appear_pick(unsigned seed, int per, int* chr);
+unsigned pc_appear_seed(int br_seed);              /* the seed a random look takes: br_seed (a BioRand game's), or with -1 the
+                                                      enemy seed + the offset (any other game) */
 /* co-op (coop_glue.c): -1 not a guest in a session (our own setting counts), else the host's choice (0/1) */
 int coop_biorand(void);
 /* a guest whose pack is not the host's, at the title (protocol 30, docs/BIORAND_INGAME.md S5b): the host's seed string

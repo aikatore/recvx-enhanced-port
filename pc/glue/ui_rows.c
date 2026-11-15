@@ -28,7 +28,9 @@
 #include "../src/host/cast.h"
 #include "../src/host/actors.h"
 #include "../src/host/coop.h"
+#include "../src/host/biorand_opts.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 
@@ -89,8 +91,9 @@ enum { SC_ESC = 41, SC_HOME = 74, SC_PGUP = 75, SC_DEL = 76, SC_END = 77, SC_PGD
 #define C_DIM 0xFF686868u
 
 /* ---------------------------------------------------------------- rows */
-enum { R_ITEM, R_GROUP, R_BIND, R_BIND_RESET, R_RATES, R_CUSTOM, R_RESET_CAT };
-typedef struct Row { int kind; const MenuRow* m; int set; int idx; } Row;   /* idx: R_GROUP's text index, R_BIND's bind row, R_CUSTOM's list */
+enum { R_ITEM, R_GROUP, R_BIND, R_BIND_RESET, R_RATES, R_CUSTOM, R_RESET_CAT, R_INFO };
+typedef struct Row { int kind; const MenuRow* m; int set; int idx; } Row;   /* idx: R_GROUP's text index, R_BIND's bind row, R_CUSTOM's list
+    (cast_list.c: 0 Story Character Looks, 1 Your Random Looks, 2 Monster Looks), R_INFO's line */
 #define MAX_ROWS 96
 static Row rows[MAX_ROWS];
 static int nrows;
@@ -116,6 +119,12 @@ static struct {
     int pad;                          /* the button bar shows the controller's buttons */
     unsigned char keys_prev[80];      /* Esc, Delete, Page Up/Down, Home, End: edges */
     int ok, cancel, def;              /* this frame's buttons */
+    const MenuRow* go;                /* ui_rows_goto: the row to put the cursor on when the rows are built */
+    int picker;                       /* the host has the 3D look picker (UR_PICK) */
+    const Setting* pick;              /* UR_PICK's row */
+    const MenuRow* edit;              /* a seed being typed (the Enemy Randomizer Seed, BioRand's Seed): its row */
+    char ebuf[12];
+    int caret, blink;
 } st = { .last = { -1, -1, -1 } };
 
 static MouseTake mt;
@@ -141,7 +150,22 @@ static int setting_of(const MenuRow* m)   /* cached menu_setting(m->ref) */
 static const Setting* row_set(const Row* r) { return r->kind == R_ITEM && r->set >= 0 ? &g_settings[r->set] : NULL; }
 static int top_cat(int c) { while (menu_cats[c].parent >= 0) c = menu_cats[c].parent; return c; }
 static int is_bind_cat(int c) { return c == MC_BIND_KB || c == MC_BIND_PAD; }
-static int heading(const Row* r) { return r->kind == R_GROUP; }
+static int heading(const Row* r) { return r->kind == R_GROUP || r->kind == R_INFO; }   /* (never selected) */
+static int in_setup(const MenuRow* m) { return m && menu_cats[m->cat].screen == MS_SETUP; }   /* GAME SETUP's rows: setup_glue.c has a say */
+static int virt(const MenuRow* m) { return m->kind == ML_VAR || m->kind == ML_BIO; }   /* a GAME SETUP value of its own (setup_get) */
+/* why the row cannot change here and now (GAME SETUP's reasons first: read-only in game or for a co-op guest), else NULL */
+static const char* lock_of(const Row* r)
+{
+    const Setting* s = row_set(r);
+    const char* l = r->kind == R_ITEM && in_setup(r->m) ? setup_row_lock(r->m) : NULL;
+    return l ? l : s ? settings_locked(s) : NULL;
+}
+/* a seed row: Confirm types a number */
+static int seed_row(const Row* r)
+{
+    const Setting* s = row_set(r);
+    return r->kind == R_ITEM && ((r->m->kind == ML_BIO && !strcmp(r->m->ref, "Seed")) || (s && s->val == &g_enemy_opts.seed));
+}
 
 /* ---------------------------------------------------------------- the game's own OPTION rows and the merged ones */
 static int vib_unit(void) { return CheckVibrationUnit(AdvWork.PortId * 6 + 2) != 0; }
@@ -185,7 +209,11 @@ static const char* value_text(const Row* r, char* buf, int n)
     const MenuRow* m = r->m;
     const Setting* s = row_set(r);
     switch (m->kind) {
-    case ML_SET: case ML_SHORTCUT:
+    case ML_VAR: case ML_BIO: return setup_name(m, setup_get(m), buf, n);
+    case ML_SHORTCUT:
+        if (setup_value(m, buf, n)) return buf;
+        /* fall through */
+    case ML_SET:
         if (!s || (s->flags & SET_ACTION)) return NULL;
         if (m->flags & MLF_VIBRATION) {
             int v = vib_get();
@@ -219,7 +247,8 @@ static int changed(const Row* r)
     int d;
     if (r->kind != R_ITEM) return 0;
     switch (r->m->kind) {
-    case ML_SET:
+    case ML_VAR: case ML_BIO: return setup_default(r->m, &d) && setup_get(r->m) != d;
+    case ML_SET: case ML_MERGED:
         if (!s || !menu_default(r->set, &d)) return 0;
         if (r->m->flags & MLF_VIBRATION) return vib_get() != d;
         return settings_get(s) != d;
@@ -236,9 +265,10 @@ static int reset_row(const Row* r)
     const Setting* s = row_set(r);
     int d;
     if (!changed(r)) return 0;
-    if (s && settings_locked(s)) { say(settings_locked(s)); return -1; }
+    if (lock_of(r)) { say(lock_of(r)); return -1; }
     switch (r->m->kind) {
-    case ML_SET:
+    case ML_VAR: case ML_BIO: if (!setup_default(r->m, &d)) return 0; setup_set(r->m, d); return 1;
+    case ML_SET: case ML_MERGED:
         if (!menu_default(r->set, &d)) return 0;
         if (r->m->flags & MLF_VIBRATION) { settings_set(s, d); if (vib_unit()) vib_set(s, d); }
         else settings_set(s, d);
@@ -252,9 +282,11 @@ static int reset_row(const Row* r)
 
 static int row_shown(const MenuRow* m, int set)
 {
-    if (m->kind == ML_RETIRED) return 0;
-    if (set >= 0 && g_settings[set].shown && !g_settings[set].shown() && !(m->flags & MLF_ALWAYS)) return 0;
-    return 1;
+    int on = 1;
+    if (m->kind == ML_RETIRED || m->kind == ML_MERGED) return 0;
+    if (set >= 0 && g_settings[set].shown && !g_settings[set].shown() && !(m->flags & MLF_ALWAYS) && m->kind != ML_SHORTCUT) on = 0;   /* (a shortcut
+        shows its home, whatever its row's table says: Your Character with Separate Looks) */
+    return in_setup(m) ? setup_row_shown(m, on) : on;
 }
 
 static void build_rows(void)
@@ -278,17 +310,26 @@ static void build_rows(void)
             if (m->group) g = m->group;
             if (!row_shown(m, set)) continue;
             if (g) { rows[nrows++] = (Row){ R_GROUP, m, -1, i }; g = NULL; }
+            if (m->kind == ML_INFO) {   /* its lines, not selectable */
+                unsigned int col;
+                int k, n = setup_info(m, -1, NULL, 0, &col);
+                for (k = 0; k < n && nrows < MAX_ROWS - 4; k++) rows[nrows++] = (Row){ R_INFO, m, -1, k };
+                continue;
+            }
             rows[nrows++] = (Row){ R_ITEM, m, set, 0 };
-            if (m->kind != ML_SET || set < 0) continue;   /* "Custom": its list's row under it */
-            if (g_settings[set].val == &g_enemy_opts.variety && g_enemy_opts.variety == 2) rows[nrows++] = (Row){ R_RATES, m, -1, 0 };
-            if (g_settings[set].val == &g_enemy_opts.cast_all && g_enemy_opts.cast_all == 2) rows[nrows++] = (Row){ R_CUSTOM, m, -1, 0 };
-            if (g_settings[set].val == &g_enemy_opts.cast_enemy && g_enemy_opts.cast_enemy == CAST_ENEMY_CUSTOM) rows[nrows++] = (Row){ R_CUSTOM, m, -1, 2 };
+            if (in_setup(m) && setup_custom_list(m) >= 0) rows[nrows++] = (Row){ R_CUSTOM, m, -1, setup_custom_list(m) };   /* "Custom": its list's row under it */
+            if (m->kind == ML_SET && set >= 0 && g_settings[set].val == &g_enemy_opts.variety && g_enemy_opts.variety == 2) rows[nrows++] = (Row){ R_RATES, m, -1, 0 };
         }
-        if (menu_cats[st.cat].parent < 0 && menu_cats[st.cat].screen != MS_CHEATS) rows[nrows++] = (Row){ R_RESET_CAT, NULL, -1, 0 };
+        if (menu_cats[st.cat].parent < 0 && menu_cats[st.cat].screen != MS_CHEATS && st.cat != MC_OVERVIEW) rows[nrows++] = (Row){ R_RESET_CAT, NULL, -1, 0 };
+    }
+    if (st.go) {   /* ui_rows_goto's row */
+        for (int i = 0; i < nrows; i++) if (rows[i].kind == R_ITEM && rows[i].m == st.go) { st.sel[st.cat] = i; st.top[st.cat] = 0; }
+        st.go = NULL;
     }
     if (st.sel[st.cat] >= nrows) st.sel[st.cat] = nrows - 1;
     if (st.sel[st.cat] < 0) st.sel[st.cat] = 0;
     while (st.sel[st.cat] < nrows - 1 && heading(&rows[st.sel[st.cat]])) st.sel[st.cat]++;
+    while (st.sel[st.cat] > 0 && heading(&rows[st.sel[st.cat]])) st.sel[st.cat]--;   /* (none after it: the one before) */
 }
 
 #define SEL st.sel[st.cat]
@@ -314,7 +355,7 @@ static void move_sel(int dir, int sound)
 }
 
 /* ---------------------------------------------------------------- categories, sub-pages */
-static int cat_listed(int c) { return menu_cats[c].screen == st.screen && menu_cats[c].parent < 0; }
+static int cat_listed(int c) { return menu_cats[c].screen == st.screen && menu_cats[c].parent < 0 && (st.screen != MS_SETUP || setup_cat_shown(c)); }
 
 static void set_cat(int c)
 {
@@ -354,6 +395,7 @@ static int back(void)
     return 0;
 }
 
+static void edit_end(int accept);
 void ui_rows_open(int screen, const char* root)
 {
     st.screen = screen;
@@ -362,12 +404,75 @@ void ui_rows_open(int screen, const char* root)
     if (st.last[screen] < 0) {
         for (int c = 0; c < MC_COUNT; c++) if (cat_listed(c)) { st.last[screen] = c; break; }
     }
+    if (!cat_listed(st.last[screen])) for (int c = 0; c < MC_COUNT; c++) if (cat_listed(c)) { st.last[screen] = c; break; }   /* (one not shown in this context) */
     st.cat = st.last[screen];
     st.capture = st.wait_release = st.list = st.confirm = 0;
+    if (st.edit) edit_end(0);
     st.hold = 0; st.held_done = 1;   /* (a button still down from the screen before) */
     st.msg_t = 0;
 }
 int ui_rows_screen(void) { return st.screen; }
+void ui_rows_goto(int cat, const MenuRow* m)
+{
+    st.depth = 0;
+    set_cat(cat);
+    st.go = m;
+}
+void ui_rows_picker(int on) { st.picker = on; }
+const Setting* ui_rows_pick(void) { return st.pick; }
+void ui_rows_say(const char* m) { say(m); }
+
+/* ---------------------------------------------------------------- a seed typed (digits from the keyboard; the controller's up / down at the caret) */
+static int edit_hi(void) { int lo, hi; if (st.edit->kind == ML_BIO) { setup_range(st.edit, &lo, &hi); return hi; } return settings_of(&g_enemy_opts.seed)->hi; }
+static void edit_begin(const Row* r)
+{
+    st.edit = r->m;
+    snprintf(st.ebuf, sizeof(st.ebuf), "%d", r->m->kind == ML_BIO ? setup_get(r->m) : g_enemy_opts.seed);
+    st.caret = (int)strlen(st.ebuf);
+    g_lobby_io.tail = g_lobby_io.head;   /* (nothing typed before counts) */
+    g_lobby_io.text_on = 1;
+    CallSystemSe(0, 3);
+}
+static void edit_end(int accept)
+{
+    if (accept && st.ebuf[0]) {   /* (as many digits as the highest; set clamps) */
+        int v = (int)strtol(st.ebuf, NULL, 10);
+        if (st.edit->kind == ML_BIO) setup_set(st.edit, v);
+        else settings_set(settings_of(&g_enemy_opts.seed), v);
+    }
+    st.edit = NULL;
+    g_lobby_io.text_on = 0;
+    CallSystemSe(0, accept ? 3 : 0);
+}
+static void edit_input(unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel, int esc)
+{
+    char hi[12];
+    int n, max = snprintf(hi, sizeof(hi), "%d", edit_hi());
+    while (g_lobby_io.tail != __atomic_load_n(&g_lobby_io.head, __ATOMIC_ACQUIRE)) {
+        int k = g_lobby_io.keys[g_lobby_io.tail & 63];
+        n = (int)strlen(st.ebuf);
+        g_lobby_io.tail++;
+        if (k == LK_ENTER) { edit_end(1); return; }
+        if (k == LK_ESC) { edit_end(0); return; }
+        if (k == LK_BACK && st.caret > 0) { memmove(st.ebuf + st.caret - 1, st.ebuf + st.caret, n - st.caret + 1); st.caret--; }
+        else if (k == LK_DEL && st.caret < n) memmove(st.ebuf + st.caret, st.ebuf + st.caret + 1, n - st.caret);
+        else if (k == LK_LEFT && st.caret > 0) st.caret--;
+        else if (k == LK_RIGHT && st.caret < n) st.caret++;
+        else if (k == LK_HOME) st.caret = 0;
+        else if (k == LK_END) st.caret = n;
+        else if (k >= '0' && k <= '9' && n < max) { memmove(st.ebuf + st.caret + 1, st.ebuf + st.caret, n - st.caret + 1); st.ebuf[st.caret++] = (char)k; }
+    }
+    if (press & ok) { edit_end(1); return; }
+    if ((press & cancel) || esc) { edit_end(0); return; }
+    n = (int)strlen(st.ebuf);
+    if (rept & (P_UP | P_DOWN)) {
+        if (st.caret == n) { if (n >= max) return; st.ebuf[n] = '0'; st.ebuf[n + 1] = 0; }   /* a new digit, 0 */
+        else st.ebuf[st.caret] = (char)('0' + (st.ebuf[st.caret] - '0' + ((rept & P_UP) ? 1 : 9)) % 10);
+        CallSystemSe(0, 2);
+    }
+    if ((rept & P_LEFT) && st.caret > 0) st.caret--;
+    if ((rept & P_RIGHT) && st.caret < n) st.caret++;
+}
 
 /* ---------------------------------------------------------------- changing and running */
 static void change(const Row* r, int dir)
@@ -376,9 +481,14 @@ static void change(const Row* r, int dir)
     if (r->kind == R_BIND) { st.slot = (dir > 0) != rtl; CallSystemSe(0, 2); return; }
     if (r->kind != R_ITEM) return;
     switch (r->m->kind) {
+    case ML_VAR: case ML_BIO:
+        if (lock_of(r)) { CallSystemSe(0, 1); say(lock_of(r)); return; }
+        setup_step(r->m, dir);
+        CallSystemSe(0, 2);
+        return;
     case ML_SET:
         if (!s || (s->flags & SET_ACTION)) return;
-        if (settings_locked(s)) { CallSystemSe(0, 1); say(settings_locked(s)); return; }
+        if (lock_of(r)) { CallSystemSe(0, 1); say(lock_of(r)); return; }
         if (r->m->flags & MLF_VIBRATION) {
             int v = vib_get() + dir * s->step;
             if (!vib_unit()) { CallSystemSe(0, 1); say("No controller with vibration is connected."); return; }
@@ -420,6 +530,7 @@ static int activate(const Row* r)
         return UR_STAY;
     case R_RATES: case R_CUSTOM: {
         float y = Y0 + 16;
+        if (r->kind == R_CUSTOM && lock_of(&(Row){ R_ITEM, r->m, setting_of(r->m), 0 })) { CallSystemSe(0, 1); say(lock_of(&(Row){ R_ITEM, r->m, setting_of(r->m), 0 })); return UR_STAY; }
         st.list = r->kind == R_RATES ? 2 : 1;
         if (st.list == 2) rate_list_open(0, X_LABEL - 8, ROWS_X1, y, ROW_H, SC_ROW, VIS - 2);
         else cast_list_open(r->idx, X_LABEL - 8, ROWS_X1, y, ROW_H, SC_ROW, VIS - 3);
@@ -430,9 +541,23 @@ static int activate(const Row* r)
     case R_ITEM: break;
     default: return UR_STAY;
     }
+    if (seed_row(r)) {
+        if (lock_of(r)) { CallSystemSe(0, 1); say(lock_of(r)); }
+        else edit_begin(r);
+        return UR_STAY;
+    }
     switch (r->m->kind) {
     case ML_PAGE: enter(r->m->arg); return UR_STAY;
     case ML_SHORTCUT: enter(r->m->arg); return UR_STAY;
+    case ML_ACTION:
+        if (lock_of(r)) { CallSystemSe(0, 1); say(lock_of(r)); return UR_STAY; }
+        return setup_action(r->m);
+    case ML_VAR: case ML_BIO: {
+        int n;
+        if (setup_choice(r->m, &n)) change(r, 1);
+        else CallSystemSe(0, 1);   /* (a number: left / right) */
+        return UR_STAY;
+    }
     case ML_SCREEN: CallSystemSe(0, 3); return UR_LEVEL + r->m->arg;
     case ML_WINDOW: case ML_TEXT: st.window = r->m->kind == ML_TEXT ? 3 : r->m->arg; CallSystemSe(0, 3); return UR_CLOSE;
     case ML_OUTPUT: case ML_PRESET: change(r, 1); return UR_STAY;
@@ -446,6 +571,7 @@ static int activate(const Row* r)
             return UR_STAY;
         }
         if (r->m->flags & MLF_VIBRATION) { CallSystemSe(0, 1); return UR_STAY; }
+        if (s->count && st.picker) { st.pick = s; CallSystemSe(0, 3); return UR_PICK; }   /* a look row: the host's 3D picker */
         if (settings_is_bool(s) || s->names || s->name) { settings_step(s, 1); CallSystemSe(0, 2); }
         else CallSystemSe(0, 1);   /* numbers: left/right */
         return UR_STAY;
@@ -456,10 +582,11 @@ static int activate(const Row* r)
 static void reset_category(void)
 {
     int n = 0, locked = 0;
-    for (int i = 0; i < menu_rows_n; i++) {
+    for (int i = menu_rows_n - 1; i >= 0; i--) {   /* (last first: a row another one turns on comes after it, "Turn on ... first") */
         const MenuRow* m = &menu_rows[i];
         Row r = { R_ITEM, m, setting_of(m), 0 };
         if (m->kind == ML_RETIRED || m->kind == ML_PRESET || top_cat(m->cat) != st.cat) continue;
+        if (in_setup(m) && !setup_row_shown(m, 1) && m->kind != ML_MERGED) continue;   /* (GAME SETUP: what this context does not show) */
         { int k = reset_row(&r); n += k > 0; locked += k < 0; }
     }
     settings_save_later();
@@ -580,7 +707,7 @@ static const char* row_label(const Row* r, char* buf, int n)
     case R_BIND: return bind_row_label(r->idx, buf, n);
     case R_BIND_RESET: return "Reset Bindings";
     case R_RATES: return "Enemy Rates";
-    case R_CUSTOM: return r->idx ? "Monster Looks" : "Story Character Looks";
+    case R_CUSTOM: return r->idx == 2 ? "Monster Looks" : r->idx ? "Your Random Looks" : "Story Character Looks";
     case R_RESET_CAT: return "Reset Category";
     case R_GROUP:
         if (!m) {   /* a binding group (idx 100 + BG_*) */
@@ -590,6 +717,7 @@ static const char* row_label(const Row* r, char* buf, int n)
         return m->group;
     }
     if (m->label) return m->label;
+    if (m->kind == ML_BIO) return setup_label(m);
     if (m->ref) return m->ref;
     return "";
 }
@@ -598,13 +726,20 @@ static void draw_row(int i, int sel)
 {
     const Row* r = &rows[i];
     const Setting* s = row_set(r);
-    const char* lock = s ? settings_locked(s) : NULL;
+    const char* lock = r->kind == R_ITEM || r->kind == R_CUSTOM ? lock_of(&(Row){ R_ITEM, r->m, r->kind == R_ITEM ? r->set : setting_of(r->m), 0 }) : NULL;
     float y = row_y(i);
     unsigned int col = sel ? 0xFFFFFFFF : C_ROW;
     char label[256], val[160];
     const char* v;
     if (lock) col = sel ? 0xFF9A9A9A : C_DIM;
     if (r->kind == R_GROUP) { text_m(ROWS_X0 + 4, y + 2, row_label(r, label, sizeof(label)), 0.5f, C_GOLD); return; }
+    if (r->kind == R_INFO) {   /* a line of GAME SETUP's text (OVERVIEW's ACTIVE MODIFIERS: a box behind its lines) */
+        unsigned int c = C_HELP;
+        int n = setup_info(r->m, r->idx, val, sizeof(val), &c);
+        if (r->m->arg == SI_MODIFIERS && r->idx < n) rect_m(ROWS_X0 + 2, y - 2, ROWS_X1, y + ROW_H - 2, 0x30FFFFFF, Z_PANEL + 0.002f);
+        text_fit(X_LABEL, y + 1, val, 0.48f, ROWS_X1 - X_LABEL - 8, c);
+        return;
+    }
     if (sel) rect_m(ROWS_X0, y - 2, ROWS_X1, y + ROW_H - 3, st.capture ? 0x50FFC040 : 0x40FFFFFF, Z_HI);
     if (changed(r)) dot(X_LABEL - 7, y + 8);
     if (r->kind == R_BIND) {
@@ -629,13 +764,22 @@ static void draw_row(int i, int sel)
     text_fit(X_LABEL, y, label, SC_ROW, X_VALUE - X_LABEL - 16, col);
     if (r->kind == R_RATES || r->kind == R_CUSTOM) {
         if (r->kind == R_RATES) rate_list_summary(g_enemy_opts.rate, val, sizeof(val));
-        else if (r->idx) cast_list_summary(2, g_enemy_opts.cast_enemy_off, 0, val, sizeof(val));
+        else if (r->idx == 2) cast_list_summary(2, g_enemy_opts.cast_enemy_off, 0, val, sizeof(val));
+        else if (r->idx) cast_list_summary(1, cast_appear_off, g_biorand_appear_imports > 0 ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, sizeof(val));
         else cast_list_summary(0, cast_off, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, sizeof(val));
         text_fit(X_VALUE, y, val, SC_ROW, VALUE_W, col);
         pc_ui_arrow(mx(ROWS_X1 - 6, 0), y + 9, rtl ? -1 : 1, col);
         return;
     }
     if (r->kind != R_ITEM) return;
+    if (r->m->kind == ML_ACTION) return;   /* (a button: its label alone) */
+    if (st.edit == r->m) {   /* the seed being typed, its caret blinking */
+        char pre[12];
+        text_m(X_VALUE, y, st.ebuf, SC_ROW, 0xFFFFFFFF);
+        snprintf(pre, sizeof(pre), "%.*s", st.caret, st.ebuf);
+        if (st.blink & 16) rect_m(X_VALUE + pc_ui_text_w(pre, SC_ROW), y, X_VALUE + 2 + pc_ui_text_w(pre, SC_ROW), y + 16, 0xFFFFFFFF, Z_HI + 0.04f);
+        return;
+    }
     if (s && (s->flags & SET_ACTION)) {
         if (r->set < (int)sizeof(st.pending) && st.pending[r->set]) text_m(X_VALUE, y + 1, pc_in_game() ? "(on resume)" : "(on leaving menu)", 0.48f, C_GOLD);
         return;
@@ -658,11 +802,14 @@ static void draw_row(int i, int sel)
 }
 
 /* the value preview, right of the help: a choice's values, a number's range and default, the test pattern */
+static void draw_virt_preview(const Row* r);
 static void draw_preview(const Row* r)
 {
     const Setting* s = row_set(r);
     char a[96], b[96], t[160];
     int d, has_d;
+    if ((r->kind == R_ITEM || r->kind == R_CUSTOM) && in_setup(r->m) && setup_preview(r->m, rtl ? 640 - ROWS_X1 : X_PREVIEW, Y_HELP, ROWS_X1 - X_PREVIEW)) return;
+    if (r->kind == R_ITEM && virt(r->m)) { draw_virt_preview(r); return; }
     if (r->kind != R_ITEM || !s || (s->flags & SET_ACTION) || r->m->kind != ML_SET) {
         if (r->kind == R_ITEM && r->m->kind == ML_PAGE && !is_bind_cat(r->m->arg)) {   /* what the sub-page holds */
             char list[512] = "";
@@ -740,6 +887,47 @@ static void draw_preview(const Row* r)
     }
 }
 
+/* ... of a GAME SETUP value (setup_get): its values, or a number's range */
+static void draw_virt_preview(const Row* r)
+{
+    const MenuRow* m = r->m;
+    char t[96];
+    int n, lo, hi, cur = setup_get(m), d, has_d = setup_default(m, &d);
+    if (setup_choice(m, &n)) {
+        float x = X_PREVIEW, y = Y_HELP + 16;
+        text_m(X_PREVIEW, Y_HELP, "VALUES", 0.48f, C_GOLD);
+        for (int v = 0; v < n; v++) {
+            float w;
+            setup_name(m, v, t, sizeof(t));
+            w = pc_ui_text_w(t, 0.42f) + (has_d && v == d ? 8 : 0);
+            if (x + w > ROWS_X1 && x > X_PREVIEW) { x = X_PREVIEW; y += 13; }
+            if (y > Y_HELP + 16 + 13) break;
+            if (has_d && v == d) { dot(x + 3, y + 6); x += 8; w -= 8; }
+            text_m(x, y, t, 0.42f, v == cur ? 0xFFFFFFFF : 0xFF808080);
+            x += w + 10;
+        }
+        if (has_d) { dot(X_PREVIEW + 3, Y_HELP + 16 + 26 + 6); text_m(X_PREVIEW + 9, Y_HELP + 16 + 26, "Default", 0.36f, 0xFF808080); }
+        return;
+    }
+    setup_range(m, &lo, &hi);
+    {
+        float x0 = X_PREVIEW, x1 = ROWS_X1 - 2, k = hi > lo ? (float)(cur - lo) / (hi - lo) : 0;
+        text_m(X_PREVIEW, Y_HELP, "RANGE", 0.48f, C_GOLD);
+        rect_m(x0, Y_HELP + 20, x1, Y_HELP + 25, 0xFF404040, Z_HI + 0.01f);
+        rect_m(x0, Y_HELP + 20, x0 + (x1 - x0) * k, Y_HELP + 25, C_GOLD, Z_HI + 0.02f);
+        text_m(x0, Y_HELP + 29, setup_name(m, lo, t, sizeof(t)), 0.4f, C_HELP);
+        setup_name(m, hi, t, sizeof(t));
+        text_m(x1 - pc_ui_text_w(t, 0.4f), Y_HELP + 29, t, 0.4f, C_HELP);
+        if (has_d) {
+            char dv[64];
+            float kd = hi > lo ? (float)(d - lo) / (hi - lo) : 0;
+            rect_m(x0 + (x1 - x0) * kd - 1, Y_HELP + 16, x0 + (x1 - x0) * kd + 1, Y_HELP + 29, 0xFFFFFFFF, Z_HI + 0.03f);
+            snprintf(t, sizeof(t), tr("Default %s"), setup_name(m, d, dv, sizeof(dv)));
+            text_m(x0, Y_HELP + 42, t, 0.4f, C_HELP);
+        }
+    }
+}
+
 static void draw_help(void)
 {
     const Row* r = &rows[SEL];
@@ -753,6 +941,9 @@ static void draw_help(void)
         snprintf(t, sizeof(t), tr("Press a %s for %s. Esc: cancel. Delete: clear. %d s left."), tr(st.cat == MC_BIND_PAD ? "controller button" : "key or mouse button"),
                  tr(bind_rows[st.capture - 1].name), (bind_capture_left_ms() + 999) / 1000);
         col = 0xFFFFE080;
+    } else if (st.edit) {
+        snprintf(t, sizeof(t), tr("Type a number from 0 to %d. Enter: confirm; Esc: cancel. Controller: up / down change a digit, left / right move."), edit_hi());
+        col = 0xFFFFE080;
     } else if (st.msg_t > 0) { st.msg_t--; snprintf(t, sizeof(t), "%s", st.msg); col = 0xFFFFE080; }
     else if (st.list) { snprintf(t, sizeof(t), "%s", tr(st.list == 2 ? rate_list_help() : cast_list_help())); name[0] = 0; }
     else switch (r->kind) {
@@ -764,11 +955,12 @@ static void draw_help(void)
     }
     case R_BIND_RESET: snprintf(t, sizeof(t), "%s", tr(st.cat == MC_BIND_PAD ? "Restore the default controller bindings." : "Restore the default keyboard and mouse bindings.")); break;
     case R_RATES: snprintf(t, sizeof(t), "%s", tr("Set how often each enemy type is chosen.")); break;
-    case R_CUSTOM: snprintf(t, sizeof(t), "%s", tr(r->idx ? "Choose the enemies the monsters can appear as." : "Choose the models the characters can appear as.")); break;
+    case R_CUSTOM: snprintf(t, sizeof(t), "%s", tr(r->idx == 2 ? "Choose the monsters cutscene monsters can look like." : r->idx ? "Choose the looks your random look is picked from."
+                                                       : "Choose the looks the story characters can have.")); break;
     case R_RESET_CAT: snprintf(t, sizeof(t), tr("Put every setting of %s back to its default."), tr(menu_cats[st.cat].name)); break;
     case R_ITEM: {
-        const char* lock = s ? settings_locked(s) : NULL;
-        const char* help = r->m->help ? r->m->help : s ? s->help : NULL;
+        const char* lock = lock_of(r);
+        const char* help = r->m->help ? r->m->help : s ? s->help : r->m->kind == ML_BIO ? setup_help(r->m) : NULL;
         char ap[160] = "";
         if (s && (s->flags & SET_ACTION) && !lock && !(s->flags & SET_NOW))
             snprintf(ap, sizeof(ap), "%s%s", help ? " " : "", tr(pc_in_game() ? "Runs when you resume." : "Applies when you leave this menu."));
@@ -828,7 +1020,7 @@ static void draw(void)
     }
     if (st.confirm) ;   /* (the question alone: the font's text would show through its box) */
     else if (st.list) {   /* a list in the rows' place, its name above */
-        const char* h = st.list == 2 ? "ENEMY RATES" : rows[SEL].idx ? "MONSTER LOOKS" : "STORY CHARACTER LOOKS";
+        const char* h = st.list == 2 ? "ENEMY RATES" : rows[SEL].idx == 2 ? "MONSTER LOOKS" : rows[SEL].idx ? "YOUR RANDOM LOOKS" : "STORY CHARACTER LOOKS";
         text_m(ROWS_X0 + 4, Y0 - 2, h, 0.5f, C_GOLD);
         if (st.list == 2) rate_list_draw(); else cast_list_draw();
     } else {
@@ -880,7 +1072,7 @@ static int cat_at(float x, float y)
     return -1;
 }
 
-static int defaultable(const Row* r) { return r->kind == R_ITEM && r->m->kind != ML_PAGE && r->m->kind != ML_SHORTCUT; }
+static int defaultable(const Row* r) { return r->kind == R_ITEM && r->m->kind != ML_PAGE && r->m->kind != ML_SHORTCUT && r->m->kind != ML_ACTION; }
 
 static void do_default(const Row* r)
 {
@@ -921,6 +1113,12 @@ static int input(int port)
         else if (mt.right || esc || (press & cancel)) { st.confirm = 0; CallSystemSe(0, 0); }
         return UR_STAY;
     }
+    if (st.edit) {   /* a seed typed: a click elsewhere takes it, a right click drops it */
+        if (mt.left && row_at(x, mt.y) != SEL) edit_end(1);
+        else if (mt.right) edit_end(0);
+        else edit_input(press, rept, ok, cancel, esc);
+        return UR_STAY;
+    }
     if (st.list) {   /* its BACK, cancel or a right click: the rows again */
         if (esc) press |= cancel;
         if ((st.list == 2 ? rate_list_input : cast_list_input)(&mt, press, rept, ok, cancel)) st.list = 0;
@@ -950,7 +1148,8 @@ static int input(int port)
         if (hit >= 0) {
             const Row* r = &rows[hit];
             const Setting* rs = row_set(r);
-            int arrows = r->kind == R_ITEM && ((r->m->kind == ML_SET && rs && !(rs->flags & SET_ACTION)) || r->m->kind == ML_OUTPUT || r->m->kind == ML_PRESET);
+            int arrows = r->kind == R_ITEM && ((r->m->kind == ML_SET && rs && !(rs->flags & SET_ACTION) && !(rs->count && st.picker)) || r->m->kind == ML_OUTPUT || r->m->kind == ML_PRESET
+                                               || virt(r->m)) && !seed_row(r);
             if (arrows && x >= X_VALUE - 16) change(r, x < X_VALUE + 4 ? -1 : 1);
             else return activate(r);
         }
@@ -975,6 +1174,7 @@ int ui_rows_run(int port, int flag)
     int r = UR_STAY;
     rtl = lang_rtl_text();
     buttons();
+    st.blink++;
     g_lobby_io.list_on = st.list;   /* (Page Up / Down, Home, End in the lists) */
     build_rows();
     if (flag) r = input(port);
@@ -982,7 +1182,7 @@ int ui_rows_run(int port, int flag)
     build_rows();
     scroll_to_sel();
     draw();
-    if (r != UR_STAY) { st.capture = 0; st.wait_release = 0; st.list = 0; }
+    if (r != UR_STAY && r != UR_PICK && r != UR_FLOW) { st.capture = 0; st.wait_release = 0; st.list = 0; if (st.edit) edit_end(0); }
     if (!st.list) g_lobby_io.list_on = 0;
     if (r == UR_BACK) host_log("menu: back from %s\n", menu_cats[st.cat].name);
     return r;
@@ -997,6 +1197,7 @@ void ui_rows_close(void)
     st.capture = 0;
     st.list = 0;
     st.confirm = 0;
+    if (st.edit) edit_end(0);
 }
 
 int ui_rows_window(void) { int w = st.window; st.window = 0; return w; }

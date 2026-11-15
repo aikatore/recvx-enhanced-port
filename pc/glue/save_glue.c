@@ -22,6 +22,7 @@
 #include "../src/host/lobby.h"
 #include "../src/host/coop.h"
 #include "../src/host/menu_mouse.h"
+#include "../src/host/menu_layout.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -170,6 +171,22 @@ void pc_save_list(SELECTFILEWINDOW* win, MEMORYCARDSTATE* mc, int saving)
     SetMemoryCardFileNumber(mc, cur);
 }
 
+/* the new menu (--new-menu): LOAD GAME's note: the current GAME SETUP applies to the save loaded (as it always did), so it
+   names the modifiers in effect, at the bottom (setup_glue.c setup_summary); nothing without any */
+void pc_ui_text(float x, float y, const char* s, float sc, unsigned int argb);
+float pc_ui_text_w(const char* s, float sc);
+int pc_in_game(void);
+static void load_note(void)
+{
+    char m[320], t[400];
+    float w, sc = 0.45f;
+    if (!setup_summary(m, sizeof(m))[0]) return;
+    snprintf(t, sizeof(t), tr("Game Setup: %s. Change in the pause menu."), m);
+    w = pc_ui_text_w(t, sc);
+    if (w > 600) { sc *= 600 / w; w = 600; }
+    pc_ui_text(320 - w / 2, 446, t, sc, 0xFFC8C8C2u);
+}
+
 /* mcDisplayFileSelectWindow's header (MEMORY CARD and the slot, messages 463 and 464 + port, at
    y 32): with native saves "Load Game" / "Save Game" instead, as a message in the game's font
    (codes: lang.h pc_glyph_next, 0xFF01 a space) drawn by bhDispMessage the same way, centred above the list */
@@ -185,6 +202,7 @@ int pc_save_header(void)
     sys->mes_tp = mes;
     bhDispMessage(320.0f - bhMesLen(mes) / 2, 32.0f, 0, 2, 0, 0, 0);
     sys->mes_tp = keep;
+    if (!listing_save && g_new_menu && !pc_in_game()) load_note();
     return 1;
 }
 

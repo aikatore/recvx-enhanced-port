@@ -61,6 +61,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "skip_intro", &g_config.skip_intro, 0, 1 },
     { "battle_unlocked", &g_config.battle_unlocked, 0, 1 },
     { "difficulty_select", &g_config.difficulty_select, 0, 1 },
+    { "newgame_difficulty", &g_config.newgame_difficulty, 0, 2 },   /* GAME SETUP's Difficulty (the new menu, setup_glue.c) */
     { "biorand", &g_config.biorand, 0, 1 },             /* BioRand's pack in mods/biorand served (biorand.h) */
     { "rifle_stack", &g_config.rifle_stack, 0, 1 },     /* rifle ammo stacks (forced on while BioRand is on) */
     { "no_ink_ribbon", &g_config.no_ink_ribbon, 0, 1 },   /* typewriters save without an ink ribbon (co-op: the host's) */
@@ -247,6 +248,7 @@ void config_load(void)
         else if (sscanf(line, " update_skip = %31s", g_update_skip) == 1) continue;   /* SKIP THIS VERSION (update.h) */
         else if (sscanf(line, " biorand_seed = %71s", g_biorand_seed) == 1) continue;   /* the BioRand generator's options (biorand_opts.h), checked when used */
         else if (!strncmp(line, "enemy_rates =", 13)) { line[strcspn(line, "\r\n")] = 0; enemy_rates_ini(line + 13 + strspn(line + 13, " ")); continue; }   /* "Custom"'s rates (enemies.h), applied once the variants are known */
+        else if (sscanf(line, " cast_monsters_alone = %d", &v) == 1) { enemy_cast_alone_set(&g_enemy_opts, v != 0); continue; }   /* (enemies.h; only once set, in the new menu) */
         else if (sscanf(line, " biorand_appear = %d", &g_biorand_appear) == 1) { g_biorand_appear = g_biorand_appear == 2 ? 2 : g_biorand_appear != 0; continue; }   /* "Randomize Played as" (biorand_opts.h) */
         else if (sscanf(line, " dev_cutscene_overlay = %d", &g_devcine_show) == 1) { g_devcine_show = g_devcine_show != 0; continue; }   /* --dev cutscene log (devcine.h) */
         else if (!strncmp(line, "cast_custom_off =", 17) || !strncmp(line, "appear_custom_off =", 19) || !strncmp(line, "enemy_custom_off =", 18)) continue;   /* (below, once the imports are listed) */
@@ -338,6 +340,7 @@ static int write_ini(FILE* f, void* ud)
     if (g_biorand_seed[0]) fprintf(f, "biorand_seed = %s\n", g_biorand_seed);
     fprintf(f, "enemy_rates = %s\n", enemy_rates_text());   /* "Custom"'s rates (enemies.h) */
     if (g_biorand_appear) fprintf(f, "biorand_appear = %d\n", g_biorand_appear);   /* (like biorand_seed: only once set, in the BIORAND menu) */
+    if (enemy_cast_alone(&g_enemy_opts)) fprintf(f, "cast_monsters_alone = 1\n");   /* "Cutscene Monsters" without the cast (enemies.h) */
     if (!g_devcine_show) fprintf(f, "dev_cutscene_overlay = 0\n");   /* (only once turned off, in the --dev F6 window) */
     cast_off_write(0, cast_off, off_line, f);
     cast_off_write(1, cast_appear_off, appear_off_line, f);

@@ -379,12 +379,32 @@ keeps his own look so that Claire, in the same scenes (3210), does not show the 
 `actors.c appear_choice(one, c)` (ctest `appear`) resolves it, and `coop_glue.c look_of(c)` is the one place that
 asks: our model (`my_chr`: the character played now, so a story switch changes the model), the cutscene doubles
 (`actor_doubles`), Claire's or Chris's records in the other one's part (`coop_look_model`, "Cutscene cast"), the
-voice, third person and the co-op pose (`Pose.chr`, the lobby's `lchr`). There is no random choice in the list
-(BioRand's "Randomize Played as" is the only random look).
+voice, third person and the co-op pose (`Pose.chr`, the lobby's `lchr`). There is no random choice in the list:
+the random look is "Randomize Played as" (below).
 
-**Precedence**: a BioRand game's picks ("Randomize Played as", stored in its saves) come first for the
-characters they cover, in either mode; choosing a model in game (any of the three rows; not the mode switch) drops
-them, as before. A co-op guest never has them.
+The new menu (`--new-menu`, [MENUS.md](MENUS.md)) shows all of this in GAME SETUP > CHARACTERS > YOU: *You Look Like*
+Original (`coop_char` 0 and no per-character looks) / Chosen Model / Random (`biorand_appear`), *Claire and Chris* Same
+Look / Separate Looks (`appear_per_char`; with Random also the random mode, `biorand_appear` 1 or 2), the look rows
+(the 3D picker at the title) and *Random From* (`biorand_appear_models`, its *Your Random Looks* list).
+
+### Random look
+
+"Randomize Played as" (ini `biorand_appear`: 0 off, 1 one look, 2 per character; its *Model Selection* and *Custom*
+list, `biorand_appear_models`, `appear_custom_off`; [BIORAND_INGAME.md](BIORAND_INGAME.md) S5a) picks the look at a new
+game (`biorand_glue.c pc_biorand_appear_new`, `cast.c cast_appear_pick`) and keeps it in that game's save words
+(`sys->itm[290]`, `[291]`), so its saves bring it back whatever the setting says later. **Since the menu rework (D3)
+it works in every game**, not only BioRand's: the seed is the pack's seed number in a BioRand game (as before, so a
+seed string keeps its look) and the enemy seed (`enemy_seed`) + a fixed offset in any other game, so the same seed
+gives the same look (a replay), and a load the one its save has. The two words are free outside BioRand saves:
+`AllItemInit` clears them and nothing else uses 288..291 (older saves have 0 there: no pick). Before, the setting
+did nothing outside a BioRand game; an `recvx.ini` with `biorand_appear` set now gives a random look in a standard
+game too. **A co-op guest (D19)** has the host's state and words, so it never stored a pick; it now picks its own
+from the host's seed (the host's enemy seed or pack) + its player slot (`APPEAR_SLOT`), on the fly and never stored
+(`guest_picks`), so a rejoin gets the same look and both screens agree (the host sees the look the guest sends).
+
+**Precedence**: this game's random picks come first for the characters they cover, in either mode; choosing a model
+in game (any of the three rows; not the mode switch; the new menu's You Look Like other than Random) drops them, as
+before (a guest's: until its next new game).
 
 ### The list
 
@@ -828,7 +848,8 @@ zombies" below). Kept by hand (`cast_glue.c kept[]`):
 | 7030, 1 | Alexia asleep in her ice capsule (the monitor scene): the scene needs her silhouette |
 
 **Claire and Chris are never cast** (`cast.c cast_role`): they are the characters the story is played as, and
-in every cutscene they show the player's look for them, played or not. The one played now is the game's
+in every cutscene the one played shows the player's look; the one not played shows the player's look for them only
+when they have looks of their own (below). The one played now is the game's
 double ("Cutscene doubles": "Character Model" and "Custom Cutscene Model"); the other one's records get, at the
 load, that character's look as their model instead of a pick (`cast_glue.c cast_room` -> `coop_glue.c
 coop_look_model`: "Character Model" resolved for that character, BioRand's "Randomize Played as" pick for that
@@ -842,11 +863,16 @@ the game still plays Claire and he is drawn as your Chris look in a cast slot), 
 Claire. "Current Character" (the user's own look), the character's own cutscene model or "Custom Cutscene Model"
 off: they are themselves. In co-op each screen shows them with its own player's looks, as its doubles.
 `--dev` cutscene log: `r0 Chris(92)->Nosferatu (your look)`, a played one `(played: the double)`.
-With "Character Models" *Per Character* ("Per Character" above) this runs also with the cast off: `cast_room`
-then gives only Claire's and Chris's records their look (`cast: room 9350: 2 records of Claire or Chris drawn as
-your look for them (Per Character)`), so Claire in Chris's part is "Claire's Model" and Chris in hers "Chris's
-Model" without any randomizer; with *Same for Both* and the cast off they stay themselves, as before (one model
-for both would show twice).
+**Which looks (since the menu rework, D20)**: the one not played gets your look for them only with *separate looks*
+(`biorand_glue.c pc_appear_separate`): "Character Models" *Per Character* (the new menu's *Separate Looks*), or this
+game's random looks per character; with *Same for Both* they stay themselves (`coop_look_model` returns -1), with
+the cast on or off. Before, the cast on gave them your one look too (it showed twice: Claire and Chris both as
+Wesker); with the cast off they already stayed themselves. Separate looks run with the cast off too: `cast_room`
+then gives Claire's and Chris's records their look (`cast: room 9350: 2 records drawn as your look for Claire or
+Chris (separate looks) or as other monsters (...)`), so Claire in Chris's part is "Claire's Model" and Chris in hers
+"Chris's Model" without any randomizer. Old-menu combinations that now look different: the cast on (Randomize
+Cutscene Cast) with Same for Both and a chosen look (or a one-look random pick) in the scenes that show the other
+protagonist (9150, 9300, 9350, 9360, 5820, 3210, 7220, 7240 unswitched, ...).
 
 **Precedence** for the others: the doubles of Steve and Wesker while played (Steve 93/43, Wesker 97/49/47) belong
 to "Character Model" too; the cast leaves them to the game or the appearance. Which characters count as played
@@ -963,6 +989,14 @@ a pool of their own:
 | *All Enemies* (1, default) | from the enemies' list's monsters | the same |
 | *Custom* (2) | the checked ones of the enemies' list (its characters too) | the same |
 | *Off* (3) | themselves | themselves |
+
+**Without the cast (since the menu rework, D20)**: the new menu's *Cutscene Monsters* works with Story Characters
+Original. A flag past the enemies' list's bits (`enemies.h enemy_cast_alone`: bit 7 of `cast_enemy_off[3]`, so it goes
+to a co-op guest in `EV_EOPTS`; ini `cast_monsters_alone`, written only once set) makes `cast_room` cast the creatures and
+scene zombies by *All Enemies* or *Custom* with the cast off (`enemy_cast_creatures`; their picks are the same as with
+the cast on: `cast_model` gives the creatures their own turn). Without the flag nothing changes: the old menu cannot set
+it, its default (cast off, *All Enemies*) still leaves them themselves. The voice plan's format went to 2
+(`PLAN_FORMAT`): cached plans are made again once.
 
 * **The enemies' list** (`cast_custom_list(2, ...)`, `cast.c enemy_list`, `enemy_pool`): the monsters of *All Models* and
   the zombies' one entry, nine: Alexia (First Form), Nosferatu, Tyrant, Monster Steve, Hunter, Hunter (Sweeper),

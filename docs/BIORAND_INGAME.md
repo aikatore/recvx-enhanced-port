@@ -509,7 +509,11 @@ in ENHANCED SETTINGS: `< ITEMS >`, the page keys (L1/R1 by name, Q/W on the keyb
 - `MAX_ROWS` is 30 (ROW_Z's room; ITEMS has 27).
 - **Randomize Played as**: ini `biorand_appear` (0 Off, 1 Same for Both, 2 Per Character, below), written only
   when not 0 (like `biorand_seed`, so a game that never turns it on writes nothing new). It has no settings table row (the --dev screen only), so it is
-  read and written by name in `config.c`, as `biorand_seed`. S5 uses it.
+  read and written by name in `config.c`, as `biorand_seed`. S5 uses it. Since the menu rework it also gives a random
+  look in games without BioRand (seeded by the enemy seed) and to a co-op guest ([ACTORS.md](ACTORS.md) "Random look").
+- **The new menu** (`--new-menu`, [MENUS.md](MENUS.md)): BioRand is GAME SETUP's Game Type; its options are the BIORAND
+  category's rows (the same `biorand_opt[]` and `biorand_seed`); START GAME generates (and downloads BioRand first) with
+  one question, through this screen's dialogs (`biorand_menu.c pc_biorand_flow`, `A_FLOW`).
 
 **Test aids** (job dir `biorand-ui/s4b/`, not committed): `run.sh` (a `--dev` run with a dummy CLI);
 `inputs.py` (keyboard, gamepad and mouse runs); `paste.sh`; `expect` (`expect.c` with

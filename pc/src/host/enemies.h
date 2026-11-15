@@ -34,6 +34,14 @@ typedef struct EnemyOpts {
     unsigned char cast_enemy_off[4];    /* ... its "Custom" list's unchecked entries (cast.h CAST_ENEMY_BYTES; recvx.ini enemy_custom_off) */
 } EnemyOpts;
 extern EnemyOpts g_enemy_opts;  /* our settings (F1, recvx.ini) */
+/* "Cutscene Monsters" without the cutscene cast (GAME SETUP > CHARACTERS > MONSTERS IN CUTSCENES, docs/ACTORS.md "Enemy
+   models"): a flag in the last bit of cast_enemy_off, past its list's entries (test_cast checks they leave it free), so it
+   goes to a co-op guest with them (EV_EOPTS); ini cast_monsters_alone. Set, the creatures and scene zombies are cast by
+   cast_enemy (All Enemies or Custom) while cast is off; clear (the old menu cannot set it), only with the cast, as before. */
+static inline int enemy_cast_alone(const EnemyOpts* o) { return (o->cast_enemy_off[3] & 0x80) != 0; }
+static inline void enemy_cast_alone_set(EnemyOpts* o, int on) { o->cast_enemy_off[3] = (unsigned char)((o->cast_enemy_off[3] & 0x7F) | (on ? 0x80 : 0)); }
+/* the creatures and scene zombies are given models (cast.h cast_model, cast_crowd_model; cast_enemy 3 Off: themselves) */
+static inline int enemy_cast_creatures(const EnemyOpts* o) { return o->cast || (enemy_cast_alone(o) && (o->cast_enemy == 1 || o->cast_enemy == 2)); }
 
 /* "Custom"'s list (enemyopt_glue.c): every kind the randomizer can place, the base kinds then the enemy variants with a
    randomizer weight; i is the kind's index into EnemyOpts.rate */
