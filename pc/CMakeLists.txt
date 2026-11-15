@@ -254,6 +254,9 @@ add_test(NAME rules COMMAND test_rules)
 
 # every recvx.ini key has a row in the settings table (F1 and OPTION > ENHANCED SETTINGS) or is listed
 add_test(NAME settings COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_settings.cmake)
+# the new menu's tree (src/host/menu_layout.c): every settings-table row placed exactly once; and that the check catches a broken one
+add_test(NAME menu_layout COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_menu_layout.cmake)
+add_test(NAME menu_layout_selftest COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_CURRENT_SOURCE_DIR} -DSELFTEST=1 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_menu_layout.cmake)
 
 # native texture queue (pc/src/gs/textures.c): superseded uploads never written, the rest only when read
 add_executable(test_ntex tests/test_ntex.c src/gs/textures.c)

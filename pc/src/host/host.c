@@ -11,6 +11,7 @@
 #include "lobby.h"
 #include "bindings.h"
 #include "settings.h"
+#include "menu_layout.h"
 #include "biorand.h"
 #include "enemies.h"
 #include "../import/import.h"
@@ -229,7 +230,8 @@ static void usage(void)
         "  --coop-host PORT   online co-op: wait for a partner on this UDP port (F3: co-op window)\n"
         "  --coop-join HOST:PORT#CODE | ROOM  online co-op: join a host, or a room through the co-op server\n"
         "  --coop-server ADDR   co-op server (host or host:port, UDP 7141)  --coop-conn auto|direct|server  --coop-pw PASSWORD\n"
-        "  --dev              developer tools (the object placer in the F2 window)\n"
+        "  --dev              developer tools (the object placer in the F2 window); implies --new-menu\n"
+        "  --new-menu         the new menus in testing: OPTION opens SETTINGS, in a game the PAUSE menu (docs/MENUS.md)\n"
         "  --spoof-version V  report version V (e.g. 0.6.0) to the update check, to test the update offer\n"
         "  --quiet\n"
         "  --version         print the version and exit\n"
@@ -291,7 +293,8 @@ static void parse_args(int argc, char** argv)
         else if (!strcmp(argv[i], "--spoof-version") && i + 1 < argc) SDL_setenv_unsafe("RECVX_UPDATE_FAKE_VERSION", argv[++i], 1);   /* the updater's test (update.c update_installed) */
         else if (!strcmp(argv[i], "--hd-textures") && i + 1 < argc) { SDL_strlcpy(g_config.hd_textures_dir, argv[++i], sizeof(g_config.hd_textures_dir)); }
         else if (!strcmp(argv[i], "--third-person")) g_tps.on = 1;
-        else if (!strcmp(argv[i], "--dev")) g_dev_tools = 1;   /* developer tools (the F2 object placer); BioRand and the importers are shown without it */
+        else if (!strcmp(argv[i], "--dev")) g_dev_tools = g_new_menu = 1;   /* developer tools (the F2 object placer); BioRand and the importers are shown without it */
+        else if (!strcmp(argv[i], "--new-menu")) g_new_menu = 1;   /* the new menus (menu_layout.h, docs/MENUS.md) */
         else if (!strcmp(argv[i], "--quiet")) g_config.log_level = 0;
         else if (!strcmp(argv[i], "--voice-plan") && i + 1 < argc) { voice_plan = atoi(argv[++i]); g_config_readonly = 1; }
         else if (!strcmp(argv[i], "--out") && i + 1 < argc) SDL_strlcpy(voice_plan_out, argv[++i], sizeof(voice_plan_out));
@@ -370,6 +373,7 @@ int main(int argc, char** argv)
     main_argc = argc;
     main_argv = argv;
     { char* cwd = SDL_GetCurrentDirectory(); if (cwd) { SDL_strlcpy(start_dir, cwd, sizeof(start_dir)); SDL_free(cwd); } }
+    menu_defaults_capture();   /* the settings' defaults, before the command line and recvx.ini (the new menu's Default) */
     parse_args(argc, argv);
     home_dir();
     { extern void crash_init(const char*); crash_init(RECVX_VERSION); }   /* recvx-crash.log on a crash, with or without --log */
