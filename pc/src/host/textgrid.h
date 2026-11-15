@@ -1,4 +1,4 @@
-/* The new menu's on-screen character grid for text fields (--new-menu; docs/MENUS.md "Text fields"): what a controller
+/* The new menu's on-screen character grid for text fields (docs/MENUS.md "Text fields"): what a controller
    types with (room code, address, password, player name, co-op server, the seeds). Pure logic here (the cells, the
    cursor's moves, what each field takes, the co-op lobby's READY note), tested by pc/tests/test_textgrid.c; the box is
    drawn and driven by pc/glue/text_grid.c. The keyboard types as well while the grid is up, the mouse clicks cells. */

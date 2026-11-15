@@ -171,7 +171,7 @@ void pc_save_list(SELECTFILEWINDOW* win, MEMORYCARDSTATE* mc, int saving)
     SetMemoryCardFileNumber(mc, cur);
 }
 
-/* the new menu (--new-menu): LOAD GAME's note: the current GAME SETUP applies to the save loaded (as it always did), so it
+/* the new menu: LOAD GAME's note: the current GAME SETUP applies to the save loaded (as it always did), so it
    names the modifiers in effect, at the bottom (setup_glue.c setup_summary); nothing without any */
 void pc_ui_text(float x, float y, const char* s, float sc, unsigned int argb);
 float pc_ui_text_w(const char* s, float sc);

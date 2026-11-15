@@ -511,7 +511,7 @@ in ENHANCED SETTINGS: `< ITEMS >`, the page keys (L1/R1 by name, Q/W on the keyb
   when not 0 (like `biorand_seed`, so a game that never turns it on writes nothing new). It has no settings table row (the --dev screen only), so it is
   read and written by name in `config.c`, as `biorand_seed`. S5 uses it. Since the menu rework it also gives a random
   look in games without BioRand (seeded by the enemy seed) and to a co-op guest ([ACTORS.md](ACTORS.md) "Random look").
-- **The new menu** (`--new-menu`, [MENUS.md](MENUS.md)): BioRand is GAME SETUP's Game Type; its options are the BIORAND
+- **The new menu** (the default; [MENUS.md](MENUS.md)): BioRand is GAME SETUP's Game Type; its options are the BIORAND
   category's rows (the same `biorand_opt[]` and `biorand_seed`); START GAME generates (and downloads BioRand first) with
   one question, through this screen's dialogs (`biorand_menu.c pc_biorand_flow`, `A_FLOW`).
 

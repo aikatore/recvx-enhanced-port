@@ -1,4 +1,4 @@
-/* PAUSE > CHEATS AND TOOLS > Give Item (--new-menu; docs/MENUS.md): every item with a name, grouped (weapons,
+/* PAUSE > CHEATS AND TOOLS > Give Item (docs/MENUS.md): every item with a name, grouped (weapons,
  * ammunition, healing, the rest, key items), each with its icon as the item box shows it, in the rows' place of the
  * row screen (ui_rows.c st.list 3); on the right the chosen item large, its amount and the inventory as it is now.
  * Confirm (or a click) puts it into the inventory at once (cheat_glue.c cheat_give: the menu stays open; full: into

@@ -21,7 +21,7 @@ for r in $rooms; do d=$delay; [ -z "$tp" ] && d=1; tp="$tp${tp:+,}$d:$r"; f=$((f
 rm -rf "$out"; mkdir -p "$out/save" "$out/mods"; echo "show_fps = 0" > "$out/save/recvx.ini"
 SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy RECVX_SKIP_MOVIES=1 RECVX_SKIP_CINE=30 RECVX_UPDATE_CHECK=0 RECVX_MODS="$out/mods" \
 RECVX_INPUT="$newgame" RECVX_TELEPORT="$tp" RECVX_EXIT_FRAME=$((f * 3 / 2 + 300)) RECVX_INF_HEALTH=1 RECVX_ENEMY_OOB="$n" \
-timeout -s KILL 3600 "$bin" "$iso" --skip-intro --size 320x240 --save-dir "$out/save" --log="$out/log.txt" > "$out/stdout.txt" 2>&1
+timeout -s KILL 3600 "$bin" "$iso" --skip-intro --legacy-menu --size 320x240 --save-dir "$out/save" --log="$out/log.txt" > "$out/stdout.txt" 2>&1
 python3 - "$out/log.txt" <<'EOF'
 import re, sys
 rooms, flagged, hist = {}, [], [0] * 9

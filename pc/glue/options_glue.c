@@ -849,7 +849,7 @@ int pc_new_menu_level4(int port, int flag);   /* pause_glue.c */
 int pc_options_pc(int port, int flag)
 {
     int back = 0;
-    if (g_new_menu) return pc_new_menu_level4(port, flag);   /* --new-menu: SETTINGS (docs/MENUS.md) */
+    if (g_new_menu) return pc_new_menu_level4(port, flag);   /* the new menu: SETTINGS (docs/MENUS.md) */
     rtl = lang_rtl_text();
     g_lobby_io.list_on = st.list;   /* (Page Up / Down, Home, End) */
     build_rows();
@@ -875,5 +875,5 @@ void pc_options_close(void)
     st.capture = 0;
     st.list = g_lobby_io.list_on = 0;
     g_menu_mouse.active = 0;
-    { void pc_new_menu_closed(void); pc_new_menu_closed(); }   /* --new-menu: its actions, the window to open (pause_glue.c) */
+    { void pc_new_menu_closed(void); pc_new_menu_closed(); }   /* the new menu: its actions, the window to open (pause_glue.c) */
 }

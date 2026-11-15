@@ -1,4 +1,4 @@
-/* The new menu's tree (--new-menu, implied by --dev; docs/MENUS.md): which screen, category and group each row of the
+/* The new menu's tree (the default; Legacy Menu or --legacy-menu: the old menus; docs/MENUS.md): which screen, category and group each row of the
    settings table (settings.c g_settings[]) lives in, under which words. Pure data (menu_layout.c) over the table: values,
    ranges, help, locks and apply stay in g_settings[]; a row here names its setting by the table's label (21 rows have no
    variable, so settings_of() cannot find them) and may override the label, the value names and the help without
@@ -11,7 +11,11 @@
 extern "C" {
 #endif
 
-extern int g_new_menu;   /* --new-menu or --dev (host.c): OPTION opens SETTINGS, in a game the PAUSE menu */
+extern int g_new_menu;     /* the new menus are up: OPTION opens SETTINGS, in a game the PAUSE menu (menu_choice_apply) */
+extern int g_legacy_menu;  /* ini legacy_menu, the setting "Legacy Menu": the old OPTION, ENHANCED SETTINGS, lobby, BIORAND */
+extern int g_menu_cli;     /* host.c: -1 none, 0 --legacy-menu, 1 --new-menu (over the ini until the setting is changed) */
+void menu_choice_apply(void);   /* g_new_menu from the two: at the start and on the title menu (lobby_glue.c pc_title_mouse),
+                                   never inside the OPTION task or a screen of ours, which read g_new_menu as they go */
 
 enum { MS_SETTINGS, MS_SETUP, MS_CHEATS, MS_IMPORT, MS_COUNT };   /* screens: OPTION > SETTINGS, GAME SETUP, PAUSE > CHEATS AND TOOLS, EXTRA > IMPORT */
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ctest "menu_tr": every text the new menu (--new-menu, docs/MENUS.md) shows is translated into every language of
+"""ctest "menu_tr": every text the new menu (docs/MENUS.md) shows is translated into every language of
 src/host/tr_table.inc. The texts: menu_layout.c's category names, headings, labels, value names and help; the string
 literals the new menu's screens pass to tr(), ui_hint(), the text functions and the dialogs (ui_rows.c, setup_glue.c,
 pause_glue.c, text_grid.c, import_menu.c, lobby_glue.c: the MULTIPLAYER screens and the lobby, give_list.c). A text without a row, or

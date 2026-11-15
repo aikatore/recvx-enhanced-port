@@ -382,7 +382,7 @@ asks: our model (`my_chr`: the character played now, so a story switch changes t
 voice, third person and the co-op pose (`Pose.chr`, the lobby's `lchr`). There is no random choice in the list:
 the random look is "Randomize Played as" (below).
 
-The new menu (`--new-menu`, [MENUS.md](MENUS.md)) shows all of this in GAME SETUP > CHARACTERS > YOU: *You Look Like*
+The new menu ([MENUS.md](MENUS.md)) shows all of this in GAME SETUP > CHARACTERS > YOU: *You Look Like*
 Original (`coop_char` 0 and no per-character looks) / Chosen Model / Random (`biorand_appear`), *Claire and Chris* Same
 Look / Separate Looks (`appear_per_char`; with Random also the random mode, `biorand_appear` 1 or 2), the look rows
 (the 3D picker at the title) and *Random From* (`biorand_appear_models`, its *Your Random Looks* list).

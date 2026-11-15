@@ -1,4 +1,4 @@
-/* The new menu's row screen (--new-menu; docs/MENUS.md, menu_layout.h): the category list on the left, the rows on the
+/* The new menu's row screen (docs/MENUS.md, menu_layout.h): the category list on the left, the rows on the
  * right, help and a value preview below, a button bar that follows the device used last. One screen for SETTINGS, GAME
  * SETUP and CHEATS AND TOOLS; the rows come from the layout table (pc/src/host/menu_layout.c) over the settings table
  * (settings.c), so it stores no values. It draws no background or title: its host does (pause_glue.c in the game's

@@ -1,4 +1,4 @@
-/* GAME SETUP (--new-menu; docs/MENUS.md, the proposal's §2 and §8): what a run is. NEW GAME opens it in title mode 30 (as
+/* GAME SETUP (docs/MENUS.md, the proposal's §2 and §8): what a run is. NEW GAME opens it in title mode 30 (as
  * BIORAND and the lobby: lobby_glue.c pc_lobby), EXTRA > BIORAND too (Game Type BioRand, on the BIORAND category); in a
  * game the pause menu shows the same categories (pause_glue.c, the OPTION task). The row screen is ui_rows.c; this file
  * is what GAME SETUP adds to it:
@@ -833,7 +833,7 @@ int pc_game_setup(void)
     return r;
 }
 
-/* ---------------------------------------------------------------- the co-op lobby (--new-menu; lobby_glue.c, title mode 30)
+/* ---------------------------------------------------------------- the co-op lobby (lobby_glue.c, title mode 30)
    The lobby hosts the same screen while it stays open (the session never drops: lb.open and g_coop.lobby stay, no
    COOP_REQ_STOP): the host edits (Edit Game Setup, Your Character), a guest reads the host's values ("Set by the host.")
    and edits its own YOU. view 0 the host's, 1 a guest's; cat the category to show (-1 the last); only: that one alone. */
