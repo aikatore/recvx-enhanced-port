@@ -5417,10 +5417,12 @@ static void session(void)
             point's items, but the host's game goes on: we take back the items we died with (before, whichever came first) */
         if (tx_in_game && in_session_game() && !popping && !pop_pending && !own_fixed && !own_hold) { own_snapshot(); own_send(); }
         if ((sys->tk_flg & 0x28) && !popping && !pop_pending) need_blob = 1;   /* title, or a game (re)start of our own */
-        if (br_offer == BR_ASK || br_offer == BR_GEN) pop_pending = 0;   /* generating the host's BioRand pack: no game yet (a
-            state that came meanwhile would be old: asked for again once it is done) */
-        /* load at the title or while we are in control (not from a menu, an event, a door) */
-        if (pop_pending && ((sys->tk_flg & 0x8) || (tx_in_game && local_visible()) || (go_running() && rule(OPT_GAMEOVER_BOTH)))) load_blob();
+        /* load at the title or while we are in control (not from a menu, an event, a door). While the host's BioRand pack is
+           offered or generated (br_offer), a state that came is kept, not dropped: the events behind it in the stream wait
+           for it (apply_event), and some wait for our game (EV_GRANT), so a dropped state stalled the stream for good and
+           the guest never got into the host's game. It loads once the pack matches (biorand_from_host: BR_NONE), else we
+           leave */
+        if (pop_pending && br_offer == BR_NONE && ((sys->tk_flg & 0x8) || (tx_in_game && local_visible()) || (go_running() && rule(OPT_GAMEOVER_BOTH)))) load_blob();
         if (need_blob || pop_pending || popping) return;
         follow();
     }

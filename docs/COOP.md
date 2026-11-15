@@ -609,7 +609,8 @@ screen's START, or a loaded BioRand save) counts as it is. On, both play the hos
   generates with its own). It then returns to where it came from and compares the pack again: the same one
   joins, another one leaves as below. The partner's own lobby rule and seed string (recvx.ini) stay.
   **No** (or cancel, or an error) leaves. Meanwhile the session stays (both keep sending their poses), the
-  partner loads no game state (one sent meanwhile is asked for again afterwards), and the host's lobby shows
+  partner loads no game state (one sent meanwhile is kept and loaded once the pack matches: the events behind it
+  wait for it; before, it was dropped and the partner never got into a host's game already running), and the host's lobby shows
   "BioRand: asked to generate" or "BioRand: generating..." under the partner's model.
 * Without that (in a game, a host that sent no seed string, or after generating) a partner
   without the pack, or with another one, is refused when it joins (or when the host turns BIORAND on) with
