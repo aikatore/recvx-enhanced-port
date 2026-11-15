@@ -201,18 +201,44 @@ int pc_ui_dialog_hit(float y1, const char* b0, const char* b1, int glyphs, float
     return hit;
 }
 
-/* l2: the words that fit in w per line (as pc_ui_text_wrap), each line centred; the lines (draw 0: only counted) */
+static float dlg_rtl_w(const char* s, int n, void* sc)
+{
+    char line[400];
+    if (n >= (int)sizeof(line)) return 1e9f;
+    memcpy(line, s, (size_t)n);
+    line[n] = 0;
+    return pc_ui_text_w(line, *(float*)sc);
+}
+
+/* l2: the words that fit in w per line (as pc_ui_text_wrap), each line centred; the lines (draw 0: only counted).
+   Arabic (display order, lang.h lang_shape): the lines are taken from the text's right end (lang_rtl_cut) */
 static int text_wrap_c(int draw, float y, float w, const char* s, float sc, unsigned int argb, int max_lines)
 {
     char line[160];
     int n;
+    if (lang_rtl(s)) {
+        char rl[400];
+        n = 0;
+        for (int len = (int)strlen(s); len > 0 && n < max_lines; n++) {
+            int cut = lang_rtl_cut(s, len, w, dlg_rtl_w, &sc);
+            if (draw && len - cut < (int)sizeof(rl)) {
+                memcpy(rl, s + cut, (size_t)(len - cut));
+                rl[len - cut] = 0;
+                pc_ui_text(320 - pc_ui_text_w(rl, sc) / 2, y + n * 28 * sc * 1.05f, rl, sc, argb);
+            }
+            for (len = cut; len > 0 && s[len - 1] == ' '; len--) {}
+        }
+        return n;
+    }
     for (n = 0; *s && n < max_lines; n++) {
         int len = 0, fit = 0;
-        while (s[len] && len < (int)sizeof(line) - 1) {
-            memcpy(line, s, len + 1); line[len + 1] = 0;
+        while (s[len] && len < (int)sizeof(line) - 4) {   /* (a whole UTF-8 letter at a time; a line may end after a kana or kanji) */
+            unsigned char c = (unsigned char)s[len];
+            int k = c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : c >= 0xC0 ? 2 : 1;
+            memcpy(line, s, len + k); line[len + k] = 0;
             if (pc_ui_text_w(line, sc) > w) break;
-            len++;
-            if (!s[len] || s[len] == ' ') fit = len;
+            len += k;
+            if (!s[len] || s[len] == ' ' || lang_cjk_break(c, s + len)) fit = len;
         }
         if (!s[len]) fit = len;
         if (!fit) fit = len ? len : 1;

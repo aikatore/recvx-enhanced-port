@@ -112,6 +112,17 @@ int g_tr_overlay;
 static _Thread_local int english;   /* this thread draws the overlay windows, which stay English (lang.h tr_overlay) */
 void tr_overlay(int on) { english = on && !g_tr_overlay; }
 
+const char* tr_ctx(const char* en, const char* ctx)
+{
+    char k[128];
+    const TrRow* r;
+    int l = !english && lang_installed(g_lang) ? g_lang : LANG_EN;
+    if (!l || !en) return en;
+    snprintf(k, sizeof(k), "%s (%s)", en, ctx);
+    r = find(k, strlen(k));
+    return r && r->t[l - 1] && *r->t[l - 1] ? r->t[l - 1] : tr(en);
+}
+
 const char* tr(const char* en)
 {
     static char buf[8][512];

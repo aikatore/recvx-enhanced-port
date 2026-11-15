@@ -434,7 +434,7 @@ static void pause_draw(void)
     pc_ui_rect(20, 420, 620, 421, 0x80FFFFFF, 0.021f);
     {
         const char* h = item_locked(pause_sel) ? item_locked(pause_sel) : item_help[pause_sel];
-        (rtl ? pc_ui_text_wrap_r : pc_ui_text_wrap)(20, 426, 600, tr(h), 0.45f, item_locked(pause_sel) ? C_LOCK : C_HELP, 1);
+        (rtl ? pc_ui_text_wrap_r : pc_ui_text_wrap)(20, 426, 600, tr(h), 0.45f, item_locked(pause_sel) ? C_LOCK : C_HELP, 2);   /* (2: a translation may be longer) */
     }
     x = 20;
     x = ui_hint(x, 456, ui_glyph(UG_OK, g, sizeof(g)), "Select", 0);

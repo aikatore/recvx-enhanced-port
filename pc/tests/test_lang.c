@@ -85,6 +85,10 @@ int main(void)
         lang_missing(LANG_IT, "Italiano \xC3\xA0\xC3\xA8\xC3\xA9\xC3\xAC\xC3\xB2\xC3\xB9\xC3\x88", m, sizeof(m));
         bad += check(m, "", "Italian letters");
     }
+    /* wrapping Japanese: after a kana or kanji, not before a closing mark; never in Latin or Hangul words */
+    bad += check(lang_cjk_break(0xE3, "\xE3\x81\x82") ? "1" : "0", "1", "lang_cjk_break(kana, kana)");                 /* あ */
+    bad += check(lang_cjk_break(0xE3, "\xE3\x80\x82") ? "1" : "0", "0", "lang_cjk_break(kana, full stop)");           /* 。 */
+    bad += check(lang_cjk_break('a', "b") || lang_cjk_break(0xEA, "\xEA\xB0\x80") ? "1" : "0", "0", "lang_cjk_break(Latin, Hangul)");
     /* tr() reads the table from the executable's copy of the file (src/host/tr.c): the same rows as compiled here */
     tr_init();
     for (g_lang = 1; g_lang < LANG_COUNT; g_lang++)

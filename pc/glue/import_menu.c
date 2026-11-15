@@ -531,7 +531,7 @@ void pc_import_menu_close(void)
    row screen's look (ui_rows.c draws the panel, breadcrumb and category list: CHARACTERS, LANGUAGES, MEMORY CARD SAVES),
    the same pages and dialogs. EXTRA > IMPORT hosts it in title mode 30; SETTINGS > LANGUAGE's Import Languages, GAME SETUP
    > CHARACTERS' Import Characters and GAMEPLAY's Import Memory Card Saves show it in place (ui_rows.c), at the title or in
-   a game. Left to right only (the RTL polish is P5's). */
+   a game. Arabic: mirrored as the row screen (labels and headings end at the right edge, the help right-aligned). */
 void ui_frame_import(const char* root, const char* const* path, int n, int cur);   /* ui_rows.c */
 int  ui_frame_import_cat(float x, float y);
 #define N_X0 158.0f                      /* ui_rows.c's layout */
@@ -549,6 +549,15 @@ int  ui_frame_import_cat(float x, float y);
 #define C_LOCK 0xFFFFB050u
 #define C_DIM 0xFF686868u
 enum { CAT_SAVES = 2 };                  /* im.cat past IMPORT_CAT_*: MEMORY CARD SAVES (MC_IMPORT_CHARS + im.cat) */
+int pc_ui_text_wrap_r(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines);
+static int rtl;                          /* Arabic: right to left (lang_rtl_text), set each frame */
+static float nx(float x, float w) { return rtl ? 640 - x - w : x; }   /* a left-to-right x, mirrored */
+static void nm_t(float x, float y, const char* s, float sc, unsigned int col) { pc_ui_text(nx(x, pc_ui_text_w(s, sc)), y, s, sc, col); }
+static void nm_arrow(float x, float y, int dir, unsigned int col) { pc_ui_arrow(nx(x, 0), y, rtl ? -dir : dir, col); }
+static int nm_wrap(float x, float y, float w, const char* s, float sc, unsigned int col, int lines)
+{
+    return (rtl ? pc_ui_text_wrap_r : pc_ui_text_wrap)(nx(x, w), y, w, s, sc, col, lines);
+}
 
 static void nm_cat(int c)   /* (IMPORT_CAT_* or CAT_SAVES) */
 {
@@ -615,21 +624,23 @@ static int nm_input(int port)
     const bool* keys = bind_keys();
     int esc = keys && keys[41], esc_edge = esc && !im.esc_was, hit, c;
     MouseTake* m = &im.mt;
+    float mx;
     im.esc_was = esc;
     if (im.state != IS_MENU) return input();   /* (the dialogs: as before) */
     menu_mouse_take(m);
+    mx = rtl ? 640 - m->x : m->x;   /* (hit-tested left to right) */
     ui_device(press, m->moved || m->left || m->right || m->wheel || esc_edge);
     if (press || rept || m->left || m->right || m->moved || m->wheel) StopAdvScreenSaver(0);
-    hit = nm_row_at(m->x, m->y);
+    hit = nm_row_at(mx, m->y);
     if (hit >= 0 && (m->moved || m->left) && hit != im.row) { im.row = hit; im.say_t = 0; CallSystemSe(0, 2); }
     if (m->wheel) { nm_move(m->wheel > 0 ? -1 : 1); return 0; }
-    if (m->left && (c = ui_frame_import_cat(m->x, m->y)) >= 0) {
+    if (m->left && (c = ui_frame_import_cat(mx, m->y)) >= 0) {
         if (c - MC_IMPORT_CHARS != im.cat || im.page == P_OPTS) { nm_cat(c - MC_IMPORT_CHARS); CallSystemSe(0, 2); }
         return 0;
     }
     if (m->left && hit >= 0) {
         const Row* r = &rows[hit];
-        if ((r->kind == K_PLAYERS || r->kind == K_NPCS) && m->x >= N_VALUE - 16) { toggle(r); return 0; }
+        if ((r->kind == K_PLAYERS || r->kind == K_NPCS) && mx >= N_VALUE - 16) { toggle(r); return 0; }
         return r->kind == K_CARD ? (CallSystemSe(0, 3), card(), 0) : activate(r);
     }
     if (m->right || esc_edge || (press & cancel)) return nm_back();
@@ -647,7 +658,7 @@ static int nm_input(int port)
 static void nm_text(float x, float y, const char* s, float sc, float w, unsigned int col)   /* scaled down to w */
 {
     float tw = pc_ui_text_w(s, sc), k = tw > w ? w / tw : 1.0f;
-    pc_ui_text(x, y + (1.0f - k) * 9.0f, s, sc * k, col);
+    pc_ui_text(nx(x, tw * k), y + (1.0f - k) * 9.0f, s, sc * k, col);
 }
 
 static void nm_row(int i)
@@ -658,27 +669,27 @@ static void nm_row(int i)
     float y = nm_y(i);
     unsigned int col = !live ? (sel ? 0xFF9A9A9A : C_DIM) : sel ? 0xFFFFFFFF : C_ROW;
     char v[256];
-    if (r->kind == K_HEAD) { pc_ui_text(N_X0 + 4, y + 2, tr(heads[r->idx]), 0.5f, C_GOLD); return; }
-    if (sel) pc_ui_rect(N_X0, y - 2, N_X1, y + N_ROW - 3, 0x40FFFFFF, 0.3f);
+    if (r->kind == K_HEAD) { nm_t(N_X0 + 4, y + 2, tr(heads[r->idx]), 0.5f, C_GOLD); return; }
+    if (sel) pc_ui_rect(nx(N_X0, N_X1 - N_X0), y - 2, nx(N_X0, N_X1 - N_X0) + N_X1 - N_X0, y + N_ROW - 3, 0x40FFFFFF, 0.3f);
     switch (r->kind) {
     case K_GAME:
         nm_text(N_LABEL, y, title_of(r->idx), 0.55f, N_VALUE - N_LABEL - 16, col);
         if (import_present(r->idx)) nm_text(N_VALUE, y, tr("Imported"), 0.55f, 104, col);
-        pc_ui_arrow(N_X1 - 6, y + 9, 1, col);
+        nm_arrow(N_X1 - 6, y + 9, 1, col);
         return;
     case K_PLAYERS: case K_NPCS: {
         const char* s = tr((im.what & (r->kind == K_PLAYERS ? IMPORT_PLAYERS : IMPORT_NPCS)) ? "On" : "Off");
         float w = pc_ui_text_w(s, 0.55f);
         nm_text(N_LABEL, y, tr(r->kind == K_PLAYERS ? "Playable Characters" : "NPCs"), 0.55f, N_VALUE - N_LABEL - 16, col);
-        if (live) { pc_ui_arrow(N_VALUE - 12, y + 9, -1, col); pc_ui_arrow(N_VALUE + w + 13, y + 9, 1, col); }
-        pc_ui_text(N_VALUE, y, s, 0.55f, col);
+        if (live) { nm_arrow(N_VALUE - 12, y + 9, -1, col); nm_arrow(N_VALUE + w + 13, y + 9, 1, col); }
+        nm_t(N_VALUE, y, s, 0.55f, col);
         return;
     }
     case K_DISC:
         nm_text(N_LABEL, y, tr("Disc Image"), 0.55f, N_VALUE - N_LABEL - 100, col);
         snprintf(v, sizeof(v), "%s", tr(disc_name()));
         nm_text(N_VALUE - 90, y, v, 0.55f, N_X1 - 20 - (N_VALUE - 90), col);
-        pc_ui_arrow(N_X1 - 6, y + 9, 1, col);
+        nm_arrow(N_X1 - 6, y + 9, 1, col);
         return;
     case K_START: nm_text(N_LABEL, y, tr("START IMPORT"), 0.55f, N_X1 - N_LABEL - 8, col); return;
     case K_DELETE: nm_text(N_LABEL, y, tr(langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : "DELETE IMPORTED MODELS"), 0.55f, N_X1 - N_LABEL - 8, col); return;
@@ -702,23 +713,23 @@ static void nm_preview(float x, float y, float w)
     const Row* r = &rows[im.row];
     if (im.page == P_SAVES) {
         int k = menu_setting("Save System");
-        pc_ui_text(x, y, tr("SEPARATE FILES"), 0.46f, C_GOLD);
-        pc_ui_text_wrap(x, y + 16, w, save_native_dir(), 0.4f, C_HELP, 2);
+        nm_t(x, y, tr("SEPARATE FILES"), 0.46f, C_GOLD);
+        pc_ui_text_wrap(nx(x, w), y + 16, w, save_native_dir(), 0.4f, C_HELP, 2);   /* (a path: left to right) */
         if (k >= 0) {
             snprintf(t, sizeof(t), tr("Save System: %s"), settings_value(&g_settings[k], c, sizeof(c)));
-            pc_ui_text(x, y + 40, t, 0.4f, C_HELP);
+            nm_t(x, y + 40, t, 0.4f, C_HELP);
         }
         return;
     }
     if (im.page == P_GAMES) { if (r->kind != K_GAME) return; im.src = r->idx; }   /* (that game's lines; set back below) */
-    pc_ui_text(x, y, tr("IMPORTED"), 0.46f, C_GOLD);
+    nm_t(x, y, tr("IMPORTED"), 0.46f, C_GOLD);
     if (langs() >= 0) {
         if (langs() > 0) snprintf(t, sizeof(t), tr("Installed: %s."), lang_list(c, sizeof(c), &old));
         else snprintf(t, sizeof(t), "%s", tr("Nothing imported yet."));
         if (old) snprintf(t + strlen(t), sizeof(t) - strlen(t), " %s", tr("An older import: import again."));
     } else if (im.page == P_OPTS && im.have) snprintf(t, sizeof(t), "%s%s%s", counts(c, sizeof(c)), im.when[0] ? tr(" On ") : "", im.when);
     else snprintf(t, sizeof(t), "%s", tr(import_present(im.src) ? "Imported. Open it for what can be played." : "Nothing imported yet."));
-    pc_ui_text_wrap(x, y + 16, w, t, 0.4f, old ? 0xFFFFC060 : C_HELP, 3);
+    nm_wrap(x, y + 16, w, t, 0.4f, old ? 0xFFFFC060 : C_HELP, 3);
     im.src = src;
 }
 /* the disc a game needs (the help's last sentence on its pages) */
@@ -740,6 +751,7 @@ static void nm_draw(void)
     char t[480], a[40], b[40];
     int n = 0;
     float x;
+    rtl = lang_rtl_text();
     path[n++] = "IMPORT";
     path[n++] = menu_cats[MC_IMPORT_CHARS + im.cat].name;
     if (im.page == P_OPTS) path[n++] = title_of(im.src);
@@ -770,7 +782,7 @@ static void nm_draw(void)
         case K_START: nm_text(20, N_HELP - 2, tr("START IMPORT"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_DELETE: nm_text(20, N_HELP - 2, tr(langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : "DELETE IMPORTED MODELS"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         }
-        pc_ui_text_wrap(20, N_HELP + 16, N_PREVIEW - 34, t, 0.42f, col, 3);
+        nm_wrap(20, N_HELP + 16, N_PREVIEW - 34, t, 0.42f, col, 3);
         nm_preview(N_PREVIEW, N_HELP, N_X1 - N_PREVIEW);
     }
 }
