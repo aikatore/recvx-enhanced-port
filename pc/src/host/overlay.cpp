@@ -22,6 +22,7 @@ extern "C" {
 #include "menu_mouse.h"
 #include "bindings.h"
 #include "settings.h"
+#include "menu_layout.h"
 #include "lobby.h"
 #include "../import/import.h"
 #include "lang.h"
@@ -42,6 +43,12 @@ extern "C" void placer_poll(int f2_open), placer_overlay(void);   /* --dev objec
 static SDL_Window* win;
 static bool ready, visible, cheats_visible, coop_visible, import_visible, devcine_visible;
 static bool tps_key_wait;   /* the next key pressed becomes the third-person toggle key */
+/* the new menu (--new-menu, pause_glue.c) opens the F2 / F3 / F9 windows from the pause menu (game thread: a request);
+   then the controller works in them (ImGui's gamepad navigation) and its Back or Start closes them. pad_hold: the button
+   that closed them is still down, so the game does not read it as a new press */
+static int open_req, pad_hold;
+static SDL_JoystickID pad_hold_id;
+extern "C" void overlay_request(int which) { __atomic_store_n(&open_req, which, __ATOMIC_RELEASE); }
 
 void overlay_init(void* window, void* gl_context)
 {
@@ -68,6 +75,13 @@ int overlay_event(const void* e)
     if (tps_key_wait && ev->type == SDL_EVENT_KEY_DOWN && !ev->key.repeat) {
         if (ev->key.scancode != SDL_SCANCODE_ESCAPE) { g_tps.key = ev->key.scancode; settings_save_later(); }
         tps_key_wait = false;
+        return 1;
+    }
+    if (g_new_menu && (visible || cheats_visible || coop_visible || import_visible) && ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN &&
+        (ev->gbutton.button == SDL_GAMEPAD_BUTTON_BACK || ev->gbutton.button == SDL_GAMEPAD_BUTTON_START)) {
+        visible = cheats_visible = coop_visible = import_visible = false;
+        pad_hold = 1 + ev->gbutton.button;
+        pad_hold_id = ev->gbutton.which;
         return 1;
     }
     if (bind_hotkey(ev, B_SETTINGS)) {
@@ -1414,8 +1428,18 @@ static void overlay_frame(void)
     coop_status_get(&cs);
     placer_poll(cheats_visible);
     bool devcine_on = g_dev_tools && (devcine_visible || g_devcine_show);   /* --dev cutscene log */
+    if (int w = __atomic_exchange_n(&open_req, 0, __ATOMIC_ACQ_REL)) {   /* (the new menu's pause: Advanced Tools, CO-OP, Import Languages) */
+        if (w == 2) cheats_visible = true;
+        else if (w == 3) coop_visible = true;
+        else if (w == 4) import_visible = g_dev_mode != 0;
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    }
+    if (pad_hold) {   /* (released: the game reads the controller again) */
+        SDL_Gamepad* g = SDL_GetGamepadFromID(pad_hold_id);
+        if (!g || !SDL_GetGamepadButton(g, (SDL_GamepadButton)(pad_hold - 1))) pad_hold = 0;
+    }
     bool windows = visible || cheats_visible || coop_visible || import_visible || (g_dev_tools && devcine_visible);
-    pad_set_game_input_enabled(!windows);
+    pad_set_game_input_enabled(!windows && !pad_hold);
     tps_update_mouse_mode(win, windows);
     menu_mouse_update(win, windows);
     /* without a window ImGui leaves the cursor alone (menu_mouse_update shows/hides it) */

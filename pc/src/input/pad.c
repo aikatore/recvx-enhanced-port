@@ -147,6 +147,9 @@ int pad_kb_start(void) { return kb_start; }
 /* the DS2 buttons of the last report (the game's Pad[].on also has stick directions, at rest too) */
 static uint32_t report_bits;
 int pad_report_bits(void) { return (int)report_bits; }
+/* the device pressed last: 1 the gamepad, 0 the keyboard (the new menu's button bar, ui_rows.c) */
+static int last_pad;
+int pad_last_pad(void) { return last_pad; }
 
 static void build_report(unsigned char* r)
 {
@@ -174,6 +177,8 @@ static void build_report(unsigned char* r)
         for (int i = 0; i < 16; i++)
             if (bind_held(i, BIND_KB, k, mouse)) kb |= 1u << i;
             else if (gamepad && bind_held(i, BIND_PAD, k, 0)) b |= 1u << i;
+        if (kb) last_pad = 0;
+        else if (b) last_pad = 1;
         b |= kb;
         kb_start = bind_held(B_START, BIND_KB, k, mouse);
         qt = bind_quickturn(0, bind_held(B_QUICKTURN, BIND_KB, k, mouse) || (gamepad && bind_held(B_QUICKTURN, BIND_PAD, k, 0)));

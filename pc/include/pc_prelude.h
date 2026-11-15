@@ -302,6 +302,12 @@ int   pc_options_quit_title(void);               /* bhSysCallOption: YES was cho
 void  pc_options_mouse0(int port);               /* DisplayOptionPlateLevel0: hover, click */
 void  pc_options_mouse_back(int port, int level);/* levels 1-3: right click goes back */
 int   pc_options_pc(int port, int flag);         /* DisplayOptionPlate level 4 */
+/* the new menu (--new-menu, pc/glue/pause_glue.c, docs/MENUS.md): SETTINGS at the title, the PAUSE menu in a game */
+int   pc_new_menu_on(void);                      /* DisplayOptionBg: no image bands (the picture stays) */
+int   pc_new_menu_entry(void);                   /* Adv_GameOptionScreen, after ResetOptionMenuParam(0): the level to start at (0 as before) */
+int   pc_pause(int port, int flag);              /* DisplayOptionPlateLevel0 in a game: the pause menu; the next level */
+int   pc_in_game(void);                          /* a game runs (options_glue.c) */
+int   pc_options_back_level(void);               /* levels 1-3 going back: 4 (SETTINGS) under the new menu, else 0 */
 
 /* native saves (pc/glue/save_glue.c, docs/ARCHITECTURE.md "Save system"): the save and load
    screens list save files instead of memory card slots and skip the card screens */

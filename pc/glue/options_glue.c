@@ -15,6 +15,7 @@
 #include "../../decomp/include/ps2/veronica/prog/ps2_NaDraw.h"
 #include "../../decomp/include/ps2/veronica/prog/vibman.h"
 #include "../src/host/settings.h"
+#include "../src/host/menu_layout.h"
 #include "../src/host/bindings.h"
 #include "../src/host/menu_mouse.h"
 #include "../src/host/tps.h"
@@ -337,6 +338,8 @@ static void quit_draw(void)
                  coop_on ? "Unsaved progress will be lost. The co-op session ends." : "Unsaved progress will be lost.",
                  coop_on ? 0.5f : 0.6f, 0xFFC0C0C0, 1, "YES", "NO", !quit.yes, 1);
 }
+void pc_options_quit_draw(void) { if (quit.open) quit_draw(); }   /* (the new menu's pause, pause_glue.c) */
+int pc_options_quit_up(void) { return quit.open; }
 
 /* DisplayOptionPlateLevel0, with the other rows: drawn as they are (dim, or pulsing when selected) */
 void pc_options_rows0(void)
@@ -816,9 +819,11 @@ static int input(int port)
 }
 
 /* DisplayOptionPlate level 4: returns the next level (4 stay, 0 back) */
+int pc_new_menu_level4(int port, int flag);   /* pause_glue.c */
 int pc_options_pc(int port, int flag)
 {
     int back = 0;
+    if (g_new_menu) return pc_new_menu_level4(port, flag);   /* --new-menu: SETTINGS (docs/MENUS.md) */
     rtl = lang_rtl_text();
     g_lobby_io.list_on = st.list;   /* (Page Up / Down, Home, End) */
     build_rows();
@@ -844,4 +849,5 @@ void pc_options_close(void)
     st.capture = 0;
     st.list = g_lobby_io.list_on = 0;
     g_menu_mouse.active = 0;
+    { void pc_new_menu_closed(void); pc_new_menu_closed(); }   /* --new-menu: its actions, the window to open (pause_glue.c) */
 }
