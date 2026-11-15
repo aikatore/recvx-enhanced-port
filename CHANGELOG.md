@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changes
+
+- **New menus**: reworked settings with categories, search and help, a game setup for new games (presets, BioRand,
+  enemies, characters), a pause menu reachable with a controller, a simpler co-op lobby, button icons for Xbox,
+  PlayStation, Switch or keyboard, and a Give Item list with icons. The previous menus stay available as Legacy Menu.
+
 ### Fixes
 
 - **Co-op**: a guest that generates the host's BioRand game in the lobby now gets into the host's game.
