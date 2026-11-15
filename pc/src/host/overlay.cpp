@@ -43,7 +43,7 @@ extern "C" void placer_poll(int f2_open), placer_overlay(void);   /* --dev objec
 static SDL_Window* win;
 static bool ready, visible, cheats_visible, coop_visible, import_visible, devcine_visible;
 static bool tps_key_wait;   /* the next key pressed becomes the third-person toggle key */
-/* the new menu (--new-menu, pause_glue.c) opens the F2 / F3 / F9 windows from the pause menu (game thread: a request);
+/* the new menu (pause_glue.c) opens the F2 / F3 / F9 windows from the pause menu (game thread: a request);
    then the controller works in them (ImGui's gamepad navigation) and its Back or Start closes them. pad_hold: the button
    that closed them is still down, so the game does not read it as a new press */
 static int open_req, pad_hold;

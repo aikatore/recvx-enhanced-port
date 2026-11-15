@@ -1,4 +1,4 @@
-/* The new menu's character grid (--new-menu; docs/MENUS.md "Text fields", the proposal's §1.5): one box for every text
+/* The new menu's character grid (docs/MENUS.md "Text fields", the proposal's §1.5): one box for every text
  * field a controller has to fill (JOIN's Room Code or Address and Password, the host's Room Password, Player Name,
  * Co-op Server, the seeds). A-Z (SHIFT: a-z), 0-9, . - : and a few signs, SPACE, DELETE, PASTE, OK. The controller moves
  * on the grid and types the cell; the keyboard types as well (lobby_io.c's key ring, Ctrl+V pastes), the mouse clicks

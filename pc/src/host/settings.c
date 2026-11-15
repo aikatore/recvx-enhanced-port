@@ -161,6 +161,10 @@ static void apply_vsync(void) { SDL_GL_SetSwapInterval(g_config.vsync ? 1 : 0); 
 static int perf_get(void) { return g_perf_graph; }
 static void perf_set(int v) { g_perf_graph = v; prof_enabled = v; }
 static int new_menu_only(void) { return g_new_menu; }
+/* Legacy Menu (ini legacy_menu): the menus switch on the title menu (menu_layout.h menu_choice_apply), not under the
+   cursor; choosing it here also ends a --legacy-menu / --new-menu of this run */
+static int legacy_get(void) { return g_menu_cli >= 0 ? !g_menu_cli : g_legacy_menu; }
+static void legacy_set(int v) { g_legacy_menu = v; g_menu_cli = -1; }
 static void apply_volume(void) { audio_apply_volumes(); }
 
 /* ---------------------------------------------------------------- special values */
@@ -430,6 +434,8 @@ const Setting g_settings[] = {
     { SP_GAMEPLAY, "Skip Intro", V(g_config.skip_intro), 0, 1, 1, .flags = SET_RESTART, .group = "GENERAL", .help = "Go straight to the title screen. Off lets you skip each logo and movie with a button press." },
     { SP_GAMEPLAY, "Check For Updates", V(g_config.update_check), 0, 2, 1, (const char* const[]){ "Off", "Ask to Install", "Notify Only" }, .apply = update_start,
       .help = "Check for a newer game version at startup. Ask to Install offers to download and install it on the title screen; Notify Only just shows it there." },
+    { SP_GAMEPLAY, "Legacy Menu", NULL, 0, 1, 1, .get = legacy_get, .set = legacy_set,
+      .help = "Use the previous menus: OPTION with ENHANCED SETTINGS, the old multiplayer lobby and BIORAND screen. Changes when you are back on the title screen." },
     { SP_GAMEPLAY, "Skip Door Animations", V(g_config.skip_doors), 0, 2, 1, (const char* const[]){ "Off", "Instant", "Skippable" },
       .help = "Choose full transitions, instant loading, or animations you can skip with any key or button." },
     { SP_GAMEPLAY, "Fast Loading", V(g_config.fast_loading), 0, 1, 1,

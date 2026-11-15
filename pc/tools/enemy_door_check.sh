@@ -30,7 +30,7 @@ for seed in $seeds; do
     SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy RECVX_SKIP_MOVIES=1 RECVX_SKIP_CINE=30 RECVX_UPDATE_CHECK=0 RECVX_MODS="$out/mods" \
     RECVX_INPUT="$newgame" RECVX_TELEPORT="$tp" RECVX_EXIT_FRAME=$((f * 3 / 2 + 300)) RECVX_INF_HEALTH=1 RECVX_ENEMY_SPOTS=${SPOTS:-50} \
     RECVX_ENEMY_RANDOM=1 RECVX_ENEMY_EXTRA=8 RECVX_ENEMY_SEED=$seed RECVX_ENEMY_VARIETY=1 \
-    timeout -s KILL 3600 "$bin" "$iso" --skip-intro --size 320x240 --save-dir "$d/save" --log="$d/log.txt" > "$d/stdout.txt" 2>&1 &
+    timeout -s KILL 3600 "$bin" "$iso" --skip-intro --legacy-menu --size 320x240 --save-dir "$d/save" --log="$d/log.txt" > "$d/stdout.txt" 2>&1 &
 done
 wait
 RECVX_ISO="$iso" python3 - "$out" "$root/pc/tools" $seeds <<'EOF'

@@ -14,6 +14,6 @@ newgame="100:down,103:-,110:cross,113:-,160:cross,163:-,200:cross,203:-,240:cros
 SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy RECVX_SKIP_MOVIES=1 RECVX_UPDATE_CHECK=0 \
 RECVX_DUMP_FRAMES="$out/frames" RECVX_TELEPORT="1:$target" \
 RECVX_INPUT="$newgame${MORE_INPUT:+,$MORE_INPUT}" \
-timeout -s KILL "$secs" "${RECVX_BIN:-$root/build/pc/recvx}" "$iso" --skip-intro --size ${SIZE:-320x240} \
+timeout -s KILL "$secs" "${RECVX_BIN:-$root/build/pc/recvx}" "$iso" --skip-intro --legacy-menu --size ${SIZE:-320x240} \
     --save-dir "$out/save" --log="$out/log.txt" > "$out/stdout.txt" 2>&1 || true
 echo "frames: $(ls "$out/frames" | wc -l), log: $out/log.txt"

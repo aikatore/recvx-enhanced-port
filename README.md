@@ -41,7 +41,8 @@ native paths replace the expensive parts. The game reads your own disc image in 
   [modding/README.md](docs/modding/README.md#randomizer-biorand)).
 - **Save files**: every save its own file, as many as you like, in the game's own save screens
   without the memory card screens (the emulated memory card stays available).
-- **Enhanced settings** in the game's own OPTION menu and an F1 overlay; full rebinding of keyboard,
+- **New menus**: OPTION opens SETTINGS, a PAUSE menu in game, GAME SETUP for a new game (the previous
+  OPTION / ENHANCED SETTINGS menus stay available with the Legacy Menu setting), and an F1 overlay; full rebinding of keyboard,
   mouse and gamepad; per-window input source for local co-op on one PC.
 - **Cheats and debug tools** (F2), co-op window (F3).
 - **HD texture packs**: PCSX2 HD texture packs for the game load as they come, from
@@ -82,7 +83,7 @@ conversion. None are included; use a pack you have.
 example `mods/textures/1_addon/` and `mods/textures/2_base/`. When two packs replace the same
 texture, the one in the folder that comes first by name wins, so `1_...` overrides `2_...`.
 
-Settings (F1 or ENHANCED SETTINGS, DISPLAY): **HD Textures** turns packs on or off, **HD
+Settings (SETTINGS > GRAPHICS > TEXTURE PACK, or F1 / ENHANCED SETTINGS > DISPLAY): **HD Textures** turns packs on or off, **HD
 Menus** also uses redesigned menus, title and inventory (on), **HD Font** uses
 the pack's font (off). A pack in another folder: `hd_textures_dir = <path>` in `recvx.ini` or
 `--hd-textures <path>`. Details: [docs/USER_GUIDE.md](docs/USER_GUIDE.md#hd-texture-packs).

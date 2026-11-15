@@ -887,7 +887,7 @@ EXTRAS pages (their own windows are F3 and F2), where only `SET_F1` rows appear.
 unless the key is listed there with where it is set instead (the lobby's per-session choices, the
 third-person key binding).
 
-The new menus in testing (`--new-menu`, [MENUS.md](MENUS.md)) show the same rows from a layout table
+The new menus (the default, [MENUS.md](MENUS.md)) show the same rows from a layout table
 (`pc/src/host/menu_layout.c`): a new row also needs one home there, or ctest `menu_layout` fails.
 
 With Enemy Selection or the cutscene cast's Model Selection at Custom, ENHANCED SETTINGS adds a row under it (Enemy

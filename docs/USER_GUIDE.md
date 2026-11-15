@@ -238,11 +238,16 @@ pad only to the focused window: turn Steam Input off for the game.
 
 ## Settings
 
-Two menus change the same values:
+These menus change the same values:
 
-- **OPTION -> ENHANCED SETTINGS**: in the game's OPTION screen (title, or Select in game), the row
-  below VIBRATION. Q / W or LB / RB switch pages; left / right change a value. The bottom lines
-  explain the selected setting; "(restart needed)" means after a restart.
+- **OPTION -> SETTINGS** (the default): at the title OPTION opens SETTINGS, categories on the left,
+  their settings on the right with a help line; in a game OPTION (Select) opens the PAUSE menu with
+  SETTINGS, GAME SETUP and more. See [MENUS.md](MENUS.md).
+- **OPTION -> ENHANCED SETTINGS**, with **Legacy Menu** (GAMEPLAY) on: the previous menus. In the
+  game's OPTION screen (title, or Select in game), the row below VIBRATION. Q / W or LB / RB switch
+  pages; left / right change a value. The bottom lines explain the selected setting; "(restart
+  needed)" means after a restart. Legacy Menu also brings back the old MULTIPLAYER lobby and
+  BIORAND screen; it changes once you are back on the title menu (`--legacy-menu` for one run).
 - **F1**: the same as an overlay, plus a Performance section.
 
 Changes apply at once and are saved automatically. The defaults favour the PC (smooth frames,
@@ -285,6 +290,7 @@ until the right square on the white strip is.
 |---|---|---|
 | Skip Intro | On | boot straight to the title (next start). Off: any button skips each logo and movie |
 | Check For Updates | Ask to Install | see [Updating](#updating) |
+| Legacy Menu | Off | On: the previous menus (OPTION with ENHANCED SETTINGS, the old MULTIPLAYER lobby and BIORAND screen). Changes once you are back on the title menu; `--legacy-menu` for one run |
 | Skip Door Animations | Instant | Off: played. Instant: a short load screen instead. Skippable: any button ends them |
 | Fast Loading | On | room changes without the PS2's disc waits |
 | Battle Game Unlocked | On | Battle Game (title menu, EXTRA) from the start, all five characters; saves and records unchanged |

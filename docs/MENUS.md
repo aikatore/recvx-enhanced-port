@@ -1,9 +1,14 @@
-# The new menus (`--new-menu`)
+# The menus (new by default; Legacy Menu for the old ones)
 
-A rework of the port's menus, in testing behind `--new-menu` (also on with `--dev`). Without the flag nothing changes:
-OPTION, ENHANCED SETTINGS and every other screen are as before. The menu rework is done in phases; this page describes
-what is in now (phases P0 to P4) and how it is built. Some game rules changed with P2 and P3 for both menus: see
-"Behaviour changes" below.
+The port's reworked menus are the default. The old ones stay as an option: **Legacy Menu** (SETTINGS > GAMEPLAY >
+STARTUP AND UNLOCKS; in the old ENHANCED SETTINGS and F1 under GAMEPLAY > GENERAL; ini `legacy_menu = 1`) brings back
+OPTION, ENHANCED SETTINGS, the old MULTIPLAYER lobby and the BIORAND screen as they were. A change takes effect on the
+title menu: at the title as soon as SETTINGS (or OPTION) closes, in a game once you are back at the title; never under
+the cursor, since the OPTION task and our screens read the choice as they go (`menu_layout.h menu_choice_apply`, called
+by `lobby_glue.c pc_title_mouse` at level 0). For one run `--legacy-menu` gives the old menus and `--new-menu` the new
+ones whatever the ini says; changing Legacy Menu in a menu ends that. `--dev` no longer has anything to do with the
+menus. The menu rework is done in phases; this page describes what is in now (phases P0 to P4) and how it is built.
+Some game rules changed with P2 and P3 for both menus: see "Behaviour changes" below.
 
 ## What a player sees
 
@@ -12,7 +17,7 @@ under the panel). Eight categories on the left:
 
 | Category | Rows |
 |---|---|
-| GAMEPLAY | GENERAL (door animations, loading, quick knife, stairs, Your Character ▸), COMBAT (aim and hit options, Headshots and Piercing ▸), SAVES (Save System, Import Memory Card Saves ▸: IMPORT's MEMORY CARD SAVES), STARTUP AND UNLOCKS |
+| GAMEPLAY | GENERAL (door animations, loading, quick knife, stairs, Your Character ▸), COMBAT (aim and hit options, Headshots and Piercing ▸), SAVES (Save System, Import Memory Card Saves ▸: IMPORT's MEMORY CARD SAVES), STARTUP AND UNLOCKS (Skip Intro, updates, Battle Game, Legacy Menu) |
 | CAMERA AND HUD | THIRD-PERSON CAMERA (on/off, field of view, shoulder, lighting; Advanced ▸ distances and height), HUD |
 | CONTROLS | INPUT (Fixed-camera Movement, devices, Control Type ▸ = the game's KEY CONFIG, Button Icons, Vibration), MOUSE, CONTROLLER (Advanced ▸ dead zones), BUTTONS (Customize Keyboard and Mouse ▸, Customize Controller ▸) |
 | DISPLAY | WINDOW, PICTURE (aspect, brightness, contrast, gamma, Screen Position ▸ = SCREEN SETUP, Monitor Test ▸ = MONITOR ADJUSTMENT), WIDESCREEN, INFO (Show Frame Rate, Performance Graph: F1's Performance section as a panel in the top right corner; not saved) |
@@ -155,7 +160,7 @@ Window (F3); the partner, ping and connection on the right.
 
 ### Behaviour changes (both menus, P2)
 
-These are game rules, so they also hold without `--new-menu`; the old menus' rows are unchanged:
+These are game rules, so they also hold with Legacy Menu; the old menus' rows are unchanged:
 
 * **Random look in every game (D3).** "Randomize Character Model" (ini `biorand_appear`, the old BIORAND screen's
   RANDOMIZER page) picks a look at every new game, not only in BioRand games: seeded by the enemy seed + an offset outside
@@ -175,7 +180,7 @@ These are game rules, so they also hold without `--new-menu`; the old menus' row
 * The voice plan cache (`voices.plan`) is made again once (its format changed with these rules).
 
 None of these changes the default settings: `pc/tools/layout_check.sh` (main against P2, single player without
-`--new-menu`) has 0 frames differing.
+the new menu) has 0 frames differing.
 
 ### Controls (every new screen)
 
@@ -276,12 +281,17 @@ pressed last). A hold (Default) fills a gold bar under its icon.
 ```
 SDL_VIDEO_DRIVER=offscreen RECVX_DUMP_FRAMES=/tmp/dump RECVX_DUMP_EVERY=10 RECVX_EXIT_FRAME=600 \
   RECVX_INPUT="100:down,104:-,114:down,118:-,128:cross,132:-,200:r1,204:-" \
-  build/pc/recvx --new-menu --save-dir /tmp/save --skip-intro --size 1280x960 --windowed <disc image>
+  build/pc/recvx --save-dir /tmp/save --skip-intro --size 1280x960 --windowed <disc image>
 ```
 
 `RECVX_KEYS` (keyboard: `Return`, `Escape`, `Delete`, `Q`, `W`), `RECVX_VPAD` (a virtual controller, `RECVX_VPAD_TYPE` xbox, ps5, switch or generic: `south`, `east`,
 `north`, `back`, `leftshoulder`, `dpdown`, ...) and `RECVX_DUMP_OVERLAY=1` (the F-key windows in the dumps) drive and
 show the rest. Use a temporary save directory.
+
+Scripts that drive the old title menu (`pc/tools/layout_check.sh`, the `coop_*`, `enemy_*`, `retry_check.sh` and
+`room_test.sh` checks) run with `--legacy-menu`. `layout_check.sh` also plays the new menu: `MENU=new` (NEW GAME at
+frame 100, START GAME at 110, where the old script's NEW GAME is, so the game starts on the same frame); `MENU_A=old
+MENU_B=new` compares a build from before the switch with the new default, whose game frames are the same.
 
 GAME SETUP: `100:down,103:-,110:cross,113:-` opens it from the title (START GAME is the next Confirm). A BioRand START
 without touching the network: a temporary `RECVX_MODS` folder, `RECVX_BIORAND_CLI_DIR_TEST` pointing at a folder with
@@ -319,8 +329,8 @@ fails when a text the new menu shows has no row or an empty column), and in Arab
 the lobby are mirrored too (the lobby's rows and GAME SETUP box in their own place right of the models), the dialogs'
 lines wrap from the right. The button bar's words that mean something else in the table ("Select" the button, "Back"
 the walking binding) are looked up as "Select (button hint)" first (`lang.h tr_ctx`). Left: the user's wording pass (the
-translations follow it), the user guide, a tester round on `--new-menu`, then the new menu by default (`--old-menu` for
-one release, then the old menus' code goes).
+translations follow it) and the user guide. The new menu is now the default, the old one is Legacy Menu (above);
+its code goes when the user says so.
 
 A co-op guest that generated the host's BioRand game in the lobby now gets into the host's game (P3 saw it stay in the
 lobby; also with the old BIORAND screen): the host's game state that came while the guest generated was dropped, and the

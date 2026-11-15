@@ -81,7 +81,7 @@ static struct {
     char msg[320], say[192];
     int err, say_t, say_err;
     MouseTake mt;
-    int nm;                             /* the new menu's look (--new-menu): categories left, rows right, help, a button bar */
+    int nm;                             /* the new menu's look: categories left, rows right, help, a button bar */
     char root[160];                     /* ... its breadcrumb's first words ("EXTRA", "OPTION>LANGUAGE") */
     int esc_was;
 } im;
@@ -527,7 +527,7 @@ void pc_import_menu_close(void)
     host_log("import menu: closed\n");   /* (a running extraction goes on; F9 and the next visit show it) */
 }
 
-/* ---------------------------------------------------------------- the new menu's IMPORT (--new-menu; docs/MENUS.md): the
+/* ---------------------------------------------------------------- the new menu's IMPORT (docs/MENUS.md): the
    row screen's look (ui_rows.c draws the panel, breadcrumb and category list: CHARACTERS, LANGUAGES, MEMORY CARD SAVES),
    the same pages and dialogs. EXTRA > IMPORT hosts it in title mode 30; SETTINGS > LANGUAGE's Import Languages, GAME SETUP
    > CHARACTERS' Import Characters and GAMEPLAY's Import Memory Card Saves show it in place (ui_rows.c), at the title or in

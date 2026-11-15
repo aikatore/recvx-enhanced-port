@@ -36,10 +36,10 @@ Ways to start a session:
 
 ## Lobby
 
-With `--new-menu` (or `--dev`) MULTIPLAYER opens the new screens described in the next section; without it, the lobby
+MULTIPLAYER opens the new screens described in the next section; with Legacy Menu (or `--legacy-menu`), the lobby
 below, unchanged. Both use the same session, rules and wire (protocol 57): a host on one can be joined from the other.
 
-### The new MULTIPLAYER screens (`--new-menu`)
+### The new MULTIPLAYER screens
 
 **MULTIPLAYER**: **HOST GAME**, **JOIN GAME**, **Co-op Settings** (SETTINGS > CO-OP: name, name tag, connection, co-op
 server, hosting), **BACK**.
@@ -87,7 +87,7 @@ pause menu has closed and both players are free next to each other; otherwise it
 Hide IP Addresses), **REMOVE PARTNER** (host), **END SESSION** (host) or **LEAVE** (guest; both ask with a second
 press), **Co-op Window (F3)**; on the right the partner, the ping and the connection. F3 stays a keyboard shortcut.
 
-### The lobby without `--new-menu`
+### The lobby with Legacy Menu
 
 Choose **MULTIPLAYER** in the title menu (the row above EXIT; keyboard, gamepad or mouse). The lobby is
 drawn in the game's own style; your model turns in a 3D preview on the left. It goes in steps:

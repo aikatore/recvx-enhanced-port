@@ -6,7 +6,10 @@
 #include "settings.h"
 #include <string.h>
 
-int g_new_menu;
+int g_new_menu = 1;
+int g_legacy_menu;
+int g_menu_cli = -1;
+void menu_choice_apply(void) { g_new_menu = g_menu_cli >= 0 ? g_menu_cli : !g_legacy_menu; }
 
 const MenuCat menu_cats[MC_COUNT] = {
     [MC_GAMEPLAY] = { MS_SETTINGS, "GAMEPLAY", -1 },
@@ -58,6 +61,7 @@ const MenuRow menu_rows[] = {
     { MC_GAMEPLAY, "STARTUP AND UNLOCKS", ML_SET, "Skip Intro" },
     { MC_GAMEPLAY, NULL, ML_SET, "Check For Updates", .label = "Check for Game Updates" },
     { MC_GAMEPLAY, NULL, ML_SET, "Battle Game Unlocked", .label = "Unlock Battle Game" },
+    { MC_GAMEPLAY, NULL, ML_SET, "Legacy Menu" },
     { MC_GAMEPLAY, NULL, ML_RETIRED, "Difficulty Select" },   /* D4: Difficulty is a GAME SETUP row (P2); the old menu keeps it */
 
     /* ---------------------------------------------------------------- SETTINGS > CAMERA AND HUD */

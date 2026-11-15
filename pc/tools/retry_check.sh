@@ -17,7 +17,7 @@ rm -rf "$out"; mkdir -p "$out/save"
 printf 'extra_objects = 1\nshow_fps = 0\n' > "$out/save/recvx.ini"
 (cd "$out" && SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy RECVX_SKIP_MOVIES=1 RECVX_UPDATE_CHECK=0 RECVX_SKIP_CINE=30 \
     RECVX_TELEPORT=1:0:3:0:1 RECVX_PLAYER=1 RECVX_RETRY=300 RECVX_HP=380:1 RECVX_SPAWN=400:1@3,410:1@3 RECVX_INPUT="$input" \
-    RECVX_EXIT_FRAME=2600 timeout -s KILL 300 "$bin" "$iso" --skip-intro --size 320x240 --save-dir save > log.txt 2>&1)
+    RECVX_EXIT_FRAME=2600 timeout -s KILL 300 "$bin" "$iso" --skip-intro --legacy-menu --size 320x240 --save-dir save > log.txt 2>&1)
 l=$out/log.txt; fail=0
 check() { if eval "$2"; then echo "ok:   $1"; else echo "FAIL: $1"; fail=1; fi; }
 check "the extras are in the room" "grep -aq 'extras: item_box in 0/3 case 1' $l"

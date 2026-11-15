@@ -686,7 +686,7 @@ lines of at most 1024 characters): enough for menu texts. Consequences, checked 
   list's right edge, values (between their arrows, which still lower and raise) end at the middle, the bindings'
   first slot sits next to the label (left/right move to the slot on that side), the help lines are right-aligned
   (`pc_ui_text_wrap_r`), the page counter is on the left and the page keys on the right; Latin values read left to
-  right where they stand. The new menu (`--new-menu`, [MENUS.md](MENUS.md)) is mirrored the same way: SETTINGS, GAME
+  right where they stand. The new menu ([MENUS.md](MENUS.md)) is mirrored the same way: SETTINGS, GAME
   SETUP, PAUSE, IMPORT (`import_menu.c nx`), MULTIPLAYER, JOIN GAME and the lobby (`lobby_glue.c rx`: the rows and the
   lobby's room code and GAME SETUP box in their place right of the models, which stay; help and STATUS about the
   middle), the button bars (`ui_hint`) from the right. The dialogs (`pc_ui_dialog*`) stay centred, their lines wrapped

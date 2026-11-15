@@ -56,7 +56,7 @@ int  pc_biorand_menu(void);             /* biorand_menu.c: the BIORAND screen, o
 void pc_biorand_menu_close(void);
 void pc_biorand_flow_open(int what, int d);   /* ... its dialogs alone: 3 a co-op guest generates the host's seed (the new lobby) */
 int  pc_biorand_flow(void);
-void pc_game_setup_open(int biorand);   /* setup_glue.c: GAME SETUP (--new-menu), NEW GAME's and EXTRA > BIORAND's */
+void pc_game_setup_open(int biorand);   /* setup_glue.c: GAME SETUP, NEW GAME's and EXTRA > BIORAND's */
 int  pc_game_setup(void);               /* ... once per frame: 1 back to the title menu, 2 START GAME's new game */
 void pc_game_setup_close(void);
 int  pc_import_menu(void);              /* import_menu.c: the IMPORT screen, once per frame; 1 back to the title menu */
@@ -288,7 +288,7 @@ static struct {
 static float ex_row_y(int i) { return 304.0f + 32.0f * i; }   /* DisplayNewGamePlate's rows; EXTRA at 272 as MODE SELECT */
 
 static int br_screen;                   /* mode 30 is the BioRand screen (biorand_menu.c), not the lobby */
-static int gs_screen;                   /* ... GAME SETUP (setup_glue.c, --new-menu): NEW GAME, EXTRA > BIORAND */
+static int gs_screen;                   /* ... GAME SETUP (setup_glue.c, the new menu): NEW GAME, EXTRA > BIORAND */
 static int im_screen;                   /* ... the IMPORT screen (import_menu.c) */
 static int up_screen;                   /* ... the update dialog (update_menu.c) */
 static int qt_screen;                   /* ... EXIT's question (quit_menu) */
@@ -453,6 +453,7 @@ void pc_title_mouse(int level, int flag)
 {
     ADV_WORK* ap = &AdvWork;
     int hit = -1, i, n = ap->CursorMax[level];
+    if (level == 0) menu_choice_apply();   /* Legacy Menu switched (menu_layout.h): here, with no menu of ours or OPTION open */
     menu_mouse_take(&mt);
     if (level == 0 && coop_biorand_offer(NULL)) {   /* a co-op guest (F3, --coop-join): the host's BioRand seed, offered on the
                                                        BIORAND screen as from its row (the lobby opens it itself: pc_lobby);
@@ -481,7 +482,7 @@ void pc_title_mouse(int level, int flag)
     if (mt.left && hit >= 0) Pad[ap->PortId].press |= BTN_START;
     else if (mt.right) Pad[ap->PortId].press |= AdvGetCancelButton();
     if (level == 0 && g_new_menu && ap->ModeCommandId[(int)ap->Cursor[0]] == 1 && (Pad[ap->PortId].press & (BTN_START | AdvGetOkButton()))) {
-        Pad[ap->PortId].press &= ~(BTN_START | AdvGetOkButton());   /* NEW GAME (--new-menu): GAME SETUP (setup_glue.c), not the difficulty menu */
+        Pad[ap->PortId].press &= ~(BTN_START | AdvGetOkButton());   /* NEW GAME: GAME SETUP (setup_glue.c), not the difficulty menu */
         pc_game_setup_open(0);
         to_screen(&gs_screen);
         CallSystemSe(0, 3);
@@ -1940,7 +1941,7 @@ static void draw_previews(void)
     else if (!g_coop.peer_lobby) text_c(222, 372, "(in the title menu)", 0.45f, 0xFFA0A0A0);
 }
 
-static void nm_open(void);   /* the new MULTIPLAYER screens (--new-menu, below) */
+static void nm_open(void);   /* the new MULTIPLAYER screens (below) */
 static void nm_shut(void);
 static void lobby_open(void)
 {
@@ -2098,7 +2099,7 @@ static void mp_frame(void)
     AdvEasySetTextureList(0);
 }
 
-/* ---------------------------------------------------------------- the new MULTIPLAYER screens (--new-menu)
+/* ---------------------------------------------------------------- the new MULTIPLAYER screens
    docs/MENUS.md "MULTIPLAYER" and docs/COOP.md "Lobby", the proposal's §2.3: MULTIPLAYER (HOST GAME, JOIN GAME, Co-op
    Settings, BACK); HOST GAME opens the lobby at once (the session is hosted, its room code shown); JOIN is one page (Room
    Code or Address, Password, Player Name, Connection, Your Character, Starting Items, Follow Host, JOIN); the LOBBY: the
@@ -2599,7 +2600,7 @@ static void nm_shut(void)
     setup_lobby_type(0);   /* (NEW GAME's Game Type starts Standard) */
 }
 
-/* the lobby's frame under --new-menu: 0 stay, 1 back to the title menu, 2 a new game, 3 the chosen save */
+/* the lobby's frame: 0 stay, 1 back to the title menu, 2 a new game, 3 the chosen save */
 static int nm_frame(void)
 {
     int list[16], n, r = 0;

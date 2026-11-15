@@ -1,7 +1,7 @@
-/* The new menu in the game's OPTION task (--new-menu; docs/MENUS.md): at the title OPTION opens SETTINGS (level 4, the
+/* The new menu in the game's OPTION task (docs/MENUS.md): at the title OPTION opens SETTINGS (level 4, the
  * row screen ui_rows.c), in a game it opens the PAUSE menu in level 0's place. Called from adv.c (Adv_GameOptionScreen,
  * DisplayOptionPlateLevel0, DisplayOptionBg, the sub-screens' way back) and options_glue.c (level 4, closing).
- * Without --new-menu none of this runs: pc_new_menu_on() is 0 and the old OPTION screen is unchanged.
+ * With Legacy Menu (or --legacy-menu) none of this runs: pc_new_menu_on() is 0 and the old OPTION screen is unchanged.
  *
  * PAUSE: RESUME, Camera (Fixed / Over Shoulder, the F5 setting), SETTINGS, GAME SETUP (this game's rules: the same row
  * screen), CO-OP (in a session: the F3 window), SPOILER LOG (the F8 screen, a BioRand game outside co-op), CHEATS AND
@@ -107,7 +107,7 @@ static void title_plate(void)
     FlushPlate();
 }
 
-/* level 4 under --new-menu (options_glue.c pc_options_pc): the row screen; returns the next level */
+/* level 4 (options_glue.c pc_options_pc): the row screen; returns the next level */
 int pc_new_menu_level4(int port, int flag)
 {
     int r;
@@ -439,7 +439,7 @@ static void pause_draw(void)
     AdvEasySetTextureList(0);   /* the option screen's textures again (the font set its own) */
 }
 
-/* DisplayOptionPlateLevel0 in a game under --new-menu: the pause menu; returns the next level (0 stay) */
+/* DisplayOptionPlateLevel0 in a game: the pause menu; returns the next level (0 stay) */
 int pc_pause(int port, int flag)
 {
     int next = 0;
