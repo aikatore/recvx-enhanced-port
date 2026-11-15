@@ -828,11 +828,11 @@ static float ic_face(int code, float x, float y, int draw)   /* A B X Y, cross c
         }
         return 15;
     }
-    if (style == BPS_SWITCH) { ring(cx, cy, 7.5f, C_BODY); l[0] = sw[pos]; ic_text(cx, y + 1, l, 0.42f, 0xFFFFFFFF); return 15; }
+    if (style == BPS_SWITCH) { ring(cx, cy, 7.5f, C_BODY); l[0] = sw[pos]; ic_text(cx - 0.4f, y + 2.5f, l, 0.42f, 0xFFFFFFFF); return 15; }
     disc(cx, cy, 7.5f, 0xFF161616u, Z_IC);
     disc(cx, cy, 6.7f, xc[pos], Z_IC + Z_ICD);
     l[0] = xb[pos];
-    ic_text(cx, y + 1, l, 0.42f, pos == 3 ? 0xFF202020u : 0xFFFFFFFFu);
+    ic_text(cx - 0.4f, y + 2.5f, l, 0.42f, 0xFFFFFFFFu);   /* (centred on the disc; white on all four, as on the pad) */
     return 15;
 }
 
