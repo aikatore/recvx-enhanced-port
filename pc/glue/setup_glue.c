@@ -676,7 +676,7 @@ static void who_is_who(float x, float y, float w)
         snprintf(t, sizeof(t), tr("Others: %s%s"), tr(st[story_now()]), story_now() ? tr(o->cast_assign ? ", new each scene" : ", whole game") : "");
         line_at(x, y + 11 * row++, w, t, 0.4f, C_HELP);
     }
-    snprintf(t, sizeof(t), tr("Monsters: %s; voices %s"), tr(mt[mon]), tr(o->voices ? "follow the look" : "original"));
+    snprintf(t, sizeof(t), tr("Monsters: %s; voices %s"), tr(mt[mon]), tr(o->voices ? "match the used character" : "original"));
     line_at(x, y + 11 * row++, w, t, 0.4f, C_HELP);
 }
 

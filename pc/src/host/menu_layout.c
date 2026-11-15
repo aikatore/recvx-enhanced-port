@@ -197,7 +197,7 @@ const MenuRow menu_rows[] = {
       .help = "The co-op lobby's: a new game, or one of your saves (you both go on from there; its BioRand state counts)." },
     { MC_OVERVIEW, NULL, ML_VAR, NULL, SV_PRESET, "Preset", N("Original", "Remix", "Chaos", "Custom"),
       .help = "Original: no modifiers. Remix: rearranged and extra enemies, more item boxes and herbs. Chaos: wild and event enemies, "
-              "any model in cutscenes, voices follow the look. Custom: your own." },
+              "any model in cutscenes, voices match the used character. Custom: your own." },
     { MC_OVERVIEW, NULL, ML_SHORTCUT, "Character Model", MC_CHARACTERS, "Your Character",
       .help = "Your look, and who looks like whom in cutscenes. Shortcut: GAME SETUP > CHARACTERS." },
     { MC_OVERVIEW, "ACTIVE MODIFIERS", ML_INFO, NULL, SI_MODIFIERS },
