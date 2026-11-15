@@ -256,7 +256,7 @@ const MenuRow menu_rows[] = {
       .help = "Monsters only cutscenes show, e.g. the Tyrant on the plane. Like Story Characters takes their choice. Monsters you "
               "fight are ENEMIES'." },
     { MC_CHARACTERS, NULL, ML_MERGED, "Enemy Models" },
-    { MC_CHARACTERS, "VOICES", ML_SET, "Randomize Voice Lines", .label = "Voices Follow the Look",
+    { MC_CHARACTERS, "VOICES", ML_SET, "Randomize Voice Lines", .label = "Voices Match Used Character",
       .help = "Anyone who looks like another character speaks with their lines, e.g. Steve as Wesker says Wesker's; as a monster, he "
               "makes its sounds. Works with every look on this page." },
     { MC_CHARACTERS, NULL, ML_SET, "Talking Mouths", .label = "Extra Mouth Movement", .flags = MLF_ALWAYS,

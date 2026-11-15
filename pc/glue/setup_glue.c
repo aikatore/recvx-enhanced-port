@@ -307,7 +307,7 @@ const char* setup_row_lock(const MenuRow* m)
         if (c == SC_INGAME) return "Only before the game starts.";
         if (gs.type || biorand_next()) return "No effect with BioRand.";
     }
-    if (m->ref && !strcmp(m->ref, "Talking Mouths") && !eo()->voices) return "Turn on Voices Follow the Look first.";
+    if (m->ref && !strcmp(m->ref, "Talking Mouths") && !eo()->voices) return "Turn on Voices Match Used Character first.";
     if (m->ref && !eo()->rand && (!strcmp(m->ref, "Enemy Selection") || !strcmp(m->ref, "Types per Room") || !strcmp(m->ref, "Randomize Event Enemies")))
         return "Turn on Enemy Randomizer first.";
     if (m->kind == ML_VAR && (m->arg == SV_STORY || m->arg == SV_MONSTERS)) return settings_locked(row(m->arg == SV_STORY ? "Randomize Cutscene Cast" : "Enemy Models"));
@@ -583,7 +583,7 @@ static int modifiers(char out[MOD_MAX][128], int brief)
         }
         if (t[0]) { if (brief) ADD("%s", tr("Looks")); else ADD("%s: %s", tr("Looks"), t); }
     }
-    if (o->voices) ADD("%s", tr("Voices Follow the Look"));
+    if (o->voices) ADD("%s", tr("Voices Match Used Character"));
     if (val_of("Extra Item Boxes and Herbs")) ADD("%s", tr("Extra Item Boxes and Herbs"));
     if (val_of("Free Typewriter Saves")) ADD("%s", tr("Save Without Ink Ribbons"));
     {
