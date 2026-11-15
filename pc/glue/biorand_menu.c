@@ -1255,6 +1255,18 @@ void pc_biorand_flow_open(int what, int d)
     biorand_seed_encode(&bm.o, bm.str, sizeof(bm.str));
     look_mods();
     bm.have = biorand_cli_present();
+    if (what == 3) {   /* the new co-op lobby's GENERATE (a guest: the host's seed string; that press was the consent) */
+        const char *dig = "", *hs = coop_biorand_offer(&dig);
+        if (hs) {
+            bm.host = 1;
+            biorand_seed_decode(hs, &bm.o);
+            snprintf(bm.str, sizeof(bm.str), "%s", hs);
+            snprintf(bm.dig, sizeof(bm.dig), "%s", dig);
+            host_log("biorand menu: the co-op lobby generates the host's seed string %s, the CLI is %s\n", bm.str, bm.have ? "there" : "missing");
+            host_next();
+            return;
+        }
+    }
     ask(what == 1 ? A_FLOW : bm.have ? A_CHECK : A_DOWNLOAD);
     host_log("biorand menu: GAME SETUP's %s, the CLI is %s, seed string %s\n", what == 1 ? "START GAME" : "update check", bm.have ? "there" : "missing", bm.str);
 }
@@ -1266,6 +1278,7 @@ int pc_biorand_flow(void)
     int r = 0;
     bm.blink++;
     if (bm.state == BS_WORK) r = work_end();
+    else if (bm.host && !coop_biorand_offer(NULL)) r = 1;   /* (the session ended, or the host's pack is no longer needed) */
     if (!r && bm.state != BS_MENU) r = input();
     if (!r && bm.state == BS_MENU) r = 1;   /* (to_menu: the dialogs are over) */
     if (!r && bm.state == BS_WORK) draw_work();

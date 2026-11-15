@@ -554,8 +554,8 @@ const Setting g_settings[] = {
     { SP_COOP, "Hide IP Addresses", V(g_coop.hide_ip), 0, 1, 1, .flags = SET_F1,
       .help = "Hide addresses on screen. Copying an address and joining still work." },
     { SP_COOP, "Follow Host", V(g_coop.follow), 0, 1, 1, .help = "Follow the host through doors. Off allows separate exploration; story scenes can still reunite you." },
-    { SP_COOP, "Loot Sharing", V(g_coop.loot), 0, 1, 1, loots, .locked = in_session, .help = "Shared divides supplies between you. Individual gives each player a copy. Key items go to both.", .group = "HOST RULES" },
-    { SP_COOP, "Duplicate Weapons and Ribbons", V(g_coop.important), 0, 1, 1, .locked = in_session,
+    { SP_COOP, "Loot Sharing", V(g_coop.loot), 0, 1, 1, loots, .locked = in_session_game, .help = "Shared divides supplies between you. Individual gives each player a copy. Key items go to both.", .group = "HOST RULES" },
+    { SP_COOP, "Duplicate Weapons and Ribbons", V(g_coop.important), 0, 1, 1, .locked = in_session_game,
       .help = "With Shared loot, give each player their own weapons and ink ribbons." },
     { SP_COOP, "Skip Cutscenes Together", V(g_coop.skip_sync), 0, 1, 1,
       .help = "Skip shared cutscenes only after both players choose to skip. The host decides." },
@@ -643,9 +643,11 @@ void settings_step(const Setting* s, int dir)
 
 void settings_act(const Setting* s) { if (s->apply) s->apply(); }
 
-const char* settings_value(const Setting* s, char* b, int n)
+const char* settings_value(const Setting* s, char* b, int n) { return settings_value_of(s, settings_get(s), b, n); }
+const char* settings_value_of(const Setting* s, int v, char* b, int n)
 {
-    int v = settings_get(s);
+    if (s->names && v < s->lo) v = s->lo;   /* (a value from elsewhere: within the names) */
+    if (s->names && v > settings_hi(s)) v = settings_hi(s);
     if (s->flags & SET_ACTION) b[0] = 0;
     else if (s->name) s->name(v, b, n);
     else if (s->names) snprintf(b, n, "%s", tr(s->names[v - s->lo]));

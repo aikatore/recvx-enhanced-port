@@ -42,6 +42,8 @@
 #include "../src/net/coop_proto.h"   /* REC_*: what the host keeps for us */
 #include "../src/net/update.h"
 #include "../src/host/lang.h"
+#include "../src/host/bindings.h"
+#include "../src/host/textgrid.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,6 +54,8 @@ void coop_own_from_save(const void* save);
 void bhReturnTitle(void);
 int  pc_biorand_menu(void);             /* biorand_menu.c: the BIORAND screen, once per frame; 1 back to the title menu */
 void pc_biorand_menu_close(void);
+void pc_biorand_flow_open(int what, int d);   /* ... its dialogs alone: 3 a co-op guest generates the host's seed (the new lobby) */
+int  pc_biorand_flow(void);
 void pc_game_setup_open(int biorand);   /* setup_glue.c: GAME SETUP (--new-menu), NEW GAME's and EXTRA > BIORAND's */
 int  pc_game_setup(void);               /* ... once per frame: 1 back to the title menu, 2 START GAME's new game */
 void pc_game_setup_close(void);
@@ -448,8 +452,10 @@ void pc_title_mouse(int level, int flag)
     int hit = -1, i, n = ap->CursorMax[level];
     menu_mouse_take(&mt);
     if (level == 0 && coop_biorand_offer(NULL)) {   /* a co-op guest (F3, --coop-join): the host's BioRand seed, offered on the
-                                                       BIORAND screen as from its row (the lobby opens it itself: pc_lobby) */
-        to_screen(&br_screen);
+                                                       BIORAND screen as from its row (the lobby opens it itself: pc_lobby);
+                                                       the new menu: the lobby, which offers it (GENERATE) */
+        static int lobby_screen;   /* (mode 30 with no screen of ours set: the lobby) */
+        to_screen(g_new_menu ? &lobby_screen : &br_screen);
         return;
     }
     if (level == 0 && !ex.on && g_coop.state == COOP_OFF && pc_update_menu_offer()) {   /* a newer release to install (net/update.h) */
@@ -1264,6 +1270,27 @@ static void pick_open(int c);   /* the model page (below) */
 static void custom_open(int list);
 static void rates_open(void);
 
+/* START from the chosen save (g_coop.start >= 3): 3 load it, 0 not now (lb.msg says why) */
+static int go_save(void)
+{
+    static int asked = -1;   /* the save BioRand's question was shown for: START again loads it */
+    if (!lobby_read_save(g_coop.start - 3, save_buf)) { say("Cannot read that save. Choose another."); CallSystemSe(0, 1); scan_saves(); return 0; }
+    if (pc_biorand_save_differs(save_buf)) {   /* (biorand_glue.c, as the load screen asks) */
+        if (asked != g_coop.start) {
+            char m[96];
+            asked = g_coop.start;
+            snprintf(m, sizeof(m), tr("%s %s START again to load."), pc_biorand_ask(0), pc_biorand_ask(1));
+            say(m);
+            CallSystemSe(0, 1);
+            return 0;
+        }
+        pc_biorand_save_accept(save_buf);
+    }
+    asked = -1;
+    host_log("lobby: starting from save file %d\n", g_coop.start - 2);
+    return 3;
+}
+
 /* 0 stay, 1 back to the menu, 2 new game, 3 the chosen save */
 static int activate(int r)
 {
@@ -1321,24 +1348,7 @@ static int activate(int r)
         CallSystemSe(0, 3);
         return 0;
     case R_GO:
-        if (g_coop.start >= 3) {
-            static int asked = -1;   /* the save BioRand's question was shown for: START again loads it */
-            if (!lobby_read_save(g_coop.start - 3, save_buf)) { say("Cannot read that save. Choose another."); CallSystemSe(0, 1); scan_saves(); return 0; }
-            if (pc_biorand_save_differs(save_buf)) {   /* (biorand_glue.c, as the load screen asks) */
-                if (asked != g_coop.start) {
-                    char m[96];
-                    asked = g_coop.start;
-                    snprintf(m, sizeof(m), tr("%s %s START again to load."), pc_biorand_ask(0), pc_biorand_ask(1));
-                    say(m);
-                    CallSystemSe(0, 1);
-                    return 0;
-                }
-                pc_biorand_save_accept(save_buf);
-            }
-            asked = -1;
-            host_log("lobby: starting from save file %d\n", g_coop.start - 2);
-            return 3;
-        }
+        if (g_coop.start >= 3) return go_save();
         sys->gm_mode = g_coop.start;
         biorand_game(biorand_setting());   /* the rule BIORAND (a pack is checked by biorand_active) */
         host_log("lobby: starting a new game (mode %d)\n", g_coop.start);
@@ -1863,6 +1873,7 @@ static void draw_previews(void)
     int chr;
     if (g_appear_per && (lb.step == 6 || lb.row == R_CHAR || lb.row == R_CHAR2)) played = lb.step == 6 ? lb.pick_c : lb.row == R_CHAR2;   /* Claire's or Chris's being chosen: as that one */
     chr = lb.step == 6 && lb.pick < appear_count() ? appear_at(lb.pick) : appear_choice(g_coop.chr, played);
+    if (lb.step != 6 && !mp_set && joining() && pc_biorand_appear(played) >= 0) chr = pc_biorand_appear(played);   /* a guest's random look (D19): the host's seed + its slot */
     if (chr != lb.want_chr || played != lb.want_ply) { lb.want_chr = chr; lb.want_ply = played; lb.chr_stable = 0; }
     if (++lb.chr_stable >= 8 || pv[0].chr < 0) pv_set(0, appear_played(lb.want_chr, lb.want_ply), lb.want_ply);   /* ("As played (cutscene)": that character's cutscene model) */
     pv_set(1, partner && g_coop.peer_lchr >= 0 && g_coop.peer_lchr <= COOP_CHR_MAX ? g_coop.peer_lchr : -1, 0);
@@ -1896,6 +1907,8 @@ static void draw_previews(void)
     else if (!g_coop.peer_lobby) text_c(222, 372, "(in the title menu)", 0.45f, 0xFFA0A0A0);
 }
 
+static void nm_open(void);   /* the new MULTIPLAYER screens (--new-menu, below) */
+static void nm_shut(void);
 static void lobby_open(void)
 {
     memset(&lb, 0, sizeof(lb));
@@ -1912,6 +1925,7 @@ static void lobby_open(void)
     if (!start_valid(g_coop.start)) g_coop.start = 0;
     if (!items_valid(g_coop.items)) g_coop.items = COOP_ITEMS_HOST;
     g_coop.lobby = 1;
+    if (g_new_menu) nm_open();
     host_log("lobby: open\n");
 }
 
@@ -1928,6 +1942,7 @@ static void lobby_close(int keep)
         host_log("lobby: left, the session closes\n");
     }
     if (lb.edit) edit_end(0);
+    if (g_new_menu) nm_shut();
     for (k = 0; k < 2; k++) pv_release(&pv[k], k);
     font_release();
     lb.open = 0;
@@ -1984,12 +1999,13 @@ static void mp_frame(void)
     rect(0, 0, 640, 480, 0xB0000000, Z_DIM);
     rect(304, 64, 640, 384, 0x70000000, Z_DIM + 0.0005f);
     if (gs_screen) pc_title_word_newgame(320.0f, 6.0f, 0xFFFFFFFF, 192);   /* (GAME SETUP's look rows) */
+    else if (g_new_menu && !br_screen) mp_word(320.0f, 6.0f, 0xFFFFFFFF, 192, 1.0f);   /* (the new lobby's) */
     else plate_word(W_BR, 320.0f, 16.0f, 0xFFFFFFFF, 192, 1.0f);
     draw_previews();
     draw_models();
     rect(0, 384, 640, 480, 0x60000000, Z_FRONT);
-    text_wrap(24, 390, gs_screen ? 400 : 584, row_help(lb.row), 0.5f, 0xFFA0D0FF, 3);
-    if (gs_screen && lb.pick < appear_count()) {   /* GAME SETUP's look picker: the voice and the animations the look gets */
+    text_wrap(24, 390, gs_screen || g_new_menu ? 400 : 584, row_help(lb.row), 0.5f, 0xFFA0D0FF, 3);
+    if ((gs_screen || g_new_menu) && lb.pick < appear_count()) {   /* GAME SETUP's look picker: the voice and the animations the look gets */
         static const char* const who[4] = { "Claire", "Chris", "Steve", "Wesker" };
         int chr = appear_at(lb.pick), v = appear_voice(chr), a;
         char t[96];
@@ -2005,12 +2021,586 @@ static void mp_frame(void)
     AdvEasySetTextureList(0);
 }
 
+/* ---------------------------------------------------------------- the new MULTIPLAYER screens (--new-menu)
+   docs/MENUS.md "MULTIPLAYER" and docs/COOP.md "Lobby", the proposal's §2.3: MULTIPLAYER (HOST GAME, JOIN GAME, Co-op
+   Settings, BACK); HOST GAME opens the lobby at once (the session is hosted, its room code shown); JOIN is one page (Room
+   Code or Address, Password, Player Name, Connection, Your Character, Starting Items, Follow Host, JOIN); the LOBBY: the
+   host's START GAME, Edit Game Setup, Start From, Room Password, Your Character, COPY, REMOVE PARTNER, CLOSE LOBBY; the
+   guest's READY, Game Setup (read-only), Your Character, Starting Items, the host's BioRand game, LEAVE. GAME SETUP and
+   the co-op settings are ui_rows.c's screen hosted here while the lobby stays open (lb.open and g_coop.lobby stay, no
+   COOP_REQ_STOP: the session never drops); text fields use the character grid (text_grid.c). Requests, the session and
+   the wire are the old lobby's (protocol unchanged); READY is the guest's note (MP_READY). */
+enum { NP_MENU, NP_JOIN, NP_LOBBY };
+enum { NS_NONE, NS_SETTINGS, NS_SETUP, NS_TEXT, NS_FLOW, NS_GEN, NS_ASK };   /* what is over the page */
+enum { NR_HOST, NR_JOINPG, NR_COOPSET, NR_BACK,
+       NR_CODE, NR_PW, NR_NAME, NR_CONN, NR_CHAR, NR_ITEMS, NR_FOLLOW, NR_JOIN,
+       NR_START, NR_SETUP, NR_FROM, NR_ROOMPW, NR_COPY, NR_SHOWADDR, NR_KICK, NR_CLOSE,
+       NR_READY, NR_GSETUP, NR_GEN, NR_LEAVE };
+static struct {
+    int page, sub, text;                /* NP_*; NS_*; the row typed on the grid */
+    int sel[3];                         /* per page: the row chosen (NR_*) */
+    int off;                            /* frames the lobby has been without a session: it ended, back to the page before */
+    int ready, asked, show_addr, ask_yes, offered;
+    int esc, esc_edge;                  /* Esc held (SDL scancode 41), pressed this frame (tracked under the screens over the page too) */
+} nm;
+int pc_newgame_difficulty(int set);     /* host.c */
+
+static int srv_room(void) { return g_coop.conn != COOP_CONN_DIRECT && g_coop.server[0]; }   /* hosting makes a room on the co-op server */
+static int partner_in(void) { return g_coop.state == COOP_CONNECTED || g_coop.state == COOP_LOST; }
+
+/* Start From (GAME SETUP > OVERVIEW in the lobby, setup_glue.c; the old lobby's START): New Game (the Difficulty), then the saves */
+int pc_lobby_start_step(int dir)
+{
+    int d = pc_newgame_difficulty(-1);
+    if (!n_saves) { CallSystemSe(0, 1); return g_coop.start; }
+    g_coop.start = step_choice(g_coop.start < 3 ? d : g_coop.start, dir, d, 1, 3);
+    lobby_settings_changed();
+    return g_coop.start;
+}
+const char* pc_lobby_start_label(int v, char* buf, int n) { start_label(buf, n, v); return buf; }
+
+static int nm_rows(int* r)
+{
+    int n = 0;
+    switch (nm.page) {
+    case NP_MENU: r[n++] = NR_HOST; r[n++] = NR_JOINPG; r[n++] = NR_COOPSET; r[n++] = NR_BACK; break;
+    case NP_JOIN:
+        r[n++] = NR_CODE; r[n++] = NR_PW; r[n++] = NR_NAME; r[n++] = NR_CONN; r[n++] = NR_CHAR; r[n++] = NR_ITEMS; r[n++] = NR_FOLLOW; r[n++] = NR_JOIN;
+        break;
+    default:
+        if (lb.role == 0) {
+            r[n++] = NR_START; r[n++] = NR_SETUP; r[n++] = NR_FROM;
+            if (srv_room()) r[n++] = NR_ROOMPW;
+            r[n++] = NR_CHAR; r[n++] = NR_COPY;
+            if (g_coop.hide_ip && !srv_room()) r[n++] = NR_SHOWADDR;
+            if (partner_in()) r[n++] = NR_KICK;
+            r[n++] = NR_CLOSE;
+        } else {
+            r[n++] = NR_READY; r[n++] = NR_GSETUP; r[n++] = NR_CHAR; r[n++] = NR_ITEMS;
+            if (coop_biorand_offer(NULL)) r[n++] = NR_GEN;
+            r[n++] = NR_LEAVE;
+        }
+    }
+    return n;
+}
+
+static int nm_value_row(int r) { return r == NR_FROM || r == NR_ITEMS || r == NR_FOLLOW || r == NR_READY || r == NR_SHOWADDR; }   /* left / right change it */
+static int nm_opens(int r) { return r == NR_JOINPG || r == NR_COOPSET || r == NR_CONN || r == NR_CHAR || r == NR_SETUP || r == NR_GSETUP; }
+
+static const char* nm_label(int r)
+{
+    static const char* const l[] = { "HOST GAME", "JOIN GAME", "Co-op Settings", "BACK",
+                                     "Room Code or Address", "Password", "Player Name", "Connection", "Your Character", "Starting Items", "Follow Host", "JOIN",
+                                     "START GAME", "Edit Game Setup", "Start From", "Room Password", "", "Show Addresses", "REMOVE PARTNER", "CLOSE LOBBY",
+                                     "READY", "Game Setup", "GENERATE THE HOST'S BIORAND GAME", "LEAVE" };
+    if (r == NR_COPY) return srv_room() ? "COPY ROOM CODE" : "COPY JOIN ADDRESS";
+    return l[r];
+}
+
+static const MenuRow* your_character(void)   /* GAME SETUP's shortcut row (its value: the look) */
+{
+    for (int i = 0; i < menu_rows_n; i++) if (menu_rows[i].kind == ML_SHORTCUT && menu_rows[i].cat == MC_OVERVIEW) return &menu_rows[i];
+    return NULL;
+}
+
+static const char* nm_value(int r, char* buf, int n)
+{
+    static const char* const conn[] = { "Automatic", "Direct (IP Address)", "Always Relay" };
+    int k;
+    buf[0] = 0;
+    switch (r) {
+    case NR_CODE:
+        snprintf(buf, n, "%.*s", n - 1, g_coop.join[0] ? coop_shown(g_coop.join) : "-");
+        for (char* p = buf; *p; p++) if (*p == '#') *p = ' ';   /* (the font's '#' is a picture) */
+        break;
+    case NR_PW: case NR_ROOMPW:
+        k = (int)strlen(g_coop.password);
+        if (!k) snprintf(buf, n, "%s", tr("None"));
+        else { memset(buf, '*', (size_t)(k < n - 1 ? k : n - 1)); buf[k < n - 1 ? k : n - 1] = 0; }
+        break;
+    case NR_NAME: snprintf(buf, n, "%s", g_coop.name); break;
+    case NR_CONN: snprintf(buf, n, "%s", tr(conn[(unsigned)g_coop.conn < 3 ? g_coop.conn : 0])); break;
+    case NR_CHAR: if (your_character()) ui_rows_value(your_character(), buf, n); break;
+    case NR_ITEMS: items_label(buf, n, g_coop.items); break;
+    case NR_FOLLOW: case NR_SHOWADDR: snprintf(buf, n, "%s", tr((r == NR_FOLLOW ? g_coop.follow : nm.show_addr) ? "On" : "Off")); break;
+    case NR_SETUP: case NR_GSETUP: { char lines[1][128]; setup_lobby_lines(lines, 0, r == NR_GSETUP, buf, n); break; }
+    case NR_FROM: snprintf(buf, n, "%s", g_coop.start >= 3 ? "" : tr("New Game")); if (g_coop.start >= 3) save_label(buf, n, g_coop.start - 3); break;
+    case NR_READY: snprintf(buf, n, "%s", tr(nm.ready ? "Yes" : "No")); break;
+    }
+    return buf;
+}
+
+static const char* nm_help(int r)
+{
+    switch (r) {
+    case NR_HOST: return "Open a lobby at once: your partner joins with the room code shown there while you set up the game.";
+    case NR_JOINPG: return "Join your partner's lobby with a room code or an address.";
+    case NR_COOPSET: return "Player name, name tag, connection, co-op server and hosting options. Shortcut: OPTION > SETTINGS > CO-OP.";
+    case NR_BACK: return "Back to the title screen.";
+    case NR_CODE: return "The host's room code (case and dash do not matter), or its copied join address (with a dot or colon: direct).";
+    case NR_PW: return "The host's room password, or none. Not saved.";
+    case NR_NAME: return "Your name, as your partner sees it.";
+    case NR_CONN: return "How to connect: Automatic, Direct (IP Address) or Always Relay; the co-op server. Shortcut: SETTINGS > CO-OP.";
+    case NR_CHAR: return "Your look; your partner sees it. Shortcut: GAME SETUP > CHARACTERS.";
+    case NR_ITEMS: return "Join with the items saved by the host, a new inventory, or the items of one of your saves.";
+    case NR_FOLLOW: return eset(&g_coop.follow)->help;
+    case NR_JOIN: return "Join the host's lobby. The host starts the game.";
+    case NR_START: return mp_note_ready(g_coop.peer_note) ? "Both players are ready. Start the game with this setup."
+                        : partner_in() ? "Start the game with this setup. Your partner has not said READY yet." : "Start the game with this setup; your partner can join later.";
+    case NR_SETUP: return "What this game is: difficulty, BioRand, rules, enemies, characters and co-op rules. The lobby stays open.";
+    case NR_FROM: return "A new game, or one of your saves: you both go on from there.";
+    case NR_ROOMPW: return "A password your partner types to join through the server. Changing it opens the room again (a new room code).";
+    case NR_COPY: return srv_room() ? "Copy the room code for your partner." : "Copy the join address for your partner: your public address if known, else the local one.";
+    case NR_SHOWADDR: return "Hide IP Addresses is on: show the join address here until you leave the lobby.";
+    case NR_KICK: return "Remove your partner and reopen their place. They can rejoin with the same code.";
+    case NR_CLOSE: return "Close the lobby. A partner in it leaves too.";
+    case NR_READY: return "Tell the host you are ready to start.";
+    case NR_GSETUP: return "The host's game setup, read-only. Your look (YOU) stays yours.";
+    case NR_GEN: return "The host plays a BioRand game you do not have: generate it (it replaces your installed BioRand game), then you join.";
+    case NR_LEAVE: return "Leave the host's lobby.";
+    }
+    return "";
+}
+
+static const char* nm_lock(int r)
+{
+    if (r == NR_ROOMPW && partner_in()) return "Not while a partner is in the lobby.";
+    if (r == NR_COPY && srv_room() && !g_coop.room[0]) return "Waiting for the room code.";
+    if ((r == NR_READY || r == NR_GSETUP) && g_coop.state != COOP_CONNECTED) return "Once you are in the host's lobby.";
+    return NULL;
+}
+
+static void nm_page(int p)
+{
+    int list[16];
+    nm.page = p;
+    nm.sub = NS_NONE;
+    nm.off = nm.asked = 0;
+    if (p != NP_LOBBY) nm.ready = nm.show_addr = 0;
+    nm_rows(list);
+    nm.sel[p] = list[0];
+    host_log("lobby: %s\n", p == NP_MENU ? "MULTIPLAYER" : p == NP_JOIN ? "JOIN" : lb.role ? "the lobby (guest)" : "the lobby (host)");
+}
+
+static void nm_text_open(int r)
+{
+    nm.text = r;
+    nm.sub = NS_TEXT;
+    switch (r) {
+    case NR_CODE: tg_open("Room Code or Address", "", 79, TGK_JOIN, g_coop.hide_ip); break;   /* (empty: left empty or cancelled, the old one stays) */
+    case NR_PW: case NR_ROOMPW: tg_open(r == NR_PW ? "Password" : "Room Password", g_coop.password, 40, TGK_PW, 1); break;
+    default: tg_open("Player Name", g_coop.name, COOP_NAME_MAX - 1, TGK_NAME, 0); break;
+    }
+}
+
+static void nm_text_take(void)
+{
+    const char* t = tg_text();
+    switch (nm.text) {
+    case NR_CODE: if (t[0]) snprintf(g_coop.join, sizeof(g_coop.join), "%s", t); break;   /* (left empty: the old one stays) */
+    case NR_PW: snprintf(g_coop.password, sizeof(g_coop.password), "%.63s", t); break;
+    case NR_ROOMPW:
+        if (strcmp(t, g_coop.password)) {
+            snprintf(g_coop.password, sizeof(g_coop.password), "%.63s", t);
+            if (hosting()) { g_coop.request = COOP_REQ_HOST; say("The room opens again with the new password: a new room code."); host_log("lobby: room password changed, the room opens again\n"); }
+        }
+        break;
+    default:
+        while (*t == ' ') t++;
+        if (*t) snprintf(g_coop.name, sizeof(g_coop.name), "%.*s", (int)sizeof(g_coop.name) - 1, t);
+    }
+    lobby_settings_changed();
+}
+
+/* the co-op settings (SETTINGS > CO-OP alone) over the page, at row ref (NULL: the first) */
+static void nm_settings(const char* ref)
+{
+    const MenuRow* m = NULL;
+    for (int i = 0; ref && i < menu_rows_n; i++) if (menu_rows[i].cat == MC_COOP && menu_rows[i].ref && !strcmp(menu_rows[i].ref, ref)) m = &menu_rows[i];
+    ui_rows_open(MS_SETTINGS, "MULTIPLAYER");
+    ui_rows_only(MC_COOP);
+    ui_rows_goto(MC_COOP, m);
+    nm.sub = NS_SETTINGS;
+}
+
+static void nm_close_lobby(void)
+{
+    g_coop.request = COOP_REQ_STOP;
+    setup_lobby_type(0);
+    CallSystemSe(0, 0);
+    host_log("lobby: CLOSE LOBBY\n");
+    nm_page(NP_MENU);
+}
+
+/* START GAME: 0 not now, 2 a new game, 3 the chosen save */
+static int nm_start(void)
+{
+    int r;
+    if (g_coop.state == COOP_CONNECTED && !mp_note_ready(g_coop.peer_note) && !nm.asked) {
+        nm.asked = 1;
+        say("Your partner is not ready yet. START GAME again to start anyway.");
+        CallSystemSe(0, 1);
+        return 0;
+    }
+    nm.asked = 0;
+    if (g_coop.start >= 3) return go_save();
+    r = setup_lobby_start(g_coop.start);
+    if (r == 1) { nm.sub = NS_FLOW; return 0; }
+    CallSystemSe(0, 3);
+    return 2;
+}
+
+static void nm_change(int r, int dir)
+{
+    switch (r) {
+    case NR_FROM: pc_lobby_start_step(dir); break;
+    case NR_ITEMS: g_coop.items = step_choice(g_coop.items, dir, COOP_ITEMS_HOST, 2, 0); break;
+    case NR_FOLLOW: g_coop.follow ^= 1; break;
+    case NR_SHOWADDR: nm.show_addr ^= 1; break;
+    case NR_READY:
+        if (nm_lock(r)) { say(nm_lock(r)); CallSystemSe(0, 1); return; }
+        nm.ready ^= 1;
+        host_log("lobby: %s\n", nm.ready ? "READY" : "not ready");
+        break;
+    default: return;
+    }
+    CallSystemSe(0, 2);
+    lobby_settings_changed();
+}
+
+/* Confirm on row r: 0 stay, 1 back to the title, 2 a new game, 3 the chosen save */
+static int nm_activate(int r)
+{
+    if (nm_lock(r) && r != NR_READY) { say(nm_lock(r)); CallSystemSe(0, 1); return 0; }
+    switch (r) {
+    case NR_HOST:
+        if (g_coop.conn == COOP_CONN_SERVER && !g_coop.server[0]) { say("Always Relay needs a co-op server: set it in Co-op Settings."); CallSystemSe(0, 1); return 0; }
+        setup_lobby_type(biorand_setting() && biorand_pack());   /* (the old lobby rule BIORAND: the Game Type it starts with) */
+        lb.role = 0;
+        g_coop.request = COOP_REQ_HOST;
+        CallSystemSe(0, 3);
+        nm_page(NP_LOBBY);
+        return 0;
+    case NR_JOINPG: CallSystemSe(0, 3); nm_page(NP_JOIN); return 0;
+    case NR_COOPSET: CallSystemSe(0, 3); nm_settings(NULL); return 0;
+    case NR_CONN: CallSystemSe(0, 3); nm_settings("Connection"); return 0;
+    case NR_BACK: CallSystemSe(0, 0); return 1;
+    case NR_CODE: case NR_PW: case NR_ROOMPW: case NR_NAME: nm_text_open(r); return 0;
+    case NR_CHAR: CallSystemSe(0, 3); setup_lobby_open(lb.role || nm.page == NP_JOIN, MC_CHARACTERS, 1); nm.sub = NS_SETUP; return 0;   /* (a guest's view: YOU its own) */
+    case NR_SETUP: case NR_GSETUP: CallSystemSe(0, 3); setup_lobby_open(r == NR_GSETUP, -1, 0); nm.sub = NS_SETUP; return 0;
+    case NR_JOIN:
+        if (!g_coop.join[0]) { say("Enter the host's room code or address first."); CallSystemSe(0, 1); nm.sel[NP_JOIN] = NR_CODE; return 0; }
+        lb.role = 1;
+        hand_items();
+        g_coop.request = COOP_REQ_JOIN;
+        CallSystemSe(0, 3);
+        nm_page(NP_LOBBY);
+        return 0;
+    case NR_START: return nm_start();
+    case NR_COPY:
+        if (srv_room()) snprintf(g_lobby_io.clip, sizeof(g_lobby_io.clip), "%.4s-%.4s", g_coop.room, g_coop.room + 4);
+        else join_address(g_lobby_io.clip, sizeof(g_lobby_io.clip));
+        g_lobby_io.clip_req = 1;
+        say(srv_room() ? "Room code copied." : "Join address copied.");
+        CallSystemSe(0, 3);
+        return 0;
+    case NR_KICK: g_coop.request = COOP_REQ_KICK; say("Partner removed. They can rejoin with the same code."); CallSystemSe(0, 0); return 0;
+    case NR_CLOSE:
+        if (partner_in()) { nm.sub = NS_ASK; nm.ask_yes = 0; CallSystemSe(0, 3); return 0; }
+        nm_close_lobby();
+        return 0;
+    case NR_GEN: CallSystemSe(0, 3); pc_biorand_flow_open(3, 0); nm.sub = NS_GEN; return 0;
+    case NR_LEAVE: g_coop.request = COOP_REQ_STOP; CallSystemSe(0, 0); host_log("lobby: LEAVE\n"); nm_page(NP_JOIN); return 0;
+    default: if (nm_value_row(r)) nm_change(r, 1); return 0;
+    }
+}
+
+/* Cancel: 1 back to the title */
+static int nm_back(void)
+{
+    if (nm.page == NP_MENU) { CallSystemSe(0, 0); return 1; }
+    if (nm.page == NP_JOIN) { CallSystemSe(0, 0); nm_page(NP_MENU); return 0; }
+    return nm_activate(lb.role ? NR_LEAVE : NR_CLOSE);
+}
+
+/* the rows' place: the page's right half (the models stand on the left) */
+#define NX 312.0f
+#define NV 470.0f
+#define NX1 628.0f
+static float nm_y0(void) { return nm.page == NP_LOBBY ? 220.0f : nm.page == NP_JOIN ? 84.0f : 120.0f; }
+static float nm_h(void) { return nm.page == NP_MENU ? 30.0f : 20.0f; }
+static float nm_sc(void) { return nm.page == NP_MENU ? 0.7f : 0.55f; }
+
+static int nm_at(const int* list, int n, float x, float y)
+{
+    if (x < NX - 10 || x > NX1 + 4) return -1;
+    for (int i = 0; i < n; i++) if (y >= nm_y0() + i * nm_h() - 2 && y < nm_y0() + (i + 1) * nm_h() - 2) return i;
+    return -1;
+}
+
+/* the page's input (nothing over it): 0 stay, else what pc_lobby returns */
+static int nm_input(const int* list, int n)
+{
+    ADV_WORK* ap = &AdvWork;
+    unsigned int press = Pad[ap->PortId].press, rept = Pad[ap->PortId].Rept, ok = AdvGetOkButton(), cancel = AdvGetCancelButton();
+    int esc = nm.esc_edge, hit, i;
+    for (i = 0; i < n && list[i] != nm.sel[nm.page]; i++) {}
+    if (i >= n) { i = 0; nm.sel[nm.page] = list[0]; }
+    menu_mouse_take(&mt);
+    ui_device(press, mt.moved || mt.left || mt.right || esc);
+    if (press || rept || mt.left || mt.right || mt.moved || esc) StopAdvScreenSaver(0);
+    hit = nm_at(list, n, mt.x, mt.y);
+    if (hit >= 0 && (mt.moved || mt.left) && hit != i) { i = hit; nm.sel[nm.page] = list[i]; CallSystemSe(0, 2); }
+    if (mt.left && hit >= 0) {
+        if (nm_value_row(list[i]) && mt.x >= NV - 16) { nm_change(list[i], mt.x < NV + 4 ? -1 : 1); return 0; }
+        return nm_activate(list[i]);
+    }
+    if (mt.right || esc || (press & cancel)) return nm_back();
+    if ((press & BTN_START) && nm.page == NP_LOBBY && lb.role == 0) { nm.sel[nm.page] = NR_START; return nm_activate(NR_START); }   /* (the screen's main button) */
+    if (rept & (BTN_UP | BTN_DOWN)) { nm.sel[nm.page] = list[(i + ((rept & BTN_UP) ? n - 1 : 1)) % n]; CallSystemSe(0, 2); }
+    else if ((rept & (BTN_LEFT | BTN_RIGHT)) && nm_value_row(list[i])) nm_change(list[i], (rept & BTN_LEFT) ? -1 : 1);
+    else if (press & (ok | BTN_START)) return nm_activate(list[i]);
+    return 0;
+}
+
+static void nm_background(void)
+{
+    AdvEasySetTextureList(0);
+    AdvDwawOnePictureEx(0, 0xFFFFFFFF);   /* the title picture, darkened */
+    rect(0, 0, 640, 480, 0xB0000000, Z_DIM);
+    mp_word(320.0f, 6.0f, 0xFFFFFFFF, 192, 1.0f);
+}
+
+/* the lobby's top right: the room code (host) or the host (guest), then the GAME SETUP box */
+static void nm_lobby_info(void)
+{
+    char t[160], lines[10][128];
+    const char* ch;
+    float y = 64;
+    int n, i;
+    if (lb.role == 0) {
+        if (srv_room()) {
+            text(NX, y, "ROOM CODE", 0.5f, 0xFFD6B668);
+            if (g_coop.room[0]) snprintf(t, sizeof(t), "%.4s-%.4s", g_coop.room, g_coop.room + 4);
+            else snprintf(t, sizeof(t), "%s", tr("..."));
+            text(NX, y + 15, t, 0.95f, 0xFFFFFFFF);
+            snprintf(t, sizeof(t), tr("via %s"), coop_shown(g_coop.server));
+            text(NX + text_w("XXXX-XXXX", 0.95f) + 14, y + 26, t, 0.42f, 0xFFA0A0A0);
+        } else {
+            char* code;
+            text(NX, y, "JOIN ADDRESS", 0.5f, 0xFFD6B668);
+            join_address(t, sizeof(t));
+            if ((code = strchr(t, '#'))) *code++ = 0;   /* (the font's '#' is a picture: the code on a line of its own, as the old lobby) */
+            text(NX, y + 15, nm.show_addr ? t : coop_shown(t), 0.55f, 0xFFFFFFFF);
+            if (code) { char c[32]; snprintf(c, sizeof(c), tr("CODE %.4s-%.4s"), code, code + 4); text(NX, y + 31, c, 0.45f, 0xFFFFFFFF); }
+            text(NX + 150, y + 32, "COPY JOIN ADDRESS: both", 0.38f, 0xFFA0A0A0);
+        }
+    } else {
+        text(NX, y, "HOST", 0.5f, 0xFFD6B668);
+        text(NX, y + 15, g_coop.state == COOP_CONNECTED && g_coop.peer_name[0] ? g_coop.peer_name : tr("Joining..."), 0.8f, 0xFFFFFFFF);
+    }
+    y = 112;
+    rect(NX - 8, y - 2, NX1 + 2, 214, 0x30FFFFFF, Z_FRONT - 0.001f);
+    text(NX, y, "GAME SETUP", 0.5f, 0xFFD6B668);
+    y += 16;
+    if (lb.role && (ch = setup_host_changed())) {   /* what the host just changed */
+        snprintf(t, sizeof(t), tr("Host changed: %s"), ch);
+        text_wrap(NX, y, NX1 - NX - 4, t, 0.42f, 0xFFFFE080, 1);
+        y += 13;
+    }
+    n = setup_lobby_lines(lines, 10, lb.role, NULL, 0);
+    for (i = 0; i < n && y < 204; i++, y += 13) {
+        float w = text_w(lines[i], 0.42f), sc = w > NX1 - NX - 4 ? 0.42f * (NX1 - NX - 4) / w : 0.42f;
+        text(NX, y, lines[i], sc, i ? 0xFFC8C8C2 : 0xFFFFFFFF);
+    }
+}
+
+static void nm_draw(const int* list, int n)
+{
+    char v[160], g[40];
+    float x, h = nm_h(), sc = nm_sc();
+    int i;
+    nm_background();
+    {   /* the breadcrumb (the font has no '>': an arrow) */
+        x = 20 + text_w("MULTIPLAYER", 0.45f);
+        text(20, 44, "MULTIPLAYER", 0.45f, 0xFFA0A09B);
+        if (nm.page != NP_MENU) { arrow(x + 12, 51, 1, 0xFFA0A09B); text(x + 20, 44, nm.page == NP_JOIN ? "JOIN GAME" : "LOBBY", 0.45f, 0xFFA0A09B); }
+        rect(20, 60, 620, 61, 0x80FFFFFF, Z_FRONT);
+    }
+    draw_previews();
+    if (nm.page == NP_LOBBY) {
+        nm_lobby_info();
+        if (g_coop.state == COOP_CONNECTED && !g_coop.peer_in_game && g_coop.peer_lobby) {   /* under the partner: READY (the guest's note), ping */
+            snprintf(v, sizeof(v), "%s  %d ms", tr(lb.role ? "Host" : mp_note_ready(g_coop.peer_note) ? "Ready" : "Not ready"), g_coop.ping_ms);
+            text_c(222, 370, v, 0.45f, lb.role || mp_note_ready(g_coop.peer_note) ? 0xFF60D060 : 0xFFA0A0A0);
+        }
+    }
+    for (i = 0; i < n; i++) {
+        float y = nm_y0() + i * h;
+        int r = list[i], sel = r == nm.sel[nm.page];
+        const char* lock = nm_lock(r);
+        unsigned int col = lock ? (sel ? 0xFF9A9A9A : 0xFF686868) : sel ? 0xFFFFFFFF : 0xFFA0A09B;
+        float lw, room, ls;
+        if (sel) { rect(NX - 10, y - 2, NX1 + 2, y + h - 3, 0x40FFFFFF, Z_FRONT); rect(NX - 10, y - 2, NX - 7, y + h - 3, 0xFFD6B668, Z_FRONT + 0.001f); }
+        nm_value(r, v, sizeof(v));
+        lw = text_w(nm_label(r), sc);
+        room = v[0] ? NV - NX - 12 : NX1 - NX - 16;   /* (a long label: narrower) */
+        ls = lw > room ? sc * room / lw : sc;
+        text(NX, y + (sc - ls) * 14, nm_label(r), ls, col);
+        if (v[0]) {
+            float w = text_w(v, sc), lim = NX1 - NV - (nm_value_row(r) || nm_opens(r) ? 26 : 4), s2 = w > lim ? sc * lim / w : sc;
+            text(NV + (nm_value_row(r) ? 12 : 0), y + (sc - s2) * 14, v, s2, col);
+            if (nm_value_row(r)) { arrow(NV, y + 9, -1, col); arrow(NV + 12 + (w > lim ? lim : w) + 12, y + 9, 1, col); }
+        }
+        if (nm_opens(r)) arrow(NX1 - 4, y + (nm.page == NP_MENU ? 14 : 9), 1, col);
+    }
+    /* help and status, the button bar */
+    rect(0, 384, 640, 480, 0x60000000, Z_FRONT);
+    rect(20, 386, 620, 387, 0x80FFFFFF, Z_FRONT + 0.001f);
+    text(20, 390, nm_label(nm.sel[nm.page]), 0.55f, 0xFFFFFFFF);
+    if (lb.msg_t > 0) { lb.msg_t--; text_wrap(20, 408, 380, lb.msg, 0.45f, 0xFFFFE080, 3); }
+    else text_wrap(20, 408, 380, nm_lock(nm.sel[nm.page]) ? nm_lock(nm.sel[nm.page]) : nm_help(nm.sel[nm.page]), 0.45f, nm_lock(nm.sel[nm.page]) ? 0xFFFFB050 : 0xFFC8C8C2, 3);
+    text(412, 390, "STATUS", 0.5f, 0xFFD6B668);
+    text_wrap(412, 408, 210, g_coop.status[0] ? coop_shown(g_coop.status) : session_on() ? (hosting() ? "Waiting for a partner" : "Joining...") : "Not connected",
+              0.42f, !session_on() && g_coop.status[0] ? 0xFFFFC060 : 0xFFC8C8C2, 3);
+    rect(20, 452, 620, 453, 0x80FFFFFF, Z_FRONT + 0.001f);
+    x = ui_hint(20, 458, ui_glyph(UG_OK, g, sizeof(g)), "Select", 0);
+    x = ui_hint(x, 458, ui_glyph(UG_BACK, g, sizeof(g)), nm.page == NP_LOBBY ? (lb.role ? "Leave" : "Close Lobby") : "Back", 0);
+    if (nm.page == NP_LOBBY && lb.role == 0 && ui_pad()) x = ui_hint(x, 458, "Start", "Start Game", 0);
+    if (nm_value_row(nm.sel[nm.page])) ui_hint(x, 458, ui_glyph(UG_CHANGE, g, sizeof(g)), "Change", 0);
+}
+
+static void nm_open(void)
+{
+    memset(&nm, 0, sizeof(nm));
+    nm.esc = 1;   /* (an Esc still down from the title menu) */
+    if (hosting()) setup_lobby_type(biorand_setting() && biorand_pack());   /* (hosted through F3: the Game Type its rule says) */
+    nm_page(session_on() ? NP_LOBBY : NP_MENU);
+}
+
+/* the lobby closes (the game starts, BACK, a soft reset): what is over the page goes with it */
+static void nm_shut(void)
+{
+    switch (nm.sub) {
+    case NS_SETTINGS: ui_rows_close(); ui_rows_only(-1); break;
+    case NS_SETUP: setup_lobby_close(); break;
+    case NS_TEXT: tg_close(); break;
+    case NS_FLOW: case NS_GEN: pc_biorand_menu_close(); break;
+    }
+    nm.sub = NS_NONE;
+    setup_lobby_type(0);   /* (NEW GAME's Game Type starts Standard) */
+}
+
+/* the lobby's frame under --new-menu: 0 stay, 1 back to the title menu, 2 a new game, 3 the chosen save */
+static int nm_frame(void)
+{
+    int list[16], n, r = 0;
+    char note[64];
+    if (mp_set && mp_end) mp_close();   /* (a look row's 3D picker: the frame after, the press that ended it is not ours) */
+    if (mp_set) { mp_frame(); return 0; }
+    {
+        const bool* k = bind_keys();
+        int down = k && k[41];
+        nm.esc_edge = down && !nm.esc;
+        nm.esc = down;
+    }
+    font_ok = font_ready();
+    if (session_on()) lb.role = !g_coop.host;   /* (F3 may host or join meanwhile) */
+    if (nm.page != NP_LOBBY && session_on() && !g_coop.request && !nm.sub) nm_page(NP_LOBBY);   /* (joined through F3 or --coop-join: its lobby) */
+    if (nm.page == NP_LOBBY && !session_on() && !g_coop.request) {   /* the session ended (closed, refused, the host left): the page before */
+        if (++nm.off > 2) {
+            if (nm.sub == NS_SETUP) setup_lobby_close();
+            if (nm.sub == NS_TEXT) tg_close();
+            setup_lobby_type(0);
+            if (g_coop.status[0]) say(coop_shown(g_coop.status));
+            nm_page(lb.role ? NP_JOIN : NP_MENU);
+        }
+    } else nm.off = 0;
+    /* what we chose, for the partner's screen (the old lobby's notes; READY in front of a guest's) */
+    if (lb.role == 0) { start_label(note, sizeof(note), g_coop.start); snprintf(g_coop.note, sizeof(g_coop.note), "Starts: %.*s", (int)sizeof(g_coop.note) - 9, note); }
+    else {
+        if (g_coop.items == COOP_ITEMS_HOST) snprintf(note, sizeof(note), "Items saved by host");
+        else if (g_coop.items < 0) snprintf(note, sizeof(note), "New inventory");
+        else { char it[48]; items_label(it, sizeof(it), g_coop.items); snprintf(note, sizeof(note), "Items: %.40s", it); }
+        snprintf(g_coop.note, sizeof(g_coop.note), "%s%.*s", nm.ready ? MP_READY : "", (int)sizeof(g_coop.note) - 8, note);
+    }
+    if (joining() && lb.items_sent != g_coop.items) hand_items();
+    if (hosting()) {   /* the host's Game Type: the installed BioRand game is this setup's, the guest is told (biorand_next) */
+        int want = setup_lobby_bio() && setup_lobby_bio_ready();
+        if (want != biorand_setting() && !biorand_locked()) biorand_toggle();
+    }
+    if (joining()) {
+        setup_track();
+        if (coop_biorand_offer(NULL) && !nm.offered) {   /* the host's BioRand game is not ours: its row, chosen */
+            nm.offered = 1;
+            nm.sel[NP_LOBBY] = NR_GEN;
+            say("The host plays a BioRand game you do not have. Generate it to play.");
+        } else if (!coop_biorand_offer(NULL)) nm.offered = 0;
+    }
+    n = nm_rows(list);
+    switch (nm.sub) {
+    case NS_SETTINGS:   /* SETTINGS > CO-OP alone */
+        nm_background();
+        if (ui_rows_run(AdvWork.PortId, 1) == UR_BACK) { ui_rows_close(); ui_rows_only(-1); nm.sub = NS_NONE; }
+        break;
+    case NS_SETUP:   /* GAME SETUP in the lobby (setup_glue.c) */
+        nm_background();
+        switch (pc_setup_lobby()) {
+        case 1: nm.sub = NS_NONE; break;
+        case 2: nm.sub = NS_NONE; nm.sel[NP_LOBBY] = NR_START; r = nm_start(); break;
+        case 3: r = 2; break;   /* (BioRand generated: the game starts) */
+        }
+        break;
+    case NS_TEXT: {   /* the character grid */
+        int k;
+        nm_background();
+        if ((k = tg_run(AdvWork.PortId))) { if (k > 0) nm_text_take(); tg_close(); nm.sub = NS_NONE; }
+        break;
+    }
+    case NS_FLOW:   /* START GAME's BioRand dialogs (generate, then start) */
+        nm_background();
+        if ((r = setup_flow_frame()) == 1) { nm.sub = NS_NONE; r = 0; }
+        break;
+    case NS_GEN:   /* a guest: the host's BioRand game generated (biorand_menu.c answers the host when it closes) */
+        nm_background();
+        if (pc_biorand_flow()) nm.sub = NS_NONE;
+        break;
+    case NS_ASK: {   /* CLOSE LOBBY with a partner in it */
+        static const char* q = "Close the lobby?";
+        static const char* q2 = "Your partner leaves too.";
+        unsigned int press = Pad[AdvWork.PortId].press;
+        float y0, y1;
+        int hit;
+        menu_mouse_take(&mt);
+        pc_ui_dialog_place(q, q2, 0.5f, 1, 0, &y0, &y1);
+        hit = pc_ui_dialog_hit(y1, "YES", "NO", 0, mt.x, mt.y);
+        if (hit >= 0) hit = !hit;
+        if (hit >= 0 && (mt.moved || mt.left) && hit != nm.ask_yes) { nm.ask_yes = hit; CallSystemSe(0, 2); }
+        if (press & (BTN_LEFT | BTN_RIGHT)) { nm.ask_yes ^= 1; CallSystemSe(0, 2); }
+        else if ((mt.left && hit >= 0) || (press & (AdvGetOkButton() | BTN_START))) { nm.sub = NS_NONE; if (nm.ask_yes) nm_close_lobby(); else CallSystemSe(0, 0); }
+        else if (mt.right || (press & AdvGetCancelButton())) { nm.sub = NS_NONE; CallSystemSe(0, 0); }
+        nm_background();
+        if (nm.sub == NS_ASK) pc_ui_dialog(y0, y1, 0.303f, q, q2, 0.5f, 0xFFC8C8C2, 1, "YES", "NO", !nm.ask_yes, 0);
+        break;
+    }
+    default:
+        r = nm_input(list, n);
+        n = nm_rows(list);
+        if (nm.sub == NS_NONE) nm_draw(list, n);
+        else nm_background();   /* (opened this frame: its own drawing starts next frame) */
+    }
+    AdvEasySetTextureList(0);   /* the title's texture list again (the font and the models set theirs) */
+    if (r) lobby_close(r != 1);
+    return r;
+}
+
 /* Adv_BioCvTitle mode 30, once per frame */
 int pc_lobby(void)
 {
     int r;
     char note[64];
-    if (lb.open && !br_screen && coop_biorand_offer(NULL)) br_screen = 1;   /* a guest: the host's BioRand seed, offered there */
+    if (lb.open && !br_screen && !g_new_menu && coop_biorand_offer(NULL)) br_screen = 1;   /* a guest: the host's BioRand seed, offered there
+                                                                                              (the new lobby offers it itself) */
     if (qt_screen) {   /* EXIT's question: 1 back to the menu */
         title_font();
         if ((r = quit_menu())) qt_screen = 0;
@@ -2041,6 +2631,7 @@ int pc_lobby(void)
         return lb.open ? 0 : r;
     }
     if (!lb.open) lobby_open();
+    if (g_new_menu) return nm_frame();   /* the new MULTIPLAYER screens */
     if (session_on()) lb.role = !g_coop.host;   /* F3 may host or join meanwhile */
     font_ok = font_ready();
     r = lobby_input();

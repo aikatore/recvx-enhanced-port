@@ -47,7 +47,8 @@ void overlay_request(int which);         /* overlay.cpp: open an F-key window (2
 
 enum { P_UP = 0x1000, P_RIGHT = 0x2000, P_DOWN = 0x4000, P_LEFT = 0x8000, P_START = 0x800, P_SELECT = 0x100 };   /* Pad[] bits */
 enum { SC_ESC = 41 };
-enum { AFTER_SPOILER = 8 };
+enum { AFTER_SPOILER = 8, AFTER_TRADE = 9 };
+void coop_trade_menu(void);              /* coop_glue.c: PAUSE > CO-OP > TRADE ITEMS, the trade key once we can */
 
 int pc_new_menu_on(void) { return g_new_menu; }
 
@@ -76,6 +77,7 @@ static int esc_edge(void)
 
 /* Adv_GameOptionScreen, after ResetOptionMenuParam(0): the level OPTION starts at (0: level 0, the pause menu in a game) */
 static int pause_sel;
+static int coop_page, coop_sel, coop_show, coop_leave;   /* PAUSE > CO-OP: up, its row, Show Addresses, LEAVE pressed once */
 int pc_new_menu_entry(void)
 {
     if (!g_new_menu) return 0;
@@ -83,6 +85,7 @@ int pc_new_menu_entry(void)
     after = 0;
     esc_prev = 1;
     pause_sel = 0;
+    coop_page = coop_show = coop_leave = 0;
     ui_device(1, 0);   /* (the button bar: the device that opened OPTION) */
     if (pc_in_game()) { host_log("menu: pause\n"); return 0; }
     ui_rows_open(MS_SETTINGS, "OPTION");
@@ -133,6 +136,7 @@ void pc_new_menu_closed(void)
     if (!w) w = after;
     after = 0;
     opt_held = 1;
+    if (w == AFTER_TRADE) { coop_trade_menu(); w = 0; host_log("menu: TRADE ITEMS (the trade key)\n"); }
     if (w == AFTER_SPOILER) spoiler_key(1);
     else if (w) overlay_request(w);
     if (w) host_log("menu: opens %s\n", w == AFTER_SPOILER ? "the spoiler log" : w == 2 ? "the cheats window" : w == 3 ? "the co-op window" : "the import window");
@@ -146,7 +150,7 @@ static const char* const item_help[I_N] = {
     "Switch between the fixed cameras and the third-person camera (F5).",
     "How you like to play: gameplay, camera, controls, display, graphics, audio, language and co-op.",
     "This game's rules: enemies, characters and co-op rules. Changes apply from the next room.",
-    "Your co-op session: partner, trading, addresses (the co-op window, F3).",
+    "Your co-op session: partner and connection, trading, addresses, leaving.",
     "Where BioRand put the items, room by room (F8).",
     "Cheats, items, enemies, teleport and the advanced tools window (F2).",
     "Leave this game for the title screen.",
@@ -211,7 +215,7 @@ static int pick(int i)
     case I_SETTINGS: CallSystemSe(0, 3); ui_rows_open(MS_SETTINGS, "PAUSE"); host_log("menu: settings\n"); return 4;
     case I_SETUP: CallSystemSe(0, 3); ui_rows_open(MS_SETUP, "PAUSE"); host_log("menu: game setup\n"); return 4;
     case I_CHEATS: CallSystemSe(0, 3); ui_rows_open(MS_CHEATS, "PAUSE"); host_log("menu: cheats and tools\n"); return 4;
-    case I_COOP: CallSystemSe(0, 3); after = 3; return -1;
+    case I_COOP: CallSystemSe(0, 3); coop_page = 1; coop_sel = 0; coop_leave = 0; host_log("menu: co-op\n"); return 0;
     case I_SPOILER: CallSystemSe(0, 3); after = AFTER_SPOILER; return -1;
     case I_TITLE: CallSystemSe(0, 3); pc_options_quit_open(); return 0;
     }
@@ -226,6 +230,88 @@ static int item_at(float x, float y)
     return -1;
 }
 
+/* ---------------------------------------------------------------- PAUSE > CO-OP (the proposal's §1.1, instead of the F3 window):
+   TRADE ITEMS (the trade key once OPTION has closed), Show Addresses (with Hide IP Addresses: not saved), REMOVE PARTNER
+   (host), LEAVE (a guest) or END SESSION (the host; both ask with a second press), Co-op Window (F3) for the rest; on the
+   right the partner, ping and the connection. Co-op does not pause. */
+enum { C_TRADE, C_SHOW, C_KICK, C_LEAVE, C_WINDOW, C_BACK, C_N };
+static int coop_shown_row(int i)
+{
+    if (i == C_SHOW) return g_coop.hide_ip;
+    if (i == C_KICK) return g_coop.host && (g_coop.state == COOP_CONNECTED || g_coop.state == COOP_LOST);
+    return 1;
+}
+static const char* coop_label(int i)
+{
+    static const char* const l[C_N] = { "TRADE ITEMS", "Show Addresses", "REMOVE PARTNER", "", "Co-op Window (F3)", "BACK" };
+    if (i == C_LEAVE) return coop_leave ? (g_coop.host ? "END SESSION: PRESS AGAIN" : "LEAVE: PRESS AGAIN") : g_coop.host ? "END SESSION" : "LEAVE";
+    return l[i];
+}
+static const char* const coop_help[C_N] = {
+    "Trade with your partner (also the trade key): stand next to each other, then choose what to give and take.",
+    "Hide IP Addresses is on: show the addresses here until you leave the pause menu.",
+    "Remove your partner and reopen their place. They can rejoin with the same code.",
+    "",
+    "The co-op window (F3): every co-op option, with the controller too. Opens when you leave this menu.",
+    "Back to the pause menu.",
+};
+static float coop_y(int i) { int k = 0; for (int j = 0; j < i; j++) k += coop_shown_row(j); return PY0 + k * PDY + (i == C_BACK ? 14 : 0); }
+static void coop_move(int dir) { do coop_sel = (coop_sel + dir + C_N) % C_N; while (!coop_shown_row(coop_sel)); CallSystemSe(0, 2); }
+static int coop_pick(int i)
+{
+    ADV_WORK* ap = &AdvWork;
+    ap->OptFadeType = 0;
+    if (i != C_LEAVE) coop_leave = 0;
+    switch (i) {
+    case C_TRADE: CallSystemSe(0, 3); after = AFTER_TRADE; return -1;
+    case C_SHOW: coop_show ^= 1; CallSystemSe(0, 2); return 0;
+    case C_KICK: g_coop.request = COOP_REQ_KICK; CallSystemSe(0, 0); host_log("menu: co-op: remove partner\n"); return 0;
+    case C_LEAVE:
+        if (!coop_leave) { coop_leave = 1; CallSystemSe(0, 1); return 0; }
+        g_coop.request = COOP_REQ_STOP;
+        CallSystemSe(0, 0);
+        host_log("menu: co-op: %s\n", g_coop.host ? "end session" : "leave");
+        coop_page = 0;
+        return -1;
+    case C_WINDOW: CallSystemSe(0, 3); after = 3; return -1;
+    default: CallSystemSe(0, 0); coop_page = 0; return 0;
+    }
+}
+static int coop_at(float x, float y)
+{
+    if (x < PX - 10 || x > PANEL_X0 - 50) return -1;
+    for (int i = 0; i < C_N; i++) if (coop_shown_row(i) && y >= coop_y(i) - 3 && y < coop_y(i) + PDY - 3) return i;
+    return -1;
+}
+static int coop_input(unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel, int esc, float x)
+{
+    int hit = coop_at(x, mt.y);
+    if (!coop_shown_row(coop_sel)) coop_move(1);
+    if (hit >= 0 && (mt.moved || mt.left) && hit != coop_sel) { coop_sel = hit; coop_leave = 0; CallSystemSe(0, 2); }
+    if (mt.left && hit >= 0) return coop_pick(hit);
+    if (mt.right || esc || (press & (cancel | P_SELECT))) return coop_pick(C_BACK);
+    if (rept & P_UP) { coop_move(-1); coop_leave = 0; }
+    else if (rept & P_DOWN) { coop_move(1); coop_leave = 0; }
+    else if ((press & (P_LEFT | P_RIGHT)) && coop_sel == C_SHOW) coop_pick(C_SHOW);
+    else if (press & (ok | P_START)) return coop_pick(coop_sel);
+    return 0;
+}
+static void coop_info(float y)
+{
+    char t[200];
+    text_m(PANEL_X0 + 10, y, "CO-OP", 0.55f, C_GOLD);
+    y += 20;
+    snprintf(t, sizeof(t), tr("Partner: %s"), g_coop.state == COOP_CONNECTED ? (g_coop.peer_name[0] ? g_coop.peer_name : tr("your partner")) : tr("none"));
+    text_m(PANEL_X0 + 16, y, t, 0.48f, 0xFFFFFFFF); y += 16;
+    if (g_coop.state == COOP_CONNECTED) { snprintf(t, sizeof(t), tr("Ping: %d ms"), g_coop.ping_ms); text_m(PANEL_X0 + 16, y, t, 0.48f, 0xFFFFFFFF); y += 16; }
+    snprintf(t, sizeof(t), "%s", tr(g_coop.host ? "You host this game." : "You joined this game."));
+    text_m(PANEL_X0 + 16, y, t, 0.46f, C_HELP); y += 18;
+    text_m(PANEL_X0 + 10, y, "CONNECTION", 0.5f, C_GOLD); y += 18;
+    y += 14 * (rtl ? pc_ui_text_wrap_r : pc_ui_text_wrap)(PANEL_X0 + 16, y, PANEL_X1 - PANEL_X0 - 26,
+                                                        g_coop.status[0] ? (coop_show ? g_coop.status : coop_shown(g_coop.status)) : tr("Connected."), 0.44f, C_HELP, 4);
+    if (g_coop.host && g_coop.room[0]) { snprintf(t, sizeof(t), tr("Room code: %.4s-%.4s"), g_coop.room, g_coop.room + 4); text_m(PANEL_X0 + 16, y + 4, t, 0.46f, 0xFFFFFFFF); }
+}
+
 static int pause_input(int port)
 {
     unsigned int press = Pad[port].press, rept = Pad[port].Rept;
@@ -236,6 +322,8 @@ static int pause_input(int port)
     x = mx(mt.x, 0);
     ui_device(press, mt.moved || mt.left || mt.right || esc);
     if (options_button()) { CallSystemSe(0, 0); AdvWork.OptFadeType = 0; return -1; }
+    if (coop_page && !coop_on) coop_page = 0;   /* (the session ended meanwhile) */
+    if (coop_page) return coop_input(press, rept, ok, cancel, esc, x);
     hit = item_at(x, mt.y);
     if (hit >= 0 && (mt.moved || mt.left) && hit != pause_sel) { pause_sel = hit; CallSystemSe(0, 2); }
     if (mt.left && hit >= 0) return pick(hit);
@@ -301,6 +389,33 @@ static void pause_draw(void)
     text_m(PX - 4, 24, "PAUSE", 1.35f, 0xFFFFFFFF);
     if (coop_on) text_m(PX, 64, "The game keeps running.", 0.48f, C_LOCK);
     if (pc_options_quit_up()) { AdvEasySetTextureList(0); return; }   /* (the question alone: the font's text would show through its box) */
+    if (coop_page) {   /* PAUSE > CO-OP */
+        text_m(PX, 80, "PAUSE", 0.45f, C_ROW);   /* (the font has no '>': an arrow) */
+        pc_ui_arrow(mx(PX + pc_ui_text_w("PAUSE", 0.45f) + 12, 0), 87, rtl ? -1 : 1, C_ROW);
+        text_m(PX + pc_ui_text_w("PAUSE", 0.45f) + 20, 80, "CO-OP", 0.45f, C_ROW);
+        for (int i = 0; i < C_N; i++) {
+            float y = coop_y(i);
+            int sel = i == coop_sel;
+            unsigned int col = i == C_LEAVE && coop_leave ? 0xFFFFB050 : sel ? 0xFFFFFFFF : C_ROW;
+            if (!coop_shown_row(i)) continue;
+            if (sel) {
+                pc_ui_rect(mx(PX - 10, 262), y - 3, mx(PX - 10, 262) + 262, y + PDY - 5, 0x40FFFFFF, 0.3f);
+                pc_ui_rect(mx(PX - 10, 3), y - 3, mx(PX - 10, 3) + 3, y + PDY - 5, C_GOLD, 0.31f);
+            }
+            if (i == C_SHOW) { snprintf(t, sizeof(t), "%s: %s", tr(coop_label(i)), tr(coop_show ? "On" : "Off")); text_m(PX, y, t, PSC * 0.85f, col); }
+            else text_m(PX, y, coop_label(i), i == C_LEAVE && coop_leave ? PSC * 0.7f : PSC, col);
+            if (i == C_WINDOW) pc_ui_arrow(mx(PX + 240, 0), y + 10, rtl ? -1 : 1, col);
+        }
+        pc_ui_rect(mx(PANEL_X0, PANEL_X1 - PANEL_X0), 92, mx(PANEL_X0, PANEL_X1 - PANEL_X0) + PANEL_X1 - PANEL_X0, 330, 0x90000000, 0.02f);
+        coop_info(98);
+        pc_ui_rect(20, 420, 620, 421, 0x80FFFFFF, 0.021f);
+        (rtl ? pc_ui_text_wrap_r : pc_ui_text_wrap)(20, 426, 600, tr(coop_sel == C_LEAVE ? (g_coop.host ? "End the session: your partner leaves; you play on alone."
+                                                                                                     : "Leave the host's game: you play on alone from here.") : coop_help[coop_sel]), 0.45f, C_HELP, 2);
+        x = ui_hint(20, 456, ui_glyph(UG_OK, g, sizeof(g)), "Select", 0);
+        ui_hint(x, 456, ui_glyph(UG_BACK, g, sizeof(g)), "Back", 0);
+        AdvEasySetTextureList(0);
+        return;
+    }
     for (int i = 0; i < I_N; i++) {
         float y = item_y(i);
         int sel = i == pause_sel;

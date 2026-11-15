@@ -2,8 +2,8 @@
 
 A rework of the port's menus, in testing behind `--new-menu` (also on with `--dev`). Without the flag nothing changes:
 OPTION, ENHANCED SETTINGS and every other screen are as before. The menu rework is done in phases; this page describes
-what is in now (phases P0 to P2) and how it is built. Some game rules changed with P2 for both menus: see "Behaviour
-changes" below.
+what is in now (phases P0 to P3) and how it is built. Some game rules changed with P2 and P3 for both menus: see
+"Behaviour changes" below.
 
 ## What a player sees
 
@@ -27,7 +27,8 @@ Off turns the game's vibration off (the system save's VIBRATION), a percentage t
 
 **In a game OPTION opens PAUSE** (Select / View or Backspace as before; with the Modern third-person controller layout
 its Start): RESUME, Camera (Fixed / Third Person, the F5 setting), SETTINGS, GAME SETUP (this game's setup: OVERVIEW, RULES,
-ENEMIES, CHARACTERS, BIORAND in a BioRand game, CO-OP RULES, on the same row screen, below), CO-OP (in a session: opens the F3 window), SPOILER LOG (the
+ENEMIES, CHARACTERS, BIORAND in a BioRand game, CO-OP RULES, on the same row screen, below), CO-OP (in a session: its own
+page, below), SPOILER LOG (the
 F8 screen; a BioRand game outside co-op, greyed otherwise), CHEATS AND TOOLS (cheats, actions, items, spawn, teleport;
 Advanced Tools ▸ opens the F2 window), RETURN TO TITLE (the old question). On the right: THIS GAME (difficulty,
 BioRand, the rules that differ from the original game) and the keyboard shortcuts. In co-op the header says the game
@@ -72,6 +73,31 @@ next room).
 
 **LOAD GAME** (native saves) names the modifiers in effect at the bottom: "Game Setup: Extra Enemies, ... Change in the
 pause menu." (they apply to a loaded game as they always did); nothing when none is on.
+
+**MULTIPLAYER** (P3; the player's side is in [COOP.md](COOP.md) "The new MULTIPLAYER screens"): MULTIPLAYER (HOST GAME,
+JOIN GAME, Co-op Settings, BACK); HOST GAME opens the lobby at once with the room code (or the join address and code);
+JOIN GAME is one page; the lobby's host edits GAME SETUP in it (Edit Game Setup, Your Character: the same row screen,
+the session stays open) and starts it; a guest says READY, reads the host's GAME SETUP ("Set by the host.", what the host
+changed flashes), keeps its own YOU, and generates the host's BioRand game in the lobby when it has another one.
+
+**Text fields** (Room Code or Address, Password, Room Password, Player Name, Co-op Server, the Enemy Randomizer Seed,
+BioRand's Seed) open the **character grid**: A-Z (SHIFT: a-z), 0-9, `. - :` and the signs the game's font draws as signs
+(`_ # ! ? ' ( ) + / , ; % ~`), SPACE, DELETE, PASTE, OK. The controller moves on it and types the cell; Triangle (Y)
+deletes the last character, Start is OK, Cancel leaves the text as it was. The keyboard types at the same time (Backspace,
+Enter, Esc, Ctrl+V), the mouse clicks cells. A seed and the room code start empty (OK on nothing keeps the old one); a
+name starts with the old one. Player Name and Co-op Server are typed in SETTINGS > CO-OP now (before: the F3 window).
+
+**PAUSE > CO-OP** (in a session; before P3 it opened the F3 window): TRADE ITEMS, Show Addresses (with Hide IP
+Addresses), REMOVE PARTNER (host), END SESSION (host) or LEAVE (guest), each of those two with a second press, Co-op
+Window (F3); the partner, ping and connection on the right.
+
+### Behaviour changes (both menus, P3)
+
+* **Loot Sharing and Duplicate Weapons and Ribbons** can change in a session until its game starts (before: not in a
+  session at all), as Shared Enemy Control could: the new lobby is hosted from the start, so its host sets them there.
+  F1 and ENHANCED SETTINGS follow the same lock; the old lobby's LOOT and GEAR rows keep their own (not in a session).
+* A co-op guest's random look (D19) is picked in the lobby already (before: once in the game), so both lobbies' 3D models
+  show it; the pick is the same.
 
 ### Behaviour changes (both menus, P2)
 
@@ -125,6 +151,11 @@ opened them. The button bar shows the buttons of the device pressed last. Arabic
 | GAME SETUP: where it is shown, its own rows (Game Type, Difficulty, Preset, the merged CHARACTERS rows, BioRand's options, START GAME), ACTIVE MODIFIERS, the previews, the title-mode-30 host | `pc/glue/setup_glue.c` |
 | BioRand's dialogs for START GAME (download, generate, start) | `pc/glue/biorand_menu.c` `pc_biorand_flow` |
 | NEW GAME and EXTRA > BIORAND open GAME SETUP; its look rows open the lobby's model page | `pc/glue/lobby_glue.c` (`pc_title_mouse`, `extra_input`, `pc_lobby`) |
+| MULTIPLAYER, JOIN and the LOBBY (host and guest; `nm_*`), Start From's choices (`pc_lobby_start_step`) | `pc/glue/lobby_glue.c` ("the new MULTIPLAYER screens") |
+| GAME SETUP in the lobby (`setup_lobby_open`, `pc_setup_lobby`, `setup_lobby_start`), a guest's view of the host's values (`setup_host_value`), what the host changed (`setup_track`), the lobby's summary (`setup_lobby_lines`) | `pc/glue/setup_glue.c` |
+| The character grid: its cells, moves, field rules, the READY note (pure, ctest `textgrid`) and its box | `pc/src/host/textgrid.h`, `pc/tests/test_textgrid.c`, `pc/glue/text_grid.c` |
+| PAUSE > CO-OP; TRADE ITEMS's trade key (`coop_trade_menu`) | `pc/glue/pause_glue.c`, `pc/glue/coop_glue.c` |
+| A co-op guest generates the host's BioRand game from the lobby (`pc_biorand_flow_open(3)`) | `pc/glue/biorand_menu.c` |
 | Hooks in the game's OPTION task | decomp `adv.c`: `Adv_GameOptionScreen` (start level), `DisplayOptionPlateLevel0` (pause), `DisplayOptionBg` (no bands), levels 1-3 (`pc_options_back_level`) |
 
 - **The layout table names settings by their table label** (`ref`), because 21 rows have no variable. A row kind says
@@ -140,8 +171,16 @@ opened them. The button bar shows the buttons of the device pressed last. Arabic
 - **GAME SETUP's context** (`g_setup_ctx`, `setup_glue.c ctx()`): NEW GAME, in game (the pause menu), and the lobby's
   host and guest for P3. ui_rows.c asks setup_glue.c for every row of a GAME SETUP category, wherever it is shown, which
   categories and rows are shown (`setup_cat_shown`, `setup_row_shown`) and which are read-only and why (`setup_row_lock`:
-  "Set when the game started.", "Set by the host." for a guest, who keeps YOU and Extra Mouth Movement). The lobby (P3)
-  only sets the context and hosts the same screen.
+  "Set when the game started.", "Set by the host." for a guest, who keeps YOU and Extra Mouth Movement). The lobby only
+  sets the context and hosts the same screen; a guest's rows show the host's values through `setup_host_value` (the
+  EnemyOpts rows from `enemy_opts()`, EV_EOPTS; the rest from the host's Pose.opts / opts2 rules, `coop_rule` and the
+  existing `coop_*` getters), so the wire is unchanged. A guest in a game sees the pause menu's GAME SETUP the same way.
+- **The lobby keeps the session**: everything over its page (GAME SETUP, SETTINGS > CO-OP alone via `ui_rows_only`, the
+  character grid, BioRand's dialogs, the CLOSE LOBBY question) runs inside `pc_lobby` while `lb.open` and `g_coop.lobby`
+  stay set; only CLOSE LOBBY, LEAVE, BACK from MULTIPLAYER or a soft reset stop the session.
+- **READY** is the guest's lobby note (`g_coop.note`, sent to the host as before) starting with `MP_READY` ("Ready: ");
+  the old lobby shows it as text. The host's Game Type BioRand turns the old lobby rule BIORAND on once the installed game
+  is the setup's, so the guest is told (`biorand_next`) as before.
 - **Adding a setting**: besides its settings-table row, give it one home in `menu_layout.c` (ctest `menu_layout` fails
   otherwise). Keep each entry's kind and label together (`ML_SET, "Label"`) so the check finds it.
 - **Defaults** are the variables' values before the command line and `recvx.ini` (`menu_defaults_capture`, first in
@@ -150,8 +189,9 @@ opened them. The button bar shows the buttons of the device pressed last. Arabic
   and `SetUseVibrationUnit` besides the strength; Control Type opens KEY CONFIG (level 1, cycling it in place would swap
   the menu's own Confirm and Cancel). These live in the system save, which OPTION writes when it closes, as before.
 - **Hosts**: the row screen draws rows, help, preview and the button bar only (`ui_rows_open`, `ui_rows_run`); its host
-  draws the background and the title. The pause menu reuses its button bar (`ui_device`, `ui_glyph`, `ui_hint`). GAME
-  SETUP in title mode 30 and the lobby (later phases) are meant to host the same screen.
+  draws the background and the title. The pause menu reuses its button bar (`ui_device`, `ui_glyph`, `ui_hint`); GAME
+  SETUP in title mode 30 and the lobby host the same screen. A root of several words ("MULTIPLAYER>LOBBY>GAME SETUP")
+  is drawn with arrows between (the game's font has no `>`).
 - **Hold for Default** is Triangle: Square confirms in key types A, C and D and cancels in B, so it cannot be the hold
   button; Triangle is free in every type.
 
@@ -174,17 +214,28 @@ seed ... -> Steve`); `RECVX_CHEAT_SAVE=frame` saves in game, LOAD GAME brings th
 `--dev`'s `RECVX_TEST_SCENE=200:RM_9150:0:5:1` (Chris in Claire's part) and `RM_3230:0:0` (the Tyrant), in the log's
 `cast: room ...` lines.
 
+Co-op (two instances on one machine, never the public co-op server): run both under one `unshare -rn` with `lo` up;
+direct with `coop_conn = 1` in each `recvx.ini` (the guest on another `coop_port`), `RECVX_COOP_CODE=TESTKEYS` on the
+host so the guest can type `127.0.0.1:PORT#TESTKEYS`; a relay through a local `build/pc/server/recvx-server --port 47141
+--listen 127.0.0.1` with `coop_server = 127.0.0.1:47141`. `RECVX_LOBBY_KEYS="frame:text|"` types on the character grid
+with the keyboard (`|` Enter); `RECVX_VPAD` moves on it (`dpright`, `south` types, `start` is OK). MULTIPLAYER is the
+title's fifth row (four downs from LOAD GAME with EXTRA shown).
+
 ## Not in yet (later phases)
 
 - P2 left out: the look picker is the lobby's model page (its own list layout and help line, the voice and animations
   added), not mockup 09's new layout; in a game the actual cast picks are not listed (D17: the default is hidden);
-  "Copy Setup Code" (D16); "Your Character" is not a shortcut in the lobby and JOIN yet (P3).
-- P3: MULTIPLAYER (instant lobby, JOIN, the guest's read-only GAME SETUP: `g_setup_ctx` SC_LOBBY_HOST / SC_LOBBY_GUEST
-  are there, the lobby still has to host the screen, send the host's values and show Start From), the guest's BioRand
-  question in the lobby (it still opens the old BIORAND screen), Quick Start greyed with BioRand, the on-screen character
-  grid for text rows (Player Name and Co-op Server are edited in the F3 window until then).
-- P4: PAUSE > CO-OP as its own page (today it opens F3), IMPORT restyled with MEMORY CARD SAVES (Import Memory Card
-  Saves still runs from GAMEPLAY > SAVES), Performance Graph in DISPLAY > INFO, keyboard search.
+  "Copy Setup Code" (D16).
+- P3 left out (deviations from the mockups and the proposal): the lobby is the old lobby's layout with the new rows (the
+  models left, ROOM CODE and the GAME SETUP box top right, the rows below them), not mockup 06's exact positions; Start
+  From is both a lobby row and an OVERVIEW row; COPY ROOM CODE has no extra button-bar hint; a guest's BIORAND category
+  is hidden (the host's BioRand options are not on the wire outside the offer; its summary says "BioRand: the host's
+  game"); Difficulty is not shown to a guest (the host's Start From words say it); the grid's `#` key draws as the
+  font's picture (it is the address's separator, so it stays); a guest whose BioRand game was generated in the lobby
+  was not seen to be pulled into the host's game in the tests (the same with the old BIORAND screen: a co-op matter,
+  not the menu's).
+- P4: IMPORT restyled with MEMORY CARD SAVES (Import Memory Card Saves still runs from GAMEPLAY > SAVES), Performance
+  Graph in DISPLAY > INFO, keyboard search.
 - P5: translations of the new words, help for the rows that have none, the RTL polish, then the new menu by default.
 - Also not yet: the "Keep these settings?" countdown after a display change, restart / next-room marks as small icons
   (a "(restart)" note after the label for now), the darkened game frame behind PAUSE (the OPTION task has released the

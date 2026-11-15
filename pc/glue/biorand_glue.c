@@ -203,7 +203,7 @@ static int guest_picks(unsigned int* w)
 /* this game's picks: their two words; 0 none */
 static int picks(unsigned int* w)
 {
-    if (!sys || !pc_in_game()) return 0;
+    if (!sys || (!pc_in_game() && !coop_is_guest())) return 0;   /* (a guest's also in the lobby: its preview, the look it sends) */
     if (coop_is_guest()) return guest_picks(w);
     w[0] = sys->itm[BR_APPEAR];
     w[1] = sys->itm[BR_APPEAR2];

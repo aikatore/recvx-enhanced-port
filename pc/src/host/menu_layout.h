@@ -33,7 +33,7 @@ enum {
     ML_OUTPUT,     /* the game's AUDIO SETUP (Stereo / Mono, the system save) */
     ML_PRESET,     /* GRAPHICS Preset: Original Look / Enhanced / Custom over menu_preset[] */
     ML_WINDOW,     /* opens an F-key window (arg: 2 cheats F2, 3 co-op F3, 4 import F9) */
-    ML_TEXT,       /* a co-op text (arg: 0 player name, 1 co-op server); edited in the F3 window for now */
+    ML_TEXT,       /* a co-op text (arg: 0 player name, 1 co-op server); typed on the character grid */
     ML_RETIRED,    /* a table row the new menu no longer shows (ref: its label) */
     ML_MERGED,     /* a table row shown as part of an ML_VAR row (ref: its label; Model Selection in Story Characters) */
     ML_VAR,        /* a GAME SETUP row over the game's variables, not one table row (arg: SV_*; setup_glue.c) */
@@ -41,7 +41,8 @@ enum {
     ML_ACTION,     /* a GAME SETUP button (arg: SA_*): START GAME, RANDOM SEED, COPY SEED STRING, ... */
     ML_INFO,       /* lines of text, not selectable (arg: SI_*): OVERVIEW's ACTIVE MODIFIERS */
 };
-enum { SV_GAME_TYPE, SV_DIFFICULTY, SV_PRESET, SV_LOOK, SV_LOOK_MODE, SV_RANDOM_FROM, SV_RANDOM_IMPORTS, SV_STORY, SV_MONSTERS };
+enum { SV_GAME_TYPE, SV_DIFFICULTY, SV_PRESET, SV_LOOK, SV_LOOK_MODE, SV_RANDOM_FROM, SV_RANDOM_IMPORTS, SV_STORY, SV_MONSTERS,
+       SV_START_FROM };   /* (SV_START_FROM: the co-op lobby's, g_coop.start) */
 enum { SA_START, SA_ENEMY_SEED, SA_BIO_RANDOM, SA_BIO_COPY, SA_BIO_PASTE, SA_BIO_CHECK };
 enum { SI_MODIFIERS, SI_BIO_ENEMIES };
 enum {
@@ -82,6 +83,9 @@ enum { UR_STAY, UR_BACK, UR_CLOSE, UR_START, UR_PICK, UR_FLOW, UR_LEVEL };   /* 
 void ui_rows_open(int screen, const char* root);   /* at its remembered category and row; root: the breadcrumb's first word */
 void ui_rows_goto(int cat, const MenuRow* m);      /* show category cat, the cursor on row m (NULL: its remembered row) */
 void ui_rows_picker(int on);                       /* the host has the 3D look picker (title mode 30): Confirm on a look row returns UR_PICK */
+void ui_rows_only(int cat);                        /* list only category cat (-1: the screen's all): a shortcut's home in another host */
+const char* ui_rows_value(const MenuRow* m, char* buf, int n);   /* a row's value as the screen shows it ("" none) */
+int  ui_pad(void);                                 /* the button bar shows the controller's buttons (the device pressed last) */
 const struct Setting* ui_rows_pick(void);          /* UR_PICK's row */
 void ui_rows_say(const char* m);                   /* a message on the help line */
 int  ui_rows_run(int port, int flag);              /* input (flag) and drawing, every frame */
@@ -117,6 +121,26 @@ int  setup_info(const MenuRow* m, int line, char* buf, int n, unsigned int* col)
 int  setup_preview(const MenuRow* m, float x, float y, float w);   /* 1: the row's preview drawn (CHARACTERS' who-is-who, OVERVIEW, BIORAND) */
 const char* setup_value(const MenuRow* m, char* buf, int n);   /* a shortcut's own value (Your Character), else NULL */
 const char* setup_summary(char* buf, int n);         /* the modifiers in one line (LOAD GAME's note), "" none */
+int  setup_host_value(const MenuRow* m, int set, int* v);   /* a co-op guest's view: the host's value of a table row (1), else 0 */
+/* the co-op lobby (lobby_glue.c hosts GAME SETUP in title mode 30 while the session stays open) */
+void setup_lobby_open(int view, int cat, int only);  /* view 0 the host's, 1 a guest's (read-only, YOU its own); cat -1 the last */
+int  pc_setup_lobby(void);                           /* per frame: 0 stay, 1 back, 2 START GAME pressed, 3 the game starts (BioRand generated) */
+void setup_lobby_close(void);                        /* ... closed by its host (the lobby closes, the session ended) */
+int  setup_lobby_start(int d);                       /* a new game of difficulty d: 2 start now, 1 BioRand's dialogs first */
+int  setup_flow_frame(void);                         /* ... those dialogs: 0 on, 1 over, 2 the game starts */
+void setup_lobby_type(int on);                       /* the host's Game Type in the lobby (1 BioRand) */
+int  setup_lobby_bio(void);
+int  setup_lobby_bio_ready(void);                    /* the installed BioRand game is this setup's */
+void setup_track(void);                              /* a guest, per frame: notes what the host changes */
+const char* setup_host_changed(void);                /* ... "Extra Enemies: Up to 3" for a few seconds, else NULL */
+int  setup_lobby_lines(char out[][128], int max, int view, char* brief, int nb);   /* the lobby's GAME SETUP box; brief: "Normal, 3 changes" */
+
+/* the character grid for text fields (pc/glue/text_grid.c; its cells and rules src/host/textgrid.h, kind TGK_*) */
+void tg_open(const char* title, const char* text, int max, int kind, int masked);
+int  tg_run(int port);                               /* per frame: 0 on (drawn), 1 OK (tg_text), -1 cancelled */
+int  tg_active(void);
+const char* tg_text(void);
+void tg_close(void);                                 /* after OK: the text taken (a password's copy wiped) */
 
 #ifdef __cplusplus
 }

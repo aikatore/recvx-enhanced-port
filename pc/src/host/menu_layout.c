@@ -152,7 +152,7 @@ const MenuRow menu_rows[] = {
       .help = "Add languages from other editions of the game. Opens the import window (F9) when you leave this menu." },
 
     /* ---------------------------------------------------------------- SETTINGS > CO-OP */
-    { MC_COOP, "PERSONAL", ML_TEXT, NULL, 0, "Player Name", .help = "Your name, as your partner sees it. Edit it in MULTIPLAYER or the co-op window (F3)." },
+    { MC_COOP, "PERSONAL", ML_TEXT, NULL, 0, "Player Name", .help = "Your name, as your partner sees it. Confirm: type it." },
     { MC_COOP, NULL, ML_SET, "Partner Name Tag" },
     { MC_COOP, NULL, ML_SET, "Show Ping" },
     { MC_COOP, NULL, ML_SET, "Hide IP Addresses" },
@@ -162,13 +162,15 @@ const MenuRow menu_rows[] = {
     { MC_COOP, NULL, ML_SET, "Host Port" },
     { MC_COOP, NULL, ML_SET, "Automatic Port Forwarding" },
     { MC_COOP, "CONNECTION", ML_SET, "Connection", .names = N("Automatic", "Direct (IP Address)", "Always Relay") },
-    { MC_COOP, NULL, ML_TEXT, NULL, 1, "Co-op Server", .help = "The server for room codes and the relay. Edit it in MULTIPLAYER or the co-op window (F3)." },
+    { MC_COOP, NULL, ML_TEXT, NULL, 1, "Co-op Server", .help = "The server for room codes and the relay (name or name:port; empty: none). Confirm: type it." },
 
     /* ---------------------------------------------------------------- GAME SETUP > OVERVIEW (NEW GAME opens it on START GAME) */
     { MC_OVERVIEW, NULL, ML_VAR, NULL, SV_GAME_TYPE, "Game Type", N("Standard", "BioRand"),
       .help = "Standard: the game with the modifiers below. BioRand: doors and items randomized by BioRand (the BIORAND category); START GAME generates it if needed." },
     { MC_OVERVIEW, NULL, ML_VAR, NULL, SV_DIFFICULTY, "Difficulty", N("Normal", "Easy", "Very Easy"),
       .help = "The game's difficulty. Easy and Very Easy give more ammunition and take less damage." },
+    { MC_OVERVIEW, NULL, ML_VAR, NULL, SV_START_FROM, "Start From",
+      .help = "The co-op lobby's: a new game, or one of your saves (you both go on from there; its BioRand state counts)." },
     { MC_OVERVIEW, NULL, ML_VAR, NULL, SV_PRESET, "Preset", N("Original", "Remix", "Chaos", "Custom"),
       .help = "Original: no modifiers. Remix: rearranged and extra enemies, more item boxes and herbs. Chaos: wild and event enemies, "
               "any model in cutscenes, voices follow the look. Custom: your own." },

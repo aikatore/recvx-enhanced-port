@@ -30,6 +30,8 @@
 #include "../src/host/biorand.h"
 #include "../src/host/biorand_opts.h"
 #include "../src/net/biorand_dl.h"
+#include "../src/net/coop_proto.h"
+#include "../src/net/net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,8 +50,10 @@ int  pc_biorand_flow(void);
 void pc_biorand_menu_close(void);
 void overlay_request(int which);                 /* overlay.cpp: an F-key window (4: F9, import) */
 int  pc_newgame_difficulty(int set);             /* host.c: recvx.ini newgame_difficulty (set -1: read only) */
-int  pc_cfg_no_ink_ribbon(void);
-int  pc_cfg_extra_objects(void);
+int  coop_is_guest(void);
+int  coop_rule(int opt);                         /* coop_glue.c: a guest, the host's Pose.opts rule */
+int  pc_lobby_start_step(int dir);               /* lobby_glue.c: Start From (g_coop.start) to the next choice */
+const char* pc_lobby_start_label(int v, char* buf, int n);
 
 #define C_GOLD 0xFFD6B668u
 #define C_HELP 0xFFC8C8C2u
@@ -69,10 +73,44 @@ static struct {
 } gs;
 
 static int ctx(void) { return g_setup_ctx >= SC_LOBBY_HOST ? g_setup_ctx : pc_in_game() ? SC_INGAME : SC_NEWGAME; }
+/* a co-op guest's view: the host's values, read-only (the lobby's, and the pause menu's in a guest's game) */
+static int guest(void) { return ctx() == SC_LOBBY_GUEST || (ctx() == SC_INGAME && coop_is_guest()); }
+static int lobby(void) { return ctx() >= SC_LOBBY_HOST; }
 static const Setting* row(const char* label) { int k = menu_setting(label); return k >= 0 ? &g_settings[k] : NULL; }
 static int get_of(const char* label) { const Setting* s = row(label); return s ? settings_get(s) : 0; }
 static void set_of(const char* label, int v) { const Setting* s = row(label); if (s && !settings_locked(s)) settings_set(s, v); }
 static int imports_n(void) { return __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE); }
+static const EnemyOpts* eo(void) { return guest() ? enemy_opts() : &g_enemy_opts; }   /* (a guest's: the host's, EV_EOPTS) */
+
+/* ---------------------------------------------------------------- a guest's values: the host's (proposal §4.5; the wire
+   format is as it was: Pose.opts / opts2, EV_EOPTS) */
+static int host_val(const Setting* s, int* v)
+{
+    static const struct { const char* label; int opt; } rules[] = {
+        { "Free Typewriter Saves", OPT_NO_RIBBON }, { "Loot Sharing", OPT_INDIVIDUAL }, { "Duplicate Weapons and Ribbons", OPT_IMPORTANT },
+        { "Skip Cutscenes Together", OPT_SKIP_SYNC }, { "Pause Enemies During Trades", OPT_TRADE_FREEZE },
+    };
+    const char* l;
+    if (!s || !guest()) return 0;
+    if (s->val >= (int*)&g_enemy_opts && s->val < (int*)(&g_enemy_opts + 1)) {   /* (an EnemyOpts row: the host's, at the same offset) */
+        *v = *(const int*)((const char*)enemy_opts() + ((const char*)s->val - (const char*)&g_enemy_opts));
+        return 1;
+    }
+    l = s->label;
+    for (int i = 0; i < (int)(sizeof(rules) / sizeof(rules[0])); i++) if (!strcmp(l, rules[i].label)) { *v = coop_rule(rules[i].opt) != 0; return 1; }
+    if (!strcmp(l, "Extra Item Boxes and Herbs")) *v = coop_extra_objects();
+    else if (!strcmp(l, "Headshots & Piercing")) *v = coop_headshots();
+    else if (!strcmp(l, "Game Over Rule")) *v = coop_host_gameover_both();
+    else if (!strcmp(l, "Metal Detector")) *v = coop_skip_detector();
+    else if (!strcmp(l, "Quick Start")) *v = coop_quick_start();
+    else if (!strcmp(l, "Shared Enemy Control")) *v = coop_shared_enemies();
+    else return 0;
+    *v = *v != 0;
+    return 1;
+}
+int setup_host_value(const MenuRow* m, int set, int* v) { return (m->kind == ML_SET || m->kind == ML_MERGED) && set >= 0 && host_val(&g_settings[set], v); }
+static int val(int k) { int v; return k < 0 ? 0 : host_val(&g_settings[k], &v) ? v : settings_get(&g_settings[k]); }
+static int val_of(const char* label) { return val(menu_setting(label)); }
 
 /* ---------------------------------------------------------------- BioRand's options */
 static BioOpts* bio(void)
@@ -139,7 +177,7 @@ static const char* look_name(int c, char* buf, int n)
 }
 
 /* ---------------------------------------------------------------- the cast (STORY CHARACTERS, MONSTERS) */
-static int story_now(void) { return g_enemy_opts.cast ? 1 + g_enemy_opts.cast_all : 0; }   /* Original, Swapped, Any Model, Custom */
+static int story_now(void) { return eo()->cast ? 1 + eo()->cast_all : 0; }   /* Original, Swapped, Any Model, Custom */
 static void story_set(int v)
 {
     set_of("Randomize Cutscene Cast", v > 0);
@@ -160,7 +198,7 @@ static int mon_id(int cast, int enemy, int alone)   /* what cast_enemy (and the 
     if (!alone) return MV_ORIG;
     return enemy == CAST_ENEMY_ALL ? MV_ANY : enemy == CAST_ENEMY_CUSTOM ? MV_CUSTOM : MV_ORIG;
 }
-static int mon_pos(int id) { int ids[4], n = mon_ids(g_enemy_opts.cast, ids); for (int i = 0; i < n; i++) if (ids[i] == id) return i; return 0; }
+static int mon_pos(int id) { int ids[4], n = mon_ids(eo()->cast, ids); for (int i = 0; i < n; i++) if (ids[i] == id) return i; return 0; }
 static void mon_set(int pos)
 {
     int ids[4], n = mon_ids(g_enemy_opts.cast, ids), id = ids[pos < 0 ? 0 : pos >= n ? n - 1 : pos];
@@ -184,10 +222,10 @@ static int preset_value(int p, int k, int* v)   /* row k's value under preset p 
 static int preset_now(void)   /* 0 Original, 1 Remix, 2 Chaos, 3 Custom */
 {
     for (int p = 0; p < 3; p++) {
-        int ok = !enemy_cast_alone(&g_enemy_opts);
+        int ok = !enemy_cast_alone(eo());
         for (int i = 0; i < menu_setup_owned_n && ok; i++) {
             int k = menu_setting(menu_setup_owned[i]), v;
-            if (k >= 0 && preset_value(p, k, &v)) ok = settings_get(&g_settings[k]) == v;
+            if (k >= 0 && preset_value(p, k, &v)) ok = val(k) == v;
         }
         if (ok) return p;
     }
@@ -209,7 +247,7 @@ static void preset_set(int p)
 int setup_cat_shown(int c)
 {
     switch (c) {
-    case MC_BIORAND: return ctx() == SC_INGAME ? biorand_active() : gs.type;
+    case MC_BIORAND: return ctx() == SC_INGAME ? biorand_active() : guest() ? 0 : gs.type;   /* (a guest: the host's options are not known here; its BioRand line says it) */
     case MC_COOP_RULES: return ctx() != SC_NEWGAME;   /* (the lobby's; in game, as P1 had it) */
     }
     return 1;
@@ -225,6 +263,8 @@ int setup_row_shown(const MenuRow* m, int shown)
         switch (m->arg) {
         case SV_RANDOM_FROM: return look == 2;
         case SV_RANDOM_IMPORTS: return look == 2 && imports_n() > 0;
+        case SV_DIFFICULTY: return ctx() != SC_LOBBY_GUEST;   /* (the guest: in Start From, the host's words) */
+        case SV_START_FROM: return lobby();
         }
     if (m->kind != ML_SET) return shown;
     if (!strcmp(r, "Character Model")) return look == 1 && !g_appear_per;
@@ -237,7 +277,7 @@ const char* setup_row_lock(const MenuRow* m)
 {
     static char why[128];
     int c = ctx(), i;
-    if (c == SC_LOBBY_GUEST && m->cat != MC_CHAR_ADV && !(m->cat == MC_CHARACTERS && m->kind == ML_VAR && m->arg <= SV_RANDOM_IMPORTS)
+    if (guest() && m->cat != MC_CHAR_ADV && !(m->cat == MC_CHARACTERS && m->kind == ML_VAR && m->arg <= SV_RANDOM_IMPORTS)
         && !(m->ref && (!strcmp(m->ref, "Character Model") || !strcmp(m->ref, "Claire's Model") || !strcmp(m->ref, "Chris's Model")
                         || !strcmp(m->ref, "Custom Cutscene Model") || !strcmp(m->ref, "Talking Mouths")))
         && m->kind != ML_WINDOW && !(m->kind == ML_ACTION && m->arg == SA_BIO_COPY))
@@ -245,8 +285,14 @@ const char* setup_row_lock(const MenuRow* m)
     if (c == SC_INGAME && ((m->kind == ML_VAR && (m->arg == SV_GAME_TYPE || m->arg == SV_DIFFICULTY)) || m->kind == ML_BIO
                            || (m->kind == ML_ACTION && (m->arg == SA_BIO_RANDOM || m->arg == SA_BIO_PASTE || m->arg == SA_BIO_CHECK))))
         return "Set when the game started.";
-    if (m->ref && !strcmp(m->ref, "Talking Mouths") && !g_enemy_opts.voices) return "Turn on Voices Follow the Look first.";
-    if (m->ref && !g_enemy_opts.rand && (!strcmp(m->ref, "Enemy Selection") || !strcmp(m->ref, "Types per Room") || !strcmp(m->ref, "Randomize Event Enemies")))
+    if (c == SC_LOBBY_HOST && g_coop.start >= 3 && m->kind == ML_VAR && (m->arg == SV_GAME_TYPE || m->arg == SV_DIFFICULTY))
+        return "Set by the save: Start From is a save.";
+    if (m->ref && !strcmp(m->ref, "Quick Start")) {   /* (proposal §2.2, §2.4) */
+        if (c == SC_INGAME) return "Only before the game starts.";
+        if (gs.type || biorand_next()) return "No effect with BioRand.";
+    }
+    if (m->ref && !strcmp(m->ref, "Talking Mouths") && !eo()->voices) return "Turn on Voices Follow the Look first.";
+    if (m->ref && !eo()->rand && (!strcmp(m->ref, "Enemy Selection") || !strcmp(m->ref, "Types per Room") || !strcmp(m->ref, "Randomize Event Enemies")))
         return "Turn on Enemy Randomizer first.";
     if (m->kind == ML_VAR && (m->arg == SV_STORY || m->arg == SV_MONSTERS)) return settings_locked(row(m->arg == SV_STORY ? "Randomize Cutscene Cast" : "Enemy Models"));
     if ((i = bio_at(m)) >= 0) {
@@ -271,7 +317,7 @@ int setup_custom_list(const MenuRow* m)
     switch (m->arg) {
     case SV_STORY: return story_now() == 3 ? 0 : -1;
     case SV_RANDOM_FROM: return g_biorand_appear_pool == 2 ? 1 : -1;
-    case SV_MONSTERS: return mon_id(g_enemy_opts.cast, g_enemy_opts.cast_enemy, enemy_cast_alone(&g_enemy_opts)) == MV_CUSTOM ? 2 : -1;
+    case SV_MONSTERS: return mon_id(eo()->cast, eo()->cast_enemy, enemy_cast_alone(eo())) == MV_CUSTOM ? 2 : -1;
     }
     return -1;
 }
@@ -289,7 +335,7 @@ int setup_choice(const MenuRow* m, int* n)
     case SV_GAME_TYPE: case SV_LOOK_MODE: case SV_RANDOM_IMPORTS: *n = 2; return 1;
     case SV_DIFFICULTY: case SV_LOOK: case SV_RANDOM_FROM: *n = 3; return 1;
     case SV_PRESET: case SV_STORY: *n = 4; return 1;
-    case SV_MONSTERS: *n = mon_ids(g_enemy_opts.cast, ids); return 1;
+    case SV_MONSTERS: *n = mon_ids(eo()->cast, ids); return 1;
     }
     *n = 0;
     return 0;
@@ -308,15 +354,16 @@ int setup_get(const MenuRow* m)
     int i = bio_at(m);
     if (i >= 0) return biorand_opt_get(bio(), i);
     switch (m->arg) {
-    case SV_GAME_TYPE: return ctx() == SC_INGAME ? biorand_active() : gs.type;
-    case SV_DIFFICULTY: return ctx() == SC_INGAME ? (sys->gm_mode <= 2 ? sys->gm_mode : 0) : pc_newgame_difficulty(-1);
+    case SV_GAME_TYPE: return guest() ? coop_biorand() == 1 : ctx() == SC_INGAME ? biorand_active() : gs.type;
+    case SV_DIFFICULTY: return ctx() == SC_INGAME ? (sys->gm_mode <= 2 ? sys->gm_mode : 0) : lobby() && g_coop.start >= 0 && g_coop.start < 3 ? g_coop.start : pc_newgame_difficulty(-1);
+    case SV_START_FROM: return g_coop.start;
     case SV_PRESET: return preset_now();
     case SV_LOOK: return look_now();
     case SV_LOOK_MODE: return look_mode();
     case SV_RANDOM_FROM: return g_biorand_appear_pool;
     case SV_RANDOM_IMPORTS: return g_biorand_appear_imports > 0;
     case SV_STORY: return story_now();
-    case SV_MONSTERS: return mon_pos(mon_id(g_enemy_opts.cast, g_enemy_opts.cast_enemy, enemy_cast_alone(&g_enemy_opts)));
+    case SV_MONSTERS: return mon_pos(mon_id(eo()->cast, eo()->cast_enemy, enemy_cast_alone(eo())));
     }
     return 0;
 }
@@ -332,7 +379,11 @@ void setup_set(const MenuRow* m, int v)
     }
     switch (m->arg) {
     case SV_GAME_TYPE: gs.type = v != 0; break;
-    case SV_DIFFICULTY: pc_newgame_difficulty(v < 0 ? 0 : v > 2 ? 2 : v); settings_save_later(); break;
+    case SV_DIFFICULTY:
+        pc_newgame_difficulty(v < 0 ? 0 : v > 2 ? 2 : v);
+        if (lobby() && g_coop.start < 3) g_coop.start = pc_newgame_difficulty(-1);   /* (the lobby's new game: ini coop_start) */
+        settings_save_later();
+        break;
     case SV_PRESET: preset_set(v); break;
     case SV_LOOK: look_set(v); break;
     case SV_LOOK_MODE: look_mode_set(v); break;
@@ -346,6 +397,7 @@ void setup_set(const MenuRow* m, int v)
 void setup_step(const MenuRow* m, int dir)
 {
     int n, lo, hi, v = setup_get(m);
+    if (m->kind == ML_VAR && m->arg == SV_START_FROM) { pc_lobby_start_step(dir); return; }   /* (New Game, then the saves: lobby_glue.c) */
     if (setup_choice(m, &n)) {
         if (m->kind == ML_VAR && m->arg == SV_PRESET) v = v == 3 ? (dir > 0 ? 0 : 2) : (v + dir + 3) % 3;   /* (Custom is not chosen: it is what is left) */
         else v = (v + dir + n) % n;
@@ -371,7 +423,12 @@ const char* setup_name(const MenuRow* m, int v, char* buf, int n)
         else snprintf(buf, n, "%d / %d", v - d->lo, d->hi - d->lo);
         return buf;
     }
-    if (m->arg == SV_MONSTERS) { mon_ids(g_enemy_opts.cast, ids); v = ids[v < 0 ? 0 : v > 3 ? 3 : v]; }
+    if (m->arg == SV_START_FROM) {   /* (a guest: the host's words, its note "Starts: ...") */
+        if (guest()) snprintf(buf, n, "%s", !strncmp(g_coop.peer_note, "Starts: ", 8) ? g_coop.peer_note + 8 : "...");
+        else pc_lobby_start_label(v, buf, n);
+        return buf;
+    }
+    if (m->arg == SV_MONSTERS) { mon_ids(eo()->cast, ids); v = ids[v < 0 ? 0 : v > 3 ? 3 : v]; }
     if (!m->names || v < 0) { snprintf(buf, n, "%d", v); return buf; }
     snprintf(buf, n, "%s", tr(m->names[v]));
     return buf;
@@ -385,7 +442,7 @@ int setup_default(const MenuRow* m, int* d)
     case SV_GAME_TYPE: case SV_DIFFICULTY: case SV_PRESET: case SV_LOOK_MODE: case SV_RANDOM_IMPORTS: *d = 0; return 1;
     case SV_RANDOM_FROM: *d = 1; return 1;   /* (biorand_opts.c: All Models, as before) */
     case SV_STORY: { int c = 0, a = 0; menu_default(menu_setting("Randomize Cutscene Cast"), &c); menu_default(menu_setting("Model Selection"), &a); *d = c ? 1 + a : 0; return 1; }
-    case SV_MONSTERS: if (!menu_default(menu_setting("Enemy Models"), &v)) return 0; *d = mon_pos(mon_id(g_enemy_opts.cast, v, 0)); return 1;
+    case SV_MONSTERS: if (!menu_default(menu_setting("Enemy Models"), &v)) return 0; *d = mon_pos(mon_id(eo()->cast, v, 0)); return 1;
     }
     return 0;   /* (You Look Like: your own, no default) */
 }
@@ -414,7 +471,8 @@ static int random_seed(int hi)
 static int start_game(void)
 {
     int d = pc_newgame_difficulty(-1);
-    if (ctx() != SC_NEWGAME) return UR_STAY;   /* (the lobby's START comes with P3) */
+    if (ctx() == SC_LOBBY_HOST) return UR_START;   /* (the lobby starts it: a save, or setup_lobby_start) */
+    if (ctx() != SC_NEWGAME) return UR_STAY;
     if (gs.type && !bio_ready()) {   /* BioRand's dialogs: generate (and download it first), then start */
         bio_saved();
         gs.flow = 1;
@@ -483,13 +541,13 @@ static int modifiers(char out[MOD_MAX][128], int brief)
 {
     char a[64], b[64];
     int n = 0;
-    const EnemyOpts* o = &g_enemy_opts;
+    const EnemyOpts* o = eo();
 #define ADD(...) do { if (n < MOD_MAX) snprintf(out[n++], 128, __VA_ARGS__); } while (0)
     if (o->rand) {
         if (brief) ADD("%s", tr("Enemy Randomizer"));
-        else ADD("%s: %s%s", tr("Enemy Randomizer"), settings_value(settings_of(&o->variety), a, sizeof(a)), o->events ? tr(", Event Enemies On") : "");
+        else ADD("%s: %s%s", tr("Enemy Randomizer"), settings_value_of(settings_of(&g_enemy_opts.variety), o->variety, a, sizeof(a)), o->events ? tr(", Event Enemies On") : "");
     }
-    if (o->extra) { if (brief) ADD("%s", tr("Extra Enemies")); else ADD("%s: %s", tr("Extra Enemies"), settings_value(settings_of(&o->extra), a, sizeof(a))); }
+    if (o->extra) { if (brief) ADD("%s", tr("Extra Enemies")); else ADD("%s: %s", tr("Extra Enemies"), settings_value_of(settings_of(&g_enemy_opts.extra), o->extra, a, sizeof(a))); }
     if (o->place) ADD("%s", tr("Rearranged Enemies"));
     {   /* the looks, in one line */
         char t[128] = "";
@@ -508,11 +566,11 @@ static int modifiers(char out[MOD_MAX][128], int brief)
         if (t[0]) { if (brief) ADD("%s", tr("Looks")); else ADD("%s: %s", tr("Looks"), t); }
     }
     if (o->voices) ADD("%s", tr("Voices Follow the Look"));
-    if (pc_cfg_extra_objects()) ADD("%s", tr("Extra Item Boxes and Herbs"));
-    if (pc_cfg_no_ink_ribbon()) ADD("%s", tr("Save Without Ink Ribbons"));
+    if (val_of("Extra Item Boxes and Herbs")) ADD("%s", tr("Extra Item Boxes and Herbs"));
+    if (val_of("Free Typewriter Saves")) ADD("%s", tr("Save Without Ink Ribbons"));
     {
         int k = menu_setting("Headshots & Piercing"), d;
-        if (k >= 0 && menu_default(k, &d) && settings_get(&g_settings[k]) != d) ADD("%s: %s", tr("Headshots and Piercing"), tr(settings_get(&g_settings[k]) ? "On" : "Off"));
+        if (k >= 0 && menu_default(k, &d) && val(k) != d) ADD("%s: %s", tr("Headshots and Piercing"), tr(val(k) ? "On" : "Off"));
     }
 #undef ADD
     return n;
@@ -546,8 +604,9 @@ int setup_info(const MenuRow* m, int line, char* buf, int n, unsigned int* col)
     boxed = k;
     /* below the box, grey: BioRand's state or the seed the modifiers use, and when rules can change */
     if (ctx() == SC_NEWGAME && gs.type) snprintf(lines[k++], 128, "%s", tr(bio_ready() ? "BioRand: ready." : "BioRand: will generate at start (about 20 s)."));
-    else if (g_enemy_opts.rand || g_enemy_opts.place || g_enemy_opts.extra || g_enemy_opts.cast || look_now() == 2) snprintf(lines[k++], 128, tr("Enemy Randomizer Seed: %d"), g_enemy_opts.seed);
-    snprintf(lines[k++], 128, "%s", tr(ctx() == SC_INGAME ? "Rules apply from the next room." : "Rules can also be changed later from the pause menu."));
+    else if (eo()->rand || eo()->place || eo()->extra || eo()->cast || look_now() == 2) snprintf(lines[k++], 128, tr("Enemy Randomizer Seed: %d"), eo()->seed);
+    snprintf(lines[k++], 128, "%s", tr(guest() ? "Set by the host; your look (YOU) is yours." : ctx() == SC_INGAME ? "Rules apply from the next room."
+                                                                                    : "Rules can also be changed later from the pause menu."));
     if (buf) {
         snprintf(buf, n, "%s", line >= 0 && line < k ? lines[line] : "");
         *col = line < boxed ? 0xFFE8E8E2u : C_GREY;
@@ -566,7 +625,7 @@ static void line_at(float x, float y, float w, const char* s, float sc, unsigned
 static void who_is_who(float x, float y, float w)
 {
     char a[96], b[96], t[200];
-    const EnemyOpts* o = &g_enemy_opts;
+    const EnemyOpts* o = eo();
     int look = look_now(), mon = mon_id(o->cast, o->cast_enemy, enemy_cast_alone(o)), sep = look == 2 ? look_mode() : g_appear_per, row = 0;
     static const char* const st[] = { "original", "swapped", "any model", "custom looks" };
     static const char* const mt[] = { "original", "any monster", "like story characters", "custom" };
@@ -594,6 +653,17 @@ int setup_preview(const MenuRow* m, float x, float y, float w)
     char t[200], s[BIORAND_SEED_CAP];
     int top = m->cat;
     while (menu_cats[top].parent >= 0) top = menu_cats[top].parent;
+    if (guest() && lobby() && setup_host_changed()) {   /* (mockup 07: what the host just changed) */
+        pc_ui_text(x, y, tr("HOST CHANGED"), 0.46f, C_GOLD);
+        line_at(x, y + 16, w, setup_host_changed(), 0.42f, C_GOLD);
+        return 1;
+    }
+    if (m->kind == ML_VAR && m->arg == SV_START_FROM) {
+        pc_ui_text(x, y, tr("START FROM"), 0.46f, C_GOLD);
+        line_at(x, y + 16, w, tr(guest() ? "The host chooses a new game or one of its saves." : g_coop.start >= 3
+                                 ? "Your save: you both go on from there. Its BioRand state counts." : "A new game with the Difficulty above."), 0.42f, C_HELP);
+        return 1;
+    }
     if (top == MC_CHARACTERS || (m->kind == ML_SHORTCUT && m->arg == MC_CHARACTERS)) { who_is_who(x, y, w); return 1; }
     if (m->kind == ML_ACTION && m->arg == SA_START) {
         char mods[MOD_MAX][128];
@@ -729,4 +799,159 @@ int pc_game_setup(void)
     }
     if (r) pc_game_setup_close();
     return r;
+}
+
+/* ---------------------------------------------------------------- the co-op lobby (--new-menu; lobby_glue.c, title mode 30)
+   The lobby hosts the same screen while it stays open (the session never drops: lb.open and g_coop.lobby stay, no
+   COOP_REQ_STOP): the host edits (Edit Game Setup, Your Character), a guest reads the host's values ("Set by the host.")
+   and edits its own YOU. view 0 the host's, 1 a guest's; cat the category to show (-1 the last); only: that one alone. */
+void setup_lobby_open(int view, int cat, int only)
+{
+    g_setup_ctx = view ? SC_LOBBY_GUEST : SC_LOBBY_HOST;
+    gs.flow = gs.pasting = 0;
+    gs.bio_loaded = 0;
+    ui_rows_open(MS_SETUP, view ? "MULTIPLAYER>LOBBY>GAME SETUP (SET BY THE HOST)" : "MULTIPLAYER>LOBBY>GAME SETUP");
+    ui_rows_only(only ? cat : -1);
+    ui_rows_picker(1);
+    if (cat >= 0) ui_rows_goto(cat, NULL);
+    host_log("setup: GAME SETUP in the lobby (%s%s)\n", view ? "a guest's, read-only" : "the host's", only ? ", one category" : "");
+}
+
+void setup_lobby_close(void)
+{
+    ui_rows_close();
+    ui_rows_only(-1);
+    ui_rows_picker(0);
+    g_setup_ctx = SC_NEWGAME;
+}
+
+/* the host's Game Type in the lobby (not saved, as NEW GAME's; the lobby starts it as the old lobby rule BIORAND, ini biorand) */
+void setup_lobby_type(int on) { gs.type = on != 0; }
+int  setup_lobby_bio(void) { return gs.type; }
+int  setup_lobby_bio_ready(void) { return bio_ready(); }
+
+/* BioRand's dialogs (download, generate) while they are up: 0 on, 1 over (back), 2 the game starts (sys->gm_mode, BioRand on) */
+int setup_flow_frame(void)
+{
+    int r;
+    if (!gs.flow) return 1;
+    if ((r = pc_biorand_flow())) { gs.flow = 0; if (r == 1) gs.bio_loaded = 0; }
+    return r;
+}
+
+/* the lobby's START GAME of a new game of difficulty d (a save: the lobby's own): 2 start now (sys->gm_mode set, BioRand
+   on or off for it), 1 BioRand's dialogs first (setup_flow_frame: generate, then start) */
+int setup_lobby_start(int d)
+{
+    if (gs.type && !bio_ready()) { bio_saved(); gs.flow = 1; pc_biorand_flow_open(1, d); return 1; }
+    biorand_game(gs.type);
+    sys->gm_mode = d;
+    host_log("setup: the lobby's START GAME: %s, difficulty %d\n", gs.type ? "BioRand (the installed game)" : "Standard", d);
+    return 2;
+}
+
+/* once per frame while it is up: 0 stay, 1 back to the lobby, 2 START GAME (the lobby starts it), 3 the game starts now
+   (BioRand generated: sys->gm_mode set) */
+int pc_setup_lobby(void)
+{
+    int r = 0, w;
+    if (gs.pasting && __atomic_load_n(&g_lobby_io.paste_req, __ATOMIC_ACQUIRE) == 2) {
+        gs.pasting = 0;
+        g_lobby_io.paste_req = 0;
+        paste_end(g_lobby_io.paste);
+    }
+    if (gs.flow) {   /* (Check for BioRand Updates) */
+        if (setup_flow_frame() == 2) { setup_lobby_close(); return 3; }
+        return 0;
+    }
+    switch (ui_rows_run(AdvWork.PortId, 1)) {
+    case UR_BACK: r = 1; break;
+    case UR_START: r = 2; break;
+    case UR_PICK: {
+        const Setting* s = ui_rows_pick();
+        if (s) pc_lobby_models(s, !strcmp(s->label, "Chris's Model"));
+        break;
+    }
+    case UR_CLOSE: if ((w = ui_rows_window())) overlay_request(w); break;
+    }
+    if (r) setup_lobby_close();
+    return r;
+}
+
+/* ... a guest's: what the host changed lately ("Extra Enemies: Up to 3"), for its summary and its read-only rows. Every
+   frame of a guest's lobby; a value seen for the first time (the host's come in after the join) is no change. */
+static struct { int v[512]; unsigned char have[512]; unsigned int since, at; char note[40]; char msg[128]; } hc;
+static int host_decided(const MenuRow* m, int* v)
+{
+    if (menu_cats[m->cat].screen != MS_SETUP) return 0;
+    if (m->kind == ML_SET) { int k = menu_setting(m->ref); return k >= 0 && host_val(&g_settings[k], v); }
+    if (m->kind == ML_VAR && (m->arg == SV_GAME_TYPE || m->arg == SV_STORY || m->arg == SV_MONSTERS)) { *v = setup_get(m); return 1; }
+    return 0;
+}
+void setup_track(void)
+{
+    int keep = g_setup_ctx;
+    unsigned int now = net_ms();
+    if (!coop_is_guest() || g_coop.state != COOP_CONNECTED) { memset(&hc, 0, sizeof(hc)); return; }
+    if (!hc.since) hc.since = now | 1;
+    g_setup_ctx = SC_LOBBY_GUEST;
+    for (int i = 0; i < menu_rows_n && i < 512; i++) {
+        const MenuRow* m = &menu_rows[i];
+        char a[96];
+        int v;
+        if (!host_decided(m, &v)) continue;
+        if (hc.have[i] && hc.v[i] != v && now - hc.since > 2000) {
+            snprintf(hc.msg, sizeof(hc.msg), "%s: %s", tr(m->label ? m->label : m->ref), ui_rows_value(m, a, sizeof(a)));
+            hc.at = now | 1;
+            host_log("setup: the host changed %s\n", hc.msg);
+        }
+        hc.v[i] = v;
+        hc.have[i] = 1;
+    }
+    if (!strncmp(g_coop.peer_note, "Starts: ", 8)) {   /* (Start From, in the host's note) */
+        if (hc.note[0] && strcmp(hc.note, g_coop.peer_note) && now - hc.since > 2000) {
+            snprintf(hc.msg, sizeof(hc.msg), "%.60s: %.40s", tr("Start From"), g_coop.peer_note + 8);
+            hc.at = now | 1;
+            host_log("setup: the host changed %s\n", hc.msg);
+        }
+        snprintf(hc.note, sizeof(hc.note), "%s", g_coop.peer_note);
+    }
+    g_setup_ctx = keep;
+}
+const char* setup_host_changed(void) { return hc.at && net_ms() - hc.at < 6000 ? hc.msg : NULL; }
+
+/* the lobby's GAME SETUP box (view 1: a guest's, the host's values): what starts, BioRand, the modifiers, the co-op rules
+   not at their defaults; the count. brief: "Normal, 3 changes" (Edit Game Setup's value) */
+int setup_lobby_lines(char out[][128], int max, int view, char* brief, int nb)
+{
+    static const char* const diff[] = { "Normal", "Easy", "Very Easy" };
+    char mods[MOD_MAX][128], a[96], c[48];
+    int keep = g_setup_ctx, n = 0, k, changes, bio_on;
+    g_setup_ctx = view ? SC_LOBBY_GUEST : SC_LOBBY_HOST;
+    bio_on = setup_get(&(MenuRow){ MC_OVERVIEW, NULL, ML_VAR, NULL, SV_GAME_TYPE });
+#define OUT(...) do { if (n < max) snprintf(out[n++], 128, __VA_ARGS__); } while (0)
+    if (view) OUT("%.120s", !strncmp(g_coop.peer_note, "Starts: ", 8) ? g_coop.peer_note + 8 : tr("Waiting for the host's setup..."));
+    else OUT("%s", pc_lobby_start_label(g_coop.start, a, sizeof(a)));
+    if (bio_on && view) OUT("%s", tr("BioRand: the host's game"));
+    else if (bio_on) OUT(tr("BioRand: seed %d%s"), bio()->Seed, bio_ready() ? "" : tr(" (generates at start)"));
+    changes = k = modifiers(mods, 0);
+    for (int i = 0; i < k; i++) OUT("%.127s", mods[i]);
+    for (int i = 0; i < menu_rows_n; i++) {   /* the co-op rules not at their defaults */
+        const MenuRow* m = &menu_rows[i];
+        int s = menu_setting(m->ref), d;
+        if (m->cat != MC_COOP_RULES || m->kind != ML_SET || s < 0 || !menu_default(s, &d) || val(s) == d) continue;
+        OUT("%s: %s", tr(m->label ? m->label : m->ref), ui_rows_value(m, a, sizeof(a)));
+        changes++;
+    }
+    if (!changes) OUT("%s", tr("No modifiers: the original game."));
+#undef OUT
+    if (brief) {
+        const char* what = view ? "" : g_coop.start >= 3 ? tr("Save") : tr(diff[setup_get(&(MenuRow){ MC_OVERVIEW, NULL, ML_VAR, NULL, SV_DIFFICULTY }) % 3]);
+        snprintf(c, sizeof(c), tr(changes == 1 ? "%d change" : "%d changes"), changes);
+        if (!changes) snprintf(brief, nb, "%s", *what ? what : tr("Original"));
+        else if (*what) snprintf(brief, nb, "%s, %s", what, c);
+        else snprintf(brief, nb, "%s", c);
+    }
+    g_setup_ctx = keep;
+    return n;
 }

@@ -4881,6 +4881,7 @@ static int rule(int opt)
    guest's lobby (the host's value) */
 int coop_skip_detector(void) { return rule(OPT_SKIP_DETECTOR); }
 int coop_quick_start(void) { return rule(OPT_QUICK_START); }   /* "Quick start" (protocol 23): the guest's lobby */
+int coop_rule(int opt) { return rule(opt); }   /* the new menu's read-only GAME SETUP of a guest (setup_glue.c): the host's Pose.opts rule */
 
 /* event.c bhPlItemCheck, ps2_McSaveFile.c mcWriteStartSaveFile: typewriters save without an ink ribbon and use none.
    The setting (single player, and the host); a guest plays by the host's rule once it knows it. */
@@ -7222,6 +7223,11 @@ static const char* binding_names(int row, char* out, int n)
     return out;
 }
 
+/* the new menu's PAUSE > CO-OP > TRADE ITEMS (pause_glue.c, once OPTION has closed): the trade key's press within the next
+   frames (a second and a half), as soon as both players are free and next to each other; else at the end, which says why */
+static int trade_menu;
+void coop_trade_menu(void) { trade_menu = 90; }
+
 /* at the hand-off, after trade_frame */
 static void ts_frame(void)
 {
@@ -7269,6 +7275,10 @@ static void ts_frame(void)
     partner = have_rx && same_room() && (rx.flags & (PF_IN_GAME | PF_VISIBLE)) == (PF_IN_GAME | PF_VISIBLE) &&
               (rx.busy == BUSY_NONE || rx.busy == BUSY_PAUSED || rx.busy == BUSY_TRADE) && rx.mode0 == 1 && rx.mset == MSET_OWN;
     near = have_peer && have_rx && tx_in_game && trade_near();
+    if (trade_menu && g_trade.phase == TRADE_IDLE) {   /* the pause menu's TRADE ITEMS: the trade key, once we can (or why not) */
+        if ((me && partner && near) || trade_menu == 1) press = 1;
+        trade_menu = press ? 0 : trade_menu - 1;
+    } else trade_menu = 0;
     g_trade.hint[0] = 0;
     switch (g_trade.phase) {
     case TRADE_IDLE:

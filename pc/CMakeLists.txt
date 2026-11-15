@@ -252,6 +252,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 add_test(NAME rules COMMAND test_rules)
 
+# the new menu's character grid for text fields (src/host/textgrid.h): its keys, moves, field rules, the lobby's READY note
+add_executable(test_textgrid tests/test_textgrid.c)
+add_test(NAME textgrid COMMAND test_textgrid)
+
 # every recvx.ini key has a row in the settings table (F1 and OPTION > ENHANCED SETTINGS) or is listed
 add_test(NAME settings COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_settings.cmake)
 # the new menu's tree (src/host/menu_layout.c): every settings-table row placed exactly once; and that the check catches a broken one

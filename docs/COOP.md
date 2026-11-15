@@ -36,6 +36,59 @@ Ways to start a session:
 
 ## Lobby
 
+With `--new-menu` (or `--dev`) MULTIPLAYER opens the new screens described in the next section; without it, the lobby
+below, unchanged. Both use the same session, rules and wire (protocol 57): a host on one can be joined from the other.
+
+### The new MULTIPLAYER screens (`--new-menu`)
+
+**MULTIPLAYER**: **HOST GAME**, **JOIN GAME**, **Co-op Settings** (SETTINGS > CO-OP: name, name tag, connection, co-op
+server, hosting), **BACK**.
+
+**HOST GAME** opens the lobby at once: the session is hosted (Connection: Automatic with a co-op server makes a room on
+it, Direct or no server listens on Host Port) and the lobby shows the **ROOM CODE** ("via" the server) or, direct, the
+**JOIN ADDRESS** and its **CODE**. Your partner can join while you set up. The host's rows:
+
+| Row | |
+|---|---|
+| **START GAME** | Starts with this setup (Start on a controller does the same). If your partner has not said READY, the first press says so and the second starts. A BioRand setup whose game is not installed generates it first (BioRand's questions and progress over the lobby), then starts. |
+| **Edit Game Setup** | GAME SETUP ([MENUS.md](MENUS.md)) in the lobby: OVERVIEW (Game Type, Difficulty, **Start From**, Preset, Your Character), RULES, ENEMIES, CHARACTERS, BIORAND (with Game Type BioRand), **CO-OP RULES** (Loot Sharing, Duplicate Weapons and Ribbons, Skip Cutscenes Together, Game Over Rule, Metal Detector Check, Quick Start, Pause Enemies During Trades, Shared Enemy Control). The lobby stays open: the session never drops while you edit, and your partner sees each change. Its value: the difficulty and how many rules differ ("Normal, 3 changes"). |
+| **Start From** | New Game (with the Difficulty), or one of your saves (as the old lobby's START). |
+| **Room Password** | Through a co-op server: the password your partner types. Changing it opens the room again (a new room code); not while a partner is in the lobby. Not saved. |
+| **Your Character** | GAME SETUP > CHARACTERS (your look; the lobby's 3D picker). |
+| **COPY ROOM CODE** / **COPY JOIN ADDRESS** | To the clipboard. With Hide IP Addresses, **Show Addresses** reveals the address here. |
+| **REMOVE PARTNER** | With a partner: as before (it can rejoin with the same code). |
+| **CLOSE LOBBY** | Closes the session (asks first with a partner in it). Cancel does the same. |
+
+On the right the **GAME SETUP** box sums up what starts: Start From, BioRand, every modifier and the co-op rules that
+differ from their defaults. Under the partner's model: Ready or Not ready and the ping.
+
+**JOIN GAME** is one page: **Room Code or Address** (a text with a dot, a colon or a `#` is an address and connects
+directly; anything else is a room code through the co-op server), **Password**, **Player Name**, **Connection** (SETTINGS
+> CO-OP), **Your Character**, **Starting Items** (as the old ITEMS), **Follow Host**, **JOIN**. A join that fails comes
+back here with the reason.
+
+**The guest's lobby**: **READY** (Yes / No: the host sees it; it travels in the lobby note the old lobby already sends,
+so the wire is unchanged), **Game Setup** (the host's GAME SETUP, read-only: every row with the host's value and "Set by
+the host."; your own YOU rows and Extra Mouth Movement stay yours), **Your Character**, **Starting Items**, **LEAVE**.
+When the host changes a rule it shows for a few seconds as "Host changed: Extra Enemies: Up to 2" in the summary and in
+the read-only setup. A guest whose You Look Like is Random sees its look from the host's seed and its slot (D19) on its
+model in the lobby, and the host sees it too.
+
+**BioRand**: a guest without the host's BioRand game gets **GENERATE THE HOST'S BIORAND GAME** in its lobby (chosen for
+it) instead of the old BIORAND screen; confirming it is the consent: the CLI is downloaded if needed, the game generated
+with progress and CANCEL, then compared again. Quick Start is greyed with BioRand ("No effect with BioRand.").
+
+**Text fields** (room code, address, password, player name, co-op server, the seeds) open the character grid: a controller
+moves on it and types the cell (Triangle deletes, Start is OK, SHIFT switches case, PASTE pastes); the keyboard types
+directly (Backspace, Enter, Esc, Ctrl+V); the mouse clicks cells.
+
+In a game, **PAUSE > CO-OP** replaces the F3 window as the controller's way in: **TRADE ITEMS** (the trade key, once the
+pause menu has closed and both players are free next to each other; otherwise it says why), **Show Addresses** (with
+Hide IP Addresses), **REMOVE PARTNER** (host), **END SESSION** (host) or **LEAVE** (guest; both ask with a second
+press), **Co-op Window (F3)**; on the right the partner, the ping and the connection. F3 stays a keyboard shortcut.
+
+### The lobby without `--new-menu`
+
 Choose **MULTIPLAYER** in the title menu (the row above EXIT; keyboard, gamepad or mouse). The lobby is
 drawn in the game's own style; your model turns in a 3D preview on the left. It goes in steps:
 

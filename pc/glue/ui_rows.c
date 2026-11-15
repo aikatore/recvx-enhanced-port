@@ -29,6 +29,8 @@
 #include "../src/host/actors.h"
 #include "../src/host/coop.h"
 #include "../src/host/biorand_opts.h"
+#include "../src/host/textgrid.h"
+#include "../src/net/net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -122,10 +124,9 @@ static struct {
     const MenuRow* go;                /* ui_rows_goto: the row to put the cursor on when the rows are built */
     int picker;                       /* the host has the 3D look picker (UR_PICK) */
     const Setting* pick;              /* UR_PICK's row */
-    const MenuRow* edit;              /* a seed being typed (the Enemy Randomizer Seed, BioRand's Seed): its row */
-    char ebuf[12];
-    int caret, blink;
-} st = { .last = { -1, -1, -1 } };
+    const MenuRow* edit;              /* a text typed on the character grid (text_grid.c): a seed's row, Player Name's, Co-op Server's */
+    int only;                         /* ui_rows_only: the one category listed, -1 all */
+} st = { .last = { -1, -1, -1 }, .only = -1 };
 
 static MouseTake mt;
 static int rtl;
@@ -201,7 +202,15 @@ static void preset_set(int p)
     }
 }
 
-static const char* text_value(int which) { return which ? (g_coop.server[0] ? g_coop.server : tr("None")) : g_coop.name; }
+static const char* text_value(int which) { return which ? (g_coop.server[0] ? coop_shown(g_coop.server) : tr("None")) : g_coop.name; }
+
+/* a table row's value as shown: its own, or on a co-op guest's GAME SETUP the host's */
+static int shown_get(const Row* r)
+{
+    int v;
+    if (in_setup(r->m) && setup_host_value(r->m, r->set, &v)) return v;
+    return settings_get(row_set(r));
+}
 
 /* the value shown (buf) or NULL for none */
 static const char* value_text(const Row* r, char* buf, int n)
@@ -220,8 +229,8 @@ static const char* value_text(const Row* r, char* buf, int n)
             if (v) snprintf(buf, n, "%d%%", v); else snprintf(buf, n, "%s", tr("Off"));
             return buf;
         }
-        if (m->names && !s->name) { int v = settings_get(s) - s->lo; snprintf(buf, n, "%s", tr(m->names[v < 0 ? 0 : v])); return buf; }
-        return settings_value(s, buf, n);
+        if (m->names && !s->name) { int v = shown_get(r) - s->lo; snprintf(buf, n, "%s", tr(m->names[v < 0 ? 0 : v])); return buf; }
+        return settings_value_of(s, shown_get(r), buf, n);
     case ML_SCREEN:
         if (m->arg != 1) return NULL;
         snprintf(buf, n, tr("Type %c"), 'A' + (sys->keytype & 3));
@@ -251,7 +260,7 @@ static int changed(const Row* r)
     case ML_SET: case ML_MERGED:
         if (!s || !menu_default(r->set, &d)) return 0;
         if (r->m->flags & MLF_VIBRATION) return vib_get() != d;
-        return settings_get(s) != d;
+        return shown_get(r) != d;
     case ML_SCREEN: return r->m->arg == 1 && (sys->keytype & 3) != 0;
     case ML_OUTPUT: return GetSoundMode() != 0;
     case ML_PRESET: return preset_get() != 1;
@@ -355,7 +364,11 @@ static void move_sel(int dir, int sound)
 }
 
 /* ---------------------------------------------------------------- categories, sub-pages */
-static int cat_listed(int c) { return menu_cats[c].screen == st.screen && menu_cats[c].parent < 0 && (st.screen != MS_SETUP || setup_cat_shown(c)); }
+static int cat_listed(int c)
+{
+    if (st.only >= 0) return c == st.only;
+    return menu_cats[c].screen == st.screen && menu_cats[c].parent < 0 && (st.screen != MS_SETUP || setup_cat_shown(c));
+}
 
 static void set_cat(int c)
 {
@@ -421,58 +434,49 @@ void ui_rows_goto(int cat, const MenuRow* m)
 void ui_rows_picker(int on) { st.picker = on; }
 const Setting* ui_rows_pick(void) { return st.pick; }
 void ui_rows_say(const char* m) { say(m); }
+void ui_rows_only(int cat) { st.only = cat; }
+int ui_pad(void) { return st.pad; }
+const char* ui_rows_value(const MenuRow* m, char* buf, int n)
+{
+    Row r = { R_ITEM, m, setting_of(m), 0 };
+    const char* v = value_text(&r, buf, n);
+    if (!v) buf[0] = 0;
+    return buf;
+}
 
-/* ---------------------------------------------------------------- a seed typed (digits from the keyboard; the controller's up / down at the caret) */
-static int edit_hi(void) { int lo, hi; if (st.edit->kind == ML_BIO) { setup_range(st.edit, &lo, &hi); return hi; } return settings_of(&g_enemy_opts.seed)->hi; }
+/* ---------------------------------------------------------------- a text typed on the character grid (text_grid.c): a seed
+   (the Enemy Randomizer Seed, BioRand's Seed), Player Name, Co-op Server */
 static void edit_begin(const Row* r)
 {
+    char hi[16];
+    int lo, top;
     st.edit = r->m;
-    snprintf(st.ebuf, sizeof(st.ebuf), "%d", r->m->kind == ML_BIO ? setup_get(r->m) : g_enemy_opts.seed);
-    st.caret = (int)strlen(st.ebuf);
-    g_lobby_io.tail = g_lobby_io.head;   /* (nothing typed before counts) */
-    g_lobby_io.text_on = 1;
-    CallSystemSe(0, 3);
+    if (r->m->kind == ML_TEXT) {   /* (a name: edited as it is) */
+        if (r->m->arg) tg_open("Co-op Server", (const char*)g_coop.server, (int)sizeof(g_coop.server) - 1, TGK_SERVER, g_coop.hide_ip && net_numeric_host((const char*)g_coop.server));
+        else tg_open("Player Name", g_coop.name, COOP_NAME_MAX - 1, TGK_NAME, 0);
+        return;
+    }
+    if (r->m->kind == ML_BIO) setup_range(r->m, &lo, &top); else top = settings_of(&g_enemy_opts.seed)->hi;
+    /* a seed: a new number (empty: OK keeps the old one); as many digits as the highest, set clamps */
+    tg_open(r->m->kind == ML_BIO ? "Seed" : "Enemy Randomizer Seed", "", snprintf(hi, sizeof(hi), "%d", top), TGK_DIGITS, 0);
 }
 static void edit_end(int accept)
 {
-    if (accept && st.ebuf[0]) {   /* (as many digits as the highest; set clamps) */
-        int v = (int)strtol(st.ebuf, NULL, 10);
+    const char* t = tg_text();
+    if (accept && st.edit->kind == ML_TEXT && st.edit->arg) snprintf(g_coop.server, sizeof(g_coop.server), "%s", t);   /* (empty: no server) */
+    else if (accept && st.edit->kind == ML_TEXT) {
+        while (*t == ' ') t++;
+        if (*t) snprintf(g_coop.name, sizeof(g_coop.name), "%.*s", (int)sizeof(g_coop.name) - 1, t);
+    } else if (accept && t[0]) {
+        int v = (int)strtol(t, NULL, 10);
         if (st.edit->kind == ML_BIO) setup_set(st.edit, v);
         else settings_set(settings_of(&g_enemy_opts.seed), v);
     }
+    if (accept) settings_save_later();
+    tg_close();
     st.edit = NULL;
-    g_lobby_io.text_on = 0;
-    CallSystemSe(0, accept ? 3 : 0);
 }
-static void edit_input(unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel, int esc)
-{
-    char hi[12];
-    int n, max = snprintf(hi, sizeof(hi), "%d", edit_hi());
-    while (g_lobby_io.tail != __atomic_load_n(&g_lobby_io.head, __ATOMIC_ACQUIRE)) {
-        int k = g_lobby_io.keys[g_lobby_io.tail & 63];
-        n = (int)strlen(st.ebuf);
-        g_lobby_io.tail++;
-        if (k == LK_ENTER) { edit_end(1); return; }
-        if (k == LK_ESC) { edit_end(0); return; }
-        if (k == LK_BACK && st.caret > 0) { memmove(st.ebuf + st.caret - 1, st.ebuf + st.caret, n - st.caret + 1); st.caret--; }
-        else if (k == LK_DEL && st.caret < n) memmove(st.ebuf + st.caret, st.ebuf + st.caret + 1, n - st.caret);
-        else if (k == LK_LEFT && st.caret > 0) st.caret--;
-        else if (k == LK_RIGHT && st.caret < n) st.caret++;
-        else if (k == LK_HOME) st.caret = 0;
-        else if (k == LK_END) st.caret = n;
-        else if (k >= '0' && k <= '9' && n < max) { memmove(st.ebuf + st.caret + 1, st.ebuf + st.caret, n - st.caret + 1); st.ebuf[st.caret++] = (char)k; }
-    }
-    if (press & ok) { edit_end(1); return; }
-    if ((press & cancel) || esc) { edit_end(0); return; }
-    n = (int)strlen(st.ebuf);
-    if (rept & (P_UP | P_DOWN)) {
-        if (st.caret == n) { if (n >= max) return; st.ebuf[n] = '0'; st.ebuf[n + 1] = 0; }   /* a new digit, 0 */
-        else st.ebuf[st.caret] = (char)('0' + (st.ebuf[st.caret] - '0' + ((rept & P_UP) ? 1 : 9)) % 10);
-        CallSystemSe(0, 2);
-    }
-    if ((rept & P_LEFT) && st.caret > 0) st.caret--;
-    if ((rept & P_RIGHT) && st.caret < n) st.caret++;
-}
+
 
 /* ---------------------------------------------------------------- changing and running */
 static void change(const Row* r, int dir)
@@ -559,7 +563,11 @@ static int activate(const Row* r)
         return UR_STAY;
     }
     case ML_SCREEN: CallSystemSe(0, 3); return UR_LEVEL + r->m->arg;
-    case ML_WINDOW: case ML_TEXT: st.window = r->m->kind == ML_TEXT ? 3 : r->m->arg; CallSystemSe(0, 3); return UR_CLOSE;
+    case ML_TEXT:   /* the character grid (the co-op server: not while a session uses it) */
+        if (r->m->arg && g_coop.state != COOP_OFF) { CallSystemSe(0, 1); say("Not during a co-op session."); return UR_STAY; }
+        edit_begin(r);
+        return UR_STAY;
+    case ML_WINDOW: st.window = r->m->arg; CallSystemSe(0, 3); return UR_CLOSE;
     case ML_OUTPUT: case ML_PRESET: change(r, 1); return UR_STAY;
     case ML_SET:
         if (!s) return UR_STAY;
@@ -763,23 +771,16 @@ static void draw_row(int i, int sel)
     }
     text_fit(X_LABEL, y, label, SC_ROW, X_VALUE - X_LABEL - 16, col);
     if (r->kind == R_RATES || r->kind == R_CUSTOM) {
-        if (r->kind == R_RATES) rate_list_summary(g_enemy_opts.rate, val, sizeof(val));
-        else if (r->idx == 2) cast_list_summary(2, g_enemy_opts.cast_enemy_off, 0, val, sizeof(val));
+        if (r->kind == R_RATES) rate_list_summary(enemy_opts()->rate, val, sizeof(val));
+        else if (r->idx == 2) cast_list_summary(2, enemy_opts()->cast_enemy_off, 0, val, sizeof(val));
         else if (r->idx) cast_list_summary(1, cast_appear_off, g_biorand_appear_imports > 0 ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, sizeof(val));
-        else cast_list_summary(0, cast_off, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, sizeof(val));
+        else cast_list_summary(0, enemy_cast_off(), enemy_opts()->cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, sizeof(val));
         text_fit(X_VALUE, y, val, SC_ROW, VALUE_W, col);
         pc_ui_arrow(mx(ROWS_X1 - 6, 0), y + 9, rtl ? -1 : 1, col);
         return;
     }
     if (r->kind != R_ITEM) return;
     if (r->m->kind == ML_ACTION) return;   /* (a button: its label alone) */
-    if (st.edit == r->m) {   /* the seed being typed, its caret blinking */
-        char pre[12];
-        text_m(X_VALUE, y, st.ebuf, SC_ROW, 0xFFFFFFFF);
-        snprintf(pre, sizeof(pre), "%.*s", st.caret, st.ebuf);
-        if (st.blink & 16) rect_m(X_VALUE + pc_ui_text_w(pre, SC_ROW), y, X_VALUE + 2 + pc_ui_text_w(pre, SC_ROW), y + 16, 0xFFFFFFFF, Z_HI + 0.04f);
-        return;
-    }
     if (s && (s->flags & SET_ACTION)) {
         if (r->set < (int)sizeof(st.pending) && st.pending[r->set]) text_m(X_VALUE, y + 1, pc_in_game() ? "(on resume)" : "(on leaving menu)", 0.48f, C_GOLD);
         return;
@@ -837,7 +838,7 @@ static void draw_preview(const Row* r)
     }
     if (settings_is_bool(s) || s->names || (r->m->names && !s->name) || (s->name && settings_hi(s) - s->lo <= 8 && !s->fmt)) {   /* a choice: its values */
         float x = X_PREVIEW, y = Y_HELP + 16;
-        int hi = settings_hi(s), cur = settings_get(s);
+        int hi = settings_hi(s), cur = shown_get(r);
         text_m(X_PREVIEW, Y_HELP, "VALUES", 0.48f, C_GOLD);
         if (hi - s->lo > 8) return;
         for (int v = s->lo; v <= hi; v++) {
@@ -859,7 +860,7 @@ static void draw_preview(const Row* r)
         return;
     }
     {   /* a number: its range, the value and the default */
-        int lo = s->lo, hi = settings_hi(s), v = settings_get(s);
+        int lo = s->lo, hi = settings_hi(s), v = shown_get(r);
         float x0 = X_PREVIEW, x1 = ROWS_X1 - 2, k = hi > lo ? (float)(v - lo) / (hi - lo) : 0, kd;
         if (r->m->flags & MLF_VIBRATION) v = vib_get(), k = hi > lo ? (float)(v - lo) / (hi - lo) : 0;
         text_m(X_PREVIEW, Y_HELP, "RANGE", 0.48f, C_GOLD);
@@ -941,9 +942,6 @@ static void draw_help(void)
         snprintf(t, sizeof(t), tr("Press a %s for %s. Esc: cancel. Delete: clear. %d s left."), tr(st.cat == MC_BIND_PAD ? "controller button" : "key or mouse button"),
                  tr(bind_rows[st.capture - 1].name), (bind_capture_left_ms() + 999) / 1000);
         col = 0xFFFFE080;
-    } else if (st.edit) {
-        snprintf(t, sizeof(t), tr("Type a number from 0 to %d. Enter: confirm; Esc: cancel. Controller: up / down change a digit, left / right move."), edit_hi());
-        col = 0xFFFFE080;
     } else if (st.msg_t > 0) { st.msg_t--; snprintf(t, sizeof(t), "%s", st.msg); col = 0xFFFFE080; }
     else if (st.list) { snprintf(t, sizeof(t), "%s", tr(st.list == 2 ? rate_list_help() : cast_list_help())); name[0] = 0; }
     else switch (r->kind) {
@@ -992,14 +990,29 @@ static void draw(void)
         float x = CAT_X0;
         for (int i = 0; i < st.depth; i++) path[n++] = st.stack[i];
         path[n++] = st.cat;
-        text_m(x, 44, st.root, 0.45f, C_ROW);
-        x += pc_ui_text_w(st.root, 0.45f);
+        for (const char* p = st.root; *p;) {   /* (a root of several words: "MULTIPLAYER>LOBBY>GAME SETUP") */
+            char part[64];
+            int len = (int)strcspn(p, ">");
+            snprintf(part, sizeof(part), "%.*s", len, p);
+            text_m(x, 44, tr(part), 0.45f, C_ROW);
+            x += pc_ui_text_w(tr(part), 0.45f);
+            p += len;
+            if (*p) { p++; pc_ui_arrow(mx(x + 12, 0), 51, rtl ? -1 : 1, C_ROW); x += 20; }
+        }
         for (int i = 0; i < n; i++) {
             pc_ui_arrow(mx(x + 12, 0), 51, rtl ? -1 : 1, C_ROW);
             x += 20;
             text_m(x, 44, menu_cats[path[i]].name, 0.45f, C_ROW);
             x += pc_ui_text_w(menu_cats[path[i]].name, 0.45f);
         }
+    }
+    if (st.edit) {   /* the character grid draws itself over this (text_grid.c): the help line alone */
+        char nm[96];
+        text_m(CAT_X0, Y_HELP - 2, tr(row_label(&rows[SEL], nm, sizeof(nm))), 0.55f, 0xFFFFFFFF);
+        (rtl ? pc_ui_text_wrap_r : pc_ui_text_wrap)(rtl ? 640 - ROWS_X1 : CAT_X0, Y_HELP + 16, ROWS_X1 - CAT_X0,
+            tr("Choose characters on the grid, or type them. Start or Enter: OK; Cancel or Esc: leave it as it was."), 0.42f, 0xFFFFE080, 3);
+        AdvEasySetTextureList(0);
+        return;
     }
     /* the category list: this screen's top categories; the one shown (or its parent) on a plate with a gold edge */
     for (int c = 0; c < MC_COUNT; c++) {
@@ -1113,12 +1126,6 @@ static int input(int port)
         else if (mt.right || esc || (press & cancel)) { st.confirm = 0; CallSystemSe(0, 0); }
         return UR_STAY;
     }
-    if (st.edit) {   /* a seed typed: a click elsewhere takes it, a right click drops it */
-        if (mt.left && row_at(x, mt.y) != SEL) edit_end(1);
-        else if (mt.right) edit_end(0);
-        else edit_input(press, rept, ok, cancel, esc);
-        return UR_STAY;
-    }
     if (st.list) {   /* its BACK, cancel or a right click: the rows again */
         if (esc) press |= cancel;
         if ((st.list == 2 ? rate_list_input : cast_list_input)(&mt, press, rept, ok, cancel)) st.list = 0;
@@ -1174,7 +1181,12 @@ int ui_rows_run(int port, int flag)
     int r = UR_STAY;
     rtl = lang_rtl_text();
     buttons();
-    st.blink++;
+    if (st.edit) {   /* the character grid over the panel (it takes the input; the rows' text would show through its box) */
+        int k;
+        draw();
+        if (flag && (k = tg_run(port))) edit_end(k > 0);
+        return UR_STAY;
+    }
     g_lobby_io.list_on = st.list;   /* (Page Up / Down, Home, End in the lists) */
     build_rows();
     if (flag) r = input(port);

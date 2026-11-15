@@ -55,6 +55,7 @@ void settings_step(const Setting* s, int dir);  /* left/right: by step, choices 
 void settings_act(const Setting* s);            /* SET_ACTION */
 int  settings_is_bool(const Setting* s);
 const char* settings_value(const Setting* s, char* buf, int n);
+const char* settings_value_of(const Setting* s, int v, char* buf, int n);   /* ... of value v (a co-op guest: the host's) */
 const char* settings_locked(const Setting* s);  /* why not now (locked(), SET_GAME_ONLY), or NULL */
 void settings_poll(void);                       /* main thread, per pumped frame: appliers; recvx.ini 500 ms after the last change */
 void settings_save_later(void);                 /* any thread: recvx.ini is written by settings_poll (or at exit) */
