@@ -166,11 +166,13 @@ static int text_wrap(float x, float y, float w, const char* s, float sc, unsigne
     }
     while (*s && n < max_lines) {
         int len = 0, fit = 0;
-        while (s[len] && len < (int)sizeof(line) - 1) {
-            memcpy(line, s, len + 1); line[len + 1] = 0;
+        while (s[len] && len < (int)sizeof(line) - 4) {   /* (a whole UTF-8 letter at a time; a line may end after a kana or kanji) */
+            unsigned char c = (unsigned char)s[len];
+            int k = c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : c >= 0xC0 ? 2 : 1;
+            memcpy(line, s, len + k); line[len + k] = 0;
             if (text_w(line, sc) > w) break;
-            len++;
-            if (!s[len] || s[len] == ' ') fit = len;
+            len += k;
+            if (!s[len] || s[len] == ' ' || lang_cjk_break(c, s + len)) fit = len;
         }
         if (!s[len]) fit = len;
         if (!fit) fit = len ? len : 1;
@@ -2134,6 +2136,8 @@ int pc_lobby_start_step(int dir)
 }
 const char* pc_lobby_start_label(int v, char* buf, int n) { start_label(buf, n, v); return buf; }
 
+void ui_no_gt(char* t);   /* ui_rows.c */
+
 static int nm_rows(int* r)
 {
     int n = 0;
@@ -2404,6 +2408,22 @@ static float nm_x(void) { return nm.page == NP_LOBBY ? 244.0f : 312.0f; }   /* t
 #define NV 470.0f
 #define NX1 628.0f
 static float nm_y0(void) { return nm.page == NP_LOBBY ? 220.0f : nm.page == NP_JOIN ? 84.0f : 120.0f; }
+/* Arabic (lang_rtl_text): the rows (and the lobby's room code and GAME SETUP box) mirrored in their own place right of the
+   models, NX - 10 .. NX1 + 2 (the models stay where they are); the breadcrumb, help and STATUS about the screen's middle */
+static int nrtl;
+static float rx(float x, float w) { return nrtl ? NX - 10 + NX1 + 2 - x - w : x; }
+static float fx(float x, float w) { return nrtl ? 640 - x - w : x; }
+static void rtext(float x, float y, const char* s, float sc, unsigned int argb) { text(rx(x, text_w(s, sc)), y, s, sc, argb); }
+static void rrect(float x0, float y0, float x1, float y1, unsigned int argb, float z) { rect(rx(x0, x1 - x0), y0, rx(x0, x1 - x0) + x1 - x0, y1, argb, z); }
+static void rarrow(float x, float y, int dir, unsigned int argb) { arrow(rx(x, 0), y, nrtl ? -dir : dir, argb); }
+static int fwrap(float x, float y, float w, const char* s, float sc, unsigned int argb, int lines)
+{
+    int n;
+    wrap_right = nrtl;
+    n = text_wrap(fx(x, w), y, w, s, sc, argb, lines);
+    wrap_right = 0;
+    return n;
+}
 static float nm_h(void) { return nm.page == NP_MENU ? 30.0f : 20.0f; }
 static float nm_sc(void) { return nm.page == NP_MENU ? 0.7f : 0.55f; }
 
@@ -2420,15 +2440,17 @@ static int nm_input(const int* list, int n)
     ADV_WORK* ap = &AdvWork;
     unsigned int press = Pad[ap->PortId].press, rept = Pad[ap->PortId].Rept, ok = AdvGetOkButton(), cancel = AdvGetCancelButton();
     int esc = nm.esc_edge, hit, i;
+    float x;
     for (i = 0; i < n && list[i] != nm.sel[nm.page]; i++) {}
     if (i >= n) { i = 0; nm.sel[nm.page] = list[0]; }
     menu_mouse_take(&mt);
+    x = rx(mt.x, 0);   /* (hit-tested left to right) */
     ui_device(press, mt.moved || mt.left || mt.right || esc);
     if (press || rept || mt.left || mt.right || mt.moved || esc) StopAdvScreenSaver(0);
-    hit = nm_at(list, n, mt.x, mt.y);
+    hit = nm_at(list, n, x, mt.y);
     if (hit >= 0 && (mt.moved || mt.left) && hit != i) { i = hit; nm.sel[nm.page] = list[i]; CallSystemSe(0, 2); }
     if (mt.left && hit >= 0) {
-        if (nm_value_row(list[i]) && mt.x >= NV - 16) { nm_change(list[i], mt.x < NV + 4 ? -1 : 1); return 0; }
+        if (nm_value_row(list[i]) && x >= NV - 16) { nm_change(list[i], (x < NV + 4) != nrtl ? -1 : 1); return 0; }
         return nm_activate(list[i]);
     }
     if (mt.right || esc || (press & cancel)) return nm_back();
@@ -2457,38 +2479,40 @@ static void nm_lobby_info(void)
     int n, i;
     if (lb.role == 0) {
         if (srv_room()) {
-            text(NX, y, "ROOM CODE", 0.5f, 0xFFD6B668);
+            rtext(NX, y, "ROOM CODE", 0.5f, 0xFFD6B668);
             if (g_coop.room[0]) snprintf(t, sizeof(t), "%.4s-%.4s", g_coop.room, g_coop.room + 4);
             else snprintf(t, sizeof(t), "%s", tr("..."));
-            text(NX, y + 15, t, 0.95f, 0xFFFFFFFF);
+            rtext(NX, y + 15, t, 0.95f, 0xFFFFFFFF);
             snprintf(t, sizeof(t), tr("via %s"), coop_shown(g_coop.server));
-            text(NX + text_w("XXXX-XXXX", 0.95f) + 14, y + 26, t, 0.42f, 0xFFA0A0A0);
+            rtext(NX + text_w("XXXX-XXXX", 0.95f) + 14, y + 26, t, 0.42f, 0xFFA0A0A0);
         } else {
             char* code;
-            text(NX, y, "JOIN ADDRESS", 0.5f, 0xFFD6B668);
+            rtext(NX, y, "JOIN ADDRESS", 0.5f, 0xFFD6B668);
             join_address(t, sizeof(t));
             if ((code = strchr(t, '#'))) *code++ = 0;   /* (the font's '#' is a picture: the code on a line of its own, as the old lobby) */
-            text(NX, y + 15, nm.show_addr ? t : coop_shown(t), 0.55f, 0xFFFFFFFF);
-            if (code) { char c[32]; snprintf(c, sizeof(c), tr("CODE %.4s-%.4s"), code, code + 4); text(NX, y + 31, c, 0.45f, 0xFFFFFFFF); }
-            text(NX + 150, y + 32, "COPY JOIN ADDRESS: both", 0.38f, 0xFFA0A0A0);
+            rtext(NX, y + 15, nm.show_addr ? t : coop_shown(t), 0.55f, 0xFFFFFFFF);
+            if (code) { char c[32]; snprintf(c, sizeof(c), tr("CODE %.4s-%.4s"), code, code + 4); rtext(NX, y + 31, c, 0.45f, 0xFFFFFFFF); }
+            rtext(NX + 150, y + 32, "COPY JOIN ADDRESS: both", 0.38f, 0xFFA0A0A0);
         }
     } else {
-        text(NX, y, "HOST", 0.5f, 0xFFD6B668);
-        text(NX, y + 15, g_coop.state == COOP_CONNECTED && g_coop.peer_name[0] ? g_coop.peer_name : tr("Joining..."), 0.8f, 0xFFFFFFFF);
+        rtext(NX, y, "HOST", 0.5f, 0xFFD6B668);
+        rtext(NX, y + 15, g_coop.state == COOP_CONNECTED && g_coop.peer_name[0] ? g_coop.peer_name : tr("Joining..."), 0.8f, 0xFFFFFFFF);
     }
     y = 112;
-    rect(NX - 8, y - 2, NX1 + 2, 214, 0x30FFFFFF, Z_FRONT - 0.001f);
-    text(NX, y, "GAME SETUP", 0.5f, 0xFFD6B668);
+    rrect(NX - 8, y - 2, NX1 + 2, 214, 0x30FFFFFF, Z_FRONT - 0.001f);
+    rtext(NX, y, "GAME SETUP", 0.5f, 0xFFD6B668);
     y += 16;
     if (lb.role && (ch = setup_host_changed())) {   /* what the host just changed */
         snprintf(t, sizeof(t), tr("Host changed: %s"), ch);
-        text_wrap(NX, y, NX1 - NX - 4, t, 0.42f, 0xFFFFE080, 1);
+        wrap_right = nrtl;
+        text_wrap(rx(NX, NX1 - NX - 4), y, NX1 - NX - 4, t, 0.42f, 0xFFFFE080, 1);
+        wrap_right = 0;
         y += 13;
     }
     n = setup_lobby_lines(lines, 10, lb.role, NULL, 0);
     for (i = 0; i < n && y < 204; i++, y += 13) {
         float w = text_w(lines[i], 0.42f), sc = w > NX1 - NX - 4 ? 0.42f * (NX1 - NX - 4) / w : 0.42f;
-        text(NX, y, lines[i], sc, i ? 0xFFC8C8C2 : 0xFFFFFFFF);
+        rtext(NX, y, lines[i], sc, i ? 0xFFC8C8C2 : 0xFFFFFFFF);
     }
 }
 
@@ -2497,11 +2521,13 @@ static void nm_draw(const int* list, int n)
     char v[160], g[40];
     float x, h = nm_h(), sc = nm_sc();
     int i;
+    nrtl = lang_rtl_text();
     nm_background();
     {   /* the breadcrumb (the font has no '>': an arrow) */
+        const char* p2 = nm.page == NP_JOIN ? "JOIN GAME" : "LOBBY";
         x = 20 + text_w("MULTIPLAYER", 0.45f);
-        text(20, 44, "MULTIPLAYER", 0.45f, 0xFFA0A09B);
-        if (nm.page != NP_MENU) { arrow(x + 12, 51, 1, 0xFFA0A09B); text(x + 20, 44, nm.page == NP_JOIN ? "JOIN GAME" : "LOBBY", 0.45f, 0xFFA0A09B); }
+        text(fx(20, text_w("MULTIPLAYER", 0.45f)), 44, "MULTIPLAYER", 0.45f, 0xFFA0A09B);
+        if (nm.page != NP_MENU) { arrow(fx(x + 12, 0), 51, nrtl ? -1 : 1, 0xFFA0A09B); text(fx(x + 20, text_w(p2, 0.45f)), 44, p2, 0.45f, 0xFFA0A09B); }
         rect(20, 60, 620, 61, 0x80FFFFFF, Z_FRONT);
     }
     lobby_look = nm.page == NP_LOBBY;   /* (the names, READY and the ping above the models: draw_previews) */
@@ -2514,28 +2540,33 @@ static void nm_draw(const int* list, int n)
         const char* lock = nm_lock(r);
         unsigned int col = lock ? (sel ? 0xFF9A9A9A : 0xFF686868) : sel ? 0xFFFFFFFF : 0xFFA0A09B;
         float lw, room, ls;
-        if (sel) { rect(NX - 10, y - 2, NX1 + 2, y + h - 3, 0x40FFFFFF, Z_FRONT); rect(NX - 10, y - 2, NX - 7, y + h - 3, 0xFFD6B668, Z_FRONT + 0.001f); }
+        if (sel) { rrect(NX - 10, y - 2, NX1 + 2, y + h - 3, 0x40FFFFFF, Z_FRONT); rrect(NX - 10, y - 2, NX - 7, y + h - 3, 0xFFD6B668, Z_FRONT + 0.001f); }
         nm_value(r, v, sizeof(v));
         lw = text_w(nm_label(r), sc);
         room = v[0] ? NV - NX - 12 : NX1 - NX - 16;   /* (a long label: narrower) */
         ls = lw > room ? sc * room / lw : sc;
-        text(NX, y + (sc - ls) * 14, nm_label(r), ls, col);
+        rtext(NX, y + (sc - ls) * 14, nm_label(r), ls, col);
         if (v[0]) {
             float w = text_w(v, sc), lim = NX1 - NV - (nm_value_row(r) || nm_opens(r) ? 26 : 4), s2 = w > lim ? sc * lim / w : sc;
-            text(NV + (nm_value_row(r) ? 12 : 0), y + (sc - s2) * 14, v, s2, col);
-            if (nm_value_row(r)) { arrow(NV, y + 9, -1, col); arrow(NV + 12 + (w > lim ? lim : w) + 12, y + 9, 1, col); }
+            rtext(NV + (nm_value_row(r) ? 12 : 0), y + (sc - s2) * 14, v, s2, col);
+            if (nm_value_row(r)) { rarrow(NV, y + 9, -1, col); rarrow(NV + 12 + (w > lim ? lim : w) + 12, y + 9, 1, col); }
         }
-        if (nm_opens(r)) arrow(NX1 - 4, y + (nm.page == NP_MENU ? 14 : 9), 1, col);
+        if (nm_opens(r)) rarrow(NX1 - 4, y + (nm.page == NP_MENU ? 14 : 9), 1, col);
     }
     /* help and status, the button bar */
     rect(0, 384, 640, 480, 0x60000000, Z_FRONT);
     rect(20, 386, 620, 387, 0x80FFFFFF, Z_FRONT + 0.001f);
-    text(20, 390, nm_label(nm.sel[nm.page]), 0.55f, 0xFFFFFFFF);
-    if (lb.msg_t > 0) { lb.msg_t--; text_wrap(20, 408, 380, lb.msg, 0.45f, 0xFFFFE080, 3); }
-    else text_wrap(20, 408, 380, nm_lock(nm.sel[nm.page]) ? nm_lock(nm.sel[nm.page]) : nm_help(nm.sel[nm.page]), 0.45f, nm_lock(nm.sel[nm.page]) ? 0xFFFFB050 : 0xFFC8C8C2, 3);
-    text(412, 390, "STATUS", 0.5f, 0xFFD6B668);
-    text_wrap(412, 408, 210, g_coop.status[0] ? coop_shown(g_coop.status) : session_on() ? (hosting() ? "Waiting for a partner" : "Joining...") : "Not connected",
-              0.42f, !session_on() && g_coop.status[0] ? 0xFFFFC060 : 0xFFC8C8C2, 3);
+    text(fx(20, text_w(nm_label(nm.sel[nm.page]), 0.55f)), 390, nm_label(nm.sel[nm.page]), 0.55f, 0xFFFFFFFF);
+    if (lb.msg_t > 0) { lb.msg_t--; fwrap(20, 408, 380, lb.msg, 0.45f, 0xFFFFE080, 3); }
+    else {   /* (a help's " > " drawn as ", ": the font's '>' is a picture) */
+        char h[400];
+        snprintf(h, sizeof(h), "%s", tr(nm_lock(nm.sel[nm.page]) ? nm_lock(nm.sel[nm.page]) : nm_help(nm.sel[nm.page])));
+        ui_no_gt(h);
+        fwrap(20, 408, 380, h, 0.45f, nm_lock(nm.sel[nm.page]) ? 0xFFFFB050 : 0xFFC8C8C2, 3);
+    }
+    text(fx(412, text_w("STATUS", 0.5f)), 390, "STATUS", 0.5f, 0xFFD6B668);
+    fwrap(412, 408, 210, g_coop.status[0] ? coop_shown(g_coop.status) : session_on() ? (hosting() ? "Waiting for a partner" : "Joining...") : "Not connected",
+          0.42f, !session_on() && g_coop.status[0] ? 0xFFFFC060 : 0xFFC8C8C2, 3);
     rect(20, 452, 620, 453, 0x80FFFFFF, Z_FRONT + 0.001f);
     x = ui_hint(20, 458, ui_glyph(UG_OK, g, sizeof(g)), "Select", 0);
     x = ui_hint(x, 458, ui_glyph(UG_BACK, g, sizeof(g)), nm.page == NP_LOBBY ? (lb.role ? "Leave" : "Close Lobby") : "Back", 0);

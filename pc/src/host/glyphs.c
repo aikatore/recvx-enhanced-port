@@ -493,6 +493,17 @@ int lang_rtl(const char* s)
     return 0;
 }
 
+int lang_cjk_break(unsigned char lead, const char* s)
+{
+    static const char* const closing[] = { "\xE3\x80\x81", "\xE3\x80\x82", "\xEF\xBC\x89", "\xE3\x80\x8D", "\xE3\x80\x8F",
+                                           "\xEF\xBC\x9A", "\xE3\x83\xBC", "\xE2\x80\xA6", "\xE3\x83\xBB", "\xEF\xBC\x8C",
+                                           "\xEF\xBC\x8E", "\xEF\xBC\x9F", "\xEF\xBC\x81" };   /* 、。）」』：ー…・，．？！ */
+    if (lead < 0xE3 || lead > 0xE9 || !*s) return 0;   /* (U+3000..U+9FFF: kana, kanji, their signs) */
+    for (size_t i = 0; i < sizeof(closing) / sizeof(closing[0]); i++)
+        if (!strncmp(s, closing[i], 3)) return 0;
+    return 1;
+}
+
 int lang_rtl_cut(const char* s, int len, float w, float (*width)(const char* s, int n, void* ud), void* ud)
 {
     int last = 0;

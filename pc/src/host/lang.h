@@ -49,6 +49,9 @@ int  lang_us_plates(int adv);
 
 /* our texts in the language of the setting (the English text when there is none); tr_init sorts the table (start) */
 const char* tr(const char* en);
+/* a word that means something else here: the row "en (ctx)" ("Back (button hint)": the menus' button bar, where the table's
+   "Back" is the walking binding) when the language has one, else tr(en) */
+const char* tr_ctx(const char* en, const char* ctx);
 void tr_init(void);
 /* Translate Overlay Windows (ini translate_overlay; 0, the default: the ImGui windows F1, F2, F3, F6, F9 in English).
    tr_overlay(1) before the overlay's frame, tr_overlay(0) after: on this thread tr() keeps English unless the
@@ -77,6 +80,9 @@ int  lang_rtl_text(void);             /* our texts are right to left (Arabic): p
 /* the byte where the last line of s[0, len) that is at most w wide starts (at a space; 0: all of it fits), for wrapping
    a display-order text from its right end; width(s, n, ud) measures n bytes */
 int  lang_rtl_cut(const char* s, int len, float w, float (*width)(const char* s, int n, void* ud), void* ud);
+/* wrapping: a line may end before s after a letter whose first byte is lead when that letter is a kana or kanji (Japanese
+   has no spaces) and s does not start with a mark that closes (、。）」：ー ...) */
+int  lang_cjk_break(unsigned char lead, const char* s);
 /* the game's text (u16 glyph codes, 0xFFFF end) as UTF-8 for the overlay, with the loaded font's letters */
 void pc_glyphs_utf8(const unsigned short* g, char* out, int n);
 

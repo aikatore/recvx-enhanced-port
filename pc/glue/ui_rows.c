@@ -171,7 +171,7 @@ static const char* lock_of(const Row* r)
 {
     const Setting* s = row_set(r);
     const char* l = r->kind == R_ITEM && in_setup(r->m) ? setup_row_lock(r->m) : NULL;
-    return l ? l : s ? settings_locked(s) : NULL;
+    return l ? tr(l) : s ? settings_locked(s) : NULL;   /* (GAME SETUP's reasons are English: tr here) */
 }
 /* a seed row: Confirm types a number */
 static int seed_row(const Row* r)
@@ -1046,9 +1046,11 @@ const char* ui_glyph(int which, char* buf, int n)
 
 /* one hint at x (left to right): the button's icons, its word; fill: how far a hold has got (0..1), a bar under the
    icons; returns the next x */
-float ui_hint_w(const char* glyph, const char* word) { return glyph_run(glyph, 0, 0, 0) + 5 + pc_ui_text_w(word, 0.5f); }
+float ui_hint_w(const char* glyph, const char* word) { return glyph_run(glyph, 0, 0, 0) + 5 + pc_ui_text_w(tr_ctx(word, "button hint"), 0.5f); }
 float ui_hint(float x, float y, const char* glyph, const char* word, float fill)
 {
+    rtl = lang_rtl_text();   /* (from right to left in Arabic, whichever screen draws it) */
+    word = tr_ctx(word, "button hint");   /* ("Select", "Back": the table's are the button and the walking binding) */
     float gw = glyph_run(glyph, x, y, 0), ww = pc_ui_text_w(word, 0.5f);
     if (fill > 0) {
         rect_m(x, y + 16.5f, x + gw, y + 18.5f, 0xFF505050, Z_HI + 0.01f);
@@ -1366,11 +1368,12 @@ static void draw_virt_preview(const Row* r)
 }
 
 /* a help text's path ("GAME SETUP > CHARACTERS") as the game's font can draw it: it has no '>' (a picture there), so
-   " > " becomes ", " */
+   " > " becomes ", "; in Arabic (display order, lang_shape mirrored it to " < ") " ," */
 void ui_no_gt(char* t)
 {
     char* p;
     while ((p = strstr(t, " > "))) { p[0] = ','; memmove(p + 1, p + 2, strlen(p + 2) + 1); }
+    if (lang_rtl(t)) while ((p = strstr(t, " < "))) { p[1] = ','; memmove(p + 2, p + 3, strlen(p + 3) + 1); }
 }
 
 static void draw_help(void)
@@ -1476,10 +1479,10 @@ static int cat_hit(float x, float y, int (*listed)(int))   /* x: left to right *
     }
     return -1;
 }
-/* ... for the IMPORT screen (import_menu.c, left to right: P4 does not mirror it) */
+/* ... for the IMPORT screen (import_menu.c; mirrored in Arabic as the rows are) */
 static int import_listed(int c) { return menu_cats[c].screen == MS_IMPORT && menu_cats[c].parent < 0; }
-void ui_frame_import(const char* root, const char* const* path, int n, int cur) { rtl = 0; frame(root, path, n, import_listed, cur); }
-int  ui_frame_import_cat(float x, float y) { return cat_hit(x, y, import_listed); }
+void ui_frame_import(const char* root, const char* const* path, int n, int cur) { rtl = lang_rtl_text(); frame(root, path, n, import_listed, cur); }
+int  ui_frame_import_cat(float x, float y) { return cat_hit(x, y, import_listed); }   /* x: left to right */
 
 static void draw(void)
 {

@@ -674,7 +674,8 @@ lines of at most 1024 characters): enough for menu texts. Consequences, checked 
   English's last (`من أصل %d لغات تم استيراد %d.` for `%d of %d languages imported.`); placeholders joined by Latin
   or signs (`%d x %d`, `%.4s-%.4s`) form one left-to-right group and keep the English order. ctest `lang` checks the
   conversions' order of every Arabic row after `lang_shape` (the meaning with two `%d` is the translation's job).
-- **Wrapping**: a text in display order starts at its right end, so `lobby_glue.c text_wrap` (the menus' help lines)
+- **Wrapping** (all languages): whole UTF-8 letters; Japanese may break after any kana or kanji but before a closing
+  mark (`glyphs.c lang_cjk_break`: 、。）」：ー ...), as it has no spaces. Arabic: a text in display order starts at its right end, so `lobby_glue.c text_wrap` (the menus' help lines)
   and the overlay's `wrapped()` (ImGui `TextWrapped`) take each line from the right (`lang_rtl_cut`).
 - **Pieces joined in code** go the other way round in Arabic (`lang_rtl_text`): the settings' label and its
   "(restart needed)", the help line's lock reason, "Restart needed.", help and "Applies when you leave this menu.", the
@@ -685,8 +686,12 @@ lines of at most 1024 characters): enough for menu texts. Consequences, checked 
   list's right edge, values (between their arrows, which still lower and raise) end at the middle, the bindings'
   first slot sits next to the label (left/right move to the slot on that side), the help lines are right-aligned
   (`pc_ui_text_wrap_r`), the page counter is on the left and the page keys on the right; Latin values read left to
-  right where they stand. Other screens (title menus, co-op lobby, BIORAND, IMPORT, the dialogs, F1) stay
-  left-aligned, as the patch's own messages are; values sit between their arrows as in English.
+  right where they stand. The new menu (`--new-menu`, [MENUS.md](MENUS.md)) is mirrored the same way: SETTINGS, GAME
+  SETUP, PAUSE, IMPORT (`import_menu.c nx`), MULTIPLAYER, JOIN GAME and the lobby (`lobby_glue.c rx`: the rows and the
+  lobby's room code and GAME SETUP box in their place right of the models, which stay; help and STATUS about the
+  middle), the button bars (`ui_hint`) from the right. The dialogs (`pc_ui_dialog*`) stay centred, their lines wrapped
+  from the right; their answers keep their places. Other screens (the old title menus' co-op lobby, BIORAND, the old
+  IMPORT, F1) stay left-aligned, as the patch's own messages are; values sit between their arrows as in English.
 - The language's name in the settings is `العربية` in display order (`lang.c lang_names`); an Arabic word in another
   language's text is drawn with the Arabic font (`pc_glyph_next`: the Subtitles row in any language). The same holds
   for the other scripts (`script_at`): a Hangul, Cyrillic, kana or kanji letter the text's font lacks is drawn with the

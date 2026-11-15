@@ -292,12 +292,15 @@ Left out on purpose, or deviating from the mockups and the proposal:
   says "BioRand: the host's game"); Difficulty is not shown to a guest (the host's Start From words say it).
 - The grid's `#` key draws as the font's picture (it is the address's separator, so it stays).
 - PAUSE shows the darkened OPTION picture, not the darkened game frame (the OPTION task has released the room's textures).
-- IMPORT is drawn left to right in Arabic too (SETTINGS, GAME SETUP and the pause menu are mirrored).
 - The Performance Graph is not saved (as F1's Measure); turning it off stops the measuring (also with `--profile`).
 
-P5: the translations of the new words (about 150 strings and the new help lines; the user's wording pass first), the
-RTL polish (IMPORT, the MULTIPLAYER screens, the lobby, the dialogs), the user guide, a tester round on `--new-menu`,
-then the new menu by default (`--old-menu` for one release, then the old menus' code goes).
+P5 so far: the new words are translated into the ten languages (about 490 rows of `tr_table.inc`; ctest `menu_tr`
+fails when a text the new menu shows has no row or an empty column), and in Arabic IMPORT, MULTIPLAYER, JOIN GAME and
+the lobby are mirrored too (the lobby's rows and GAME SETUP box in their own place right of the models), the dialogs'
+lines wrap from the right. The button bar's words that mean something else in the table ("Select" the button, "Back"
+the walking binding) are looked up as "Select (button hint)" first (`lang.h tr_ctx`). Left: the user's wording pass (the
+translations follow it), the user guide, a tester round on `--new-menu`, then the new menu by default (`--old-menu` for
+one release, then the old menus' code goes).
 
 A co-op guest that generated the host's BioRand game in the lobby now gets into the host's game (P3 saw it stay in the
 lobby; also with the old BIORAND screen): the host's game state that came while the guest generated was dropped, and the
