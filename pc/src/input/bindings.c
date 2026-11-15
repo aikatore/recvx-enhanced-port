@@ -281,6 +281,15 @@ static SDL_JoystickID pad_info_get(SDL_GamepadType* type, char* name, int n)
     return id;
 }
 static SDL_GamepadType pad_type(void) { SDL_GamepadType t; pad_info_get(&t, NULL, 0); return t; }
+int g_button_icons;
+int bind_pad_style(void)
+{
+    SDL_GamepadType t = pad_type();
+    if (g_button_icons >= BI_XBOX && g_button_icons <= BI_SWITCH) return g_button_icons - BI_XBOX + BPS_XBOX;
+    if (t == SDL_GAMEPAD_TYPE_PS3 || t == SDL_GAMEPAD_TYPE_PS4 || t == SDL_GAMEPAD_TYPE_PS5) return BPS_PS;
+    if (t >= SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO && t <= SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR) return BPS_SWITCH;
+    return BPS_XBOX;
+}
 
 /* ---------------------------------------------------------------- input source */
 int g_input_source, g_input_pad;
@@ -861,7 +870,7 @@ int bind_event(const void* e)
    as key state and key events; @x:y clicks the left mouse button at window pixel x/y (as events:
    the overlay), @x:y:r the right one.
    RECVX_VPAD="<frame>:<input>+<input>,...": a virtual SDL gamepad (RECVX_VPAD_TYPE xbox, ps5 or
-   generic; default xbox) holding gamepad inputs in the ini spelling (south, dpup, +lefttrigger),
+   generic, switch; default xbox) holding gamepad inputs in the ini spelling (south, dpup, +lefttrigger),
    or an axis at a value from -1 to 1 (leftx=0.5, lefty=-1: the left stick half right, all up);
    "unplug" disconnects it, "plug" connects it again (hotplug tests); RECVX_VPAD_RUMBLE=0: it has no motors. */
 static void push_key(int sc, int down)
@@ -948,6 +957,7 @@ static SDL_Joystick* vpad_plug(void)
     if (!SDL_getenv("RECVX_VPAD_RUMBLE") || SDL_atoi(SDL_getenv("RECVX_VPAD_RUMBLE"))) d.Rumble = vpad_rumble;
     if (t && !strcmp(t, "ps5")) { d.vendor_id = 0x054c; d.product_id = 0x0ce6; d.name = "Virtual DualSense"; }
     else if (t && !strcmp(t, "generic")) d.name = "Virtual gamepad";
+    else if (t && !strcmp(t, "switch")) { d.vendor_id = 0x057e; d.product_id = 0x2009; d.name = "Virtual Switch Pro Controller"; }
     else { d.vendor_id = 0x045e; d.product_id = 0x02ea; d.name = "Virtual Xbox One"; }
     joy = SDL_OpenJoystick(SDL_AttachVirtualJoystick(&d));
     host_log("test: virtual gamepad %s\n", joy ? d.name : SDL_GetError());

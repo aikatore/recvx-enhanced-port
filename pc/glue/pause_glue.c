@@ -370,13 +370,9 @@ static void this_game(float y)
         y += 20;
         for (int i = 0; i < (int)(sizeof(keys) / sizeof(keys[0])); i++) {
             char k[32];
-            float w;
             bind_code_name(BIND_KB, bind_get(keys[i].row, BIND_KB, 0), k, sizeof(k));
-            snprintf(t, sizeof(t), "%s %s", k, tr(keys[i].what));
-            w = pc_ui_text_w(t, 0.44f);
-            if (x + w > PANEL_X1 - 8) { x = PANEL_X0 + 16; y += 15; }
-            text_m(x, y, t, 0.44f, C_HELP);
-            x += w + 12;
+            if (x + ui_hint_w(k, keys[i].what) > PANEL_X1 - 8) { x = PANEL_X0 + 16; y += 20; }
+            x = ui_hint(x, y, k, keys[i].what, 0);
         }
     }
 }

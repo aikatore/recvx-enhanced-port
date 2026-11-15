@@ -1333,7 +1333,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 |---|---|
 | `RECVX_INPUT="frame:buttons,..."` | scripted pad input by presented frame, e.g. `200:start,205:-` |
 | `RECVX_KEYS="f:key+key,f:-,f:@x:y"` | hold keyboard keys (SDL names, `_` for a space; `Mouse_Left` .. `Mouse_X2` a mouse button) from presented frame f, sent as key and button events; `@x:y` left-clicks at a window pixel, `@x:y:r` right-clicks |
-| `RECVX_VPAD="f:input+input,..."`, `RECVX_VPAD_TYPE=xbox\|ps5\|generic`, `RECVX_VPAD_RUMBLE=0` | a virtual SDL gamepad holding inputs (ini spelling) from frame f; `axis=value` holds an axis at -1..1 (`leftx=0.5+lefty=-0.5`: the left stick half up-right); `unplug` / `plug` disconnect and reconnect it (hotplug); `RECVX_VPAD_RUMBLE=0`: a gamepad without motors |
+| `RECVX_VPAD="f:input+input,..."`, `RECVX_VPAD_TYPE=xbox\|ps5\|switch\|generic`, `RECVX_VPAD_RUMBLE=0` | a virtual SDL gamepad holding inputs (ini spelling) from frame f; `axis=value` holds an axis at -1..1 (`leftx=0.5+lefty=-0.5`: the left stick half up-right); `unplug` / `plug` disconnect and reconnect it (hotplug); `RECVX_VPAD_RUMBLE=0`: a gamepad without motors |
 | `RECVX_MENU_MOUSE="f:x:y[:act],..."` | scripted mouse in menus (window pixels; act `l`/`r` click, `L`/`U` left down/up, `w`/`s` wheel) |
 | `RECVX_TPS_MOUSE="frame:dx:dy,..."` | scripted third-person mouse motion |
 | `RECVX_UNFOCUS="f:1,f:0"` | hide the window at frame f (focus loss), `0` shows it again |

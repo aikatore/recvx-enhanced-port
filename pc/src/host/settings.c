@@ -362,6 +362,7 @@ static const char* const free_cam_names[] = { "Behind Character", "Free Camera" 
 static const char* const fixed_cam_names[] = { "Classic", "Modern", "Combined" };
 static const char* const tps_pad_names[] = { "Classic", "Modern" };
 static const char* const noclips[] = { "Off", "Walls", "Walls and Flight" };
+static const char* const button_icon_names[] = { "Automatic", "Xbox", "PlayStation", "Switch", "Keyboard and Mouse" };
 static const char* const sources[] = { "Auto", "Keyboard and Mouse", "Gamepad Only" };
 static const char* const extras[ENEMY_EXTRA_MAX + 1] = { "Off", "Up to 1", "Up to 2", "Up to 3", "Up to 4", "Up to 5", "Up to 6", "Up to 7", "Up to 8" };
 static const char* const varieties[] = { "Mild", "Wild", "Custom" };
@@ -495,6 +496,8 @@ const Setting g_settings[] = {
     { SP_CONTROLS, "Vibration Strength", V(g_config.rumble), 0, 100, 10, .fmt = "%d%%",
       .help = "Adjust vibration strength. Turn vibration on or off in OPTION > VIBRATION." },
     { SP_CONTROLS, "Mouse In Menus", V(g_menu_mouse.on), 0, 1, 1, .help = "Point and left-click to select in menus. Right-click to go back." },
+    { SP_CONTROLS, "Button Icons", V(g_button_icons), 0, 4, 1, button_icon_names, .shown = new_menu_only,
+      .help = "The buttons shown in menus. Automatic follows your controller, or the keyboard when you use it. Keyboard and Mouse always shows keys." },
     { SP_CONTROLS, "Fixed Camera Controls", V(g_modern_on), 0, 2, 1, fixed_cam_names,
       .help = "Modern follows screen direction. Combined uses Modern movement with Classic gamepad D-pad controls." },
     { SP_CONTROLS, "Weapon Shortcuts", V(g_config.weapon_shortcuts), 0, 1, 1,

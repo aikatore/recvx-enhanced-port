@@ -140,11 +140,11 @@ static void draw(void)
     if (ui_pad()) {
         x = ui_hint(x, Y1 - 24, ui_glyph(UG_OK, g, sizeof(g)), "Type", 0);
         x = ui_hint(x, Y1 - 24, ui_glyph(UG_DEFAULT, g, sizeof(g)), "Delete", 0);
-        x = ui_hint(x, Y1 - 24, "Start", "OK", 0);
+        x = ui_hint(x, Y1 - 24, ui_glyph(UG_START, g, sizeof(g)), "OK", 0);
     } else {
         x = ui_hint(x, Y1 - 24, "Enter", "OK", 0);
         x = ui_hint(x, Y1 - 24, "Backspace", "Delete", 0);
-        x = ui_hint(x, Y1 - 24, "Ctrl+V", "Paste", 0);
+        x = ui_hint(x, Y1 - 24, "Ctrl\tV", "Paste", 0);
     }
     ui_hint(x, Y1 - 24, ui_glyph(UG_BACK, g, sizeof(g)), "Cancel", 0);
     AdvEasySetTextureList(0);

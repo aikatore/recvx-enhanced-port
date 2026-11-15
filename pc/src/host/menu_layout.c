@@ -92,6 +92,7 @@ const MenuRow menu_rows[] = {
       .help = "The game's button layouts, Type A to D. Opens the original KEY CONFIG screen; Confirm and Cancel follow the type." },
     { MC_CONTROLS, NULL, ML_SET, "Weapon Shortcuts" },
     { MC_CONTROLS, NULL, ML_SET, "Mouse In Menus", .label = "Mouse in Menus" },
+    { MC_CONTROLS, NULL, ML_SET, "Button Icons" },
     { MC_CONTROLS, NULL, ML_SET, "Vibration Strength", .label = "Vibration", .flags = MLF_VIBRATION,
       .help = "The controller's vibration strength. Off turns vibration off." },
     { MC_CONTROLS, "MOUSE", ML_SET, "Mouse Camera Style" },

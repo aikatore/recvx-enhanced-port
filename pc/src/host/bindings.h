@@ -57,6 +57,11 @@ extern int g_dev_mode;                                   /* BioRand and the impo
 extern int g_dev_tools;                                  /* --dev: developer tools (the F2 object placer, the F6 cutscene log: docs/DEV_TOOLS.md) */
 const char* bind_code_name(int dev, int code, char* buf, int n);   /* for menus, by the connected pad's type */
 const char* bind_row_label(int row, char* buf, int n);  /* game rows: the actions of the button under the key type */
+enum { BI_AUTO, BI_XBOX, BI_PS, BI_SWITCH, BI_KBM };   /* g_button_icons (ini "button_icons", CONTROLS > Button Icons): the new menu's
+                                                          button hints; BI_KBM shows the keyboard's keys whatever was pressed last */
+extern int g_button_icons;
+enum { BPS_XBOX, BPS_PS, BPS_SWITCH };
+int bind_pad_style(void);                                /* the gamepad hints' style: Button Icons, or the connected pad's type (others, none: Xbox's) */
 const char* bind_pad_desc(char* buf, int n);            /* the connected gamepad (its name in buf), or "No gamepad"; any thread */
 const char* bind_swapped(void);                         /* the row the last bind_set moved a code from, or NULL */
 

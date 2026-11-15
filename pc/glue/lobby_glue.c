@@ -111,6 +111,7 @@ static float text_w(const char* s, float sc)
 /* the game's font, left-aligned at x (bhDispMessage's advance), with a drop shadow */
 static int font_ok;                     /* the game's font is loaded (font_ready) */
 static int font_state;                  /* lobby_glue loads it: 1 reading, 2 loaded by us */
+static int text_flat;                   /* no drop shadow (pc_ui_text_flat: letters on the new menu's button icons) */
 
 static void text(float x, float y, const char* s, float sc, unsigned int argb)
 {
@@ -120,7 +121,7 @@ static void text(float x, float y, const char* s, float sc, unsigned int argb)
     if (!font_ok) return;
     s = tr(s);
     bhFontScaleSet(sc, sc, sc);
-    for (pass = 0; pass < 2; pass++)
+    for (pass = text_flat; pass < 2; pass++)
         for (p = s, x = x0; *p;) {
             int c = pc_glyph_next(&p);
             NJS_POINT2 pos = { x + (pass ? 0 : 2), y + (pass ? 0 : 2) };
@@ -2539,7 +2540,7 @@ static void nm_draw(const int* list, int n)
     x = ui_hint(20, 458, ui_glyph(UG_OK, g, sizeof(g)), "Select", 0);
     x = ui_hint(x, 458, ui_glyph(UG_BACK, g, sizeof(g)), nm.page == NP_LOBBY ? (lb.role ? "Leave" : "Close Lobby") : "Back", 0);
     if (nm.page == NP_LOBBY && lb.role == 0 && ui_pad()) {
-        x = ui_hint(x, 458, "Start", "Start Game", 0);
+        x = ui_hint(x, 458, ui_glyph(UG_START, g, sizeof(g)), "Start Game", 0);
         x = ui_hint(x, 458, ui_glyph(UG_DEFAULT, g, sizeof(g)), srv_room() ? "Copy Code" : "Copy Address", 0);   /* (Triangle) */
     }
     if (nm_value_row(nm.sel[nm.page])) ui_hint(x, 458, ui_glyph(UG_CHANGE, g, sizeof(g)), "Change", 0);
@@ -2549,6 +2550,7 @@ static void nm_open(void)
 {
     memset(&nm, 0, sizeof(nm));
     nm.esc = 1;   /* (an Esc still down from the title menu) */
+    ui_device(1, 0);   /* (the button bar: the device that opened it) */
     if (hosting()) setup_lobby_type(biorand_setting() && biorand_pack());   /* (hosted through F3: the Game Type its rule says) */
     nm_page(session_on() ? NP_LOBBY : NP_MENU);
 }
@@ -2816,6 +2818,7 @@ void lobby_frame(void)
 /* the lobby's drawing helpers for the ENHANCED SETTINGS pages of the OPTION menu (pc/glue/options_glue.c) */
 void pc_ui_text(float x, float y, const char* s, float sc, unsigned int argb) { font_ok = (sys->ss_flg & 0x40) != 0; text(x, y, s, sc, argb); }
 float pc_ui_text_w(const char* s, float sc) { return text_w(s, sc); }
+void pc_ui_text_flat(float x, float y, const char* s, float sc, unsigned int argb) { text_flat = 1; pc_ui_text(x, y, s, sc, argb); text_flat = 0; }
 int pc_ui_text_wrap(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines)
 {
     font_ok = (sys->ss_flg & 0x40) != 0;

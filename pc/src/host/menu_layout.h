@@ -95,10 +95,11 @@ int  ui_rows_screen(void);
 void ui_rows_close(void);                          /* OPTION closed: the actions chosen run now */
 int  ui_rows_window(void);                         /* an F-key window to open once OPTION is closed (ML_WINDOW), 0 none; taken */
 /* its button bar, for other screens (the pause menu): the device pressed last, a button's name on it, one hint */
-enum { UG_OK = 1, UG_BACK, UG_DEFAULT, UG_CAT, UG_CHANGE };
+enum { UG_OK = 1, UG_BACK, UG_DEFAULT, UG_CAT, UG_CHANGE, UG_START };
 void ui_device(unsigned int press, int kb_used);   /* a press this frame (Pad[].press); kb_used: the mouse or a menu key */
-const char* ui_glyph(int which, char* buf, int n);
+const char* ui_glyph(int which, char* buf, int n);   /* the bound button, drawn by ui_hint as icons in Button Icons' style */
 float ui_hint(float x, float y, const char* glyph, const char* word, float fill);   /* returns the next x */
+float ui_hint_w(const char* glyph, const char* word);   /* its width, without the gap after it */
 
 /* GAME SETUP (pc/glue/setup_glue.c, game thread): where it is shown, and its rows that are not table rows. ui_rows.c asks
    these for every row of a GAME SETUP category (wherever it is shown: NEW GAME, the pause menu, later the lobby). */

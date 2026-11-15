@@ -14,7 +14,7 @@ under the panel). Eight categories on the left:
 |---|---|
 | GAMEPLAY | GENERAL (door animations, loading, quick knife, stairs, Your Character ▸), COMBAT (aim and hit options, Headshots and Piercing ▸), SAVES (Save System, Import Memory Card Saves ▸: IMPORT's MEMORY CARD SAVES), STARTUP AND UNLOCKS |
 | CAMERA AND HUD | THIRD-PERSON CAMERA (on/off, field of view, shoulder, lighting; Advanced ▸ distances and height), HUD |
-| CONTROLS | INPUT (Fixed-camera Movement, devices, Control Type ▸ = the game's KEY CONFIG, Vibration), MOUSE, CONTROLLER (Advanced ▸ dead zones), BUTTONS (Customize Keyboard and Mouse ▸, Customize Controller ▸) |
+| CONTROLS | INPUT (Fixed-camera Movement, devices, Control Type ▸ = the game's KEY CONFIG, Button Icons, Vibration), MOUSE, CONTROLLER (Advanced ▸ dead zones), BUTTONS (Customize Keyboard and Mouse ▸, Customize Controller ▸) |
 | DISPLAY | WINDOW, PICTURE (aspect, brightness, contrast, gamma, Screen Position ▸ = SCREEN SETUP, Monitor Test ▸ = MONITOR ADJUSTMENT), WIDESCREEN, INFO (Show Frame Rate, Performance Graph: F1's Performance section as a panel in the top right corner; not saved) |
 | GRAPHICS | Preset (Original Look / Enhanced / Custom), QUALITY, MOTION, TEXTURE PACK, Advanced ▸ (renderer) |
 | AUDIO | volumes, Output (Stereo / Mono, the game's AUDIO SETUP) |
@@ -174,6 +174,19 @@ Each screen remembers its category and each category its row while the game runs
 pages, the Custom lists, a shortcut's home) replace the rows; the breadcrumb grows and Back returns to the row that
 opened them. The button bar shows the buttons of the device pressed last. Arabic mirrors the whole layout.
 
+**Button icons.** The button bar (and the pause menu's, the lobby's, the look picker's, the character grid's, the
+pause menu's keyboard shortcuts, the category list's L1/R1) draws each button as an icon: the input actually bound to the
+action (the gamepad set's first binding, the keyboard set's key or mouse button). They are geometry and the game's font,
+drawn at the screen's resolution (`ui_rows.c` `glyph_run`; no picture files, generic shapes and letters only): Xbox style
+coloured A/B/X/Y discs, LB/RB, LT/RT, View/Menu; PlayStation style cross/circle/square/triangle, L1/R1, L2/R2,
+Share/Options; Switch style B/A/Y/X, L/R, ZL/ZR, -/+; the d-pad with the arm(s) marked, sticks, key caps (arrow keys as
+arrows) and a mouse. Gamepad inputs are positional (SDL's south, east, ...), so the label is the style's: on a Switch
+pad the bottom button, which confirms by default, shows B, as printed on it. CONTROLS > **Button Icons** (ini
+`button_icons`, new menu only): Automatic (the connected pad's SDL type: PS3/4/5 PlayStation, Switch Pro and Joy-Cons
+Switch, any other Xbox; the keyboard's keys whenever the keyboard or mouse was used last), Xbox, PlayStation, Switch
+(that style for any pad; the keyboard still shows keys), Keyboard and Mouse (always the keyboard's keys, whatever was
+pressed last). A hold (Default) fills a gold bar under its icon.
+
 ## How it is built
 
 | Piece | File |
@@ -246,7 +259,7 @@ SDL_VIDEO_DRIVER=offscreen RECVX_DUMP_FRAMES=/tmp/dump RECVX_DUMP_EVERY=10 RECVX
   build/pc/recvx --new-menu --save-dir /tmp/save --skip-intro --size 1280x960 --windowed <disc image>
 ```
 
-`RECVX_KEYS` (keyboard: `Return`, `Escape`, `Delete`, `Q`, `W`), `RECVX_VPAD` (a virtual controller: `south`, `east`,
+`RECVX_KEYS` (keyboard: `Return`, `Escape`, `Delete`, `Q`, `W`), `RECVX_VPAD` (a virtual controller, `RECVX_VPAD_TYPE` xbox, ps5, switch or generic: `south`, `east`,
 `north`, `back`, `leftshoulder`, `dpdown`, ...) and `RECVX_DUMP_OVERLAY=1` (the F-key windows in the dumps) drive and
 show the rest. Use a temporary save directory.
 
