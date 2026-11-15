@@ -887,6 +887,9 @@ EXTRAS pages (their own windows are F3 and F2), where only `SET_F1` rows appear.
 unless the key is listed there with where it is set instead (the lobby's per-session choices, the
 third-person key binding).
 
+The new menus in testing (`--new-menu`, [MENUS.md](MENUS.md)) show the same rows from a layout table
+(`pc/src/host/menu_layout.c`): a new row also needs one home there, or ctest `menu_layout` fails.
+
 With Enemy Selection or the cutscene cast's Model Selection at Custom, ENHANCED SETTINGS adds a row under it (Enemy
 Rates, Choose Models) that opens the shared list (`rate_list.c`, `cast_list.c`, as the lobby and the BIORAND screen do)
 in place of the page's rows; F1 draws both inline. F3 draws some table rows itself (`overlay.cpp setting_row`: the
