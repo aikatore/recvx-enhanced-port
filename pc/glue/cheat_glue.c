@@ -843,6 +843,27 @@ int pc_cheat_load_exit(void)
     return 1;
 }
 
+/* item id, count (its word's number: ammunition, rounds loaded) into the current player's inventory as a pickup puts it
+   (pc_rules.h pc_inv_add: onto stacks, a two-slot item into two cells; the lighter / Claire's lockpick into the special
+   slot while it is empty); full and box: into the main item box (sys->itm[64..191]; not in co-op: the box is the
+   session's). Returns CHEAT_GIVE_*. Game thread (also inside the OPTION task: the inventory is plain data there). */
+extern short standard[3][2];   /* sub1.c: the special slot's items per player */
+int cheat_give(int id, int count, int box)
+{
+    unsigned int* inv, w;
+    int ply, i;
+    if (!sys || id <= 0 || id >= CHEAT_ITEMS) return CHEAT_GIVE_FULL;
+    ply = sys->ply_id > 2 ? 0 : sys->ply_id;
+    inv = &sys->itm[ply * 16];
+    w = (unsigned int)id << 16 | (count & 0xFFFF);
+    if (pc_to_special(inv, id, standard[ply][0], standard[ply][1])) { inv[1] = w; return CHEAT_GIVE_INV; }
+    if (pc_inv_add(inv, (sys->gm_flg & 0x8000000) ? 10 : 8, w, itemdata)) return CHEAT_GIVE_INV;
+    if (!box || coop_on) return CHEAT_GIVE_FULL;
+    for (i = 64; i < 64 + 128; i++)
+        if (!(sys->itm[i] >> 16)) { sys->itm[i] = w; return CHEAT_GIVE_BOX; }
+    return CHEAT_GIVE_FULL;
+}
+
 void devcine_frame(void);   /* --dev cutscene log (devcine_glue.c) */
 void cheat_frame(void)
 {
@@ -883,13 +904,7 @@ void cheat_frame(void)
     if (!req) return;
     if (req & CHEAT_HEAL) { plp->hp = max_hp; g_cheat.result = "Health restored."; }
     if (req & CHEAT_GIVE) {
-        g_cheat.result = "Inventory full.";
-        for (i = 2; i < 2 + slots; i++)
-            if (!(inv[i] >> 16)) {
-                inv[i] = (unsigned int)g_cheat.give_id << 16 | (g_cheat.give_count & 0xFFFF);
-                g_cheat.result = "Item added.";
-                break;
-            }
+        g_cheat.result = cheat_give(g_cheat.give_id, g_cheat.give_count, 0) ? "Item added." : "Inventory full.";
     }
     if (req & CHEAT_DROP) {   /* the inventory's X: the slot emptied, as the item box leaves it; the weapon in hand first put away
                                  the inventory's way (WeaponSet on its own slot unequips), only with the weapon down as the quick knife */

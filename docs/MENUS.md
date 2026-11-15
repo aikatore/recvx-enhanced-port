@@ -41,7 +41,27 @@ its Start): RESUME, Camera (Fixed / Third Person, the F5 setting), SETTINGS, GAM
 ENEMIES, CHARACTERS, BIORAND in a BioRand game, CO-OP RULES, on the same row screen, below), CO-OP (in a session: its own
 page, below), SPOILER LOG (the
 F8 screen; a BioRand game outside co-op, greyed otherwise), CHEATS AND TOOLS (cheats, actions, items, spawn, teleport;
-Advanced Tools ▸ opens the F2 window), RETURN TO TITLE (the old question). On the right: THIS GAME (difficulty,
+Advanced Tools ▸ opens the F2 window), RETURN TO TITLE (the old question).
+
+**CHEATS AND TOOLS > Give Item ▸** (`give_list.c`) lists every item with its icon as the item box draws it, under
+WEAPONS, AMMUNITION, HEALING, OTHER ITEMS and KEY ITEMS (ids 152..155 and the "?" entries have no item name and are not
+listed); on the right the chosen item large, its amount and the inventory as it is now. Confirm or a click adds it at
+once and the menu stays open ("Added: Handgun Bullets x15" on the help line, the confirm sound); Left/Right (or the
+panel's arrows) the amount where the item carries one (ammunition up to 999, a weapon's rounds up to its magazine, the
+percent weapons in tenths); L1/R1 (Q/W) the previous / next group; the wheel scrolls; Page Up/Down, Home, End. It is
+`cheat_glue.c cheat_give`, also F2's Add to Inventory: the current character's block (`sys->itm[ply_id * 16]`), as a
+pickup puts it (`pc_inv_add`: onto stacks, a two-slot item into two cells and sorted first; the lighter / Claire's
+lockpick into the special slot while it is empty). Full: outside co-op into the main item box ("Inventory full: ...
+went into the item box"), in co-op refused ("Inventory full. Make room first."): the box is the session's and its sync
+compares it while it is open. Adding inside the OPTION task is safe at once: the inventory is plain data in `sys`, which
+OPTION neither copies nor restores, and the game thread runs the menu, so no queue to the next game frame is needed.
+In co-op the item is ours alone, as a pickup the partner did not see: no event is sent (the co-op item sync is flag
+based; a key item counts as ours for `EV_LOST` like one picked up), so nothing diverges. BioRand changes nothing here.
+The icons are trade_glue.c's `pc_item_icons` (ITEM AFS file 145's two icon textures with their own CLUT, user bit 8;
+the spoiler log is user 4 and loads them while it is open): the list's first open in a pause loads them, opening it
+again reuses them, `ui_rows_close` (OPTION closing) releases them unless another user holds them, and
+`njReleaseTextureAll` takes them with the rest (`trade_textures_released`). The old ENHANCED SETTINGS rows (Item,
+Quantity, Add To Inventory: on resume) and F2 stay; in the new menu those three rows are retired. On the right: THIS GAME (difficulty,
 BioRand, the rules that differ from the original game) and the keyboard shortcuts. In co-op the header says the game
 keeps running. A window opened from the pause menu (F2, F3, F9) can be used with the controller (ImGui's gamepad
 navigation); Back or Start closes it.

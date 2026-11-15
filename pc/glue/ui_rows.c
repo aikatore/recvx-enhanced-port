@@ -63,6 +63,11 @@ int  rate_list_input(const MouseTake* m, unsigned int press, unsigned int rept, 
 void rate_list_draw(void);
 const char* rate_list_help(void);
 const char* rate_list_summary(const unsigned char* rate, char* buf, int n);
+void give_list_open(float x0, float x1, float y0, float h, int rows);   /* give_list.c: PAUSE > CHEATS AND TOOLS > Give Item */
+int  give_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
+void give_list_draw(void);
+const char* give_list_help(void);
+void give_list_release(void);
 uint64_t SDL_GetTicks(void);
 
 enum { P_UP = 0x1000, P_RIGHT = 0x2000, P_DOWN = 0x4000, P_LEFT = 0x8000, P_START = 0x800, P_SELECT = 0x100, P_L1 = 0x4, P_R1 = 0x8,
@@ -112,7 +117,7 @@ static struct {
     int last[MS_COUNT];               /* per screen: its last top category (-1 none yet) */
     int capture, wait_release;        /* a binding waiting for a key: its row + 1 */
     int slot;                         /* the binding slot chosen */
-    int list;                         /* 1 the cast's Custom list, 2 the enemy rates */
+    int list;                         /* 1 the cast's Custom list, 2 the enemy rates, 3 Give Item's items */
     int confirm, confirm_yes;         /* RESET CATEGORY's question */
     int hold;                         /* hold-to-default: ms the button went down, 0 up */
     int held_done;
@@ -692,6 +697,7 @@ static int activate(const Row* r)
         edit_begin(r);
         return UR_STAY;
     case ML_WINDOW: st.window = r->m->arg; CallSystemSe(0, 3); return UR_CLOSE;
+    case ML_GIVE: st.list = 3; give_list_open(X_LABEL - 8, ROWS_X1, Y0 + 16, 24, 11); CallSystemSe(0, 3); return UR_STAY;
     case ML_OUTPUT: case ML_PRESET: change(r, 1); return UR_STAY;
     case ML_SET:
         if (!s) return UR_STAY;
@@ -1073,6 +1079,10 @@ static void bar_build(void)
     }
     hints[nhints++] = (Hint){ ui_glyph(UG_OK, g[0], 40), "Select", UG_OK };
     hints[nhints++] = (Hint){ ui_glyph(UG_BACK, g[1], 40), st.search && !st.depth ? "Close Search" : "Back", UG_BACK };
+    if (st.list == 3) {   /* Give Item: the amount, the groups */
+        hints[nhints++] = (Hint){ ui_glyph(UG_CHANGE, g[2], 40), "Amount", UG_CHANGE };
+        hints[nhints++] = (Hint){ ui_glyph(UG_CAT, g[3], 40), "Group", UG_CAT };
+    }
     if (!st.list) hints[nhints++] = (Hint){ ui_glyph(UG_DEFAULT, g[2], 40), st.pad ? "Hold: Default" : "Default", UG_DEFAULT };
     if (!st.list && !st.depth) hints[nhints++] = (Hint){ ui_glyph(UG_CAT, g[3], 40), "Category", UG_CAT };
     if (!st.list && !st.depth && !st.pad && st.screen == MS_SETTINGS && st.only < 0) hints[nhints++] = (Hint){ "Ctrl\tF", "Search", UG_SEARCH };
@@ -1225,7 +1235,7 @@ static void draw_row(int i, int sel)
     }
     v = value_text(r, val, sizeof(val));
     switch (r->m->kind) {
-    case ML_PAGE: case ML_SHORTCUT: case ML_SCREEN: case ML_WINDOW: case ML_TEXT: case ML_IMPORT:   /* opens something: an arrow at the end */
+    case ML_PAGE: case ML_SHORTCUT: case ML_SCREEN: case ML_WINDOW: case ML_TEXT: case ML_IMPORT: case ML_GIVE:   /* opens something: an arrow at the end */
         if (v) text_fit(X_VALUE, y, v, SC_ROW, VALUE_W, col);
         pc_ui_arrow(mx(ROWS_X1 - 6, 0), y + 9, rtl ? -1 : 1, col);
         return;
@@ -1394,7 +1404,7 @@ static void draw_help(void)
         snprintf(t, sizeof(t), "%s", tr("Type a word of a setting's name, help or value: every category's matches are listed. Enter or Down: to the results; Esc: close."));
         col = 0xFFFFE080;
     } else if (st.msg_t > 0) { st.msg_t--; snprintf(t, sizeof(t), "%s", st.msg); col = 0xFFFFE080; }
-    else if (st.list) { snprintf(t, sizeof(t), "%s", tr(st.list == 2 ? rate_list_help() : cast_list_help())); name[0] = 0; }
+    else if (st.list) { snprintf(t, sizeof(t), "%s", tr(st.list == 3 ? give_list_help() : st.list == 2 ? rate_list_help() : cast_list_help())); name[0] = 0; }
     else switch (r->kind) {
     case R_BIND: {
         int dev = st.cat == MC_BIND_PAD, c = bind_conflict(r->idx, dev);
@@ -1509,9 +1519,9 @@ static void draw(void)
     }
     if (st.confirm || st.keep) ;   /* (the question alone: the font's text would show through its box) */
     else if (st.list) {   /* a list in the rows' place, its name above */
-        const char* h = st.list == 2 ? "ENEMY RATES" : rows[SEL].idx == 2 ? "MONSTER LOOKS" : rows[SEL].idx ? "YOUR RANDOM LOOKS" : "STORY CHARACTER LOOKS";
+        const char* h = st.list == 3 ? "GIVE ITEM" : st.list == 2 ? "ENEMY RATES" : rows[SEL].idx == 2 ? "MONSTER LOOKS" : rows[SEL].idx ? "YOUR RANDOM LOOKS" : "STORY CHARACTER LOOKS";
         text_m(ROWS_X0 + 4, Y0 - 2, h, 0.5f, C_GOLD);
-        if (st.list == 2) rate_list_draw(); else cast_list_draw();
+        if (st.list == 3) give_list_draw(); else if (st.list == 2) rate_list_draw(); else cast_list_draw();
     } else {
         for (int i = TOP; i < nrows && i < TOP + VIS; i++) draw_row(i, i == SEL);
         if (nrows > VIS) {   /* the scroll bar */
@@ -1611,7 +1621,7 @@ static int input(int port)
     }
     if (st.list) {   /* its BACK, cancel or a right click: the rows again */
         if (esc) press |= cancel;
-        if ((st.list == 2 ? rate_list_input : cast_list_input)(&mt, press, rept, ok, cancel)) st.list = 0;
+        if ((st.list == 3 ? give_list_input : st.list == 2 ? rate_list_input : cast_list_input)(&mt, press, rept, ok, cancel)) st.list = 0;
         return UR_STAY;
     }
     if (st.search && st.typing) {   /* typing the search (the keyboard's ring); a click on a result goes to it */
@@ -1717,6 +1727,7 @@ void ui_rows_close(void)
     st.any_pending = 0;
     st.capture = 0;
     st.list = 0;
+    give_list_release();   /* (the item icons, if Give Item loaded them) */
     st.confirm = 0;
     if (st.edit) edit_end(0);
     if (st.imp) { import_menu_shut(); st.imp = 0; }

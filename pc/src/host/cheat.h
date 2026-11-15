@@ -30,6 +30,8 @@ typedef struct CheatState {
 
 extern CheatState g_cheat;
 void cheat_frame(void);             /* game thread */
+enum { CHEAT_GIVE_FULL, CHEAT_GIVE_INV, CHEAT_GIVE_BOX };
+int cheat_give(int id, int count, int box);   /* game thread: into the inventory (box: else the item box), CHEAT_GIVE_* */
 void cheat_put_player(float x, float z, int ay);   /* game thread, test aids: the player moved there (its collision points with it) */
 void cheat_room_warp(int stg, int rom, int pos, int rcase);   /* game thread: to that room as a door without its animation
                                                                   (rcase: its room case, -1 ours as it is) */
