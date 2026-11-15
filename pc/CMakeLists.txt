@@ -317,6 +317,8 @@ if(Python3_FOUND)
     # ... against the game itself: a few scenes run headless with the cast and the voice lines on, each line as the plan has it
     add_test(NAME voice_plan_game COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_voice_plan_game.py $<TARGET_FILE:recvx>)
     set_tests_properties(voice_plan_game PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1200)
+    # the new menu (src/host/menu_layout.c): every row it shows has a help line
+    add_test(NAME menu_help COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_menu_help.py ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 # the --dev object placer's file (pc/src/host/placer.c): written and read back
 add_executable(test_placer tests/test_placer.c src/host/placer.c src/host/extras.c src/host/fileio.c)

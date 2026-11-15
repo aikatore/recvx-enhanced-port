@@ -51,16 +51,16 @@ it, Direct or no server listens on Host Port) and the lobby shows the **ROOM COD
 | Row | |
 |---|---|
 | **START GAME** | Starts with this setup (Start on a controller does the same). If your partner has not said READY, the first press says so and the second starts. A BioRand setup whose game is not installed generates it first (BioRand's questions and progress over the lobby), then starts. |
-| **Edit Game Setup** | GAME SETUP ([MENUS.md](MENUS.md)) in the lobby: OVERVIEW (Game Type, Difficulty, **Start From**, Preset, Your Character), RULES, ENEMIES, CHARACTERS, BIORAND (with Game Type BioRand), **CO-OP RULES** (Loot Sharing, Duplicate Weapons and Ribbons, Skip Cutscenes Together, Game Over Rule, Metal Detector Check, Quick Start, Pause Enemies During Trades, Shared Enemy Control). The lobby stays open: the session never drops while you edit, and your partner sees each change. Its value: the difficulty and how many rules differ ("Normal, 3 changes"). |
-| **Start From** | New Game (with the Difficulty), or one of your saves (as the old lobby's START). |
+| **Edit Game Setup** | GAME SETUP ([MENUS.md](MENUS.md)) in the lobby: OVERVIEW (Game Type, Difficulty, **Start From**: New Game with the Difficulty, or one of your saves, as the old lobby's START; Preset, Your Character), RULES, ENEMIES, CHARACTERS, BIORAND (with Game Type BioRand), **CO-OP RULES** (Loot Sharing, Duplicate Weapons and Ribbons, Skip Cutscenes Together, Game Over Rule, Metal Detector Check, Quick Start, Pause Enemies During Trades, Shared Enemy Control). The lobby stays open: the session never drops while you edit, and your partner sees each change. Its value: the difficulty and how many rules differ ("Normal, 3 changes"). |
 | **Room Password** | Through a co-op server: the password your partner types. Changing it opens the room again (a new room code); not while a partner is in the lobby. Not saved. |
 | **Your Character** | GAME SETUP > CHARACTERS (your look; the lobby's 3D picker). |
-| **COPY ROOM CODE** / **COPY JOIN ADDRESS** | To the clipboard. With Hide IP Addresses, **Show Addresses** reveals the address here. |
+| **COPY ROOM CODE** / **COPY JOIN ADDRESS** | To the clipboard (on a controller also Triangle / Y). With Hide IP Addresses, **Show Addresses** reveals the address here. |
 | **REMOVE PARTNER** | With a partner: as before (it can rejoin with the same code). |
 | **CLOSE LOBBY** | Closes the session (asks first with a partner in it). Cancel does the same. |
 
 On the right the **GAME SETUP** box sums up what starts: Start From, BioRand, every modifier and the co-op rules that
-differ from their defaults. Under the partner's model: Ready or Not ready and the ping.
+differ from their defaults. Left the two models side by side, each one's name above it and under the name Host or
+Guest, the partner's Ready or Not ready and the ping.
 
 **JOIN GAME** is one page: **Room Code or Address** (a text with a dot, a colon or a `#` is an address and connects
 directly; anything else is a room code through the co-op server), **Password**, **Player Name**, **Connection** (SETTINGS

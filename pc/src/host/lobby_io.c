@@ -51,6 +51,7 @@ void lobby_io_event(const void* e)
         case SDLK_DELETE: push(LK_DEL); break;
         case SDLK_LEFT: push(LK_LEFT); break;
         case SDLK_RIGHT: push(LK_RIGHT); break;
+        case SDLK_DOWN: push(LK_DOWN); break;
         case SDLK_HOME: push(LK_HOME); break;
         case SDLK_END: push(LK_END); break;
         case SDLK_V:
@@ -138,6 +139,14 @@ const char* save_native_dir(void)
         }
     }
     return dir;
+}
+
+int save_import_card(void)
+{
+    const char* dir = save_native_dir();
+    int n = savestore_import_card(g_config.save_dir, dir);
+    host_log("saves: imported %d memory card save%s into %s (the card keeps them)\n", n, n == 1 ? "" : "s", dir);
+    return n;
 }
 
 /* the cards' slots: card 1's 0..14, card 2's 15..29 (lobby.h) */

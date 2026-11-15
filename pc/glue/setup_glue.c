@@ -45,6 +45,7 @@ void pc_ui_rect(float x0, float y0, float x1, float y1, unsigned int argb, float
 int pc_ui_text_wrap(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines);
 void pc_title_word_newgame(float cx, float y, unsigned int col, unsigned int shadow);   /* lobby_glue.c */
 void pc_lobby_models(const Setting* s, int c);   /* lobby_glue.c: the 3D model page for a look row */
+unsigned coop_partner_import_id(void);           /* coop_glue.c: the partner's cast_import_id (the cast's imports, cast_glue.c) */
 void pc_biorand_flow_open(int what, int d);      /* biorand_menu.c: its dialogs for START GAME (1) or the update check (2) */
 int  pc_biorand_flow(void);
 void pc_biorand_menu_close(void);
@@ -70,6 +71,7 @@ static struct {
     BioOpts game_bio;    /* in a BioRand game: the pack's (its seed string), read-only */
     char game_str[BIORAND_SEED_CAP];
     int keep_chr, keep_own[2], kept;   /* You Look Like Original: the chosen looks, back with Chosen Model (this run) */
+    int show_picks;      /* in game: the preview lists this game's cast picks (D17; off: no spoilers; not saved) */
 } gs;
 
 static int ctx(void) { return g_setup_ctx >= SC_LOBBY_HOST ? g_setup_ctx : pc_in_game() ? SC_INGAME : SC_NEWGAME; }
@@ -265,6 +267,7 @@ int setup_row_shown(const MenuRow* m, int shown)
         case SV_RANDOM_IMPORTS: return look == 2 && imports_n() > 0;
         case SV_DIFFICULTY: return ctx() != SC_LOBBY_GUEST;   /* (the guest: in Start From, the host's words) */
         case SV_START_FROM: return lobby();
+        case SV_SHOW_PICKS: return ctx() == SC_INGAME && story_now();
         }
     if (m->kind != ML_SET) return shown;
     if (!strcmp(r, "Character Model")) return look == 1 && !g_appear_per;
@@ -273,14 +276,27 @@ int setup_row_shown(const MenuRow* m, int shown)
     return shown;
 }
 
+/* a player's own row in GAME SETUP: YOU (and its Advanced page), Extra Mouth Movement */
+static int yours(const MenuRow* m)
+{
+    return m->cat == MC_CHAR_ADV || (m->cat == MC_CHARACTERS && m->kind == ML_VAR && m->arg <= SV_RANDOM_IMPORTS)
+           || (m->ref && (!strcmp(m->ref, "Character Model") || !strcmp(m->ref, "Claire's Model") || !strcmp(m->ref, "Chris's Model")
+                          || !strcmp(m->ref, "Custom Cutscene Model") || !strcmp(m->ref, "Talking Mouths")));
+}
+
+/* in a game, a run's rule (RULES, ENEMIES, the cast's rows) that changes from the next room on (proposal §2.4) */
+int setup_row_next_room(const MenuRow* m)
+{
+    return ctx() == SC_INGAME && (m->cat == MC_RULES || m->cat == MC_ENEMIES || m->cat == MC_CHARACTERS) && !yours(m)
+           && (m->kind == ML_SET || m->kind == ML_VAR) && !(m->kind == ML_VAR && m->arg == SV_SHOW_PICKS);
+}
+
 const char* setup_row_lock(const MenuRow* m)
 {
     static char why[128];
     int c = ctx(), i;
-    if (guest() && m->cat != MC_CHAR_ADV && !(m->cat == MC_CHARACTERS && m->kind == ML_VAR && m->arg <= SV_RANDOM_IMPORTS)
-        && !(m->ref && (!strcmp(m->ref, "Character Model") || !strcmp(m->ref, "Claire's Model") || !strcmp(m->ref, "Chris's Model")
-                        || !strcmp(m->ref, "Custom Cutscene Model") || !strcmp(m->ref, "Talking Mouths")))
-        && m->kind != ML_WINDOW && !(m->kind == ML_ACTION && m->arg == SA_BIO_COPY))
+    if (guest() && !yours(m) && m->kind != ML_WINDOW && m->kind != ML_IMPORT && !(m->kind == ML_ACTION && m->arg == SA_BIO_COPY)
+        && !(m->kind == ML_VAR && m->arg == SV_SHOW_PICKS))
         return "Set by the host.";   /* (P3: the guest's YOU and Extra Mouth Movement stay its own) */
     if (c == SC_INGAME && ((m->kind == ML_VAR && (m->arg == SV_GAME_TYPE || m->arg == SV_DIFFICULTY)) || m->kind == ML_BIO
                            || (m->kind == ML_ACTION && (m->arg == SA_BIO_RANDOM || m->arg == SA_BIO_PASTE || m->arg == SA_BIO_CHECK))))
@@ -332,7 +348,7 @@ int setup_choice(const MenuRow* m, int* n)
         return *n > 0;
     }
     switch (m->arg) {
-    case SV_GAME_TYPE: case SV_LOOK_MODE: case SV_RANDOM_IMPORTS: *n = 2; return 1;
+    case SV_GAME_TYPE: case SV_LOOK_MODE: case SV_RANDOM_IMPORTS: case SV_SHOW_PICKS: *n = 2; return 1;
     case SV_DIFFICULTY: case SV_LOOK: case SV_RANDOM_FROM: *n = 3; return 1;
     case SV_PRESET: case SV_STORY: *n = 4; return 1;
     case SV_MONSTERS: *n = mon_ids(eo()->cast, ids); return 1;
@@ -364,6 +380,7 @@ int setup_get(const MenuRow* m)
     case SV_RANDOM_IMPORTS: return g_biorand_appear_imports > 0;
     case SV_STORY: return story_now();
     case SV_MONSTERS: return mon_pos(mon_id(eo()->cast, eo()->cast_enemy, enemy_cast_alone(eo())));
+    case SV_SHOW_PICKS: return gs.show_picks;
     }
     return 0;
 }
@@ -391,6 +408,7 @@ void setup_set(const MenuRow* m, int v)
     case SV_RANDOM_IMPORTS: g_biorand_appear_imports = v; settings_save_later(); break;
     case SV_STORY: story_set(v); break;
     case SV_MONSTERS: mon_set(v); break;
+    case SV_SHOW_PICKS: gs.show_picks = v != 0; break;
     }
 }
 
@@ -439,7 +457,7 @@ int setup_default(const MenuRow* m, int* d)
     int i = bio_at(m), v;
     if (i >= 0) { *d = biorand_opt[i].def; return strcmp(m->ref, "Seed") != 0; }   /* (the seed has none) */
     switch (m->arg) {
-    case SV_GAME_TYPE: case SV_DIFFICULTY: case SV_PRESET: case SV_LOOK_MODE: case SV_RANDOM_IMPORTS: *d = 0; return 1;
+    case SV_GAME_TYPE: case SV_DIFFICULTY: case SV_PRESET: case SV_LOOK_MODE: case SV_RANDOM_IMPORTS: case SV_SHOW_PICKS: *d = 0; return 1;
     case SV_RANDOM_FROM: *d = 1; return 1;   /* (biorand_opts.c: All Models, as before) */
     case SV_STORY: { int c = 0, a = 0; menu_default(menu_setting("Randomize Cutscene Cast"), &c); menu_default(menu_setting("Model Selection"), &a); *d = c ? 1 + a : 0; return 1; }
     case SV_MONSTERS: if (!menu_default(menu_setting("Enemy Models"), &v)) return 0; *d = mon_pos(mon_id(eo()->cast, v, 0)); return 1;
@@ -629,21 +647,35 @@ static void who_is_who(float x, float y, float w)
     int look = look_now(), mon = mon_id(o->cast, o->cast_enemy, enemy_cast_alone(o)), sep = look == 2 ? look_mode() : g_appear_per, row = 0;
     static const char* const st[] = { "original", "swapped", "any model", "custom looks" };
     static const char* const mt[] = { "original", "any monster", "like story characters", "custom" };
-    pc_ui_text(x, y, tr("IN CUTSCENES THIS GAME"), 0.46f, C_GOLD);
+    const int picks = ctx() == SC_INGAME && gs.show_picks && story_now() && !o->cast_assign;   /* (D17: this game's picks, one per character) */
+    pc_ui_text(x, y, tr(picks ? "THIS GAME'S LOOKS" : "IN CUTSCENES THIS GAME"), 0.46f, C_GOLD);
     y += 16;
-    if (look == 0 || !g_appear_cutscene) line_at(x, y + 11 * row++, w, tr("Claire and Chris: original"), 0.4f, C_HELP);
-    else if (!sep) {
-        snprintf(t, sizeof(t), tr("Played: your look (%s)"), look_name(0, a, sizeof(a)));
-        line_at(x, y + 11 * row++, w, t, 0.4f, C_HELP);
-        line_at(x, y + 11 * row++, w, tr("Claire or Chris not played: original"), 0.4f, C_HELP);
+    if (picks) {   /* the story characters' picks, two a line, in place of Claire's and Chris's lines (they follow YOU) */
+        int n = __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE), imports = o->cast_imports && n && (!coop_on || coop_partner_import_id() == cast_import_id()) ? n : 0;
+        t[0] = 0;
+        for (int c = 2; c < CAST_CHARACTERS; c++) {
+            char* p;
+            int mdl = cast_model((unsigned)o->seed, 0, c, o->cast_all, imports, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off);
+            snprintf(a, sizeof(a), "%s", mdl >= 0 ? tr(cast_entry_name(mdl)) : tr("original"));
+            if ((p = strstr(a, " (Cutscene Model)"))) *p = 0;   /* (short) */
+            snprintf(t + strlen(t), sizeof(t) - strlen(t), "%s%s: %s", t[0] ? ", " : "", tr(cast_name(c)), a);
+            if (c == 3 || c == 5 || c == CAST_CHARACTERS - 1) { line_at(x, y + 11 * row++, w, t, 0.4f, 0xFFE8E8E2u); t[0] = 0; }
+        }
     } else {
-        snprintf(t, sizeof(t), tr("Claire: your look (%s)"), look_name(0, a, sizeof(a)));
-        line_at(x, y + 11 * row++, w, t, 0.4f, C_HELP);
-        snprintf(t, sizeof(t), tr("Chris: your look (%s)"), look_name(1, b, sizeof(b)));
+        if (look == 0 || !g_appear_cutscene) line_at(x, y + 11 * row++, w, tr("Claire and Chris: original"), 0.4f, C_HELP);
+        else if (!sep) {
+            snprintf(t, sizeof(t), tr("Played: your look (%s)"), look_name(0, a, sizeof(a)));
+            line_at(x, y + 11 * row++, w, t, 0.4f, C_HELP);
+            line_at(x, y + 11 * row++, w, tr("Claire or Chris not played: original"), 0.4f, C_HELP);
+        } else {
+            snprintf(t, sizeof(t), tr("Claire: your look (%s)"), look_name(0, a, sizeof(a)));
+            line_at(x, y + 11 * row++, w, t, 0.4f, C_HELP);
+            snprintf(t, sizeof(t), tr("Chris: your look (%s)"), look_name(1, b, sizeof(b)));
+            line_at(x, y + 11 * row++, w, t, 0.4f, C_HELP);
+        }
+        snprintf(t, sizeof(t), tr("Others: %s%s"), tr(st[story_now()]), story_now() ? tr(o->cast_assign ? ", new each scene" : ", whole game") : "");
         line_at(x, y + 11 * row++, w, t, 0.4f, C_HELP);
     }
-    snprintf(t, sizeof(t), tr("Others: %s%s"), tr(st[story_now()]), story_now() ? tr(o->cast_assign ? ", new each scene" : ", whole game") : "");
-    line_at(x, y + 11 * row++, w, t, 0.4f, C_HELP);
     snprintf(t, sizeof(t), tr("Monsters: %s; voices %s"), tr(mt[mon]), tr(o->voices ? "follow the look" : "original"));
     line_at(x, y + 11 * row++, w, t, 0.4f, C_HELP);
 }

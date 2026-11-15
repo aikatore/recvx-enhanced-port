@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 /* keys for a text field, besides the characters 32..126 */
-enum { LK_ENTER = 256, LK_ESC, LK_BACK, LK_DEL, LK_LEFT, LK_RIGHT, LK_HOME, LK_END, LK_PGUP, LK_PGDN };
+enum { LK_ENTER = 256, LK_ESC, LK_BACK, LK_DEL, LK_LEFT, LK_RIGHT, LK_HOME, LK_END, LK_PGUP, LK_PGDN, LK_DOWN };
 
 typedef struct LobbyIO {
     volatile int text_on;           /* game thread: a text field is edited (the keyboard types, it is no pad) */
@@ -33,6 +33,7 @@ void lobby_io_frame(void* window);      /* per presented frame: text input on/of
    memory card. Any thread. */
 int  save_native(void);
 const char* save_native_dir(void);      /* <save_dir>/saves; the first use creates it and copies the card's saves in */
+int  save_import_card(void);            /* the memory cards' saves copied into save_native_dir() (savestore_import_card): how many */
 /* any thread: save `slot` of the active save system, the game's SAVEFILE (the save region
    sys->version..save_end, then a byte-sum checksum). Slots are the memory cards' 0..14
    (card 1: <save_dir>/card0/BASLUS-20184/SAVEDATA-nn) and 15..29 (card 2: card1/.../SAVEDATA-(slot - 15)), or native save number - 1 (a memory card slot's

@@ -2,7 +2,7 @@
 
 A rework of the port's menus, in testing behind `--new-menu` (also on with `--dev`). Without the flag nothing changes:
 OPTION, ENHANCED SETTINGS and every other screen are as before. The menu rework is done in phases; this page describes
-what is in now (phases P0 to P3) and how it is built. Some game rules changed with P2 and P3 for both menus: see
+what is in now (phases P0 to P4) and how it is built. Some game rules changed with P2 and P3 for both menus: see
 "Behaviour changes" below.
 
 ## What a player sees
@@ -12,18 +12,29 @@ under the panel). Eight categories on the left:
 
 | Category | Rows |
 |---|---|
-| GAMEPLAY | GENERAL (door animations, loading, quick knife, stairs, Your Character ▸), COMBAT (aim and hit options, Headshots and Piercing ▸), SAVES (Save System, Import Memory Card Saves), STARTUP AND UNLOCKS |
+| GAMEPLAY | GENERAL (door animations, loading, quick knife, stairs, Your Character ▸), COMBAT (aim and hit options, Headshots and Piercing ▸), SAVES (Save System, Import Memory Card Saves ▸: IMPORT's MEMORY CARD SAVES), STARTUP AND UNLOCKS |
 | CAMERA AND HUD | THIRD-PERSON CAMERA (on/off, field of view, shoulder, lighting; Advanced ▸ distances and height), HUD |
 | CONTROLS | INPUT (Fixed-camera Movement, devices, Control Type ▸ = the game's KEY CONFIG, Vibration), MOUSE, CONTROLLER (Advanced ▸ dead zones), BUTTONS (Customize Keyboard and Mouse ▸, Customize Controller ▸) |
-| DISPLAY | WINDOW, PICTURE (aspect, brightness, contrast, gamma, Screen Position ▸ = SCREEN SETUP, Monitor Test ▸ = MONITOR ADJUSTMENT), WIDESCREEN, INFO |
+| DISPLAY | WINDOW, PICTURE (aspect, brightness, contrast, gamma, Screen Position ▸ = SCREEN SETUP, Monitor Test ▸ = MONITOR ADJUSTMENT), WIDESCREEN, INFO (Show Frame Rate, Performance Graph: F1's Performance section as a panel in the top right corner; not saved) |
 | GRAPHICS | Preset (Original Look / Enhanced / Custom), QUALITY, MOTION, TEXTURE PACK, Advanced ▸ (renderer) |
 | AUDIO | volumes, Output (Stereo / Mono, the game's AUDIO SETUP) |
-| LANGUAGE | always shown (Language reads English without an imported one), Import Languages ▸ (opens the F9 window) |
+| LANGUAGE | always shown (Language reads English without an imported one), Import Languages ▸ (IMPORT's LANGUAGES in place) |
 | CO-OP | PERSONAL (Player Name, name tag, ping, hide IP, follow host), HOSTING, CONNECTION (Connection, Co-op Server) |
 
-The rows' values, ranges, locks and help are the settings table's (the same as F1 and ENHANCED SETTINGS); some rows
-have new names (Banding Reduction, Shoulder Right / Left, Smooth Motion, Active Controller, ...). Vibration is one row:
+The rows' values, ranges, locks and help are the settings table's (the same as F1 and ENHANCED SETTINGS; the 28 rows the
+table has no help for get theirs from the layout, ctest `menu_help`); some rows have new names (Banding Reduction, Shoulder Right / Left, Smooth Motion, Active Controller, ...). Vibration is one row:
 Off turns the game's vibration off (the system save's VIBRATION), a percentage turns it on at that strength.
+
+**Search** (SETTINGS only, the keyboard's): Ctrl+F or `/` (or a click on the bar's Search), then type. Every SETTINGS
+row whose label, old name (the table's label: "Over-the-shoulder"), help or value holds the text is listed under its
+category; Enter or Down goes to the results, which change as anywhere else; Esc (Back) closes the search, L1 / R1 too.
+
+**Display Mode and Fullscreen Resolution** ask "Keep these settings? Reverting in 10 s." after a change: KEEP keeps it,
+REVERT, Cancel or no answer within 10 seconds puts the old one back (REVERT is chosen first).
+
+**Marks**: a row a restart applies (HD Textures, Skip Intro, ...) has a small orange **R** before its value; a run's rule
+in a game (PAUSE > GAME SETUP's RULES, ENEMIES, the cast's CHARACTERS rows) a turning arrow: it applies from the next
+room. Their help says it too.
 
 **In a game OPTION opens PAUSE** (Select / View or Backspace as before; with the Modern third-person controller layout
 its Start): RESUME, Camera (Fixed / Third Person, the F5 setting), SETTINGS, GAME SETUP (this game's setup: OVERVIEW, RULES,
@@ -62,9 +73,17 @@ game is this setup's (its seed string is the same); otherwise one question ("Gen
 the installed BioRand game", or, without BioRand, "Download it ... and generate"), then the download, the generation
 with its progress and CANCEL, and the game starts. The BIORAND rows can be browsed and changed without BioRand installed.
 
-**The look picker** (Your Look ▸, Claire's Look ▸, Chris's Look ▸ at the title) is the lobby's 3D model page with NEW
-GAME's title and, on the right, the look's voice and animations. Shown in the pause menu, the look rows step through
-the list instead (the 3D page needs the title).
+**The look picker** (Your Look ▸, Claire's Look ▸, Chris's Look ▸ at the title; the lobby's Your Character) is laid out
+as mockup 09: the look under the cursor on the left with its name, the list right of it (13 rows, the game's groups on
+the right of their first row, the counter above, no BACK row: Cancel), the look's voice and animations under it, a button
+bar (Use This Look, Back, Page). Shown in the pause menu, the look rows step through the list instead: the 3D page is
+drawn in title mode 30's scene (`pc_lobby_models`, `draw_previews`), which the game's OPTION task in a game does not
+have (the room's models and textures are its own then).
+
+**Show This Game's Looks** (D17, CHARACTERS in a game only, with Story Characters on): Off by default (a spoiler, not
+saved); On, the preview names who each story character looks like this game ("Steve: Alexia, Wesker: Hunter, ...",
+the Whole Game picks: `cast_model` with the run's seed, as the cutscenes do); with New Each Scene there is one look per
+scene, so it says that instead.
 
 **In a game**, PAUSE > GAME SETUP shows the same categories: Game Type, Difficulty and the BIORAND rows are read-only
 ("Set when the game started."; COPY SEED STRING works, BIORAND is listed in a BioRand game), START GAME is not there,
@@ -79,6 +98,21 @@ JOIN GAME, Co-op Settings, BACK); HOST GAME opens the lobby at once with the roo
 JOIN GAME is one page; the lobby's host edits GAME SETUP in it (Edit Game Setup, Your Character: the same row screen,
 the session stays open) and starts it; a guest says READY, reads the host's GAME SETUP ("Set by the host.", what the host
 changed flashes), keeps its own YOU, and generates the host's BioRand game in the lobby when it has another one.
+The lobby is laid out as mockup 06 (P4): the two players' models side by side on the left, each one's name above it and
+its state under the name (Host / Guest, the partner's Ready or Not ready and the ping), the room code (or the join
+address) and the GAME SETUP box right of them, the rows below the box (the host: START GAME, Edit Game Setup, Room
+Password with a server, Your Character, COPY ROOM CODE, REMOVE PARTNER, CLOSE LOBBY; Start From is in Edit Game Setup's
+OVERVIEW). With a controller the host's bar also shows Start (START GAME) and Triangle (Copy Code / Copy Address).
+
+**EXTRA > IMPORT** (P4) is one place for everything that comes into the game, in the row screen's look: CHARACTERS (the
+games characters are imported from: Resident Evil Outbreak File 2), LANGUAGES (the editions of this game), MEMORY CARD
+SAVES (Import Memory Card Saves: the memory card's saves copied to separate files, at once, with the count in a
+message). A game's page has What to Import (Playable Characters, NPCs), Your Disc (Disc Image ▸: the system's file
+dialog, START IMPORT, DELETE IMPORTED ...); the help names the disc a game needs, the preview what is imported. L1 / R1
+switch the category, Cancel goes back. The IMPORT plate stays at the top (the EXTRA submenu is unchanged).
+SETTINGS > LANGUAGE's Import Languages ▸, GAME SETUP > CHARACTERS' Import Characters ▸ and GAMEPLAY's Import Memory Card
+Saves ▸ show the same screen in place, on their category (at the title and in a game; the breadcrumb goes on from the
+row's: "OPTION ▸ LANGUAGE ▸ IMPORT ▸ LANGUAGES"); Back returns to the row. F9 (the import window) is unchanged.
 
 **Text fields** (Room Code or Address, Password, Room Password, Player Name, Co-op Server, the Enemy Randomizer Seed,
 BioRand's Seed) open the **character grid**: A-Z (SHIFT: a-z), 0-9, `. - :` and the signs the game's font draws as signs
@@ -156,12 +190,17 @@ opened them. The button bar shows the buttons of the device pressed last. Arabic
 | The character grid: its cells, moves, field rules, the READY note (pure, ctest `textgrid`) and its box | `pc/src/host/textgrid.h`, `pc/tests/test_textgrid.c`, `pc/glue/text_grid.c` |
 | PAUSE > CO-OP; TRADE ITEMS's trade key (`coop_trade_menu`) | `pc/glue/pause_glue.c`, `pc/glue/coop_glue.c` |
 | A co-op guest generates the host's BioRand game from the lobby (`pc_biorand_flow_open(3)`) | `pc/glue/biorand_menu.c` |
+| EXTRA > IMPORT in the new look (`import_menu_open`, `import_menu_run`: the IMPORT screen's pages and dialogs drawn on the row screen's panel, breadcrumb and category list, `ui_frame_import`), and in place from SETTINGS / GAME SETUP (`ML_IMPORT`, or a shortcut whose home is an IMPORT category) | `pc/glue/import_menu.c`, `pc/glue/ui_rows.c` |
+| The memory card's saves copied (`save_import_card`: the IMPORT screen's and the settings table's action) | `pc/src/host/lobby_io.c` |
+| Performance Graph's panel (F1's Performance section, `perf_body`) | `pc/src/host/overlay.cpp`, `settings.c` (a row only the new menu lists), `prof.h` `g_perf_graph` |
+| Every row the new menu shows has help (ctest `menu_help`) | `pc/tests/test_menu_help.py` |
 | Hooks in the game's OPTION task | decomp `adv.c`: `Adv_GameOptionScreen` (start level), `DisplayOptionPlateLevel0` (pause), `DisplayOptionBg` (no bands), levels 1-3 (`pc_options_back_level`) |
 
 - **The layout table names settings by their table label** (`ref`), because 21 rows have no variable. A row kind says
   what it is: `ML_SET` (a table row in its home), `ML_SHORTCUT` (a row whose home is elsewhere: shows its value,
   Confirm opens the home category in place), `ML_PAGE` (a sub-page), `ML_SCREEN` (one of the game's OPTION sub-screens),
-  `ML_OUTPUT`, `ML_PRESET`, `ML_WINDOW` (an F-key window), `ML_TEXT` (a co-op text) and `ML_RETIRED` (Difficulty Select:
+  `ML_OUTPUT`, `ML_PRESET`, `ML_WINDOW` (an F-key window), `ML_TEXT` (a co-op text), `ML_IMPORT` (EXTRA > IMPORT on one
+  of its categories, in place: `MS_IMPORT`'s `MC_IMPORT_*`, where Import Memory Card Saves has its home) and `ML_RETIRED` (Difficulty Select:
   Difficulty is GAME SETUP's own row). GAME SETUP adds `ML_VAR` (a row over the game's variables, not one table row:
   `SV_*`, setup_glue.c), `ML_MERGED` (a table row shown inside an `ML_VAR` row: Model Selection in Story Characters; it
   counts as its home), `ML_BIO` (a BioRand option by its `biorand_opt` key), `ML_ACTION` (START GAME, RANDOM SEED, ...)
@@ -191,7 +230,11 @@ opened them. The button bar shows the buttons of the device pressed last. Arabic
 - **Hosts**: the row screen draws rows, help, preview and the button bar only (`ui_rows_open`, `ui_rows_run`); its host
   draws the background and the title. The pause menu reuses its button bar (`ui_device`, `ui_glyph`, `ui_hint`); GAME
   SETUP in title mode 30 and the lobby host the same screen. A root of several words ("MULTIPLAYER>LOBBY>GAME SETUP")
-  is drawn with arrows between (the game's font has no `>`).
+  is drawn with arrows between (the game's font has no `>`; a help text's " > " is drawn as ", ", `ui_no_gt`).
+- **Search** builds its rows from every `MS_SETTINGS` row of the table (`search_rows`), under a heading per category;
+  typing uses lobby_io.c's key ring (`text_on`, as the character grid; Down comes as `LK_DOWN`), so letters bound to
+  buttons type instead. **Keep these settings?** is `step_set`/`keep_end` (Display Mode, Fullscreen Resolution).
+  The marks are `row_mark` (`SET_RESTART`; `setup_row_next_room` for a run's rules in a game).
 - **Hold for Default** is Triangle: Square confirms in key types A, C and D and cancels in B, so it cannot be the hold
   button; Triangle is free in every type.
 
@@ -221,22 +264,29 @@ host so the guest can type `127.0.0.1:PORT#TESTKEYS`; a relay through a local `b
 with the keyboard (`|` Enter); `RECVX_VPAD` moves on it (`dpright`, `south` types, `start` is OK). MULTIPLAYER is the
 title's fifth row (four downs from LOAD GAME with EXTRA shown).
 
-## Not in yet (later phases)
+## Done, and what is left (P5)
 
-- P2 left out: the look picker is the lobby's model page (its own list layout and help line, the voice and animations
-  added), not mockup 09's new layout; in a game the actual cast picks are not listed (D17: the default is hidden);
-  "Copy Setup Code" (D16).
-- P3 left out (deviations from the mockups and the proposal): the lobby is the old lobby's layout with the new rows (the
-  models left, ROOM CODE and the GAME SETUP box top right, the rows below them), not mockup 06's exact positions; Start
-  From is both a lobby row and an OVERVIEW row; COPY ROOM CODE has no extra button-bar hint; a guest's BIORAND category
-  is hidden (the host's BioRand options are not on the wire outside the offer; its summary says "BioRand: the host's
-  game"); Difficulty is not shown to a guest (the host's Start From words say it); the grid's `#` key draws as the
-  font's picture (it is the address's separator, so it stays); a guest whose BioRand game was generated in the lobby
-  was not seen to be pulled into the host's game in the tests (the same with the old BIORAND screen: a co-op matter,
-  not the menu's).
-- P4: IMPORT restyled with MEMORY CARD SAVES (Import Memory Card Saves still runs from GAMEPLAY > SAVES), Performance
-  Graph in DISPLAY > INFO, keyboard search.
-- P5: translations of the new words, help for the rows that have none, the RTL polish, then the new menu by default.
-- Also not yet: the "Keep these settings?" countdown after a display change, restart / next-room marks as small icons
-  (a "(restart)" note after the label for now), the darkened game frame behind PAUSE (the OPTION task has released the
-  room's textures, so it shows the darkened OPTION picture).
+P0 to P4 are in: every setting, game rule and window of the old menus has its place in the new screens, nothing is
+F-key-only (F1, F2, F3, F9 stay as shortcuts), and every row the new menu shows has an English help line.
+
+Left out on purpose, or deviating from the mockups and the proposal:
+
+- The look rows in the pause menu step through the list (no 3D picker there: it needs title mode 30's scene).
+- The look picker keeps the game's list with its groups on the right of each group's first row (mockup 09 has gold
+  heading rows, and "Original" first: the game's list starts with Current Character).
+- "Copy Setup Code" (D16) is not in: it needs a code for the whole GAME SETUP and its paste (later, if wanted).
+- A guest's BIORAND category is hidden (the host's BioRand options are not on the wire outside the offer; its summary
+  says "BioRand: the host's game"); Difficulty is not shown to a guest (the host's Start From words say it).
+- The grid's `#` key draws as the font's picture (it is the address's separator, so it stays).
+- PAUSE shows the darkened OPTION picture, not the darkened game frame (the OPTION task has released the room's textures).
+- IMPORT is drawn left to right in Arabic too (SETTINGS, GAME SETUP and the pause menu are mirrored).
+- The Performance Graph is not saved (as F1's Measure); turning it off stops the measuring (also with `--profile`).
+
+P5: the translations of the new words (about 150 strings and the new help lines; the user's wording pass first), the
+RTL polish (IMPORT, the MULTIPLAYER screens, the lobby, the dialogs), the user guide, a tester round on `--new-menu`,
+then the new menu by default (`--old-menu` for one release, then the old menus' code goes).
+
+A co-op guest that generated the host's BioRand game in the lobby now gets into the host's game (P3 saw it stay in the
+lobby; also with the old BIORAND screen): the host's game state that came while the guest generated was dropped, and the
+events behind it in the stream waited for it for good. It is kept now and loads once the packs match (coop_glue.c,
+[COOP.md](COOP.md) "BioRand").

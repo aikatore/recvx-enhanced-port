@@ -17,6 +17,8 @@
 #include "savestore.h"
 #include "biorand.h"
 #include "lang.h"
+#include "menu_layout.h"
+#include "prof.h"
 #include "../net/update.h"
 #include "../audio/audio.h"
 #include <SDL3/SDL.h>
@@ -154,6 +156,11 @@ void settings_apply_display(void)
 }
 void settings_apply_window(void) { if (!g_config.fullscreen) SDL_SetWindowSize(g_window, g_config.window_w, g_config.window_h); }
 static void apply_vsync(void) { SDL_GL_SetSwapInterval(g_config.vsync ? 1 : 0); }
+/* Performance Graph (the new menu's DISPLAY > INFO; F1 keeps its Performance section): the profiler's panel on screen
+   (overlay.cpp), measuring while it is shown. Not saved, as F1's Measure; the old menus do not list it */
+static int perf_get(void) { return g_perf_graph; }
+static void perf_set(int v) { g_perf_graph = v; prof_enabled = v; }
+static int new_menu_only(void) { return g_new_menu; }
 static void apply_volume(void) { audio_apply_volumes(); }
 
 /* ---------------------------------------------------------------- special values */
@@ -264,11 +271,7 @@ static int chris_get(void) { return own_get(1); }
 static void claire_set(int v) { g_appear_own[0] = appear_at(v); pc_biorand_appear_drop(); }
 static void chris_set(int v) { g_appear_own[1] = appear_at(v); pc_biorand_appear_drop(); }
 /* saves: the memory card's copied into the native folder (as the first native start does) */
-static void import_card(void)
-{
-    int n = savestore_import_card(g_config.save_dir, save_native_dir());
-    host_log("saves: imported %d memory card save%s into %s (the card keeps them)\n", n, n == 1 ? "" : "s", save_native_dir());
-}
+static void import_card(void) { save_import_card(); }
 static const char* in_session(void) { return g_coop.state != COOP_OFF ? "Not during a co-op session." : NULL; }
 /* at the title and in the lobby until the game starts; then enemies may run in either game (Shared Enemy Control) */
 static const char* in_session_game(void) { return coop_session_game() ? "Not during a co-op session." : NULL; }
@@ -387,6 +390,8 @@ const Setting g_settings[] = {
     { SP_DISPLAY, "VSync", V(g_config.vsync), 0, 1, 1, .apply = apply_vsync },
     { SP_DISPLAY, "Frame Rate Limit", V(g_config.fps_limit), 0, 5, 1, fps_limits, .help = "Limit the displayed frame rate. Game speed stays the same." },
     { SP_DISPLAY, "Show Frame Rate", V(g_config.show_fps), 0, 1, 1 },
+    { SP_DISPLAY, "Performance Graph", NULL, 0, 1, 1, .get = perf_get, .set = perf_set, .shown = new_menu_only,
+      .help = "A graph of the time each frame takes, and what it is spent on, in the top right corner." },
     { SP_DISPLAY, "Aspect Ratio", V(g_config.aspect), 0, 2, 1, aspects, .help = "Widescreen shows more at the sides. Menus and 2D artwork stay centered at 4:3.", .group = "PICTURE" },
     { SP_DISPLAY, "Internal Resolution", V(g_config.scale), 0, 8, 1, .name = scale_name, .help = "Set how sharply the game is drawn. Auto adjusts to your window size." },
     { SP_DISPLAY, "Anti-Aliasing", V(g_config.anti_aliasing), 0, 2, 1, (const char* const[]){ "Off", "FXAA", "SMAA" },

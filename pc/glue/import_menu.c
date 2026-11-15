@@ -20,6 +20,8 @@
 #include "../src/import/import.h"
 #include "../src/host/lang.h"
 #include "../src/net/biorand_dl.h"
+#include "../src/host/menu_layout.h"
+#include "../src/host/bindings.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -36,10 +38,10 @@ void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, f
 int pc_ui_dialog_hit(float y1, const char* b0, const char* b1, int glyphs, float x, float y);
 void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, float extra, float* y0, float* y1);
 
-enum { BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };
-enum { P_CATS, P_GAMES, P_OPTS };
+enum { BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000, BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_SELECT = 0x100 };
+enum { P_CATS, P_GAMES, P_OPTS, P_SAVES };
 enum { IS_MENU, IS_ASK, IS_WORK, IS_RESULT };
-enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK };
+enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK, K_CARD, K_HEAD };
 typedef struct { int kind, idx; } Row;
 
 /* the categories (IMPORT_CAT_*) */
@@ -79,9 +81,12 @@ static struct {
     char msg[320], say[192];
     int err, say_t, say_err;
     MouseTake mt;
+    int nm;                             /* the new menu's look (--new-menu): categories left, rows right, help, a button bar */
+    char root[160];                     /* ... its breadcrumb's first words ("EXTRA", "OPTION>LANGUAGE") */
+    int esc_was;
 } im;
 
-static Row rows[8];
+static Row rows[12];
 static int nrows;
 static ImportItem items[1024];
 
@@ -119,6 +124,24 @@ static const char* lang_list(char* t, int n, int* old)
 static void build_rows(void)
 {
     nrows = 0;
+    if (im.nm) {   /* (the new look: no BACK rows, headings over the groups) */
+        if (im.page == P_SAVES) { add(K_HEAD, 3); add(K_CARD, 0); }
+        else if (im.page == P_GAMES) {
+            add(K_HEAD, im.cat);
+            for (int i = 0; i < IMPORT_SOURCES; i++) if (import_sources[i].cat == im.cat) add(K_GAME, i);
+        } else {
+            if (langs() < 0) add(K_HEAD, 2);
+            if (langs() < 0 && (IMPORT_OFFERED & IMPORT_PLAYERS)) add(K_PLAYERS, 0);
+            if (langs() < 0 && (IMPORT_OFFERED & IMPORT_NPCS)) add(K_NPCS, 0);
+            add(K_HEAD, 4);
+            add(K_DISC, 0);
+            add(K_START, 0);
+            add(K_DELETE, 0);
+        }
+        if (im.row >= nrows) im.row = nrows - 1;
+        while (im.row < nrows - 1 && rows[im.row].kind == K_HEAD) im.row++;
+        return;
+    }
     if (im.page == P_CATS) for (int i = 0; i < N_CATS; i++) add(K_CAT, i);
     else if (im.page == P_GAMES) { for (int i = 0; i < IMPORT_SOURCES; i++) if (import_sources[i].cat == im.cat) add(K_GAME, i); }
     else {
@@ -504,10 +527,300 @@ void pc_import_menu_close(void)
     host_log("import menu: closed\n");   /* (a running extraction goes on; F9 and the next visit show it) */
 }
 
+/* ---------------------------------------------------------------- the new menu's IMPORT (--new-menu; docs/MENUS.md): the
+   row screen's look (ui_rows.c draws the panel, breadcrumb and category list: CHARACTERS, LANGUAGES, MEMORY CARD SAVES),
+   the same pages and dialogs. EXTRA > IMPORT hosts it in title mode 30; SETTINGS > LANGUAGE's Import Languages, GAME SETUP
+   > CHARACTERS' Import Characters and GAMEPLAY's Import Memory Card Saves show it in place (ui_rows.c), at the title or in
+   a game. Left to right only (the RTL polish is P5's). */
+void ui_frame_import(const char* root, const char* const* path, int n, int cur);   /* ui_rows.c */
+int  ui_frame_import_cat(float x, float y);
+#define N_X0 158.0f                      /* ui_rows.c's layout */
+#define N_X1 618.0f
+#define N_LABEL 172.0f
+#define N_VALUE 500.0f
+#define N_Y0 68.0f
+#define N_ROW 20.0f
+#define N_HELP 392.0f
+#define N_PREVIEW 412.0f
+#define N_BAR 458.0f
+#define C_ROW 0xFFA0A09Bu
+#define C_GOLD 0xFFD6B668u
+#define C_HELP 0xFFC8C8C2u
+#define C_LOCK 0xFFFFB050u
+#define C_DIM 0xFF686868u
+enum { CAT_SAVES = 2 };                  /* im.cat past IMPORT_CAT_*: MEMORY CARD SAVES (MC_IMPORT_CHARS + im.cat) */
+
+static void nm_cat(int c)   /* (IMPORT_CAT_* or CAT_SAVES) */
+{
+    im.cat = c;
+    set_page(c == CAT_SAVES ? P_SAVES : P_GAMES);
+}
+
+void import_menu_open(int mc, const char* root)
+{
+    memset(&im, 0, sizeof(im));
+    im.open = im.nm = 1;
+    im.what = IMPORT_OFFERED;
+    snprintf(im.root, sizeof(im.root), "%s", root);
+    nm_cat(mc - MC_IMPORT_CHARS);
+    if (running()) { im.page = P_OPTS; im.state = IS_WORK; look(); }
+    im.esc_was = 1;   /* (an Esc still down from the screen before) */
+    menu_mouse_take(&im.mt);
+    host_log("import menu: open (%s)\n", menu_cats[mc].name);
+}
+void import_menu_shut(void) { pc_import_menu_close(); }
+
+static void nm_move(int dir)
+{
+    for (int k = 0; k < nrows; k++) {
+        im.row = (im.row + dir + nrows) % nrows;
+        if (rows[im.row].kind != K_HEAD) break;
+    }
+    im.say_t = 0;
+    CallSystemSe(0, 2);
+}
+static int nm_back(void)   /* 1 left */
+{
+    CallSystemSe(0, 0);
+    if (im.page != P_OPTS) return 1;
+    set_page(P_GAMES);
+    build_rows();
+    for (int i = 0; i < nrows; i++) if (rows[i].kind == K_GAME && rows[i].idx == im.src) im.row = i;   /* (on the game's row) */
+    return 0;
+}
+static void card(void)   /* MEMORY CARD SAVES' one action, at once */
+{
+    char t[200];
+    int n = save_import_card();
+    if (n) snprintf(t, sizeof(t), tr(n == 1 ? "%d memory card save was copied to a separate file. The memory card keeps it."
+                                            : "%d memory card saves were copied to separate files. The memory card keeps them."), n);
+    else snprintf(t, sizeof(t), "%s", tr("Nothing to copy: every memory card save already has its separate file."));
+    result(t, 0);
+}
+
+static float nm_y(int i) { return N_Y0 + i * N_ROW; }
+static int nm_row_at(float x, float y)
+{
+    if (x < N_X0 || x > N_X1 + 4) return -1;
+    for (int i = 0; i < nrows; i++)
+        if (y >= nm_y(i) - 2 && y < nm_y(i) + N_ROW - 2) return rows[i].kind == K_HEAD ? -1 : i;
+    return -1;
+}
+
+/* 1 leave */
+static int nm_input(int port)
+{
+    unsigned int press = Pad[port].press, rept = Pad[port].Rept;
+    unsigned int ok = AdvGetOkButton() | BTN_START, cancel = AdvGetCancelButton() | BTN_SELECT;
+    const bool* keys = bind_keys();
+    int esc = keys && keys[41], esc_edge = esc && !im.esc_was, hit, c;
+    MouseTake* m = &im.mt;
+    im.esc_was = esc;
+    if (im.state != IS_MENU) return input();   /* (the dialogs: as before) */
+    menu_mouse_take(m);
+    ui_device(press, m->moved || m->left || m->right || m->wheel || esc_edge);
+    if (press || rept || m->left || m->right || m->moved || m->wheel) StopAdvScreenSaver(0);
+    hit = nm_row_at(m->x, m->y);
+    if (hit >= 0 && (m->moved || m->left) && hit != im.row) { im.row = hit; im.say_t = 0; CallSystemSe(0, 2); }
+    if (m->wheel) { nm_move(m->wheel > 0 ? -1 : 1); return 0; }
+    if (m->left && (c = ui_frame_import_cat(m->x, m->y)) >= 0) {
+        if (c - MC_IMPORT_CHARS != im.cat || im.page == P_OPTS) { nm_cat(c - MC_IMPORT_CHARS); CallSystemSe(0, 2); }
+        return 0;
+    }
+    if (m->left && hit >= 0) {
+        const Row* r = &rows[hit];
+        if ((r->kind == K_PLAYERS || r->kind == K_NPCS) && m->x >= N_VALUE - 16) { toggle(r); return 0; }
+        return r->kind == K_CARD ? (CallSystemSe(0, 3), card(), 0) : activate(r);
+    }
+    if (m->right || esc_edge || (press & cancel)) return nm_back();
+    if (press & (BTN_L1 | BTN_R1)) { nm_cat((im.cat + ((press & BTN_R1) ? 1 : 2)) % 3); CallSystemSe(0, 2); return 0; }
+    if (rept & BTN_UP) nm_move(-1);
+    else if (rept & BTN_DOWN) nm_move(1);
+    else if ((rept & (BTN_LEFT | BTN_RIGHT)) && (rows[im.row].kind == K_PLAYERS || rows[im.row].kind == K_NPCS)) toggle(&rows[im.row]);
+    else if (press & ok) {
+        if (rows[im.row].kind == K_CARD) { CallSystemSe(0, 3); card(); return 0; }
+        return activate(&rows[im.row]);
+    }
+    return 0;
+}
+
+static void nm_text(float x, float y, const char* s, float sc, float w, unsigned int col)   /* scaled down to w */
+{
+    float tw = pc_ui_text_w(s, sc), k = tw > w ? w / tw : 1.0f;
+    pc_ui_text(x, y + (1.0f - k) * 9.0f, s, sc * k, col);
+}
+
+static void nm_row(int i)
+{
+    static const char* const heads[] = { "GAMES", "EDITIONS OF THIS GAME", "WHAT TO IMPORT", "MEMORY CARD", "YOUR DISC" };
+    const Row* r = &rows[i];
+    int sel = i == im.row, live = !row_why(r);
+    float y = nm_y(i);
+    unsigned int col = !live ? (sel ? 0xFF9A9A9A : C_DIM) : sel ? 0xFFFFFFFF : C_ROW;
+    char v[256];
+    if (r->kind == K_HEAD) { pc_ui_text(N_X0 + 4, y + 2, tr(heads[r->idx]), 0.5f, C_GOLD); return; }
+    if (sel) pc_ui_rect(N_X0, y - 2, N_X1, y + N_ROW - 3, 0x40FFFFFF, 0.3f);
+    switch (r->kind) {
+    case K_GAME:
+        nm_text(N_LABEL, y, title_of(r->idx), 0.55f, N_VALUE - N_LABEL - 16, col);
+        if (import_present(r->idx)) nm_text(N_VALUE, y, tr("Imported"), 0.55f, 104, col);
+        pc_ui_arrow(N_X1 - 6, y + 9, 1, col);
+        return;
+    case K_PLAYERS: case K_NPCS: {
+        const char* s = tr((im.what & (r->kind == K_PLAYERS ? IMPORT_PLAYERS : IMPORT_NPCS)) ? "On" : "Off");
+        float w = pc_ui_text_w(s, 0.55f);
+        nm_text(N_LABEL, y, tr(r->kind == K_PLAYERS ? "Playable Characters" : "NPCs"), 0.55f, N_VALUE - N_LABEL - 16, col);
+        if (live) { pc_ui_arrow(N_VALUE - 12, y + 9, -1, col); pc_ui_arrow(N_VALUE + w + 13, y + 9, 1, col); }
+        pc_ui_text(N_VALUE, y, s, 0.55f, col);
+        return;
+    }
+    case K_DISC:
+        nm_text(N_LABEL, y, tr("Disc Image"), 0.55f, N_VALUE - N_LABEL - 100, col);
+        snprintf(v, sizeof(v), "%s", tr(disc_name()));
+        nm_text(N_VALUE - 90, y, v, 0.55f, N_X1 - 20 - (N_VALUE - 90), col);
+        pc_ui_arrow(N_X1 - 6, y + 9, 1, col);
+        return;
+    case K_START: nm_text(N_LABEL, y, tr("START IMPORT"), 0.55f, N_X1 - N_LABEL - 8, col); return;
+    case K_DELETE: nm_text(N_LABEL, y, tr(langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : "DELETE IMPORTED MODELS"), 0.55f, N_X1 - N_LABEL - 8, col); return;
+    case K_CARD: nm_text(N_LABEL, y, tr("IMPORT MEMORY CARD SAVES"), 0.55f, N_X1 - N_LABEL - 8, col); return;
+    }
+}
+
+static const char* nm_help(const Row* r)
+{
+    int k;
+    if (r->kind == K_CARD) return (k = menu_setting("Import Memory Card Saves")) >= 0 ? g_settings[k].help : "";
+    if (r->kind == K_START && langs() < 0) return "Import the chosen groups from your disc image. This takes a few seconds to a minute; you can leave this screen meanwhile.";
+    return row_help(r);
+}
+
+/* the preview, right of the help: the disc a game needs and what is imported (P_GAMES: of the row chosen) */
+static void nm_preview(float x, float y, float w)
+{
+    char t[320], c[160];
+    int src = im.src, old = 0;
+    const Row* r = &rows[im.row];
+    if (im.page == P_SAVES) {
+        int k = menu_setting("Save System");
+        pc_ui_text(x, y, tr("SEPARATE FILES"), 0.46f, C_GOLD);
+        pc_ui_text_wrap(x, y + 16, w, save_native_dir(), 0.4f, C_HELP, 2);
+        if (k >= 0) {
+            snprintf(t, sizeof(t), tr("Save System: %s"), settings_value(&g_settings[k], c, sizeof(c)));
+            pc_ui_text(x, y + 40, t, 0.4f, C_HELP);
+        }
+        return;
+    }
+    if (im.page == P_GAMES) { if (r->kind != K_GAME) return; im.src = r->idx; }   /* (that game's lines; set back below) */
+    pc_ui_text(x, y, tr("IMPORTED"), 0.46f, C_GOLD);
+    if (langs() >= 0) {
+        if (langs() > 0) snprintf(t, sizeof(t), tr("Installed: %s."), lang_list(c, sizeof(c), &old));
+        else snprintf(t, sizeof(t), "%s", tr("Nothing imported yet."));
+        if (old) snprintf(t + strlen(t), sizeof(t) - strlen(t), " %s", tr("An older import: import again."));
+    } else if (im.page == P_OPTS && im.have) snprintf(t, sizeof(t), "%s%s%s", counts(c, sizeof(c)), im.when[0] ? tr(" On ") : "", im.when);
+    else snprintf(t, sizeof(t), "%s", tr(import_present(im.src) ? "Imported. Open it for what can be played." : "Nothing imported yet."));
+    pc_ui_text_wrap(x, y + 16, w, t, 0.4f, old ? 0xFFFFC060 : C_HELP, 3);
+    im.src = src;
+}
+/* the disc a game needs (the help's last sentence on its pages) */
+static const char* nm_disc(int src, char* t, int n)
+{
+    int keep = im.src;
+    im.src = src;
+    if (langs() >= 0) {
+        if (import_sources[src].need) snprintf(t, n, tr(import_sources[src].need), import_sources[src].serial);
+        else snprintf(t, n, tr("Needs a clean European disc image of %s: %s."), "Resident Evil Code: Veronica X", import_sources[src].serial);
+    } else snprintf(t, n, tr("Needs a clean US disc image of %s: %s."), title_of(src), import_sources[src].serial);
+    im.src = keep;
+    return t;
+}
+
+static void nm_draw(void)
+{
+    const char* path[3];
+    char t[480], a[40], b[40];
+    int n = 0;
+    float x;
+    path[n++] = "IMPORT";
+    path[n++] = menu_cats[MC_IMPORT_CHARS + im.cat].name;
+    if (im.page == P_OPTS) path[n++] = title_of(im.src);
+    ui_frame_import(im.root, path, n, MC_IMPORT_CHARS + im.cat);
+    x = 20;
+    x = ui_hint(x, N_BAR, ui_glyph(UG_OK, a, sizeof(a)), "Select", 0);
+    x = ui_hint(x, N_BAR, ui_glyph(UG_BACK, b, sizeof(b)), "Back", 0);
+    if (im.page != P_OPTS) ui_hint(x, N_BAR, ui_glyph(UG_CAT, a, sizeof(a)), "Category", 0);
+    if (im.state != IS_MENU) return;   /* (a dialog: the font's text would show through its box) */
+    for (int i = 0; i < nrows; i++) nm_row(i);
+    {
+        const Row* r = &rows[im.row];
+        const char* why = row_why(r);
+        unsigned int col = C_HELP;
+        if (im.say_t > 0) { snprintf(t, sizeof(t), "%s", im.say); col = im.say_err ? C_LOCK : 0xFFFFE080; }
+        else {
+            char d[200] = "";
+            if ((r->kind == K_GAME && import_sources[r->idx].cat == IMPORT_CAT_CHARACTERS) || r->kind == K_DISC)   /* (the editions' help names theirs) */
+                nm_disc(r->kind == K_GAME ? r->idx : im.src, d, sizeof(d));
+            snprintf(t, sizeof(t), "%s%s%s%s%s", why ? tr(why) : "", why ? " " : "", tr(nm_help(r)), d[0] ? " " : "", d);
+            if (why) col = C_LOCK;
+        }
+        switch (r->kind) {
+        case K_GAME: nm_text(20, N_HELP - 2, title_of(r->idx), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
+        case K_CARD: nm_text(20, N_HELP - 2, tr("Import Memory Card Saves"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
+        case K_PLAYERS: case K_NPCS: case K_DISC:
+            nm_text(20, N_HELP - 2, tr(r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_NPCS ? "NPCs" : "Disc Image"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
+        case K_START: nm_text(20, N_HELP - 2, tr("START IMPORT"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
+        case K_DELETE: nm_text(20, N_HELP - 2, tr(langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : "DELETE IMPORTED MODELS"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
+        }
+        pc_ui_text_wrap(20, N_HELP + 16, N_PREVIEW - 34, t, 0.42f, col, 3);
+        nm_preview(N_PREVIEW, N_HELP, N_X1 - N_PREVIEW);
+    }
+}
+
+/* the new look, per frame, on its host's background: 1 left */
+int import_menu_run(int port, int flag)
+{
+    int r = 0;
+    if (im.say_t > 0) im.say_t--;
+    if (im.picking) {   /* the file dialog's answer (lobby_io.c) */
+        int f = __atomic_load_n(&g_lobby_io.file_req, __ATOMIC_ACQUIRE);
+        if (f >= 3) {
+            if (f == 3) {
+                snprintf(g_import.iso[im.src], sizeof(g_import.iso[im.src]), "%s", g_lobby_io.file);
+                settings_save_later();
+                host_log("import menu: disc image %s\n", g_import.iso[im.src]);
+            }
+            g_lobby_io.file_req = 0;
+            im.picking = 0;
+        }
+    }
+    if (im.state == IS_WORK) work_end();
+    build_rows();
+    if (flag && !im.picking) r = nm_input(port);
+    if (!r) build_rows();
+    nm_draw();
+    if (im.state == IS_WORK) draw_work();
+    else if (im.state != IS_MENU) {
+        float y0, y1;
+        dlg_box(&y0, &y1);
+        if (im.state == IS_ASK) pc_ui_dialog(y0, y1, Z_BOX, NULL, ask_text(), 0.55f, 0xFFFFFFFF, 5, "YES", "NO", im.sel, 0);
+        else pc_ui_dialog(y0, y1, Z_BOX, result_head(), im.msg, 0.55f, im.err ? 0xFFFFC060 : 0xFFC0C0C0, 4, "OK", NULL, 0, 0);
+    }
+    AdvEasySetTextureList(0);
+    if (r) pc_import_menu_close();
+    return r;
+}
+
 /* Adv_BioCvTitle mode 30 while the IMPORT screen is up (lobby_glue.c pc_lobby): 1 back to the title menu */
 int pc_import_menu(void)
 {
     int r = 0;
+    if (g_new_menu) {   /* the new look on the title picture, under the IMPORT plate (EXTRA's word, unchanged) */
+        if (!im.open) import_menu_open(MC_IMPORT_CHARS, "EXTRA");
+        AdvEasySetTextureList(0);
+        AdvDwawOnePictureEx(0, 0xFFFFFFFF);
+        pc_ui_rect(0, 0, 640, 480, 0xB0000000, Z_DIM);
+        pc_title_word_import(320.0f, 6.0f, 0xFFFFFFFF, 192);
+        return import_menu_run(AdvWork.PortId, 1);
+    }
     if (!im.open) {
         memset(&im, 0, sizeof(im));
         im.open = 1;

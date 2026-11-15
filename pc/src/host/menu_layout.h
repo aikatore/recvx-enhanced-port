@@ -13,13 +13,14 @@ extern "C" {
 
 extern int g_new_menu;   /* --new-menu or --dev (host.c): OPTION opens SETTINGS, in a game the PAUSE menu */
 
-enum { MS_SETTINGS, MS_SETUP, MS_CHEATS, MS_COUNT };   /* screens: OPTION > SETTINGS, GAME SETUP, PAUSE > CHEATS AND TOOLS */
+enum { MS_SETTINGS, MS_SETUP, MS_CHEATS, MS_IMPORT, MS_COUNT };   /* screens: OPTION > SETTINGS, GAME SETUP, PAUSE > CHEATS AND TOOLS, EXTRA > IMPORT */
 
 enum {   /* categories; a sub-page (Advanced, the binding pages) has its parent category */
     MC_GAMEPLAY, MC_CAMERA, MC_CONTROLS, MC_DISPLAY, MC_GRAPHICS, MC_AUDIO, MC_LANGUAGE, MC_COOP,
     MC_CAMERA_ADV, MC_PAD_ADV, MC_GRAPHICS_ADV, MC_BIND_KB, MC_BIND_PAD,
     MC_OVERVIEW, MC_RULES, MC_ENEMIES, MC_CHARACTERS, MC_BIORAND, MC_COOP_RULES, MC_CHAR_ADV, MC_BIO_POOL,
     MC_CHEATS,
+    MC_IMPORT_CHARS, MC_IMPORT_LANGS, MC_IMPORT_SAVES,   /* EXTRA > IMPORT (import_menu.c draws them; IMPORT_CAT_* order) */
     MC_COUNT
 };
 typedef struct MenuCat { int screen; const char* name; int parent; } MenuCat;   /* parent -1: listed on the left */
@@ -40,9 +41,10 @@ enum {
     ML_BIO,        /* a BioRand generator option (ref: its biorand_opt key; setup_glue.c keeps the options) */
     ML_ACTION,     /* a GAME SETUP button (arg: SA_*): START GAME, RANDOM SEED, COPY SEED STRING, ... */
     ML_INFO,       /* lines of text, not selectable (arg: SI_*): OVERVIEW's ACTIVE MODIFIERS */
+    ML_IMPORT,     /* opens the IMPORT screen in place on category arg (MC_IMPORT_*): Import Languages, Import Characters */
 };
 enum { SV_GAME_TYPE, SV_DIFFICULTY, SV_PRESET, SV_LOOK, SV_LOOK_MODE, SV_RANDOM_FROM, SV_RANDOM_IMPORTS, SV_STORY, SV_MONSTERS,
-       SV_START_FROM };   /* (SV_START_FROM: the co-op lobby's, g_coop.start) */
+       SV_START_FROM, SV_SHOW_PICKS };   /* (SV_START_FROM: the co-op lobby's, g_coop.start; SV_SHOW_PICKS: D17, in game) */
 enum { SA_START, SA_ENEMY_SEED, SA_BIO_RANDOM, SA_BIO_COPY, SA_BIO_PASTE, SA_BIO_CHECK };
 enum { SI_MODIFIERS, SI_BIO_ENEMIES };
 enum {
@@ -105,6 +107,7 @@ extern int g_setup_ctx;
 int  setup_cat_shown(int c);
 int  setup_row_shown(const MenuRow* m, int shown);   /* shown: what the table says */
 const char* setup_row_lock(const MenuRow* m);        /* why it cannot change here and now, else NULL */
+int  setup_row_next_room(const MenuRow* m);          /* in a game: a run's rule that applies from the next room (its mark) */
 int  setup_custom_list(const MenuRow* m);            /* the Custom list under row m now (cast_list.c 0, 1, 2), -1 none */
 /* ML_VAR and ML_BIO rows */
 int  setup_get(const MenuRow* m);

@@ -35,6 +35,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <math.h>
+#include <ctype.h>
 
 extern ADV_WORK AdvWork;
 extern OPTION OptionDef[];
@@ -65,7 +67,7 @@ uint64_t SDL_GetTicks(void);
 
 enum { P_UP = 0x1000, P_RIGHT = 0x2000, P_DOWN = 0x4000, P_LEFT = 0x8000, P_START = 0x800, P_SELECT = 0x100, P_L1 = 0x4, P_R1 = 0x8,
        P_TRI = 0x10, P_CIRCLE = 0x20, P_CROSS = 0x40, P_SQUARE = 0x80 };   /* Pad[] bits */
-enum { SC_ESC = 41, SC_HOME = 74, SC_PGUP = 75, SC_DEL = 76, SC_END = 77, SC_PGDN = 78 };   /* SDL scancodes (bind_keys) */
+enum { SC_F = 9, SC_ESC = 41, SC_SLASH = 56, SC_HOME = 74, SC_PGUP = 75, SC_DEL = 76, SC_END = 77, SC_PGDN = 78, SC_LCTRL = 224, SC_RCTRL = 228 };   /* SDL scancodes (bind_keys) */
 
 /* ---------------------------------------------------------------- layout (640 x 480) */
 #define CAT_X0 20.0f                    /* the category list */
@@ -126,7 +128,17 @@ static struct {
     const Setting* pick;              /* UR_PICK's row */
     const MenuRow* edit;              /* a text typed on the character grid (text_grid.c): a seed's row, Player Name's, Co-op Server's */
     int only;                         /* ui_rows_only: the one category listed, -1 all */
-} st = { .last = { -1, -1, -1 }, .only = -1 };
+    int imp;                          /* the IMPORT screen is shown in place (import_menu.c; Import Languages, ...) */
+    int keep, keep_old, keep_sel;     /* "Keep these settings?" after a display change: its row + 1, the value before, REVERT chosen */
+    uint64_t keep_t;
+    int search, typing;               /* SETTINGS' search (Ctrl+F, /): on; the query is being typed */
+    char query[32];
+    int search_sel, search_top;       /* the category's row before the search */
+} st = { .last = { -1, -1, -1, -1 }, .only = -1 };
+
+void import_menu_open(int cat, const char* root);   /* import_menu.c: the IMPORT screen on category cat (MC_IMPORT_*) */
+int  import_menu_run(int port, int flag);           /* ... per frame, drawn on the host's background: 1 left */
+void import_menu_shut(void);
 
 static MouseTake mt;
 static int rtl;
@@ -298,11 +310,80 @@ static int row_shown(const MenuRow* m, int set)
     return in_setup(m) ? setup_row_shown(m, on) : on;
 }
 
+/* ---------------------------------------------------------------- SETTINGS' search (proposal §1.5, D8): Ctrl+F or /, then type;
+   every SETTINGS row whose words (its label, its old name, its help, its value) hold the text, under its category */
+static int has(const char* s, const char* q)   /* q in s, any case (ASCII) */
+{
+    size_t n = strlen(q);
+    if (!s || !n) return !n;
+    for (; *s; s++) {
+        size_t i = 0;
+        while (i < n && s[i] && tolower((unsigned char)s[i]) == tolower((unsigned char)q[i])) i++;
+        if (i == n) return 1;
+    }
+    return 0;
+}
+static int search_hit(const Row* r)
+{
+    const MenuRow* m = r->m;
+    const Setting* s = row_set(r);
+    char v[160], q[40];
+    const char* p = st.query;
+    int n = 0;
+    while (*p == ' ') p++;
+    n = snprintf(q, sizeof(q), "%s", p);
+    while (n > 0 && q[n - 1] == ' ') q[--n] = 0;
+    if (!q[0]) return 0;
+    if (has(tr(m->label ? m->label : m->ref ? m->ref : ""), q) || has(m->ref, q) || has(m->label, q)) return 1;
+    if (has(m->help, q) || (m->help && has(tr(m->help), q)) || (s && (has(s->help, q) || (s->help && has(tr(s->help), q))))) return 1;
+    return value_text(r, v, sizeof(v)) && has(v, q);
+}
+static void search_rows(void)
+{
+    int last = -1;
+    for (int i = 0; i < menu_rows_n && nrows < MAX_ROWS - 2; i++) {
+        const MenuRow* m = &menu_rows[i];
+        Row r = { R_ITEM, m, setting_of(m), 0 };
+        if (menu_cats[top_cat(m->cat)].screen != MS_SETTINGS || !row_shown(m, r.set) || !search_hit(&r)) continue;
+        if (m->cat != last) { rows[nrows++] = (Row){ R_GROUP, NULL, -1, 200 + m->cat }; last = m->cat; }
+        rows[nrows++] = r;
+    }
+    if (!nrows) rows[nrows++] = (Row){ R_GROUP, NULL, -1, 199 };
+}
+static void search_begin(void)
+{
+    if (!st.search) { st.search_sel = st.sel[st.cat]; st.search_top = st.top[st.cat]; st.query[0] = 0; }
+    st.search = st.typing = 1;
+    st.sel[st.cat] = st.top[st.cat] = 0;
+    g_lobby_io.tail = g_lobby_io.head;   /* (nothing typed before counts) */
+    g_lobby_io.text_on = 1;
+    CallSystemSe(0, 3);
+}
+static void search_end(void)
+{
+    if (!st.search) return;
+    if (st.typing) g_lobby_io.text_on = 0;
+    st.search = st.typing = 0;
+    st.sel[st.cat] = st.search_sel; st.top[st.cat] = st.search_top;
+}
+static void search_typed(void)   /* the keys typed (lobby_io.c's ring): the text, Enter or Down to the results, Esc closes */
+{
+    while (st.typing && g_lobby_io.tail != __atomic_load_n(&g_lobby_io.head, __ATOMIC_ACQUIRE)) {
+        int k = g_lobby_io.keys[g_lobby_io.tail & 63], n = (int)strlen(st.query);
+        g_lobby_io.tail++;
+        if (k == LK_ESC) { search_end(); CallSystemSe(0, 0); return; }
+        if (k == LK_ENTER || k == LK_DOWN) { st.typing = 0; g_lobby_io.text_on = 0; CallSystemSe(0, 3); return; }
+        if (k == LK_BACK) { if (n) st.query[n - 1] = 0; continue; }
+        if (k >= 32 && k < 127 && n < (int)sizeof(st.query) - 1) { st.query[n] = (char)k; st.query[n + 1] = 0; st.sel[st.cat] = st.top[st.cat] = 0; }
+    }
+}
+
 static void build_rows(void)
 {
     const char* g = NULL;   /* a heading on a hidden row: over the next shown one */
     nrows = 0;
-    if (is_bind_cat(st.cat)) {
+    if (st.search && !st.depth) search_rows();
+    else if (is_bind_cat(st.cat)) {
         int dev = st.cat == MC_BIND_PAD, last = -1;
         for (int i = 0; i < B_COUNT && nrows < MAX_ROWS - 2; i++) {
             int r = bind_order[i], grp = bind_rows[r].group;
@@ -409,6 +490,8 @@ static int back(void)
 }
 
 static void edit_end(int accept);
+static void keep_end(int keep);
+static void search_end(void);
 void ui_rows_open(int screen, const char* root)
 {
     st.screen = screen;
@@ -421,6 +504,9 @@ void ui_rows_open(int screen, const char* root)
     st.cat = st.last[screen];
     st.capture = st.wait_release = st.list = st.confirm = 0;
     if (st.edit) edit_end(0);
+    if (st.imp) { import_menu_shut(); st.imp = 0; }
+    if (st.keep) keep_end(0);
+    search_end();
     st.hold = 0; st.held_done = 1;   /* (a button still down from the screen before) */
     st.msg_t = 0;
 }
@@ -478,6 +564,32 @@ static void edit_end(int accept)
 }
 
 
+/* ---------------------------------------------------------------- "Keep these settings?" (proposal §3.1): a new display mode
+   or fullscreen resolution goes back by itself after KEEP_MS unless KEEP is chosen (a mode the display cannot show) */
+#define KEEP_MS 10000
+static int display_row(const Setting* s) { return s && (!strcmp(s->label, "Display Mode") || !strcmp(s->label, "Fullscreen Resolution")); }
+static void step_set(const Row* r, int dir)   /* a table row's left / right (or Confirm on a choice) */
+{
+    const Setting* s = row_set(r);
+    int old = settings_get(s);
+    settings_step(s, dir);
+    if (display_row(s) && settings_get(s) != old) {
+        st.keep = r->set + 1; st.keep_old = old; st.keep_sel = 1; st.keep_t = SDL_GetTicks();
+        host_log("menu: %s changed, keep or revert\n", s->label);
+    }
+}
+static void keep_end(int keep)
+{
+    const Setting* s = &g_settings[st.keep - 1];
+    if (!keep) settings_set(s, st.keep_old);
+    settings_save_later();
+    host_log("menu: %s %s\n", s->label, keep ? "kept" : "reverted");
+    say(keep ? "The new display settings are kept." : "The display settings went back.");
+    st.keep = 0;
+}
+static int keep_left(void) { int64_t l = KEEP_MS - (int64_t)(SDL_GetTicks() - st.keep_t); return l < 0 ? 0 : (int)((l + 999) / 1000); }
+static const char* keep_text(char* buf, int n) { snprintf(buf, n, tr("Reverting in %d s."), keep_left()); return buf; }
+
 /* ---------------------------------------------------------------- changing and running */
 static void change(const Row* r, int dir)
 {
@@ -497,7 +609,7 @@ static void change(const Row* r, int dir)
             int v = vib_get() + dir * s->step;
             if (!vib_unit()) { CallSystemSe(0, 1); say("No controller with vibration is connected."); return; }
             vib_set(s, v < 0 ? 0 : v > s->hi ? s->hi : v);
-        } else settings_step(s, dir);
+        } else step_set(r, dir);
         CallSystemSe(0, 2);
         return;
     case ML_OUTPUT: output_set(!GetSoundMode()); CallSystemSe(0, 2); return;
@@ -552,7 +664,19 @@ static int activate(const Row* r)
     }
     switch (r->m->kind) {
     case ML_PAGE: enter(r->m->arg); return UR_STAY;
-    case ML_SHORTCUT: enter(r->m->arg); return UR_STAY;
+    case ML_SHORTCUT: case ML_IMPORT:
+        if (menu_cats[r->m->arg].screen == MS_IMPORT) {   /* EXTRA > IMPORT in place: its breadcrumb goes on from ours */
+            char root[160];
+            int n = snprintf(root, sizeof(root), "%s", st.root);
+            for (int i = 0; i < st.depth; i++) n += snprintf(root + n, sizeof(root) - n, ">%s", menu_cats[st.stack[i]].name);
+            snprintf(root + n, sizeof(root) - n, ">%s", menu_cats[st.cat].name);
+            import_menu_open(r->m->arg, root);
+            st.imp = 1;
+            CallSystemSe(0, 3);
+            return UR_STAY;
+        }
+        enter(r->m->arg);
+        return UR_STAY;
     case ML_ACTION:
         if (lock_of(r)) { CallSystemSe(0, 1); say(lock_of(r)); return UR_STAY; }
         return setup_action(r->m);
@@ -580,7 +704,7 @@ static int activate(const Row* r)
         }
         if (r->m->flags & MLF_VIBRATION) { CallSystemSe(0, 1); return UR_STAY; }
         if (s->count && st.picker) { st.pick = s; CallSystemSe(0, 3); return UR_PICK; }   /* a look row: the host's 3D picker */
-        if (settings_is_bool(s) || s->names || s->name) { settings_step(s, 1); CallSystemSe(0, 2); }
+        if (settings_is_bool(s) || s->names || s->name) { step_set(r, 1); CallSystemSe(0, 2); }
         else CallSystemSe(0, 1);   /* numbers: left/right */
         return UR_STAY;
     }
@@ -603,10 +727,11 @@ static void reset_category(void)
 }
 
 /* ---------------------------------------------------------------- the button bar (also the pause menu's) */
+#define UG_SEARCH 10   /* (the search's hint: SETTINGS only) */
 typedef struct { const char* glyph; const char* word; int action; } Hint;
-static Hint hints[4];
+static Hint hints[5];
 static int nhints;
-static float hint_x0[4], hint_x1[4];
+static float hint_x0[5], hint_x1[5];
 
 static const char* pad_glyph(unsigned int mask, char* buf, int n)
 {
@@ -672,10 +797,16 @@ static void bar_build(void)
     static char g[4][40];
     nhints = 0;
     if (st.capture) return;
+    if (st.search && st.typing) {   /* (typing: the keyboard's keys) */
+        hints[nhints++] = (Hint){ "Enter", "Results", UG_OK };
+        hints[nhints++] = (Hint){ "Esc", "Close Search", UG_BACK };
+        return;
+    }
     hints[nhints++] = (Hint){ ui_glyph(UG_OK, g[0], 40), "Select", UG_OK };
-    hints[nhints++] = (Hint){ ui_glyph(UG_BACK, g[1], 40), "Back", UG_BACK };
+    hints[nhints++] = (Hint){ ui_glyph(UG_BACK, g[1], 40), st.search && !st.depth ? "Close Search" : "Back", UG_BACK };
     if (!st.list) hints[nhints++] = (Hint){ ui_glyph(UG_DEFAULT, g[2], 40), st.pad ? "Hold: Default" : "Default", UG_DEFAULT };
     if (!st.list && !st.depth) hints[nhints++] = (Hint){ ui_glyph(UG_CAT, g[3], 40), "Category", UG_CAT };
+    if (!st.list && !st.depth && !st.pad && st.screen == MS_SETTINGS && st.only < 0) hints[nhints++] = (Hint){ "Ctrl F", "Search", UG_SEARCH };
 }
 
 static void bar_draw(void)
@@ -708,6 +839,37 @@ void ui_dot(float x, float y)
     njDrawPolygon(v, 4, 1);
 }
 
+/* the marks (proposal §1.4): 1 R, a restart applies it; 2 a turning arrow, it applies from the next room (a run's rule in
+   game); 0 none. Drawn as shapes: the game's font has no such signs */
+#define X_MARK (X_VALUE - 32)
+static int row_mark(const Row* r)
+{
+    const Setting* s = row_set(r);
+    if (r->kind != R_ITEM) return 0;
+    if (s && (s->flags & SET_RESTART)) return 1;
+    return in_setup(r->m) && setup_row_next_room(r->m) ? 2 : 0;
+}
+static void mark_draw(float x, float y, int k)   /* x: the mark's left (left to right), y: its row's */
+{
+    if (k == 1) {
+        rect_m(x, y + 2, x + 12, y + 15, 0xFFB06A28, Z_HI + 0.02f);
+        text_m(x + 2.5f, y + 0.5f, "R", 0.42f, 0xFFFFFFFF);
+        return;
+    }
+    {   /* a circle of dots open at the top, its arrow head at the top left pointing right (clockwise) */
+        float cx = x + 6, cy = y + 9, hx = cx + 5 * cosf(4.19f), hy = cy + 5 * sinf(4.19f);
+        for (int i = 0; i <= 10; i++) {
+            float a = 5.24f + i * 0.524f, px = cx + 5 * cosf(a), py = cy + 5 * sinf(a);
+            rect_m(px - 1, py - 1, px + 1, py + 1, C_GOLD, Z_HI + 0.02f);
+        }
+        {
+            float d = rtl ? -1.0f : 1.0f, ax = mx(hx, 0);
+            NJS_POLYGON_VTX v[3] = { { ax + d * 3.5f, hy, Z_HI + 0.03f, C_GOLD }, { ax - d * 1.5f, hy - 3.5f, Z_HI + 0.03f, C_GOLD }, { ax - d * 1.5f, hy + 3.5f, Z_HI + 0.03f, C_GOLD } };
+            njDrawPolygon(v, 3, 1);
+        }
+    }
+}
+
 static const char* row_label(const Row* r, char* buf, int n)
 {
     const MenuRow* m = r->m;
@@ -718,6 +880,13 @@ static const char* row_label(const Row* r, char* buf, int n)
     case R_CUSTOM: return r->idx == 2 ? "Monster Looks" : r->idx ? "Your Random Looks" : "Story Character Looks";
     case R_RESET_CAT: return "Reset Category";
     case R_GROUP:
+        if (!m && r->idx == 199) return "NO SETTING MATCHES";   /* (the search's) */
+        if (!m && r->idx >= 200) {   /* the search's: the category (a sub-page: and its parent's) */
+            const MenuCat* c = &menu_cats[r->idx - 200];
+            if (c->parent < 0) return c->name;
+            snprintf(buf, n, "%s: %s", tr(menu_cats[c->parent].name), tr(c->name));
+            return buf;
+        }
         if (!m) {   /* a binding group (idx 100 + BG_*) */
             if (r->idx - 100 == BG_GAME) { snprintf(buf, n, tr("GAME (CONTROL TYPE %c)"), 'A' + (sys->keytype & 3)); return buf; }
             return r->idx - 100 == BG_TPS ? (st.cat == MC_BIND_PAD ? "THIRD PERSON: MODERN CONTROLLER" : "THIRD PERSON: KEYBOARD AND MOUSE") : "HOTKEYS";
@@ -764,12 +933,12 @@ static void draw_row(int i, int sel)
         }
         return;
     }
-    {   /* (a restart mark after the label, before it right to left) */
-        const char* l = tr(row_label(r, val, sizeof(val))), *mark = s && (s->flags & SET_RESTART) ? tr("(restart)") : "";
-        if (rtl) snprintf(label, sizeof(label), "%s%s%s", mark, *mark ? " " : "", l);
-        else snprintf(label, sizeof(label), "%s%s%s", l, *mark ? " " : "", mark);
+    {   /* a mark before the value: R (applies after a restart) or a turning arrow (applies from the next room) */
+        int k = row_mark(r);
+        snprintf(label, sizeof(label), "%s", tr(row_label(r, val, sizeof(val))));
+        text_fit(X_LABEL, y, label, SC_ROW, X_VALUE - X_LABEL - (k ? 44 : 16), col);
+        if (k) mark_draw(X_MARK, y, k);
     }
-    text_fit(X_LABEL, y, label, SC_ROW, X_VALUE - X_LABEL - 16, col);
     if (r->kind == R_RATES || r->kind == R_CUSTOM) {
         if (r->kind == R_RATES) rate_list_summary(enemy_opts()->rate, val, sizeof(val));
         else if (r->idx == 2) cast_list_summary(2, enemy_opts()->cast_enemy_off, 0, val, sizeof(val));
@@ -781,13 +950,13 @@ static void draw_row(int i, int sel)
     }
     if (r->kind != R_ITEM) return;
     if (r->m->kind == ML_ACTION) return;   /* (a button: its label alone) */
-    if (s && (s->flags & SET_ACTION)) {
+    if (s && (s->flags & SET_ACTION) && r->m->kind != ML_SHORTCUT) {
         if (r->set < (int)sizeof(st.pending) && st.pending[r->set]) text_m(X_VALUE, y + 1, pc_in_game() ? "(on resume)" : "(on leaving menu)", 0.48f, C_GOLD);
         return;
     }
     v = value_text(r, val, sizeof(val));
     switch (r->m->kind) {
-    case ML_PAGE: case ML_SHORTCUT: case ML_SCREEN: case ML_WINDOW: case ML_TEXT:   /* opens something: an arrow at the end */
+    case ML_PAGE: case ML_SHORTCUT: case ML_SCREEN: case ML_WINDOW: case ML_TEXT: case ML_IMPORT:   /* opens something: an arrow at the end */
         if (v) text_fit(X_VALUE, y, v, SC_ROW, VALUE_W, col);
         pc_ui_arrow(mx(ROWS_X1 - 6, 0), y + 9, rtl ? -1 : 1, col);
         return;
@@ -929,6 +1098,14 @@ static void draw_virt_preview(const Row* r)
     }
 }
 
+/* a help text's path ("GAME SETUP > CHARACTERS") as the game's font can draw it: it has no '>' (a picture there), so
+   " > " becomes ", " */
+void ui_no_gt(char* t)
+{
+    char* p;
+    while ((p = strstr(t, " > "))) { p[0] = ','; memmove(p + 1, p + 2, strlen(p + 2) + 1); }
+}
+
 static void draw_help(void)
 {
     const Row* r = &rows[SEL];
@@ -941,6 +1118,10 @@ static void draw_help(void)
     if (st.capture) {
         snprintf(t, sizeof(t), tr("Press a %s for %s. Esc: cancel. Delete: clear. %d s left."), tr(st.cat == MC_BIND_PAD ? "controller button" : "key or mouse button"),
                  tr(bind_rows[st.capture - 1].name), (bind_capture_left_ms() + 999) / 1000);
+        col = 0xFFFFE080;
+    } else if (st.search && st.typing) {
+        snprintf(name, sizeof(name), "%s", tr("Search"));
+        snprintf(t, sizeof(t), "%s", tr("Type a word of a setting's name, help or value: every category's matches are listed. Enter or Down: to the results; Esc: close."));
         col = 0xFFFFE080;
     } else if (st.msg_t > 0) { st.msg_t--; snprintf(t, sizeof(t), "%s", st.msg); col = 0xFFFFE080; }
     else if (st.list) { snprintf(t, sizeof(t), "%s", tr(st.list == 2 ? rate_list_help() : cast_list_help())); name[0] = 0; }
@@ -960,66 +1141,55 @@ static void draw_help(void)
         const char* lock = lock_of(r);
         const char* help = r->m->help ? r->m->help : s ? s->help : r->m->kind == ML_BIO ? setup_help(r->m) : NULL;
         char ap[160] = "";
-        if (s && (s->flags & SET_ACTION) && !lock && !(s->flags & SET_NOW))
+        if (s && (s->flags & SET_ACTION) && !lock && !(s->flags & SET_NOW) && r->m->kind != ML_SHORTCUT)
             snprintf(ap, sizeof(ap), "%s%s", help ? " " : "", tr(pc_in_game() ? "Runs when you resume." : "Applies when you leave this menu."));
         if (r->m->kind == ML_SCREEN && r->m->arg == 1 && pc_in_game()) lock = NULL;
-        if (rtl) snprintf(t, sizeof(t), "%s%s%s%s%s", ap, help ? tr(help) : "", s && (s->flags & SET_RESTART) ? tr("Restart needed. ") : "", lock ? " " : "", lock ? lock : "");
-        else snprintf(t, sizeof(t), "%s%s%s%s%s", lock ? lock : "", lock ? " " : "", s && (s->flags & SET_RESTART) ? tr("Restart needed. ") : "", help ? tr(help) : "", ap);
+        if (rtl) snprintf(t, sizeof(t), "%s%s%s%s%s", ap, help ? tr(help) : "", row_mark(r) == 1 ? tr("Restart needed. ") : row_mark(r) == 2 && !lock && !has(help, "next room") ? tr("Applies from the next room. ") : "", lock ? " " : "", lock ? lock : "");
+        else snprintf(t, sizeof(t), "%s%s%s%s%s", lock ? lock : "", lock ? " " : "", row_mark(r) == 1 ? tr("Restart needed. ") : row_mark(r) == 2 && !lock && !has(help, "next room") ? tr("Applies from the next room. ") : "", help ? tr(help) : "", ap);
         if (lock) col = C_LOCK;
         break;
     }
     }
+    ui_no_gt(t);
     if (name[0]) text_m(CAT_X0, Y_HELP - 2, name, 0.55f, 0xFFFFFFFF);
     (rtl ? pc_ui_text_wrap_r : pc_ui_text_wrap)(rtl ? 640 - CAT_X0 - w : CAT_X0, Y_HELP + 16, w, t, 0.42f, col, 3);
-    if (!st.capture && !st.list) draw_preview(r);
+    if (!st.capture && !st.list && !(st.search && st.typing)) draw_preview(r);
 }
 
-static void draw(void)
+/* the panel (darkened under everything, rules, the category list's divider), the breadcrumb (root's words, ">" between,
+   then path's) and the category list: the categories listed(), cur on a plate with a gold edge (-1 none) */
+static void frame(const char* root, const char* const* path, int n, int (*listed)(int), int cur)
 {
-    char t[256];
+    char t[64];
     int at = 0;
-    /* the panel: darkened under everything, rules, the category list's divider */
+    float x = CAT_X0;
     pc_ui_rect(0, 62, 640, 480, 0xB8000000, Z_PANEL);
     rect_m(CAT_X0, 60, ROWS_X1 + 2, 61, 0x80FFFFFF, Z_PANEL + 0.001f);
     rect_m(CAT_X0, Y_HELP - 6, ROWS_X1 + 2, Y_HELP - 5, 0x80FFFFFF, Z_PANEL + 0.001f);
     rect_m(CAT_X0, Y_BAR - 6, ROWS_X1 + 2, Y_BAR - 5, 0x80FFFFFF, Z_PANEL + 0.001f);
     rect_m(CAT_X1 + 4, 66, CAT_X1 + 5, Y_HELP - 12, 0x60FFFFFF, Z_PANEL + 0.001f);
-    /* the breadcrumb: root, category, sub-page, with arrows between */
-    {
-        int path[DEPTH + 2], n = 0;
-        float x = CAT_X0;
-        for (int i = 0; i < st.depth; i++) path[n++] = st.stack[i];
-        path[n++] = st.cat;
-        for (const char* p = st.root; *p;) {   /* (a root of several words: "MULTIPLAYER>LOBBY>GAME SETUP") */
-            char part[64];
-            int len = (int)strcspn(p, ">");
-            snprintf(part, sizeof(part), "%.*s", len, p);
-            text_m(x, 44, tr(part), 0.45f, C_ROW);
-            x += pc_ui_text_w(tr(part), 0.45f);
-            p += len;
-            if (*p) { p++; pc_ui_arrow(mx(x + 12, 0), 51, rtl ? -1 : 1, C_ROW); x += 20; }
-        }
-        for (int i = 0; i < n; i++) {
-            pc_ui_arrow(mx(x + 12, 0), 51, rtl ? -1 : 1, C_ROW);
-            x += 20;
-            text_m(x, 44, menu_cats[path[i]].name, 0.45f, C_ROW);
-            x += pc_ui_text_w(menu_cats[path[i]].name, 0.45f);
-        }
+    for (const char* p = root; *p;) {   /* (a root of several words: "MULTIPLAYER>LOBBY>GAME SETUP") */
+        char part[64];
+        int len = (int)strcspn(p, ">");
+        snprintf(part, sizeof(part), "%.*s", len, p);
+        text_m(x, 44, tr(part), 0.45f, C_ROW);
+        x += pc_ui_text_w(tr(part), 0.45f);
+        p += len;
+        if (*p) { p++; pc_ui_arrow(mx(x + 12, 0), 51, rtl ? -1 : 1, C_ROW); x += 20; }
     }
-    if (st.edit) {   /* the character grid draws itself over this (text_grid.c): the help line alone */
-        char nm[96];
-        text_m(CAT_X0, Y_HELP - 2, tr(row_label(&rows[SEL], nm, sizeof(nm))), 0.55f, 0xFFFFFFFF);
-        (rtl ? pc_ui_text_wrap_r : pc_ui_text_wrap)(rtl ? 640 - ROWS_X1 : CAT_X0, Y_HELP + 16, ROWS_X1 - CAT_X0,
-            tr("Choose characters on the grid, or type them. Start or Enter: OK; Cancel or Esc: leave it as it was."), 0.42f, 0xFFFFE080, 3);
-        AdvEasySetTextureList(0);
-        return;
+    for (int i = 0; i < n; i++) {
+        float w = pc_ui_text_w(tr(path[i]), 0.45f);
+        pc_ui_arrow(mx(x + 12, 0), 51, rtl ? -1 : 1, C_ROW);
+        x += 20;
+        if (x + w > ROWS_X1) { text_fit(x, 44, tr(path[i]), 0.45f, ROWS_X1 - x, C_ROW); break; }   /* (a long last one: scaled to fit) */
+        text_m(x, 44, tr(path[i]), 0.45f, C_ROW);
+        x += w;
     }
-    /* the category list: this screen's top categories; the one shown (or its parent) on a plate with a gold edge */
     for (int c = 0; c < MC_COUNT; c++) {
         float y;
-        if (!cat_listed(c)) continue;
+        if (!listed(c)) continue;
         y = Y0 + at++ * CAT_H;
-        if (c == (st.depth ? st.stack[0] : st.cat) && menu_cats[st.cat].screen == st.screen) {
+        if (c == cur) {
             rect_m(CAT_X0, y - 2, CAT_X1, y + CAT_H - 3, 0x40FFFFFF, Z_HI);
             rect_m(CAT_X0, y - 2, CAT_X0 + 3, y + CAT_H - 3, C_GOLD, Z_HI + 0.01f);
             text_fit(CAT_X0 + 9, y, tr(menu_cats[c].name), SC_CAT, CAT_X1 - CAT_X0 - 12, 0xFFFFFFFF);
@@ -1031,7 +1201,48 @@ static void draw(void)
         else snprintf(t, sizeof(t), "%s / %s", bind_code_name(BIND_KB, bind_get(B_L1, BIND_KB, 0), a, sizeof(a)), bind_code_name(BIND_KB, bind_get(B_R1, BIND_KB, 0), b, sizeof(b)));
         text_m(CAT_X0 + 9, Y_HELP - 30, t, 0.45f, 0xFF808080);
     }
-    if (st.confirm) ;   /* (the question alone: the font's text would show through its box) */
+}
+static int cat_hit(float x, float y, int (*listed)(int))   /* x: left to right */
+{
+    int at = 0;
+    if (x < CAT_X0 || x > CAT_X1) return -1;
+    for (int c = 0; c < MC_COUNT; c++) {
+        float cy;
+        if (!listed(c)) continue;
+        cy = Y0 + at++ * CAT_H;
+        if (y >= cy - 2 && y < cy + CAT_H - 2) return c;
+    }
+    return -1;
+}
+/* ... for the IMPORT screen (import_menu.c, left to right: P4 does not mirror it) */
+static int import_listed(int c) { return menu_cats[c].screen == MS_IMPORT && menu_cats[c].parent < 0; }
+void ui_frame_import(const char* root, const char* const* path, int n, int cur) { rtl = 0; frame(root, path, n, import_listed, cur); }
+int  ui_frame_import_cat(float x, float y) { return cat_hit(x, y, import_listed); }
+
+static void draw(void)
+{
+    char t[256];
+    {
+        const char* path[DEPTH + 2];
+        char q[64];
+        int n = 0;
+        if (st.search) {   /* SEARCH: the text (a cursor while it is typed), no category on its plate */
+            snprintf(q, sizeof(q), "%s %s%s", tr("SEARCH:"), st.query, st.typing && (SDL_GetTicks() / 400 & 1) ? "_" : "");
+            path[n++] = q;
+        }
+        for (int i = 0; i < st.depth && !st.search; i++) path[n++] = menu_cats[st.stack[i]].name;
+        if (!st.search || st.depth) path[n++] = menu_cats[st.cat].name;
+        frame(st.root, path, n, cat_listed, menu_cats[st.cat].screen == st.screen && !st.search ? (st.depth ? st.stack[0] : st.cat) : -1);
+    }
+    if (st.edit) {   /* the character grid draws itself over this (text_grid.c): the help line alone */
+        char nm[96];
+        text_m(CAT_X0, Y_HELP - 2, tr(row_label(&rows[SEL], nm, sizeof(nm))), 0.55f, 0xFFFFFFFF);
+        (rtl ? pc_ui_text_wrap_r : pc_ui_text_wrap)(rtl ? 640 - ROWS_X1 : CAT_X0, Y_HELP + 16, ROWS_X1 - CAT_X0,
+            tr("Choose characters on the grid, or type them. Start or Enter: OK; Cancel or Esc: leave it as it was."), 0.42f, 0xFFFFE080, 3);
+        AdvEasySetTextureList(0);
+        return;
+    }
+    if (st.confirm || st.keep) ;   /* (the question alone: the font's text would show through its box) */
     else if (st.list) {   /* a list in the rows' place, its name above */
         const char* h = st.list == 2 ? "ENEMY RATES" : rows[SEL].idx == 2 ? "MONSTER LOOKS" : rows[SEL].idx ? "YOUR RANDOM LOOKS" : "STORY CHARACTER LOOKS";
         text_m(ROWS_X0 + 4, Y0 - 2, h, 0.5f, C_GOLD);
@@ -1044,9 +1255,15 @@ static void draw(void)
             rect_m(ROWS_X1 + 1, y, ROWS_X1 + 3, y + h, 0xC0FFFFFF, Z_HI + 0.01f);
         }
     }
-    if (!st.confirm) draw_help();
+    if (!st.confirm && !st.keep) draw_help();
     bar_build();
     bar_draw();
+    if (st.keep) {
+        float y0, y1;
+        char k[96];
+        pc_ui_dialog_place("Keep these settings?", keep_text(k, sizeof(k)), 0.5f, 1, 0, &y0, &y1);
+        pc_ui_dialog(y0, y1, 0.4f, "Keep these settings?", keep_text(k, sizeof(k)), 0.5f, C_HELP, 1, "KEEP", "REVERT", st.keep_sel, 0);
+    }
     if (st.confirm) {
         float y0, y1;
         snprintf(t, sizeof(t), tr("Reset %s?"), tr(menu_cats[st.cat].name));
@@ -1072,20 +1289,9 @@ static int row_at(float x, float y)   /* x: left to right */
         if (y >= row_y(i) - 2 && y < row_y(i) + ROW_H - 2) return heading(&rows[i]) ? -1 : i;
     return -1;
 }
-static int cat_at(float x, float y)
-{
-    int at = 0;
-    if (x < CAT_X0 || x > CAT_X1) return -1;
-    for (int c = 0; c < MC_COUNT; c++) {
-        float cy;
-        if (!cat_listed(c)) continue;
-        cy = Y0 + at++ * CAT_H;
-        if (y >= cy - 2 && y < cy + CAT_H - 2) return c;
-    }
-    return -1;
-}
+static int cat_at(float x, float y) { return cat_hit(x, y, cat_listed); }
 
-static int defaultable(const Row* r) { return r->kind == R_ITEM && r->m->kind != ML_PAGE && r->m->kind != ML_SHORTCUT && r->m->kind != ML_ACTION; }
+static int defaultable(const Row* r) { return r->kind == R_ITEM && r->m->kind != ML_PAGE && r->m->kind != ML_SHORTCUT && r->m->kind != ML_ACTION && r->m->kind != ML_IMPORT; }
 
 static void do_default(const Row* r)
 {
@@ -1099,6 +1305,7 @@ static int input(int port)
     unsigned int press = Pad[port].press, rept = Pad[port].Rept, on = Pad[port].on;
     unsigned int ok = st.ok | P_START, cancel = st.cancel | P_SELECT;
     int esc = key_edge(SC_ESC), del = key_edge(SC_DEL), pgup = key_edge(SC_PGUP), pgdn = key_edge(SC_PGDN), home = key_edge(SC_HOME), end = key_edge(SC_END);
+    int slash = key_edge(SC_SLASH), find = key_edge(SC_F), ctrl = bind_keys() && (bind_keys()[SC_LCTRL] || bind_keys()[SC_RCTRL]);
     int hit, c;
     float x;
     menu_mouse_take(&mt);
@@ -1126,10 +1333,35 @@ static int input(int port)
         else if (mt.right || esc || (press & cancel)) { st.confirm = 0; CallSystemSe(0, 0); }
         return UR_STAY;
     }
+    if (st.keep) {   /* "Keep these settings?": REVERT first; Cancel reverts */
+        float y0, y1;
+        char t[96];
+        pc_ui_dialog_place("Keep these settings?", keep_text(t, sizeof(t)), 0.5f, 1, 0, &y0, &y1);
+        hit = pc_ui_dialog_hit(y1, "KEEP", "REVERT", 0, mt.x, mt.y);
+        if (hit >= 0 && (mt.moved || mt.left) && hit != st.keep_sel) { st.keep_sel = hit; CallSystemSe(0, 2); }
+        if (press & (P_LEFT | P_RIGHT)) { st.keep_sel ^= 1; CallSystemSe(0, 2); }
+        else if ((mt.left && hit >= 0) || (press & ok)) { CallSystemSe(0, st.keep_sel ? 0 : 3); keep_end(!st.keep_sel); }
+        else if (mt.right || esc || (press & cancel)) { CallSystemSe(0, 0); keep_end(0); }
+        return UR_STAY;
+    }
     if (st.list) {   /* its BACK, cancel or a right click: the rows again */
         if (esc) press |= cancel;
         if ((st.list == 2 ? rate_list_input : cast_list_input)(&mt, press, rept, ok, cancel)) st.list = 0;
         return UR_STAY;
+    }
+    if (st.search && st.typing) {   /* typing the search (the keyboard's ring); a click on a result goes to it */
+        search_typed();
+        if (!(st.search && st.typing)) return UR_STAY;
+        hit = row_at(x, mt.y);
+        c = mt.left ? bar_hit(x, mt.y) : 0;
+        if ((mt.left && hit >= 0) || c == UG_OK) { st.typing = 0; g_lobby_io.text_on = 0; if (hit >= 0) SEL = hit; CallSystemSe(0, 2); }
+        else if (mt.right || c == UG_BACK) { search_end(); CallSystemSe(0, 0); }
+        return UR_STAY;
+    }
+    if (st.screen == MS_SETTINGS && st.only < 0 && !st.depth && (slash || (find && ctrl))) { search_begin(); return UR_STAY; }
+    if (st.search && !st.depth) {   /* the results: Back closes the search, a category switch too */
+        if (esc || mt.right || (press & cancel)) { search_end(); CallSystemSe(0, 0); return UR_STAY; }
+        if (press & (P_L1 | P_R1)) search_end();
     }
     /* hold Triangle for half a second, or Delete: the row's default */
     if (on & st.def) {
@@ -1152,6 +1384,7 @@ static int input(int port)
         if (b == UG_BACK) return back() ? UR_BACK : UR_STAY;
         if (b == UG_DEFAULT) { do_default(&rows[SEL]); return UR_STAY; }
         if (b == UG_CAT) { next_cat(1); return UR_STAY; }
+        if (b == UG_SEARCH) { search_begin(); return UR_STAY; }
         if (hit >= 0) {
             const Row* r = &rows[hit];
             const Setting* rs = row_set(r);
@@ -1179,8 +1412,18 @@ static int input(int port)
 int ui_rows_run(int port, int flag)
 {
     int r = UR_STAY;
-    rtl = lang_rtl_text();
     buttons();
+    if (st.imp) {   /* the IMPORT screen in place (its own rows, help and bar; not mirrored) */
+        if (import_menu_run(port, flag)) {
+            const bool* k = bind_keys();
+            st.imp = 0;
+            st.hold = 0; st.held_done = 1;
+            for (int i = 0; i < 80; i++) st.keys_prev[i] = k && k[i];   /* (its Esc is no Back here too) */
+        }
+        AdvEasySetTextureList(0);
+        return UR_STAY;
+    }
+    rtl = lang_rtl_text();
     if (st.edit) {   /* the character grid over the panel (it takes the input; the rows' text would show through its box) */
         int k;
         draw();
@@ -1188,6 +1431,7 @@ int ui_rows_run(int port, int flag)
         return UR_STAY;
     }
     g_lobby_io.list_on = st.list;   /* (Page Up / Down, Home, End in the lists) */
+    if (st.keep && !keep_left()) keep_end(0);   /* (no answer: the display mode may not show anything) */
     build_rows();
     if (flag) r = input(port);
     else { menu_mouse_take(&mt); for (int k = 0; k < 80; k++) st.keys_prev[k] = 0; }
@@ -1210,6 +1454,9 @@ void ui_rows_close(void)
     st.list = 0;
     st.confirm = 0;
     if (st.edit) edit_end(0);
+    if (st.imp) { import_menu_shut(); st.imp = 0; }
+    if (st.keep) keep_end(0);
+    search_end();
 }
 
 int ui_rows_window(void) { int w = st.window; st.window = 0; return w; }

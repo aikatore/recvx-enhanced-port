@@ -15,6 +15,7 @@ extern const char* const prof_names[PROF_COUNT];
 typedef struct { float ms[PROF_COUNT]; float total; } ProfFrame;
 
 extern int prof_enabled;          /* off: push/pop cost one branch */
+extern int g_perf_graph;          /* the new menu's Performance Graph: the panel on screen (overlay.cpp) */
 void prof_thread(int base_cat);   /* category for time outside any push on this thread */
 void prof_push(int cat);          /* time is charged to the innermost category */
 void prof_pop(void);

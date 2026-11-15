@@ -54,6 +54,7 @@ static void charge(void)
 }
 
 int prof_enabled;
+int g_perf_graph;
 
 void prof_thread(int base_cat) { base = base_cat; last_ns = 0; }
 

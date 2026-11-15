@@ -355,6 +355,30 @@ static void controls_section(void)
     ImGui::TextDisabled(tr("Also available in OPTION > ENHANCED SETTINGS > CONTROLS."));
 }
 
+/* the profiler's frame times (F1 > Performance, and the new menu's Performance Graph panel) */
+static void perf_body(void)
+{
+    static ProfFrame h[240];
+    int n = prof_history(h, 240);
+    if (n <= 0) return;
+    float total[240], avg[PROF_COUNT] = { 0 }, avg_total = 0, worst = 0;
+    int m = n < 60 ? n : 60;
+    for (int i = 0; i < n; i++) total[i] = h[i].total;
+    for (int i = n - m; i < n; i++) {
+        avg_total += h[i].total / m;
+        if (h[i].total > worst) worst = h[i].total;
+        for (int c = 0; c < PROF_COUNT; c++) avg[c] += h[i].ms[c] / m;
+    }
+    ImGui::TextWrapped(tr("game frame %.2f ms avg, %.2f ms worst (target 33.37 ms = 29.97 Hz)"), avg_total, worst);
+    ImGui::PlotLines("##ft", total, n, 0, tr("frame time (ms)"), 0.0f, 66.7f, ImVec2(-1, 60));
+    for (int c = 0; c < PROF_COUNT; c++) {
+        ImGui::Text(tr("%-8s %6.2f ms"), prof_names[c], avg[c]);
+        ImGui::SameLine(160);
+        ImGui::ProgressBar(avg_total > 0 ? avg[c] / avg_total : 0, ImVec2(-1, 0), "");
+    }
+    ImGui::TextDisabled(tr("'wait' is idle time; run with --profile for a CSV."));
+}
+
 static void settings_window(void)
 {
     bool changed = false;
@@ -396,28 +420,9 @@ static void settings_window(void)
             changed |= settings_imgui(p, false);
 
     if (ImGui::CollapsingHeader(tr("Performance"))) {
-        static ProfFrame h[240];
         bool on = prof_enabled != 0;
         if (ImGui::Checkbox(tr("Measure (small overhead; always on with --profile)"), &on)) prof_enabled = on;
-        int n = prof_history(h, 240);
-        if (n > 0) {
-            float total[240], avg[PROF_COUNT] = { 0 }, avg_total = 0, worst = 0;
-            int m = n < 60 ? n : 60;
-            for (int i = 0; i < n; i++) total[i] = h[i].total;
-            for (int i = n - m; i < n; i++) {
-                avg_total += h[i].total / m;
-                if (h[i].total > worst) worst = h[i].total;
-                for (int c = 0; c < PROF_COUNT; c++) avg[c] += h[i].ms[c] / m;
-            }
-            ImGui::Text(tr("game frame %.2f ms avg, %.2f ms worst (target 33.37 ms = 29.97 Hz)"), avg_total, worst);
-            ImGui::PlotLines("##ft", total, n, 0, tr("frame time (ms)"), 0.0f, 66.7f, ImVec2(-1, 60));
-            for (int c = 0; c < PROF_COUNT; c++) {
-                ImGui::Text(tr("%-8s %6.2f ms"), prof_names[c], avg[c]);
-                ImGui::SameLine(160);
-                ImGui::ProgressBar(avg_total > 0 ? avg[c] / avg_total : 0, ImVec2(-1, 0), "");
-            }
-            ImGui::TextDisabled(tr("'wait' is idle time; run with --profile for a CSV."));
-        }
+        perf_body();
     }
     ImGui::End();
     if (changed) settings_save_later();
@@ -1449,7 +1454,7 @@ static void overlay_frame(void)
     const char* hint = lobby_hint();
     bool tag = coop_on && tag_flags && !cs.trade_open && (g_coop.nametag || cs.busy_kind || cs.trade_hint[0]);   /* co-op: the partner is drawn in the frame shown */
     bool ping = g_config.show_ping && coop_on && cs.state == COOP_CONNECTED;   /* co-op: next to the frame rate */
-    if (!visible && !cheats_visible && !coop_visible && !import_visible && !devcine_on && !g_config.show_fps && !ping && !crosshair && !hint && !tag && !g_hud.on && hud_a <= 0.0f) return;
+    if (!visible && !cheats_visible && !coop_visible && !import_visible && !devcine_on && !g_config.show_fps && !g_perf_graph && !ping && !crosshair && !hint && !tag && !g_hud.on && hud_a <= 0.0f) return;
     {   /* readable on large displays: scale text with the window height (1080p = 1x) */
         int ww, wh;
         SDL_GetWindowSizeInPixels(win, &ww, &wh);
@@ -1501,6 +1506,15 @@ static void overlay_frame(void)
         if (g_config.show_fps && ping) ImGui::Text(tr("%.1f fps   ping %d ms"), ImGui::GetIO().Framerate, cs.ping_ms);
         else if (ping) ImGui::Text(tr("ping %d ms"), cs.ping_ms);
         else ImGui::Text(tr("%.1f fps"), ImGui::GetIO().Framerate);
+        ImGui::End();
+    }
+    if (g_perf_graph) {   /* the new menu's Performance Graph: F1's Performance section as a panel, under the frame rate */
+        ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 10, (g_config.show_fps || ping) ? 50.0f : 10.0f), ImGuiCond_Always, ImVec2(1, 0));
+        ImGui::SetNextWindowSize(ImVec2(420.0f * ImGui::GetStyle().FontScaleDpi, 0));
+        ImGui::SetNextWindowBgAlpha(0.5f);
+        ImGui::Begin(tr("##perf"), nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav |
+                                         ImGuiWindowFlags_NoFocusOnAppearing);   /* (height 0: fitted every frame) */
+        perf_body();
         ImGui::End();
     }
     ImGui::Render();

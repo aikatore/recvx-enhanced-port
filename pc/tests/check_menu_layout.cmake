@@ -126,7 +126,7 @@ if(SELFTEST)
     string(REGEX REPLACE "ML_SET, \"Fast Loading\"" "ML_PAGE, NULL" broken "${layout}")
     menu_layout_check("${table}" "${broken}" e1)
     # a row twice
-    string(REPLACE "ML_SET, \"VSync\" }," "ML_SET, \"VSync\" }, { 0, NULL, ML_SET, \"VSync\" }," broken "${layout}")
+    string(REPLACE "ML_SET, \"Quick Knife\" }," "ML_SET, \"Quick Knife\" }, { 0, NULL, ML_SET, \"Quick Knife\" }," broken "${layout}")
     menu_layout_check("${table}" "${broken}" e2)
     # a shortcut to nothing
     string(REPLACE "ML_SHORTCUT, \"Headshots & Piercing\"" "ML_SHORTCUT, \"Headshots and Piercing\"" broken "${layout}")
@@ -138,7 +138,7 @@ if(SELFTEST)
     menu_bio_check("${opts}" "${broken}" "${table}" e5)
     string(REPLACE "{ \"Rearranged Enemies\", 1 }" "{ \"Rearranged Enemy\", 1 }" broken "${layout}")
     menu_bio_check("${opts}" "${broken}" "${table}" e6)
-    if(NOT e1 MATCHES "Fast Loading' has no home" OR NOT e2 MATCHES "VSync' is placed twice" OR NOT e3 MATCHES "is no row"
+    if(NOT e1 MATCHES "Fast Loading' has no home" OR NOT e2 MATCHES "Quick Knife' is placed twice" OR NOT e3 MATCHES "is no row"
        OR NOT e4 MATCHES "HiddenKeyItems' has no home" OR NOT e5 MATCHES "EnemyQuantity' \\(ML_BIO\\) is no BioRand" OR NOT e6 MATCHES "Rearranged Enemy' is no row")
         message(FATAL_ERROR "menu_layout self-test: a broken layout passed (${e1} | ${e2} | ${e3} | ${e4} | ${e5} | ${e6})")
     endif()
