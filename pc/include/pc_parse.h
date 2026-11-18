@@ -104,7 +104,11 @@ uint32_t pc_mes_at(const uint8_t* t, uint32_t size, uint32_t i);
    fonts); never when that changes a palette bank (the PLI chunk before it) that a texture staying the language's
    draws with, nor when it changes one of hold (banks 0..127, NULL none: the banks of another file's textures staying
    the language's, the font's): with all, its picture and other palettes are still the disc's, the palettes that go
-   to hold's banks the language's. out: the parts to read from the disc (offset in l, offset in d, length). Returns their count. */
+   to hold's banks the language's. A paired texture staying the language's still gets the disc's global index (Gindex
+   bits 0..23, a 3-byte part; its bank bits stay): the game finds textures by it (SearchNumber, and the texture heap's
+   compaction moves every entry of a global index: Ps2ReplaceTexAddr), and the European discs number theirs otherwise
+   (their flag pages had the US index of other effect textures: shots drew the flags' letters).
+   out: the parts to read from the disc (offset in l, offset in d, length). Returns their count. */
 typedef struct PcPart { uint32_t off, disc, len; } PcPart;
 #define PC_PARTS_MAX 64
 int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, uint64_t keep, int all, const uint64_t* hold, PcPart* out, int max);

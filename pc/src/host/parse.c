@@ -473,7 +473,12 @@ int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, 
     } while (changed);
     for (k = 0; k < n && np < max; k++) {
         uint32_t at = t[k].off, c = t[k].ph + pc_rd16(l + t[k].ph + 12) + pc_rd32(l + t[k].ph + 8), step;
-        if (!swap[k]) continue;
+        if (!swap[k]) {   /* staying the language's: the disc's global index (bits 0..23; 24, 25 equal; 26.. the bank stays) */
+            if (n == m && memcmp(l + at + 8, d + u[k].off + 8, 3) && !((l[at + 11] ^ d[u[k].off + 11]) & 3)) {
+                out[np].off = at + 8; out[np].disc = u[k].off + 8; out[np].len = 3; np++;
+            }
+            continue;
+        }
         for (int i = 0; swap[k] == 2 && i <= t[k].np && np < max; i++) {   /* (2: all but those palettes; then the rest) */
             uint32_t to = t[k].off + t[k].len;
             if (i < t[k].np) {

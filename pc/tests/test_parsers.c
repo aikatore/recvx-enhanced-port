@@ -412,6 +412,11 @@ static void test_lang_parts(void)
     CHECK(pc_lang_parts(l, nl, d, nd, 1, 1, NULL, p, 8) == 2 && p[0].off == at[1] && p[1].off == at[2]);   /* all but the font */
     CHECK(pc_lang_parts(l, nl, l, nl, 0, 1, NULL, p, 8) == 0);   /* the same bytes: nothing to read */
     CHECK(pc_lang_parts(l, nl, d, nd - 200, 1, 0, NULL, p, 8) == 0);   /* the disc's last texture cut off: no pairs */
+    l[76 + 8] = 0xd3; l[76 + 11] = 0x80; d[76 + 8] = 0xcc;   /* the font's own global index (and bank bits): the disc's index */
+    CHECK(pc_lang_parts(l, nl, d, nd, 1, 1, NULL, p, 8) == 3 && p[0].off == 76 + 8 && p[0].disc == 76 + 8 && p[0].len == 3 && p[1].off == at[1]);
+    l[76 + 11] = 0x81;   /* (bits 24, 25 differ: not an index the 3 bytes give) */
+    CHECK(pc_lang_parts(l, nl, d, nd, 1, 1, NULL, p, 8) == 2);
+    l[76 + 8] = l[76 + 11] = d[76 + 8] = 0;
     {   /* another file's texture staying the language's (the font) draws with bank 2: the re-encode there stays */
         uint64_t b[2];
         pc_lang_banks(l, nl, 1, b);

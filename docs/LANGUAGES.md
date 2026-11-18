@@ -536,6 +536,17 @@ are. The European English is not installed: its text is the US text, and it has 
   over picture, the Arabic item model labels (ammunition boxes, ink ribbon: `ITEM1.AFS/11` ... `/124`), the Russian
   typewriter's keys and clipboard (`ITEM1.AFS/144`), the computer's screens with words (Brazilian Portuguese
   `SYSTEM.AFS/2` texture 2). No import again: the imports stay as they are.
+  - **Global indices**: every paired texture staying the language's (the fonts, the European flag pages, ...) still
+    gets the disc's TIM2 global index (`Gindex` bits 0..23, a 3-byte part; its bank bits stay the language's): the
+    European and Japanese discs number their textures otherwise, and the game finds a texture by it (`SearchNumber`:
+    a texture loaded with the index of one already loaded is that one) and moves every texture of an index when it
+    compacts the texture heap (`Ps2TextureGarbageCollectionAll` → `Ps2ReplaceTexAddr`). Before 2026-11-18 the European
+    `SYSTEM.AFS/1` flag pages (textures 1, 2: the flags and ENGLISH / FRENCH / GERMAN / SPANISH) had the US index of
+    texture 3 and of the sparks and smoke (texture 10: French, German, Spanish, Arabic, Italian), the Arabic and
+    Turkish first flag page that of texture 8 (a texture loaded with it was the flag page): after the compaction at a
+    new game those effects drew the flag pages, a box with letters where a shot hits metal (and, as reported, red
+    squares for a room's gas; that room not run here). Checked (job folder `langtex/`):
+    with the fix the texture loads and moves of every language are those of English, and the shots' frames the same.
 - **Translated Pictures** (LANGUAGE, under Subtitles, shown with an imported language; ini
   `translated_pictures`, default 0 since 2026-11-01): Off reads the archives' pictures from the disc (`ADV.AFS/`,
   `MRY.AFS/`, `ITEM1.AFS/`, `ITEM2.AFS/`: `pc_lang_disc_parts` returns -1 and `ADXF_OpenAfs` opens the disc's entry)
