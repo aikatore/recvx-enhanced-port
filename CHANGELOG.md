@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- With an imported language, shots hitting walls and some other effects no longer show boxes with letters or
+  coloured squares instead of sparks, smoke or gas.
+
 ## 0.8.0 (2026-11-15)
 
 ### Changes
