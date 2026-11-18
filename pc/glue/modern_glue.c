@@ -11,6 +11,7 @@
 #include "../../decomp/include/ps2/veronica/prog/player.h"
 #include "../../decomp/include/ps2/veronica/prog/playpch.h"
 #include "../src/host/modern.h"
+#include "../src/host/tps.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,7 +20,9 @@ int pad_move_dir(float* x, float* y, int* dpad);   /* pad.c: screen direction (x
 int pc_in_play(const BH_PWORK* p, int scope);   /* reload_glue.c */
 int pad_quickturn_held(void);
 int pad_free_aim(void);
+int pc_trade_screen(void);
 uint64_t gs_frame_count(void);
+void tps_aim_walk_fixed(int ok, float md, float m);   /* tps_glue.c: the walk under the aim, its legs and footsteps */
 
 #define RUN_PUSH 0.7f                   /* the stick pushed this far runs */
 #define MOVE_REBASE 10                  /* game frames after a special move in which a cut is not held */
@@ -28,6 +31,8 @@ static ModernHold hold;
 static uint64_t move_end;               /* the last frame of a special move (stairs, ladder, climbing over, pushing) */
 static float target;                    /* the angle to turn to this frame */
 static int steer;                       /* modern_pad asked modern_player to turn */
+static float walk_m, walk_dir;          /* "Move While Aiming (Fixed Cameras)": this frame's walk (0..1), its direction (as ay) */
+static int walk_tank;                   /* ... or along the facing: 1 forward, -1 back (Classic) */
 
 /* normal play: our player in control; no event, door, menu, first person or attract demo (reload_glue.c) */
 static int in_play(void) { return pc_in_play(plp, 0); }
@@ -49,6 +54,39 @@ static void trace(float x, float y, int analog, int held_old, unsigned pad)
            plp->px, plp->pz, pz != 0 ? px / pz : 0, pz != 0 ? -py / pz : 0, cam.px, cam.py, cam.pz, cam.ay * (360.0f / 65536.0f), cam.az * (360.0f / 65536.0f));
 }
 
+/* "Move While Aiming (Fixed Cameras)" (docs/USER_GUIDE.md): the weapon raised (not lowering it, nor the scope), firing,
+   slashing or reloading, in normal play; no hit or grab */
+static int aim_walk_ok(void)
+{
+    return g_tps.aim_walk_fixed && !tps_on && sys && plp == &ply && in_play() && plp->mode1 == 1 && plp->mode2 != 68 && plp->mode2 != 71 &&
+           !(plp->flg & 6) && !pc_trade_screen();
+}
+
+/* the directions walk under the aim (modern_player, tps_glue.c aim_walk), so they no longer turn or tilt it, except
+   with run held: then the original aim controls (turn, aim up / down). Classic (and Combined's d-pad): up / down walk
+   forward / back along the facing, left / right still turn. Modern: towards the direction on screen, the facing kept */
+static unsigned int aim_walk_pad(unsigned int pad)
+{
+    float x, y, rx, rz;
+    int dpad, analog = pad_move_dir(&x, &y, &dpad), cut;
+    if (pad & 0x400) { hold.held = 0; return pad; }
+    if (!g_modern_on || (g_modern_on == MODERN_COMBINED && dpad)) {
+        hold.held = 0;
+        walk_tank = !!(pad & 0x1) - !!(pad & 0x2);
+        if (!walk_tank) return pad;
+        walk_m = analog ? fabsf(y) : 1;
+        return pad & ~0x63;
+    }
+    if (x == 0 && y == 0) { hold.held = 0; return pad; }
+    rx = ((const float*)cam.mtx)[0]; rz = ((const float*)cam.mtx)[8];
+    cut = cam.ncut | cam.camver << 8;
+    modern_hold(&hold, atan2f(x, y) * (32768.0f / 3.14159265f), cut, &rx, &rz);
+    walk_dir = modern_target(rx, rz, x, y);
+    walk_tank = 0;
+    walk_m = sqrtf(x * x + y * y);
+    return pad & ~0x6F;
+}
+
 /* pad.c bhSetPad, before pad_ps is derived (virtual bits: 0x1 forward, 0x2 back, 0x4/0x8 turn,
    0x20/0x40 aim up/down, 0x400 run) */
 unsigned int modern_pad(unsigned int pad)
@@ -57,6 +95,8 @@ unsigned int modern_pad(unsigned int pad)
     float x, y, rx, rz, d;
     int analog, dpad, cut;
     steer = 0;
+    walk_m = 0;
+    if (m && aim_walk_ok()) return aim_walk_pad(pad);
     if (!g_modern_on || tps_on || !m || !sys || !plp || !in_play() || plp->mode1 != 0) {
         hold.held = 0;   /* aiming: the original input */
         return pad;
@@ -102,6 +142,8 @@ void modern_player(void)
 {
     int s = steer;
     steer = 0;
+    if (plp == &ply && !tps_on)   /* (each tick: the legs blend out after it) */
+        tps_aim_walk_fixed(aim_walk_ok(), walk_tank ? (short)plp->ay + (walk_tank < 0 ? 32768.0f : 0) : walk_dir, walk_m);
     if (pad_free_aim() && plp == &ply && plp->mode1 == 1 && (plp->flg & 0x100000)) {
         plp->flg &= ~0x100000;
         plp->stflg &= ~0x800;

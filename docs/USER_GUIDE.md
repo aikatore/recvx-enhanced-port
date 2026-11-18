@@ -108,6 +108,27 @@ Aiming is the same in every scheme. With Modern, bind the **Quick Turn** row (un
 The schemes do not apply in third person (it has its own Gamepad Controls row), and in co-op change
 only your own player.
 
+### Moving while aiming (fixed cameras)
+
+**Move While Aiming (Fixed Cameras)** (CONTROLS page, off by default): with the weapon raised, firing,
+slashing or reloading you walk slowly instead of standing still, the arms keep aiming (as Move While
+Aiming does in third person). Every weapon, the knife and the quick knife; not in the scope.
+
+- **Classic** (and Combined's d-pad): up / down walk forward / back, left / right still turn.
+- **Modern** (and Combined's stick and arrow keys): you walk towards the direction held on screen
+  (also sideways and back), facing where you aim; the stick pushed halfway walks at half speed.
+- **Hold Run** to turn and aim up / down as before, standing still (Up / Down are aim up / down then).
+
+Auto-aim, Free Aim, the change of target and the quick turn are as without it. In co-op your partner
+sees you walk under the aim.
+
+### Scoped weapons aimed normally
+
+**Aim Scoped Weapons Normally** (GAMEPLAY page, off by default): the sniper rifle and the linear
+launcher are aimed and fired like the other weapons, from the shoulder, instead of through the scope:
+with auto-aim in the fixed cameras (the sniper rifle's shot goes to the enemy the aim locked on), with
+the crosshair in third person; they reload into the aim and walk with Move While Aiming.
+
 ### Aiming without auto-aim
 
 The aim button turns you to the nearest enemy. **Free Aim** (E, the left trigger) raises
@@ -297,6 +318,7 @@ until the right square on the white strip is.
 | Difficulty Select | On | see [Difficulty select](#difficulty-select) |
 | Quick Knife | On | see [Quick knife](#quick-knife) |
 | Auto-climb Stairs | On | walk into stairs to climb them. Ledges, doors and items still need the button |
+| Aim Scoped Weapons Normally | Off | the sniper rifle and the linear launcher aim and fire like the other weapons instead of through the scope ([Scoped weapons aimed normally](#scoped-weapons-aimed-normally)) |
 | Zombie Decapitation | On | a zombie whose head bursts (magnum, close shotgun) loses it |
 | Stack Rifle Ammo | **On** | rifle bullets stack in one slot |
 | Save System | Separate Files | see [Saves](#saves) |
@@ -397,6 +419,7 @@ Shown once you have imported another language (title menu, IMPORT, or F9; see LA
 
 Input Devices and Gamepad ([above](#input-source-and-local-co-op)), Vibration Strength (100%), Mouse
 In Menus (on), Fixed Camera Controls (Combined, [Modern controls](#modern-controls-fixed-cameras)),
+Move While Aiming (Fixed Cameras) (off, [Moving while aiming](#moving-while-aiming-fixed-cameras)),
 Weapon Shortcuts (on, [Weapon shortcuts](#weapon-shortcuts)), then the bindings.
 
 ### Third person

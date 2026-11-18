@@ -448,6 +448,7 @@ const Setting g_settings[] = {
       .help = "Hold Quick Knife to draw your knife. Release it to return to your previous weapon." },
     { SP_GAMEPLAY, "Auto-climb Stairs", V(g_config.auto_stairs), 0, 1, 1,
       .help = "Climb stairs by moving into them. Ledges, doors and items still need the action button." },
+    { SP_GAMEPLAY, "Aim Scoped Weapons Normally", V(g_tps.scope_normal), 0, 1, 1, .help = "Aim and fire the sniper rifle and the linear launcher like other weapons, with auto-aim in the fixed cameras, instead of through the scope." },
     { SP_GAMEPLAY, "Zombie Decapitation", V(g_config.head_blowoff), 0, 1, 1, .help = "Allow zombie heads to burst." },
     { SP_GAMEPLAY, "Stack Rifle Ammo", V(g_config.rifle_stack), 0, 1, 1, .locked = rifle_locked,
       .help = "Combine rifle and assault rifle ammo in your inventory. Off keeps each pickup separate." },
@@ -506,6 +507,7 @@ const Setting g_settings[] = {
       .help = "The buttons shown in menus. Automatic follows your controller, or the keyboard when you use it. Keyboard and Mouse always shows keys." },
     { SP_CONTROLS, "Fixed Camera Controls", V(g_modern_on), 0, 2, 1, fixed_cam_names,
       .help = "Modern follows screen direction. Combined uses Modern movement with Classic gamepad D-pad controls." },
+    { SP_CONTROLS, "Move While Aiming (Fixed Cameras)", V(g_tps.aim_walk_fixed), 0, 1, 1, .help = "Walk slowly while aiming, attacking or reloading with the fixed cameras. Classic controls walk forward and back, Modern towards the direction held. Hold Run to turn and aim up or down." },
     { SP_CONTROLS, "Weapon Shortcuts", V(g_config.weapon_shortcuts), 0, 1, 1,
       .help = "Equip weapons with 1-8, or hold Weapon Shortcuts and press the D-pad. Assign them in the inventory." },
 

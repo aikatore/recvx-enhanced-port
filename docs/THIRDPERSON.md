@@ -193,6 +193,8 @@ unit (the character is about 17 units tall).
 | Locational Hit Reactions ([Locational hit reactions](#locational-hit-reactions)) | `tps_hit_react` | 1 |
 | Headshots & Piercing ([Headshots and piercing](#headshots-and-piercing); co-op: the host's) | `tps_headshots` | 1 |
 | Move While Aiming ([Moving while aiming](#moving-while-aiming)) | `tps_aim_walk` | 0 |
+| Move While Aiming (Fixed Cameras) ([Fixed cameras](#fixed-cameras)) | `fixed_aim_walk` | 0 |
+| Aim Scoped Weapons Normally ([Scoped weapons aimed normally](#scoped-weapons-aimed-normally)) | `scope_normal` | 0 |
 | Mouse Camera Style (0 = Behind Character, 1 = Free Camera) | `tps_free_camera` | 0 |
 | Gamepad Controls (0 = Classic, 1 = Modern) | `tps_pad_controls` | 1 |
 | Horizontal / Vertical Camera Speed (percent; 100 = 180 / 120 degrees a second) | `tps_pad_sens_x`, `tps_pad_sens_y` | 100 |
@@ -659,6 +661,62 @@ still while the weapon is raised and while reloading. With it on, in third perso
   [COOP.md](COOP.md)); the partner's model plays it under the weapon motion the same way. Position and aim pitch
   arrive as before.
 * Off, the fixed cameras, the scope: unchanged (frame-identical runs aiming, walking, firing and reloading).
+
+### Fixed cameras
+
+Setting "Move While Aiming (Fixed Cameras)" (CONTROLS page, ini `fixed_aim_walk`, off by default; the new menu: GAMEPLAY >
+COMBAT, beside "Move While Aiming (Third Person)", the row above). A setting of its own: the fixed cameras' aim has its
+own controls (the directions turn and tilt it), so walking takes them over, which players of the original may not want
+with the third-person option on.
+
+* **When**: as in third person, without the free-aim condition (the game's lock-on is the fixed cameras' aim): the weapon
+  raised (`mode1` 1; every weapon, the knife, the quick knife, the dual weapons' `mode2` 164 / 169), firing, slashing,
+  the reload (raised or of a lowered weapon). Not lowering it (68), nor the scope (71), nor hit or grabbed (`flg 6`),
+  nor in third person, menus, events or the co-op trade screen (`modern_glue.c aim_walk_ok`). Free Aim (E / LT,
+  `pad_free_aim`) is the same aim without the lock-on's turn, so it walks too.
+* **Input** (`modern_glue.c aim_walk_pad`, from `modern_pad` in `bhSetPad`, for every scheme):
+  * Classic, and Combined's d-pad: up / down (`0x1` / `0x2`, the left stick's too) walk forward / back along the
+    facing; their aim-up / aim-down bits (`0x20` / `0x40`) are dropped while they walk; left / right keep turning
+    the aim (`0x4` / `0x8`, the weapon modes' own turn), so up + left walks an arc. Tank controls: forward is where
+    the gun points, as the walk is where the character faces.
+  * Modern, and Combined's stick and arrow keys: towards the direction on screen (`modern_target`, held across a cut
+    as the walk, `modern_hold`), any way from the facing; the facing stays (the lock-on and the change of target
+    still turn it); all direction bits are dropped. The stick's length scales the speed.
+  * Run held (`0x400`): nothing walks and the pad stays as it is, so the directions turn and aim up / down as in the
+    original (also the quick-turn row, which is back + run). Run does nothing with the weapon raised otherwise.
+* **The walk** is third person's (`tps_glue.c aim_walk` through `tps_aim_walk_fixed`, from `modern_player` after the
+  mode handler, each tick without third person): speed, the walks' motions and travel, footsteps, the feet's
+  `flg 0x40000`, the game's wall / enemy / floor checks; the legs are drawn by `tps_legs` after the player's
+  `bhCalcModel` (`player.c`, the fixed cameras' branch; nothing while no legs walk). Co-op sends them as before
+  (`Pose.legs`): the partner sees the walk under the aim (checked: host Classic with a handgun, the guest's view).
+* Checked (headless, 1/5, `RECVX_TPS_TRACE=1` "aimwalk" lines and frame dumps): Classic forward, back, the turn, an arc,
+  firing and the reload (empty magazine) while walking; Modern right, down, left, up (also across a cut) with the
+  shotgun; Combined with the arrow keys, Free Aim and the sniper rifle aimed normally; the bow gun, the knife, the
+  grenade launcher, the Gold Lugers, the sub machine gun and the rocket launcher. Off: frame-identical to v0.8.0
+  (`layout_check.sh`).
+
+## Scoped weapons aimed normally
+
+Setting "Aim Scoped Weapons Normally" (GAMEPLAY page, ini `scope_normal`, off by default; the new menu: GAMEPLAY >
+COMBAT). The sniper rifle (weapon 13) and the linear launcher (18), `WpnTab flg 0x20`, raise into the scope
+(`bhCPM2_act_suw` -> `mode2` 71, `bhCPM2_act_scp`), reload back into it (`bhCPM2_act_rld`) and set the cut camera
+up again when lowered (`bhCPM2_act_wre`, `pt_flg 1`). With the setting those three checks read `pc_scoped()` (false),
+so the weapons go the other weapons' way: the aim poses (`PlMtnWpn` 104 / 109 / 114: both weapon files have the
+straight, up and down aims and the shots 101 / 106 / 111, and the reload 116, as the other rifles), the shot
+`bhCPM2_act_wpn` -> `bhCPM2_act_atk` (`mode2` 69) with the weapon's own effects, sounds, ammo and damage: the sniper
+rifle's hitscan (`flg 0x10000000`, `bhCheckGunAtari`), the linear launcher's beam (`bhCPM2_act_wpn` case 18, the
+game's own branch). The lowered weapon's reload (`reload_glue.c`) is allowed then too. Off: the scope as before.
+
+* **The sniper rifle's shot**: its ray is thin (`flg 0x8`: the enemy's joint capsules, made for the scope's exact aim)
+  and starts at the chest, while the lock-on (`bhCalcLockEneYR`) turns the facing for a hand gun's wide cone: the ray
+  passed the enemy 4 to 6 degrees off and missed (a zombie at 25 units: every shot). With the lock-on (fixed cameras;
+  third person with Aim Assist and the mouse; not Free Aim) `pc_scoped_aim` (`bhCPM2_act_atk`, before
+  `bhCheckGunAtari`) turns the ray to the middle of the enemy locked on, when it is within 20 degrees; the aim height
+  stays the player's (up / down). Free aim in third person: the crosshair's ray (Precise Shots) as for the other rifles.
+* Checked (1/5, a spawned zombie at 25 units, `RECVX_ENEMY_TRACE`): fixed cameras, Classic: the normal aim pose, two
+  sniper shots (120 -> 40, killed); the linear launcher's beam kills it with one; third person (Precise Shots, the
+  crosshair on it): 120 -> 40 -> 15; the sniper rifle's reload while walking, back into the aim. Co-op: the partner
+  plays our motions by number, so it sees the aim poses (nothing on the wire changed).
 
 ## Precise hits
 

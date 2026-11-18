@@ -19,6 +19,9 @@ typedef struct TpsConfig {
     int auto_aim;             /* 1 = keep the game's lock-on when raising the weapon */
     int precise;              /* "Precise hits": free-aim shots hit only the enemies' bodies (tps_glue.c pc_precise_hits) */
     int aim_walk;             /* "Move While Aiming": walk slowly while aiming or reloading, the legs walking under the aim (tps_glue.c) */
+    int aim_walk_fixed;       /* "Move While Aiming (Fixed Cameras)": the same under the fixed cameras (modern_glue.c aim_walk_pad) */
+    int scope_normal;         /* "Aim Scoped Weapons Normally": the sniper rifle and linear launcher aim and fire as other
+                                 weapons instead of the scope (tps_glue.c pc_scoped; player.c bhCPM2_act_suw / _rld / _wre) */
     int hit_react;            /* "Locational Hit Reactions": a zombie hit on the head, an arm or a leg flinches there (tps_glue.c, drawn only) */
     int headshots;            /* "Headshots & Piercing": more head damage from the rifles, killing head hits burst a zombie's head,
                                  the sniper rifle pierces (tps_glue.c; co-op: the host's, pc_headshots) */

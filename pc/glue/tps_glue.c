@@ -1893,16 +1893,17 @@ static int aim_walk_ok(void)
            (reload_at_rest() || !lock_aim()) && !(plp->flg & 6) && pc_in_play(plp, 0);
 }
 
-static void aim_walk(void)
+/* this tick's walk under the aim: ok (the mode allows it), towards world angle md (as ay) at m (0..1) of its speed */
+static void aim_walk(int ok, float md, float m)
 {
     static int unfixed, back, last_frm;
     TpsLegs* l = &tps_legs_me;
     EXP_WORK* x = (EXP_WORK*)plp->exp0;
-    float m = sqrtf(aw_f * aw_f + aw_r * aw_r), on;
-    int ok = aim_walk_ok() && m > 0.05f && x;
-    if (m > 1) aw_f /= m, aw_r /= m, m = 1;
+    float on;
+    ok = ok && m > 0.05f && x;
+    if (m > 1) m = 1;
     if (ok) {
-        float md = wrap(yaw - atan2f(aw_r, aw_f) * (32768.0f / 3.14159265f)), rel = wrap(md - (short)plp->ay), ly, spd, *trsz;
+        float rel = wrap(md - (short)plp->ay), ly, spd, *trsz;
         int dm = x->dmlvl < 0 ? 0 : x->dmlvl > 2 ? 2 : x->dmlvl, tp = x->wpntp & 1, mtn, n, f, k;
         back = fabsf(rel) > (back ? DEG(100.0f) : DEG(115.0f));   /* sideways: forward (a stick near it does not flip between them) */
         mtn = PlMtnAct[tp][dm][back ? 4 : 2];
@@ -1947,9 +1948,48 @@ static void aim_walk(void)
         l->yaw = 0;
     }
     if (trace && (ok || l->w > 0))
-        printf("tps: aimwalk frame %u mode %d/%d/%d input %.2f %.2f legs mtn %d frm %d yaw %.1f w %.2f at (%.2f %.2f %.2f) ay %.1f\n",
-               (unsigned)gs_frame_count(), plp->mode1, plp->mode2, plp->mode3, aw_f, aw_r, l->mtn, l->frm >> 16,
+        printf("tps: aimwalk frame %u mode %d/%d/%d input %.2f to %.1f legs mtn %d frm %d yaw %.1f w %.2f at (%.2f %.2f %.2f) ay %.1f\n",
+               (unsigned)gs_frame_count(), plp->mode1, plp->mode2, plp->mode3, m, md * (360.0f / 65536.0f), l->mtn, l->frm >> 16,
                l->yaw * (360.0f / 65536.0f), l->w, plp->px, plp->py, plp->pz, (short)plp->ay * (360.0f / 65536.0f));
+}
+
+/* "Move While Aiming (Fixed Cameras)": modern_glue.c modern_player, each tick of our player without third person
+   (also with it off, so the legs blend out) */
+void tps_aim_walk_fixed(int ok, float md, float m)
+{
+    aim_walk(ok, md, m);
+}
+
+/* the weapon aims through its scope (WpnTab flg 0x20: the sniper rifle, the linear launcher), unless
+   "Aim Scoped Weapons Normally" aims and fires it as the others (player.c bhCPM2_act_suw, _wre, _rld; reload_glue.c) */
+int pc_scoped(int wpn)
+{
+    return wpn >= 0 && wpn < 23 && (WpnTab[wpn].flg & 0x20) && !g_tps.scope_normal;
+}
+
+/* player.c bhCPM2_act_atk, the hitscan shot of a scoped weapon aimed normally (the sniper rifle): its ray is thin
+   (WpnTab flg 0x8: the enemy's joint capsules, made for the scope's exact aim) and starts at the chest, while the game's
+   lock-on (bhCalcLockEneYR) turns the facing so that a hand gun's wide cone covers the enemy: the ray passed it a few
+   degrees off and missed. With the lock-on (not free aim: the crosshair's or the facing's) it is turned to the enemy
+   locked on, when that is within 20 degrees of it; its pitch (the aim height) stays */
+int pad_free_aim(void);   /* pad.c */
+void pc_scoped_aim(GA_WORK* gap)
+{
+    const BH_PWORK* e;
+    float dx, dz, h, l, c;
+    if (!g_tps.scope_normal || !(WpnTab[gap->wpn_no].flg & 0x20) || plp != &ply || (tps_cam_active && !lock_aim()) || pad_free_aim() ||
+        plp->src_no < 0 || plp->src_no >= sys->ewk_n)
+        return;
+    e = &ene[plp->src_no];
+    if (!(e->flg & 1) || !(e->stflg & 0x800)) return;
+    dx = (e->watr.c1.x + e->watr.c2.x) / 2 - gap->px;
+    dz = (e->watr.c1.z + e->watr.c2.z) / 2 - gap->pz;
+    h = sqrtf(gap->vx * gap->vx + gap->vz * gap->vz);
+    l = sqrtf(dx * dx + dz * dz);
+    if (l < 0.01f || h < 0.01f || (c = (dx * gap->vx + dz * gap->vz) / (l * h)) < 0.94f) return;   /* (cos 20 degrees) */
+    gap->vx = dx / l * h;
+    gap->vz = dz / l * h;
+    if (trace) printf("tps: scoped shot turned to enemy %d by %.1f degrees\n", plp->src_no, acosf(c > 1 ? 1 : c) * 57.3f);
 }
 
 static void turn(float* m, const float* u, const float* c, float a);
@@ -2024,7 +2064,7 @@ void tps_player(void)
     }
     /* (the scope's first tick still has our camera: the free aim below points the scope at the crosshair's target) */
     if (!tps_cam_active && plp->mode0 == 1 && plp->mode1 == 1 && plp->mode2 == 71) { scope_look(); return; }
-    aim_walk();
+    aim_walk(aim_walk_ok(), wrap(yaw - atan2f(aw_r, aw_f) * (32768.0f / 3.14159265f)), sqrtf(aw_f * aw_f + aw_r * aw_r));
     if (!tps_cam_active || plp->mode0 != 1 || (plp->mode1 == 0 && plp->mode2 > 13) || reload_at_rest()) { frac = 0; return; }
     if (trace && plp->mode1 == 1)
         printf("tps: weapon mode %d/%d motion %d frame %d/%d at (%.1f %.1f) ay %.1f hand y %.1f\n", plp->mode2, plp->mode3, plp->mtn_no, plp->frm_no >> 16,
