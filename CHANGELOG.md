@@ -14,6 +14,8 @@
 - Characters swapped in cutscenes now put their hands where the original's are and blink and close their eyes with
   it.
 - The sniper rifle aimed normally no longer points up in the over-the-shoulder camera when you play as another model.
+- **Smoother Motion**: effects such as fire, sparks, muzzle flashes, searchlights, particles and rain now move smoothly
+  too.
 - With an imported language, shots hitting walls and some other effects no longer show boxes with letters or
   coloured squares instead of sparks, smoke or gas.
 
