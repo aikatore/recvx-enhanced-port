@@ -208,6 +208,7 @@ unit (the character is about 17 units tall).
 
 | Env var | Effect |
 |---|---|
+| `RECVX_IMPACT_TRACE=1` | logs each hitscan shot ("impact:", any camera): the shot's ray (muzzle, direction, range), the aim's ray (third person: the crosshair's, else the shot's), how far each first meets the collision walls and the room model, the wall effect's place (`fx 0`: none), its distance to where the aim's ray meets the drawn room (`off`) and, with the crosshair, its angle off it seen from the eye (`ang`, degrees) |
 | `RECVX_TPS_MOUSE="frame:dx:dy,..."` | moves the mouse dx/dy counts per game frame from that presented frame on |
 | `RECVX_VPAD="frame:input+input,..."` | a virtual gamepad ([ARCHITECTURE.md](ARCHITECTURE.md)): sticks as `leftx=0.5+lefty=-1` (up is negative), triggers `+lefttrigger`; a trigger after another input needs its own `+` (`+lefttrigger++righttrigger`) |
 | `RECVX_TPS_TRACE=1` | logs the walk under the aim per frame ("tps: aimwalk": modes, the input, the legs' walk motion, frame, turn and weight, the position), the gamepad per frame ("tps: pad": the sticks past their dead zones, the walk direction, facing, camera, quick turn, the enemy nearest the crosshair) and its aim assist ("tps: assist"), the free aim per frame, each shot's direction and wall hit against the crosshair target ("SHOT"), the drawn weapon's barrel with "Character Model", the camera ("tps: cam A\|B": yaw, pitch, the player's position, the model's root, the point followed and the eye), the aim height given to the game, the scope per frame ("tps: scope": `ay`, `wax`, the field of view, the turn of the mouse and right stick in game units, the enemy nearest the centre in degrees, the enemies' health), each shot of a dual weapon ("tps: DUAL R\|L": the arms' yaws aimed and shown, the enemy under the crosshair and the other arm's, the aim height, each enemy's health, degrees off the facing and distance), each gun hit ("tps: HIT": weapon, enemy, joint, damage, precise or the game's test, the enemy's state), each precise test that met a body ("tps: PRECISE": joint, volume, along which ray), a zombie's head burst ("tps: HEAD BURST"), each gun hit's region on a zombie ("tps: REGION") and each flinch started, ours or the partner's ("tps: REACT"); `=2` also keeps the camera on the enemy the game locked on to (dual weapons: the nearest of their lock-on), also in the scope, and logs per shot how far the crosshair passed from that enemy's body ("tps: SHOT at enemy") |
@@ -935,8 +936,20 @@ choice, `OPT2_HEADSHOTS`). It changes the balance, in third person and its scope
 * Co-op: enemies judge a hit with the aim height of the player they are after; the partner's
   stand-in carries none, so every hit counts on an enemy after the partner.
 * Near walls: a wall closer than 40 units on the crosshair ray counts as 40 units away for the
-  character's yaw/pitch (else the shoulder offset would turn it by tens of degrees); the shot
-  then hits a little beside the crosshair. Enemies, and walls farther away, are hit exactly.
+  character's yaw/pitch (else the shoulder offset would turn it by tens of degrees). The shot
+  itself goes from the muzzle to the crosshair's point (`pc_shot_ray`), so it lands there.
+* **Wall hits** (`weapon.c bhCheckGunAtari`, `tps_glue.c pc_shot_ray`, `pc_shot_wall`): the crosshair's
+  point is where its ray first meets a collision wall or the room model as drawn (stairs, shelves and
+  ledges the collision walls leave out). A shot at a wall goes from the muzzle to that point, and its
+  effect (sparks, dust, splash) is put there, also for a shot that misses the enemy under the
+  crosshair, unless a collision wall blocks the muzzle's way first (a ledge or railing below the view:
+  the effect stays on it). Before, the effect went where the ray from the muzzle met a collision wall:
+  4.5 degrees beside the crosshair on average for walls within 40 units (the 40-unit target), and on
+  the wall behind what the room model draws in front of it. Measured over 36 rooms with
+  `RECVX_IMPACT_TRACE` (handgun, 16 shots per room at pitches -45..+30): the effect's angle off the
+  crosshair from the eye, median 3.7 / 90th percentile 6.7 degrees before, 0.00 / 0.03 after. The
+  enemies' hit test and range are unchanged; the room model does not stop shots (an effect only shows
+  where a collision wall takes the hit: not on a floor or pit bottom the collision walls leave out).
 * The crosshair marks the screen centre. Target selection uses enemy hit capsules and the
   room's collision walls, not every visible prop.
 * Mouse turning rotates the character directly (no turning animation while standing). Not

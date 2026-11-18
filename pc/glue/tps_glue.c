@@ -46,6 +46,8 @@ static float clip_near, clip_far; /* the game's clip range while we draw with ou
 static int trace;                 /* RECVX_TPS_TRACE=1: log the free aim */
 static NJS_POINT3 aim_t;          /* free aim: the crosshair target (tps_calc_model) */
 static int aim_e;                 /* free aim: the enemy under the crosshair, -1: a wall or nothing */
+static NJS_POINT3 aim_p;          /* free aim: where the crosshair meets the walls or the room model, as drawn */
+static int aim_wall;              /* free aim: on a wall (aim_e -1) */
 static int aim_h;                 /* free aim: the aim height bit given to the game (at_flg 4 up, 8 down), 0: none */
 static float bend_a;   /* the last free-aim bend (radians per node), 0: none */
 static float aim_corr;            /* free aim with a model: the drawn weapon's pitch minus the hand's (radians), eased */
@@ -1501,7 +1503,8 @@ static void assist(float* dyaw, float* dpitch)
    (px, py + 11, pz) + forward * (3 + r), direction Rx(wax) Ry(ay)) goes through it. The ray is
    cast from the shoulder point, which it passes through wherever walls put the camera. A wall
    closer than AIM_MIN counts as AIM_MIN away: a target next to the character would turn it
-   (shoulder offset) and tilt the aim (shot origin below the camera) by tens of degrees. */
+   (shoulder offset) and tilt the aim (shot origin below the camera) by tens of degrees. The
+   shot itself then goes to the crosshair's point (aim_p, pc_shot_ray). */
 #define AIM_MIN 40.0f   /* ponytail: parallax limit, at most ~5 degrees yaw / 8 degrees pitch off the view */
 static void aim_at_crosshair(void)
 {
@@ -1529,12 +1532,16 @@ static void aim_at_crosshair(void)
         d = prec ? body_ray(e, &sh.x, &dir.x, 0, &j, &n) : ray_capsule(&sh, &dir, &e->watr);
         if (d > 0 && d < dist) dist = d, aim_e = i;   /* in front of the shoulder */
     }
-    if (dist == wall && dist < AIM_MIN) dist = AIM_MIN;
+    {   /* where it meets the wall as drawn, the room model's if that comes first (pc_shot_ray) */
+        float b[3] = { sh.x + dir.x * wall, sh.y + dir.y * wall, sh.z + dir.z * wall }, h = wall * mesh_ray(&sh.x, b);
+        aim_p.x = sh.x + dir.x * h; aim_p.y = sh.y + dir.y * h; aim_p.z = sh.z + dir.z * h;
+        if ((aim_wall = aim_e < 0)) dist = h < AIM_MIN ? AIM_MIN : h;
+    }
     t.x = sh.x + dir.x * dist; t.y = sh.y + dir.y * dist; t.z = sh.z + dir.z * dist;
 
     ay = (int)(atan2f(-(t.x - plp->px), -(t.z - plp->pz)) * (32768.0f / 3.14159265f));
     o.x = plp->px - sinf(RAD(ay)) * (3.0f + r); o.y = plp->py + 11.0f; o.z = plp->pz - cosf(RAD(ay)) * (3.0f + r);
-    if (dist == wall) {   /* the crosshair is on a wall: bhCheckGunAtari tests walls from the muzzle (the hand's
+    if (aim_wall) {   /* the crosshair is on a wall: bhCheckGunAtari tests walls from the muzzle (the hand's
                              point wp_fps1.z, owP[9]), about 3 units above o, so a ray aimed from o hit them
                              that much above the crosshair. Aimed from the muzzle as it will be after turning. */
         const float* hm = plp->mlwP->owP[9].mtx;
@@ -1990,6 +1997,89 @@ void pc_scoped_aim(GA_WORK* gap)
     gap->vx = dx / l * h;
     gap->vz = dz / l * h;
     if (trace) printf("tps: scoped shot turned to enemy %d by %.1f degrees\n", plp->src_no, acosf(c > 1 ? 1 : c) * 57.3f);
+}
+
+/* weapon.c bhCheckGunAtari, our hitscan shot with free aim (the crosshair's ray cast this tick; not a dual gun turned
+   to another enemy). Its wall effect went where the game's ray from the muzzle met a collision wall, not where the
+   crosshair was: aim_at_crosshair turns the character to a target AIM_MIN away when the wall is nearer, so the ray
+   from the muzzle (below and beside the view) crossed the crosshair's only behind the wall, and the hit showed a few
+   degrees beside the crosshair (4.5 on average for walls within 40 units); and what the room model draws in front of a
+   collision wall (stairs, shelves) took no hit, the effect went on the wall behind it. Aimed at a wall, the shot now
+   goes from the muzzle to the crosshair's point (aim_p, as drawn); its wall effect goes there (pc_shot_wall), also
+   for a shot at an enemy under the crosshair that misses it. Enemies are tested as before (the range to the collision
+   wall; Precise Shots along the crosshair's ray). */
+static int shot_free;   /* this shot's wall effect may go to aim_p (pc_shot_wall) */
+void pc_shot_ray(GA_WORK* gap)
+{
+    float a[3] = { aim_p.x - gap->gx, aim_p.y - gap->gy, aim_p.z - gap->gz }, l, n, c;
+    shot_free = 0;
+    if (!tps_cam_active || xr_tick != ticks || plp != &ply || gap->wpn_no != plp->wpnr_no || (WpnTab[gap->wpn_no].flg & 0x30000000) != 0x10000000 ||
+        (dual_e >= 0 && abs((short)(plp->way - dual_yaw)) < DEG(1.0f)))
+        return;
+    l = sqrtf(gap->vx * gap->vx + gap->vy * gap->vy + gap->vz * gap->vz);
+    n = sqrtf(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
+    if (l < 1e-4f || n < 1e-4f || (c = (gap->vx * a[0] + gap->vy * a[1] + gap->vz * a[2]) / (l * n)) < 0.5f)
+        return;   /* (more than 60 degrees off: the point is beside or behind the muzzle, at a wall it touches) */
+    shot_free = 1;
+    if (!aim_wall) return;
+    gap->vx = a[0] / n * l; gap->vy = a[1] / n * l; gap->vz = a[2] / n * l;
+    if (trace) printf("tps: shot turned %.1f degrees to the crosshair's point %.1f away\n", acosf(c > 1 ? 1 : c) * 57.29578f, n);
+}
+
+/* the wall hit wps of the shot from g (bhCheckGunAtari): of the free aim's, the crosshair's point unless the hit comes
+   before it. A collision wall before it stays (the muzzle's way is blocked, and the enemies' range is the game's); the
+   room model on the muzzle's way does not stop the game's shot, so neither its effect. */
+void pc_shot_wall(const float* g, float* wps)
+{
+    float dw = 0, dp = 0;
+    if (!shot_free) return;
+    for (int k = 0; k < 3; k++) dw += (wps[k] - g[k]) * (wps[k] - g[k]), dp += ((&aim_p.x)[k] - g[k]) * ((&aim_p.x)[k] - g[k]);
+    if (sqrtf(dw) >= sqrtf(dp) - 0.5f) wps[0] = aim_p.x, wps[1] = aim_p.y, wps[2] = aim_p.z;
+}
+
+/* test aid RECVX_IMPACT_TRACE=1(weapon.c bhCheckGunAtari, every hitscan shot): the shot's ray (muzzle, unit direction,
+   length), the aim's ray (third person: the crosshair's, cast this tick; else the shot's), where each first meets the
+   collision walls (as the shot tests them) and the room model as drawn, the wall effect's place (fx 0: none) and its
+   distance to where the aim's ray meets what is drawn first. Inert without the variable. */
+static float wall_ray(const float* a, const float* d, float l)
+{
+    NJS_LINE line = { a[0], a[1], a[2], d[0] * l, d[1] * l, d[2] * l };
+    NJS_POINT3 apos = sys->apos;
+    ATR_WORK* ahtp = sys->ahtp;
+    float len;
+    if (!bhCheckL2Wall(&line, 0x400, &len)) len = -1;
+    sys->apos = apos; sys->ahtp = ahtp;
+    return len;
+}
+void pc_impact_trace(const GA_WORK* gap, const float* wps, int fx)
+{
+    static int on = -1;
+    float o[3] = { gap->gx, gap->gy, gap->gz }, d[3] = { gap->vx, gap->vy, gap->vz }, l, ao[3], ad[3], b[3], m, sm, w, sw, h[3], e = -1, ang = -1;
+    int xh = tps_cam_active && xr_tick == ticks;
+    if (on < 0) on = getenv("RECVX_IMPACT_TRACE") != NULL;
+    if (!on) return;
+    l = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if (l < 1e-6f) return;
+    for (int k = 0; k < 3; k++) d[k] /= l, ao[k] = xh ? xr[k] : o[k], ad[k] = xh ? xr[3 + k] : d[k];
+    mesh_room();
+    for (int k = 0; k < 3; k++) b[k] = ao[k] + ad[k] * 1000;
+    m = mesh_ray(ao, b) * 1000;
+    w = wall_ray(ao, ad, 1000);
+    for (int k = 0; k < 3; k++) b[k] = o[k] + d[k] * 1000;
+    sm = mesh_ray(o, b) * 1000;
+    sw = wall_ray(o, d, 1000);
+    for (int k = 0; k < 3; k++) h[k] = ao[k] + ad[k] * (m < 1000 ? m : w >= 0 ? w : 0);
+    if (fx) e = sqrtf((wps[0] - h[0]) * (wps[0] - h[0]) + (wps[1] - h[1]) * (wps[1] - h[1]) + (wps[2] - h[2]) * (wps[2] - h[2]));
+    if (fx && xh) {   /* on screen: the effect's angle off the crosshair, seen from the eye */
+        float v[3] = { wps[0] - cam.px, wps[1] - cam.py, wps[2] - cam.pz }, n = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]), c;
+        c = n > 1e-4f ? (v[0] * ad[0] + v[1] * ad[1] + v[2] * ad[2]) / n : 1;
+        ang = acosf(c > 1 ? 1 : c < -1 ? -1 : c) * 57.29578f;
+    }
+    printf("impact: f %u wpn %d %s ax %.1f shot (%.1f %.1f %.1f) dir (%.3f %.3f %.3f) l %.0f: wall %.1f mesh %.1f | aim (%.1f %.1f %.1f) dir (%.3f %.3f %.3f):"
+           " wall %.1f mesh %.1f hit (%.1f %.1f %.1f) | fx %d (%.1f %.1f %.1f) off %.2f ang %.2f\n",
+           (unsigned)gs_frame_count(), gap->wpn_no, xh ? "crosshair" : "shot", (short)gap->ax * (360.0f / 65536.0f),
+           o[0], o[1], o[2], d[0], d[1], d[2], l, sw, sm >= 1000 ? -1 : sm, ao[0], ao[1], ao[2], ad[0], ad[1], ad[2], w, m >= 1000 ? -1 : m,
+           h[0], h[1], h[2], fx, wps[0], wps[1], wps[2], e, ang);
 }
 
 static void turn(float* m, const float* u, const float* c, float a);
