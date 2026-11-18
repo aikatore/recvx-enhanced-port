@@ -5,6 +5,7 @@
 ### Changes
 
 - **Move While Aiming (Fixed Cameras)**: an option to walk while aiming, firing and reloading with the fixed cameras.
+- **What's New**: a button on the title screen shows the changes of the installed version.
 - **Aim Scoped Weapons Normally**: an option to aim and fire the sniper rifle and the linear launcher like other
   weapons, with auto-aim, instead of through the scope.
 
