@@ -59,7 +59,7 @@ void reload_player(void)
     /* raised: where the trigger reloads (the aim pose held, the scope ready); lowered: where the aim button raises the
        weapon (bhCPM0_action); not the sniper rifle / linear launcher, whose reload ends in the scope */
     raised = plp->mode1 == 1 && (plp->at_flg & 0x10) && ((plp->mode2 >= 65 && plp->mode2 <= 67 && plp->mode3 == 1) || plp->mode2 == 71);
-    lowered = plp->mode1 == 0 && (plp->flg & 0x20000) && !(plp->flg & 0x4000000) && !(plp->stflg & 0x10400) && !(w->flg & 0x20);
+    lowered = plp->mode1 == 0 && (plp->flg & 0x20000) && !(plp->flg & 0x4000000) && !(plp->stflg & 0x10400) && !pc_scoped(plp->wpnr_no);
     if (!raised && !lowered && plp->mode1 == 1 && (plp->mode2 == 64 || plp->mode2 == 164 || (plp->mode2 >= 65 && plp->mode2 <= 67 && !(plp->at_flg & 0x10))))
         return;   /* pressed while the weapon comes up (Aim + reload at once): once it is */
     was = now;

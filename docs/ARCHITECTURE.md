@@ -742,6 +742,8 @@ village, collision. The render thread (GS emulation, replays: `r_exec`, `r_inter
   those bits to the game (tank controls), the stick past its dead zone wins over them. recvx.ini
   carries `fixed_cam_version = 1`; in a file without it a Modern `1` (the default then, always
   written) becomes Combined, a Classic `0` stays.
+  With "Move While Aiming (Fixed Cameras)" (`fixed_aim_walk`) `modern_pad` hands the aim to
+  `aim_walk_pad` instead ([THIRDPERSON.md](THIRDPERSON.md#moving-while-aiming) "Fixed cameras").
 - **Mouse In Menus** (`pc/glue/menu_glue.c`, hook at the end of `bhSetPad`;
   `input/menu_mouse.c` on the main thread): the mouse drives the screens' own cursor state, so
   keyboard and gamepad work unchanged. Window positions map to the game's 640x480 2D space through
@@ -929,10 +931,12 @@ options: [ENEMIES.md](ENEMIES.md#enemy-options); bindings: [Binding ini format](
 | Skip Intro, Check For Updates, Skip Door Animations | `skip_intro`, `update_check` (0 Off, 1 Ask to Install, 2 Notify Only; the old 1 "On" is Ask), `skip_doors` (0 Off, 1 Instant, 2 Skippable) |
 | Fast Loading, Battle Game Unlocked, Difficulty Select | `fast_loading`, `battle_unlocked`, `difficulty_select` |
 | Quick Knife, Auto-climb Stairs, Zombie Decapitation, Stack Rifle Ammo | `quick_knife`, `auto_stairs`, `head_blowoff`, `rifle_stack` |
+| Aim Scoped Weapons Normally | `scope_normal` ([THIRDPERSON.md](THIRDPERSON.md#scoped-weapons-aimed-normally)) |
 | (lobby GAME RULES) BIORAND, Save System, Free Typewriter Saves | `biorand`, `save_system` (0 Separate Files, 1 Memory Card), `no_ink_ribbon` |
 | Extra Item Boxes and Herbs | `extra_objects` ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md#extra-item-boxes-and-herbs)) |
 | Input Devices, Gamepad | `input_source` (0 Auto, 1 Keyboard and Mouse, 2 Gamepad Only), `input_pad` (0 Any, 1-4) |
 | Vibration Strength, Mouse In Menus, Fixed Camera Controls | `rumble_strength`, `menu_mouse`, `fixed_cam_controls` (0 Classic, 1 Modern, 2 Combined) |
+| Move While Aiming (Fixed Cameras) | `fixed_aim_walk` ([THIRDPERSON.md](THIRDPERSON.md#moving-while-aiming)) |
 | Weapon Shortcuts; (no row) their slots | `weapon_shortcuts`; `weapon_slots_claire`, `_chris`, `_steve`, `_wesker` (eight item ids, 0 none; assigned in the inventory) |
 | Music And Voice, Sound Effects | `music_volume`, `sfx_volume` |
 | APPEARANCE | `coop_char`, `appear_gender_anim`, `appear_in_cutscenes`, `appear_cutscene_face` |
