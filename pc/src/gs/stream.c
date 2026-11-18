@@ -270,12 +270,12 @@ static Deferred* deferred; static size_t ndef, cdef;
 static NativeVertex* defv; static size_t ndefv, cdefv;
 static NativeRawVertex* defr; static size_t ndefr, cdefr;
 
-uint32_t native_defer_raw(unsigned int prim, const NativeRawVertex* v, int n, uint32_t mesh)
+uint32_t native_defer_raw(unsigned int prim, const NativeRawVertex* v, int n, uint32_t mesh, uint32_t strip)
 {
     GROW(defr, ndefr, cdefr, (size_t)n);
     memcpy(defr + ndefr, v, (size_t)n * sizeof(*v));
     GROW(deferred, ndef, cdef, 1);
-    deferred[ndef] = (Deferred){ prim, (uint32_t)ndefr, (uint32_t)n, mesh, 0, 1 };
+    deferred[ndef] = (Deferred){ prim, (uint32_t)ndefr, (uint32_t)n, mesh, strip, 1 };
     ndefr += (size_t)n;
     return (uint32_t)ndef++;
 }
@@ -299,7 +299,8 @@ void native_marker(uint64_t v)
     if (d->raw) {
         Frame* f;
         uint32_t len = d->n * (uint32_t)sizeof(NativeRawVertex);
-        if (d->mesh) { stream_tag(d->mesh); stream_strip(0); }
+        if (d->mesh) stream_tag(d->mesh);
+        if (d->strip != NATIVE_NO_STRIP) stream_strip(d->strip);
         f = recording();
         GROW(f->pool, f->npool, f->cpool, len);
         memcpy(f->pool + f->npool, defr + d->first, len);
@@ -545,7 +546,7 @@ void stream_exec(Frame* f)
             ntex_forget((uint32_t)e->v);
             break;
         case EV_RAW:
-            if (inst >= 0 && MENU_TAG(f->in[inst].mesh)) {   /* a group of its own, matched like a native strip */
+            if (inst >= 0 && (MENU_TAG(f->in[inst].mesh) || (f->in[inst].mesh & 1))) {   /* a menu's or an effect's: a group of its own, matched like a native strip */
                 GROW(f->g, f->ng, f->cg, 1);
                 f->g[f->ng++] = (Group){ RAW_KEY | (e->v >> 32), (uint32_t)i, e->len, strip, ord++, (uint32_t)f->nspos };
                 f->nspos += e->len;
@@ -808,6 +809,21 @@ static long inst_pair(const Frame* p, const Inst* a, const Frame* c, const Inst*
     return near * 2 >= n ? (long)(sum / n) : -1;
 }
 
+/* an effect's polygon (native strip or sprite/line group) paired with one that is not itself: fewer
+   than half of its vertices within JUMP (a rain drop or snow flake starting again at the top, a
+   particle respawned elsewhere). It stays as in the new frame rather than flying across between frames */
+static int fx_jumped(const Frame* p, const Group* h, const Frame* c, const Group* g)
+{
+    uint32_t n = 0, near = 0;
+    for (uint32_t v = 0; v < g->nv; v++) {
+        uint64_t pa = gpos(p, h, v), pb = gpos(c, g, v);
+        if (pa == NO_POS || pb == NO_POS) continue;
+        n++;
+        near += moved(pa, pb) <= JUMP;
+    }
+    return near * 2 < n;
+}
+
 /* how far instance b (frame c) lies from instance a (frame p): the first vertex of each, d[0] x,
    d[1] y in 1/16 px (a menu piece: one group) */
 #define AMBIG (4 * 16)
@@ -1061,6 +1077,7 @@ int stream_match(const Frame* p, const Frame* c)
                 const Group *g = &c->g[b->g0 + k], *h;
                 if (pair[k] < 0) { unpaired += g->nv; lone += !!(g->key0 & NATIVE_KEY); continue; }
                 h = &p->g[pair[k]];
+                if (fx && (g->key0 & (RAW_KEY | NATIVE_KEY)) && fx_jumped(p, h, c, g)) { unpaired += g->nv; continue; }
                 if (g->key0 & RAW_KEY) {   /* a menu's sprites: blended in replay unless they stand still */
                     const NativeRawVertex *ra = raw_verts(p, h->v0), *rb = raw_verts(c, g->v0);
                     for (uint32_t v = 0; v < g->nv; v++) if (ra[v].x != rb[v].x || ra[v].y != rb[v].y) { nat_prev[g->v0] = (int32_t)h->v0; break; }

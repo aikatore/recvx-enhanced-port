@@ -69,7 +69,7 @@ struct VU1_STRIP_BUF;
 struct VU1_PRIM_BUF;
 unsigned int pc_native_prim3d(unsigned int prim, const struct VU1_PRIM_BUF* in, int n, int deferred, float* zavg);
 unsigned int pc_native_prim(unsigned int prim, const unsigned int* dp, int n, int clip_3d_on, int deferred, float* last_sz);
-unsigned int pc_native_prim_raw(unsigned int prim, const unsigned int* dp, int n, int clip_3d_on, float* last_sz);
+unsigned int pc_native_prim_raw(unsigned int prim, const unsigned int* dp, int n, int clip_3d_on, int deferred, float* last_sz);
 void  Ps2AddPrim3DExNative(unsigned long long prim, void* dp, unsigned int num, int mode);   /* 0 Ex, 1 Ex1P, 2 ExI */
 #define NATIVE_MARKER_REG 0x7F
 #define STREAM_TAG_REG 0x7E   /* gs/native.h */
@@ -166,6 +166,7 @@ void  pc_mesh_strip(const void* strip);   /* within a mesh: the following output
 void  pc_margin_next(int mode);   /* the next mesh is drawn only outside the 4:3 screen (native 3D, hor+); mode: view_glue.c pc_margin_mesh */
 int   pc_margin_reaches_43(const struct VU1_STRIP_BUF* v, int n);   /* such a mesh would cover the view (native_glue.c): left out */
 void  pc_effect_tag(const void* op);      /* effect.c: the following output is this effect (O_WRK*, NULL: none) */
+void  pc_effect_part(unsigned int n);     /* ... part n of it (a list it draws: particle stages, trail slots) */
 unsigned long long pc_effect_poly(void); /* ps2_dummy.c Ps2AddOT: STREAM_TAG_REG value for an effect polygon (0: none) */
 /* online co-op (pc/glue/coop_glue.c, docs/COOP.md): the hooks are only called while coop_on */
 extern int coop_on;

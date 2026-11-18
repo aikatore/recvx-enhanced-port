@@ -297,8 +297,18 @@ shows in-between images at the display rate:
   the tag after their vertices (`Ps2AddOT` writes it to GS register 0x7E, `STREAM_TAG_REG`). So an
   effect pairs only with itself; its position (and size on screen) is blended like a mesh's,
   its animation frame (texture coordinates) and colour are the current frame's. Effects use the
-  128 px limit and do not count towards the "most meshes matched" test. 2D effects, lines and
-  effects with their own draw function (`ef_fnc`) stay as they are.
+  128 px limit and do not count towards the "most meshes matched" test. Effects with their own
+  draw function (`ef_fnc`: Alexia's fires 263/269/274/275, the fire manager 262, the Spotter's
+  searchlight 261, Alfred's laser sight 270, muzzle flashes, sparks, the particle system 302, rain,
+  snow, blood drops) are tagged too; untagged they were drawn as in the newer frame, so in a
+  camera turn or with Smoother Motion's in-between images they moved at 30 FPS against the
+  scene. Their sprites, lines and points (`EV_RAW`) form groups of their own and their positions
+  are blended like a menu's. Effects drawing a list of their own number each part from it
+  (`pc_effect_part`: particle stages, trail and splash slots, blood streaks and drops), and the
+  fire manager tags each fire as its own effect: numbered in draw order, a part coming or going
+  paired every later one with its neighbour. An effect polygon fewer than half of whose
+  vertices stayed within 128 px (a rain drop or snow flake starting again at the top) stays as in
+  the new frame. The full-screen 2D effect lists (`ef_ntx2d`, `ef_trs2d`) stay as they are.
 - **New meshes move with the camera**: a mesh none of whose instances was drawn in the previous
   frame is placed in the previous frame's view as if it stood still in the world and blended
   from there (`stream.c cam_move`/`nv_camera`, with each frame's `cam.mtx` and projection from
