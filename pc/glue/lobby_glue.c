@@ -65,6 +65,9 @@ void pc_update_menu_close(void);
 int  pc_update_menu_offer(void);
 void pc_import_menu_close(void);
 void host_quit(void);                   /* host.c: as the window's close button */
+void pc_whatsnew_button(float fade);    /* whatsnew_menu.c: WHAT'S NEW's corner button on the title menu */
+int  pc_whatsnew_title(const MouseTake* m, unsigned int press);   /* ... its hover and click, Triangle: 1 open it */
+int  pc_whatsnew(void);                 /* ... the screen, once per frame: 1 back to the title menu */
 void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, float extra, float* y0, float* y1);   /* options_glue.c */
 void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, float sc2, unsigned int col2, int lines,
                   const char* b0, const char* b1, int sel, int glyphs);
@@ -100,10 +103,11 @@ static float adv(int c) { return c ? pc_glyph_w(c) : 11.0f; }   /* the font's sp
 
 #define TRACK (lang_font() == LANG_RU || lang_font() == LANG_AR ? 1.0f : 0.88f)   /* a little tighter than the game's messages (the Russian widths are tight; Arabic letters join) */
 
+static int text_raw;                    /* pc_ui_raw: the text as it is, not looked up (the changelog: English) */
 static float text_w(const char* s, float sc)
 {
     float w = 0;
-    s = tr(s);   /* (our texts in the language: drawn and measured the same) */
+    if (!text_raw) s = tr(s);   /* (our texts in the language: drawn and measured the same) */
     for (int c; (c = pc_glyph_next(&s)) >= 0;) w += adv(c) * sc * TRACK;
     return w;
 }
@@ -119,7 +123,7 @@ static void text(float x, float y, const char* s, float sc, unsigned int argb)
     const char* p;
     int pass;
     if (!font_ok) return;
-    s = tr(s);
+    if (!text_raw) s = tr(s);
     bhFontScaleSet(sc, sc, sc);
     for (pass = text_flat; pass < 2; pass++)
         for (p = s, x = x0; *p;) {
@@ -292,6 +296,7 @@ static int gs_screen;                   /* ... GAME SETUP (setup_glue.c, the new
 static int im_screen;                   /* ... the IMPORT screen (import_menu.c) */
 static int up_screen;                   /* ... the update dialog (update_menu.c) */
 static int qt_screen;                   /* ... EXIT's question (quit_menu) */
+static int wn_screen;                   /* ... WHAT'S NEW (whatsnew_menu.c), from the corner button */
 static struct { int sel, going; } qt;   /* EXIT's question: the answer chosen (0 YES, 1 NO); YES given */
 
 void pc_title_menu_init(void)
@@ -362,6 +367,7 @@ void pc_title_plates(int cursor, int n, float fade, int flag)
     }
     FlushPlate();
     DisplayTitleBg();
+    if (!ex.on) pc_whatsnew_button(flag ? fade / 255.0f : 1.0f);   /* WHAT'S NEW in the top corner, faded with the rows */
 }
 
 /* ---------------------------------------------------------------- mouse */
@@ -467,6 +473,15 @@ void pc_title_mouse(int level, int flag)
         return;
     }
     if (level == 0 && ex.on) { extra_input(); return; }
+    if (level == 0) {   /* WHAT'S NEW: its corner button (hover, a click) or Triangle */
+        ui_device(Pad[ap->PortId].press, mt.moved || mt.left || mt.right || mt.wheel);
+        if (pc_whatsnew_title(&mt, Pad[ap->PortId].press)) {
+            Pad[ap->PortId].press = 0;
+            to_screen(&wn_screen);
+            CallSystemSe(0, 3);
+            return;
+        }
+    }
     for (i = 0; i < n; i++) {
         float x0, y0, w;
         if (level == 0) { x0 = 140; w = 360; y0 = title_row_y(i, n); }
@@ -1992,7 +2007,7 @@ void pc_lobby_close(void)
     if (gs_screen) pc_game_setup_close();
     if (im_screen) pc_import_menu_close();
     if (up_screen) pc_update_menu_close();
-    br_screen = gs_screen = im_screen = up_screen = qt_screen = 0;
+    br_screen = gs_screen = im_screen = up_screen = qt_screen = wn_screen = 0;
     lobby_close(0);
 }
 
@@ -2710,6 +2725,11 @@ int pc_lobby(void)
     char note[64];
     if (lb.open && !br_screen && !g_new_menu && coop_biorand_offer(NULL)) br_screen = 1;   /* a guest: the host's BioRand seed, offered there
                                                                                               (the new lobby offers it itself) */
+    if (wn_screen) {   /* WHAT'S NEW (whatsnew_menu.c): 1 back to the menu */
+        title_font();
+        if ((r = pc_whatsnew())) wn_screen = 0;
+        return r;
+    }
     if (qt_screen) {   /* EXIT's question: 1 back to the menu */
         title_font();
         if ((r = quit_menu())) qt_screen = 0;
@@ -2851,6 +2871,7 @@ void lobby_frame(void)
 void pc_ui_text(float x, float y, const char* s, float sc, unsigned int argb) { font_ok = (sys->ss_flg & 0x40) != 0; text(x, y, s, sc, argb); }
 float pc_ui_text_w(const char* s, float sc) { return text_w(s, sc); }
 void pc_ui_text_flat(float x, float y, const char* s, float sc, unsigned int argb) { text_flat = 1; pc_ui_text(x, y, s, sc, argb); text_flat = 0; }
+void pc_ui_raw(int on) { text_raw = on; }
 int pc_ui_text_wrap(float x, float y, float w, const char* s, float sc, unsigned int argb, int max_lines)
 {
     font_ok = (sys->ss_flg & 0x40) != 0;

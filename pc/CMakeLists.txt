@@ -153,6 +153,9 @@ set_property(SOURCE src/host/host.c src/host/overlay.cpp src/net/update.c APPEND
 # our texts' table: its text goes into the executable as it is, outside the address window (tr.c, res/recvx.rc)
 set_property(SOURCE src/host/tr.c APPEND PROPERTY COMPILE_DEFINITIONS "TR_TABLE_INC=\"${CMAKE_CURRENT_SOURCE_DIR}/src/host/tr_table.inc\"")
 set_property(SOURCE src/host/tr.c APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/host/tr_table.inc)
+# the changelog the build carries (WHAT'S NEW at the title: changelog.c beside the table; Windows: res/recvx.rc)
+set_property(SOURCE src/host/changelog.c APPEND PROPERTY COMPILE_DEFINITIONS "CHANGELOG_MD=\"${PROJECT_SOURCE_DIR}/CHANGELOG.md\"")
+set_property(SOURCE src/host/changelog.c APPEND PROPERTY OBJECT_DEPENDS ${PROJECT_SOURCE_DIR}/CHANGELOG.md)
 target_include_directories(recvx_platform PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/sdk
@@ -180,9 +183,9 @@ if(RECVX_LAYOUT_PAD)
 endif()
 if(WIN32)
     enable_language(RC)
-    set(RECVX_RES res/recvx.rc)   # the program icon, our texts' table
+    set(RECVX_RES res/recvx.rc)   # the program icon, our texts' table, the changelog
     set_source_files_properties(res/recvx.rc PROPERTIES OBJECT_DEPENDS
-                                "${CMAKE_CURRENT_SOURCE_DIR}/res/recvx-enhanced.ico;${CMAKE_CURRENT_SOURCE_DIR}/src/host/tr_table.inc")
+                                "${CMAKE_CURRENT_SOURCE_DIR}/res/recvx-enhanced.ico;${CMAKE_CURRENT_SOURCE_DIR}/src/host/tr_table.inc;${PROJECT_SOURCE_DIR}/CHANGELOG.md")
 endif()
 add_executable(recvx ${LAYOUT_PAD_SRC} ${RECVX_RES} $<TARGET_OBJECTS:recvx_game> $<TARGET_OBJECTS:recvx_platform>
                $<$<TARGET_EXISTS:glibc_compat>:$<TARGET_OBJECTS:glibc_compat>>)
@@ -362,6 +365,10 @@ add_test(NAME biorand_opts COMMAND test_biorand_opts)
 add_executable(test_spoiler tests/test_spoiler.c src/host/spoiler.c)
 target_compile_options(test_spoiler PRIVATE -std=gnu11 -Wall)
 add_test(NAME spoiler COMMAND test_spoiler)
+# WHAT'S NEW's lines (pc/src/host/changelog.c): a made-up changelog and the real one, nothing the game's font cannot draw
+add_executable(test_changelog tests/test_changelog.c src/host/changelog.c)
+target_compile_options(test_changelog PRIVATE -std=gnu11 -Wall)
+add_test(NAME changelog COMMAND test_changelog ${PROJECT_SOURCE_DIR}/CHANGELOG.md)
 
 # co-op packets (pc/src/net/coop_proto.c): malformed events of every type, transfers, the event
 # ring, the join code, world event actions, and a fuzz loop

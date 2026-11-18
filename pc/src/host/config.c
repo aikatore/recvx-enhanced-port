@@ -17,6 +17,7 @@
 #include "lang.h"
 #include "weapons.h"
 #include "devcine.h"
+#include "changelog.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
@@ -251,6 +252,7 @@ void config_load(void)
         else if (sscanf(line, " language = %7s", k) == 1) { for (int l = 0; l < LANG_COUNT; l++) if (!strcmp(k, lang_codes[l])) g_lang = l; continue; }   /* (lang.h) */
         else if (sscanf(line, " biorand_cli_digest = %71s", g_biorand_cli_digest) == 1) continue;   /* the installed BioRand CLI (biorand_dl.h) */
         else if (sscanf(line, " update_skip = %31s", g_update_skip) == 1) continue;   /* SKIP THIS VERSION (update.h) */
+        else if (sscanf(line, " whatsnew_seen = %31s", g_whatsnew_seen) == 1) continue;   /* WHAT'S NEW opened in this version (changelog.h) */
         else if (sscanf(line, " biorand_seed = %71s", g_biorand_seed) == 1) continue;   /* the BioRand generator's options (biorand_opts.h), checked when used */
         else if (!strncmp(line, "enemy_rates =", 13)) { line[strcspn(line, "\r\n")] = 0; enemy_rates_ini(line + 13 + strspn(line + 13, " ")); continue; }   /* "Custom"'s rates (enemies.h), applied once the variants are known */
         else if (sscanf(line, " cast_monsters_alone = %d", &v) == 1) { enemy_cast_alone_set(&g_enemy_opts, v != 0); continue; }   /* (enemies.h; only once set, in the new menu) */
@@ -342,6 +344,7 @@ static int write_ini(FILE* f, void* ud)
     if (g_lang) fprintf(f, "language = %s\n", lang_codes[g_lang]);
     if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);
     if (g_update_skip[0]) fprintf(f, "update_skip = %s\n", g_update_skip);
+    if (g_whatsnew_seen[0]) fprintf(f, "whatsnew_seen = %s\n", g_whatsnew_seen);
     if (g_biorand_seed[0]) fprintf(f, "biorand_seed = %s\n", g_biorand_seed);
     fprintf(f, "enemy_rates = %s\n", enemy_rates_text());   /* "Custom"'s rates (enemies.h) */
     if (g_biorand_appear) fprintf(f, "biorand_appear = %d\n", g_biorand_appear);   /* (like biorand_seed: only once set, in the BIORAND menu) */

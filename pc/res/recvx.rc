@@ -2,3 +2,5 @@
 1 ICON "recvx-enhanced.ico"
 // our texts' table (src/host/tr.c reads it at start): after the image's game memory, outside the address window
 TR_TABLE RCDATA "../src/host/tr_table.inc"
+// the changelog (src/host/changelog.c: the title's WHAT'S NEW screen)
+CHANGELOG RCDATA "../../CHANGELOG.md"

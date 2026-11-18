@@ -1038,6 +1038,13 @@ const char* ui_glyph(int which, char* buf, int n)
     case UG_BACK: return st.pad ? pad_glyph(st.cancel, buf, n) : "Esc";
     case UG_DEFAULT: return st.pad ? pad_glyph(st.def, buf, n) : "Del";
     case UG_START: return st.pad ? pad_glyph(P_START, buf, n) : kb_glyph(B_START, buf, n);
+    case UG_TRI: return st.pad ? pad_glyph(P_TRI, buf, n) : kb_glyph(B_TRIANGLE, buf, n);
+    case UG_SCROLL:
+        if (st.pad) { snprintf(buf, n, "%c%c%c%c", GL_PAD, GP_UP, GL_PAD, GP_DOWN); return buf; }
+        return "Up\tDown";
+    case UG_PAGE:
+        if (st.pad) { snprintf(buf, n, "%c%c", GL_PAD, GP_DPAD_LR); return buf; }
+        return "PgUp\tPgDn";
     case UG_CAT:
         if (st.pad) snprintf(buf, n, "%s%s", pad_glyph(P_L1, a, sizeof(a)), pad_glyph(P_R1, b, sizeof(b)));
         else snprintf(buf, n, "%s\t%s", kb_glyph(B_L1, a, sizeof(a)), kb_glyph(B_R1, b, sizeof(b)));
@@ -1445,9 +1452,9 @@ static void frame(const char* root, const char* const* path, int n, int (*listed
     float x = CAT_X0;
     pc_ui_rect(0, 62, 640, 480, 0xB8000000, Z_PANEL);
     rect_m(CAT_X0, 60, ROWS_X1 + 2, 61, 0x80FFFFFF, Z_PANEL + 0.001f);
-    rect_m(CAT_X0, Y_HELP - 6, ROWS_X1 + 2, Y_HELP - 5, 0x80FFFFFF, Z_PANEL + 0.001f);
+    if (listed) rect_m(CAT_X0, Y_HELP - 6, ROWS_X1 + 2, Y_HELP - 5, 0x80FFFFFF, Z_PANEL + 0.001f);
     rect_m(CAT_X0, Y_BAR - 6, ROWS_X1 + 2, Y_BAR - 5, 0x80FFFFFF, Z_PANEL + 0.001f);
-    rect_m(CAT_X1 + 4, 66, CAT_X1 + 5, Y_HELP - 12, 0x60FFFFFF, Z_PANEL + 0.001f);
+    if (listed) rect_m(CAT_X1 + 4, 66, CAT_X1 + 5, Y_HELP - 12, 0x60FFFFFF, Z_PANEL + 0.001f);
     for (const char* p = root; *p;) {   /* (a root of several words: "MULTIPLAYER>LOBBY>GAME SETUP") */
         char part[64];
         int len = (int)strcspn(p, ">");
@@ -1465,7 +1472,7 @@ static void frame(const char* root, const char* const* path, int n, int (*listed
         text_m(x, 44, tr(path[i]), 0.45f, C_ROW);
         x += w;
     }
-    for (int c = 0; c < MC_COUNT; c++) {
+    for (int c = 0; c < MC_COUNT && listed; c++) {
         float y;
         if (!listed(c)) continue;
         y = Y0 + at++ * CAT_H;
@@ -1493,6 +1500,8 @@ static int cat_hit(float x, float y, int (*listed)(int))   /* x: left to right *
 static int import_listed(int c) { return menu_cats[c].screen == MS_IMPORT && menu_cats[c].parent < 0; }
 void ui_frame_import(const char* root, const char* const* path, int n, int cur) { rtl = lang_rtl_text(); frame(root, path, n, import_listed, cur); }
 int  ui_frame_import_cat(float x, float y) { return cat_hit(x, y, import_listed); }   /* x: left to right */
+/* ... with no category list or help line: the panel from the breadcrumb to the button bar (whatsnew_menu.c) */
+void ui_frame_plain(const char* root, const char* const* path, int n) { rtl = lang_rtl_text(); frame(root, path, n, NULL, -1); }
 
 static void draw(void)
 {

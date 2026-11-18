@@ -129,6 +129,16 @@ address) and the GAME SETUP box right of them, the rows below the box (the host:
 Password with a server, Your Character, COPY ROOM CODE, REMOVE PARTNER, CLOSE LOBBY; Start From is in Edit Game Setup's
 OVERVIEW). With a controller the host's bar also shows Start (START GAME) and Triangle (Copy Code / Copy Address).
 
+**WHAT'S NEW** (both menus) shows the changelog of the version being played, so nobody has to look it up elsewhere.
+Its button is in the title menu's top right corner (top left in Arabic), apart from the menu's rows: a click on it, or
+Triangle / Y (keyboard: S, the key bound to Triangle), whose icon the button shows in Button Icons' style. A gold dot on
+the button until it has been opened in this version (ini `whatsnew_seen`). The screen is in the row screen's look: the
+version this build is first (a build after a release: its "Unreleased changes", marked "This build"; a release: its
+section, "This version"), then EARLIER VERSIONS. Up / Down a line, Left / Right or Page Up / Down a page, L1 / R1 (Q / W)
+the previous / next version, Home / End, the wheel, the scroll bar dragged or clicked, the bar's hints clicked; Cancel,
+Triangle, Esc or a right click go back. The changelog is shown in English as written (its headings, bold titles and
+bullets drawn in the game's font; links and `code` as plain text); the screen's labels are translated.
+
 **EXTRA > IMPORT** (P4) is one place for everything that comes into the game, in the row screen's look: CHARACTERS (the
 games characters are imported from: Resident Evil Outbreak File 2), LANGUAGES (the editions of this game), MEMORY CARD
 SAVES (Import Memory Card Saves: the memory card's saves copied to separate files, at once, with the count in a
@@ -232,6 +242,7 @@ pressed last). A hold (Default) fills a gold bar under its icon.
 | The memory card's saves copied (`save_import_card`: the IMPORT screen's and the settings table's action) | `pc/src/host/lobby_io.c` |
 | Performance Graph's panel (F1's Performance section, `perf_body`) | `pc/src/host/overlay.cpp`, `settings.c` (a row only the new menu lists), `prof.h` `g_perf_graph` |
 | Every row the new menu shows has help (ctest `menu_help`) | `pc/tests/test_menu_help.py` |
+| WHAT'S NEW: the corner button and its input (`pc_whatsnew_button`, `pc_whatsnew_title`, called from `pc_title_plates`, `pc_title_mouse`), the screen (title mode 30); CHANGELOG.md embedded as it is (Linux section `.trtab` beside our texts' table, Windows resource `CHANGELOG`, rebuilt when it changes) and turned into lines the game's font can draw (no `& * # < > = @ [ ]`, ctest `changelog`) | `pc/glue/whatsnew_menu.c`, `pc/src/host/changelog.c` |
 | Hooks in the game's OPTION task | decomp `adv.c`: `Adv_GameOptionScreen` (start level), `DisplayOptionPlateLevel0` (pause), `DisplayOptionBg` (no bands), levels 1-3 (`pc_options_back_level`) |
 
 - **The layout table names settings by their table label** (`ref`), because 21 rows have no variable. A row kind says
