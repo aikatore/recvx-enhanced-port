@@ -37,7 +37,7 @@ Ways to start a session:
 ## Lobby
 
 MULTIPLAYER opens the new screens described in the next section; with Legacy Menu (or `--legacy-menu`), the lobby
-below, unchanged. Both use the same session, rules and wire (protocol 57): a host on one can be joined from the other.
+below, unchanged. Both use the same session, rules and wire (protocol 58): a host on one can be joined from the other.
 
 ### The new MULTIPLAYER screens
 
@@ -1607,7 +1607,10 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   scale, angles, references as enemy slot / sender / receiver). Particle bursts and sparks go as the
   call. Mirrored projectiles show only; the owner's game does the damage. Enemy attack effects hurt
   the receiver's player where they land. Budget: at most 8 per frame and none while 48 events wait
-  for acknowledgement (cosmetic, dropped rather than queued). The Bandersnatch's stretched arm goes
+  for acknowledgement; more wait (up to 256, oldest first) and go in the next frames, dropped only after 45 frames,
+  in another room or with 256 waiting. Before, those over the budget were dropped: Alexia 1's flame attack starts 24
+  burning blood puddles in 3 frames, 16 fires on her arm at once and 3 flames a frame, so the partner saw a third of the
+  puddles (and their fires on the floor) and 8 of the 16 arm fires (measured: 40..105 effects dropped per fight). The Bandersnatch's stretched arm goes
   as `FX_ARM`. A shot of ours that hits a zombie's head, arm or leg in third person goes as `FX_REACT`
   (protocol 40: the slot, the region 1..5 and the shot's unit direction), and the receiver's zombie
   flinches the same way if its own "Locational Hit Reactions" is on and it plays in third person
@@ -1631,9 +1634,34 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   `ghost`) follows the receiver's player (before, "follows something unknown"). A blood pool (effect 300, `bhSetBloodPoolLnk`:
   two entries, the second its vertex work; zombies, Cerberus, Bandersnatch dying) goes as its call (`FX_POOL`: what it
   follows, its place with the table's offset, its angle, the table's values, its palette bank; `coop_fx_pool`); before, it was
-  left out (its work is an extra entry) and showed only in the runner's game. Still each game's own: effects an event or room
-  table starts (each game runs its own), the Tyrant's claws and slashes (307..310, OR_WORK), 0 / 349 (matrices set by their
-  caller).
+  left out (its work is an extra entry) and showed only in the runner's game.
+* **A partner that comes later** (into the room, or back from its menus, a door, a scene: while it does not watch, nothing
+  goes out): the long effects it missed go out when it watches again (`fx_resync`), those it does not have yet: the windows
+  record them also while the partner is elsewhere (per `eff[]` entry its `EV_FX`, and whether it went). Alexia 1's burning
+  blood with the countdown it has left, her arm's fires with their delay and life left, a blood pool as its call, a fire on
+  the floor (263, made by the blood's own step) as burning blood that ignites at once (its copy burns a fresh life: the
+  fire's init draws one). Before, a guest who came into the fight 10 s after the host saw none of the 88..150 fires
+  burning there (measured, relay 30 ms: 0 against 88 at its arrival, 83 against 168 200 frames later; now 88 / 88 and 165 / 178).
+  Nothing new on the wire (these are ordinary entries).
+* **Alexia 1's arm fires on the receiver**: her flame attack's 16 fires (274) follow her arm; her step fades them when the
+  attack's motion comes round to frame 0 (`bhEne12_SetFireBintaEffect` 1, the 16 her work holds). The receiver's copies are
+  not in her puppet's work and its step does not run: they burned their whole 300 frames, 9 s after the runner's had gone
+  out, and in a long fight filled `eff[]` (the partner's next effects found no free entry: "eff[] full"). The puppet's
+  step now fades the last 16 it got when its frame comes round in the attack or as the attack ends into her walk (an
+  attack cut short by a hit leaves them burning, as on the runner).
+* **Calls** (protocol 58, `FX_CALL`): effect starters that keep a node's matrix (OR_WORK effects, whose state overlays the
+  entry's fields) or take a work go as their call, with the node as enemy slot and index (decomp hooks at their start,
+  `coop_fx_call`; the receiver calls them with its enemy's node): the Tyrant's blood where he is hit and on the player he
+  hits (`rySetEffBlood`, `rySetEffBlood2`: 309, 311), his claw planes (`bhEne19_SetClawPlane`: 307) and camera shakes (310),
+  Monster Steve's dust and sparks (`bhEff_SetPtcl`, `SetPtcl2`, `SetPtcl2V`: 365, 366). Before, all of these showed in the
+  runner's game only. Blood stains (301, `bhEne_SetBloodstain`: the Gulp Worm, the Black Widows, the moth, Alexia 2's
+  room) go as generic entries (before, left out as if they went as a call).
+* **The Tyrant's puppet** (protocol 58, local): the Tyrant's first step after his Init starts his camera effect (310), the
+  driver of the blood he drips (349: it starts 303 while he walks) and, for his clawed type, his long claws (312, drawn as
+  effects on his arm). A puppet's step does not run: on the partner's screen he dripped no blood (303: 0 against 2041
+  samples) and had no claws. The puppet's step starts them now (`pc_en19_first`, the same code).
+* Still each game's own: effects an event or room table starts (each game runs its own), shell casings (0: the shooter's
+  model and matrix), effects other effects' steps start (they start them in each game from their copies).
 * **Voices**: `Pose.voice_n` counts the sender's player voices, `Pose.voice` is the last one; the
   receiver plays each new count at the partner's position in the voice of the partner's model.
   Voice calls during a host enemy's step on the stand-in play nothing (the partner's game sends them).
@@ -1802,7 +1830,7 @@ bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows t
 list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
 `EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
 the Bandersnatch and the anatomist too (each type's `exp0` with its pointer words kept, the `type` field taken), never for a
-record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). 54: every type outside the boss fights is handed in, the dead ones too (`EV_ENEOWN` state 3 `stflg_b` 1), with up to 0x204 bytes of `exp0` (an enemy without a child its own size, `ATR_WORK` pointers as table and index); the extras the joiner killed are made dead on the host; `SPAWN_NOTE_DONE` carries the room's records' hash ("Room files that differ"). 55: `EneSnap.link` (1 + a linked part's parent slot, in the `SQ_ID` field's bits 16..23): a zombie's upper half is matched by its zombie, not by its slot ("Room files that differ"). 56: the player first in a room runs its enemies until it leaves ("Who runs the enemies"): `EV_ENEOWN` 1 a make-before-break hand-over (`pset` 1: the giver leaves; `tid` 0: without its state; `stflg_b`: its frame), 5 the room's runner (`COOP_ROOM_*`), 6 "it runs here now"; `COOP_HIT_FWD` (a hit passed on to the runner); `Pose.busy` `BUSY_PAUSED` 5 and `BUSY_DOOR` 6; snapshots also with the partner in another room; events that come ahead of a gap are kept; `EV_ESTATE` packed (`coop_zpack`). 57: bosses go with their state when their runner leaves through a door (`own_types` p3 2, their `rm_flg` bits after their work), a Black Widow with its legs off (leg records after its work), `EV_FX` `x1` / `ao` (an effect's `exp1` as a word of its owner's work: Alexia 1's burning blood) and `FX_POOL` (a blood pool as its call). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). 54: every type outside the boss fights is handed in, the dead ones too (`EV_ENEOWN` state 3 `stflg_b` 1), with up to 0x204 bytes of `exp0` (an enemy without a child its own size, `ATR_WORK` pointers as table and index); the extras the joiner killed are made dead on the host; `SPAWN_NOTE_DONE` carries the room's records' hash ("Room files that differ"). 55: `EneSnap.link` (1 + a linked part's parent slot, in the `SQ_ID` field's bits 16..23): a zombie's upper half is matched by its zombie, not by its slot ("Room files that differ"). 56: the player first in a room runs its enemies until it leaves ("Who runs the enemies"): `EV_ENEOWN` 1 a make-before-break hand-over (`pset` 1: the giver leaves; `tid` 0: without its state; `stflg_b`: its frame), 5 the room's runner (`COOP_ROOM_*`), 6 "it runs here now"; `COOP_HIT_FWD` (a hit passed on to the runner); `Pose.busy` `BUSY_PAUSED` 5 and `BUSY_DOOR` 6; snapshots also with the partner in another room; events that come ahead of a gap are kept; `EV_ESTATE` packed (`coop_zpack`). 57: bosses go with their state when their runner leaves through a door (`own_types` p3 2, their `rm_flg` bits after their work), a Black Widow with its legs off (leg records after its work), `EV_FX` `x1` / `ao` (an effect's `exp1` as a word of its owner's work: Alexia 1's burning blood) and `FX_POOL` (a blood pool as its call). 58: `EV_FX` `FX_CALL` (`fxc`: an effect starter's call with an enemy's or a player's node - the Tyrant's blood, claw planes and camera shakes, Steve's dust and sparks) and effect 301 (blood stains) as a generic entry. `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1927,7 +1955,7 @@ enemy's (`mode[0]` 0) to one whose own Init ran.
 | `EV_SPAWN` | 14 | either | An added enemy (`SpawnNote`), the randomizer result of a room load (`SPAWN_NOTE_DONE`, `SPAWN_NOTE_RAND`); from the joiner (protocol 53) its own result and extras of a room it was in first, then `SPAWN_NOTE_XDONE` |
 | `EV_EOPTS` | 15 | host | Enemy options: extra 0..3, placements, randomizer, seed, variety 0..1, event enemies 0..1, cutscene cast 0..1, its models 0..1, assignment 0..1, imported models 0..1, its enemy models 0..3 and their unchecked entries (4 bytes) |
 | `EV_ATR` | 16 | either | 1..2 room records (wall, trigger, floor, object) after a world event |
-| `EV_FX` | 17 | either | An effect started here (`FX_BURST` 308, `FX_PARTICLE` 302, `FX_ARM`, `FX_REACT`, or a generic entry). What it follows (`idx`), its model's owner and `exp0` are each an enemy slot or, with their bit in `refs` (`FXR_IDX` 1, `FXR_OWNER` 2, `FXR_EXP0` 4), `FX_RECEIVER` 0, `FX_SENDER` 1 or `FX_NONE` 2 |
+| `EV_FX` | 17 | either | An effect started here (`FX_BURST` 308, `FX_PARTICLE` 302, `FX_ARM`, `FX_REACT`, `FX_POOL`, `FX_CALL` (protocol 58), or a generic entry). What it follows (`idx`), its model's owner and `exp0` are each an enemy slot or, with their bit in `refs` (`FXR_IDX` 1, `FXR_OWNER` 2, `FXR_EXP0` 4), `FX_RECEIVER` 0, `FX_SENDER` 1 or `FX_NONE` 2 |
 | `EV_GRANT` | 18 | either | An event gave the sender an item: item, count, floor, position |
 | `EV_TSCREEN` | 19 | either | Trade screen op (below) |
 | `EV_GONE` | 20 | joiner | Dead enemies (up to 26: slot, type, model version) |
@@ -2091,8 +2119,8 @@ the session's code. A takeover needs a non-zero tag that matches.
   player: after 8 frames (`PAUSE_LEAVE`) they go to the partner playing in the room (only the host's examine of a
   trigger lets them run, see "The host's examine").
 * The partner has no facial animation and no aim pitch.
-* Some effects are not mirrored: those whose caller sets a matrix or a pointer the record cannot
-  name (e.g. Alexia's acid, shell casings) and blood pools.
+* Some effects are not mirrored: shell casings (the shooter's) and those an effect's own step starts from a pointer the
+  record cannot name (see "Effects and voices").
 * A cutscene the joiner triggers alone plays only for the joiner (its flags reach the host).
 * A puzzle solved by the partner's own steps in our room changes our room's walls, triggers, object
   placement and effects (its entry script's), not its lights or which models show: those follow when the
@@ -2158,6 +2186,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_LARVA="hostframe,..."` / `RECVX_COOP_HATCH="hostframe,..."` | A moth's larva on our player (as one carried into a room) / our larvae hatch now (not while held). |
 | `RECVX_COOP_BUSYLOG=n` | Every n frames: our player's busy flag, modes, motion, whether the status screen is open, the larvae (count, the last one's mode2/mode3 and player: 1xx ours, 2xx the partner's). |
 | `RECVX_COOP_FX=0` | Send no `EV_FX`. |
+| `RECVX_COOP_FXLIVE=n` | Every n frames, log the live `eff[]` entries per effect number (`id:live/from the partner`, 1263 / 1265: Alexia 1's fires and burning blood) stamped with the host's frame, to compare what the two screens show. |
 | `RECVX_COOP_GOTO="hostframe:x:z:angle,..."` | Our player alone to x/z, facing angle (0..65535), at that host frame. |
 | `RECVX_COOP_PAD="hostframe:hex,..."` | These game pad bits pressed for one frame (`b00` confirm/Cross, `10000` the cutscene skip button). |
 | `RECVX_COOP_TEST_KILL="frames:levelmask"` | End the replayed world event's tasks of those levels that many frames into a replay. |
