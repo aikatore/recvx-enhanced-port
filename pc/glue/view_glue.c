@@ -64,6 +64,11 @@ void pc_effect_tag(const void* op)
     stream_tag(pc_cur_mesh);
 }
 uint64_t pc_effect_poly(void) { return pc_cur_mesh & 1 ? pc_cur_mesh | (uint64_t)pc_cur_strip++ << 32 : 0; }
+/* an effect drawing a list of its own (particle stages, trail slots, drops): the following polygons
+   are part n of it, numbered from n << 12, so a part pairs with itself when parts before it come or
+   go (numbered in draw order, the oldest stage of a particle stream dropping off paired every stage
+   with its neighbour) */
+void pc_effect_part(unsigned int n) { if (pc_cur_mesh & 1) pc_cur_strip = (n & 0xFFFFFu) << 12; }
 
 /* "Smooth menus", while a menu task runs (title, status screen with files and item box, map,
    typewriter, OPTION; not during the title's intro movie): the frame is handed over before the

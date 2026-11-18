@@ -73,7 +73,9 @@ typedef struct {
     uint8_t r, g, b, a, f;
     uint8_t adc;                /* 1: the vertex does not draw (XYZ3 / ADC) */
 } NativeRawVertex;
-uint32_t native_defer_raw(unsigned int prim, const NativeRawVertex* v, int n, uint32_t mesh);   /* mesh: a menu tag (view_glue.c pc_menu_tag) or 0 */
+uint32_t native_defer_raw(unsigned int prim, const NativeRawVertex* v, int n, uint32_t mesh, uint32_t strip);   /* mesh: a menu or
+   effect tag (view_glue.c pc_menu_tag, pc_effect_tag) or 0; strip: its number in an effect (NATIVE_NO_STRIP: none) */
+#define NATIVE_NO_STRIP 0xFFFFFFFFu
 #define NATIVE_RAW_3D 0x800     /* prim: drawn in 3D (particles), not 2D (stream.c aa_split; gs_draw_raw ignores it) */
 void     gs_draw_raw(unsigned int prim, const NativeRawVertex* v, int n);
 
