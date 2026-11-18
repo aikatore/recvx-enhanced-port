@@ -18,6 +18,8 @@
   too.
 - **Co-op**: the partner now sees boss effects such as Alexia's burning blood and fire, the Tyrant's blood and claws
   and Steve's dust, also when arriving later in the fight.
+- In the over-the-shoulder camera, the effect of a shot hitting a wall now appears where the crosshair is, also at close
+  walls and in front of shelves or stairs.
 - With an imported language, shots hitting walls and some other effects no longer show boxes with letters or
   coloured squares instead of sparks, smoke or gas.
 
