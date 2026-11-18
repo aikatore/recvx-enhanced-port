@@ -547,6 +547,14 @@ shows the cut's flag (`eff110`) and whether the distortion is drawn (`drawn`).
   step so far: for a target a few units from the muzzle (an enemy stepping into the crosshair) each
   step moved the muzzle as much as the line, the solve swung to 50 degrees and the upper body jumped
   up for a tick and settled back.
+* **The sniper rifle aimed normally** ("Aim Scoped Weapons Normally") on another model: its muzzle point is at 6.15, 0,
+  -6.16 in the hand's frame (the rifle is held at 45 degrees to the hand's x axis, as the grenade launcher) and it has no
+  second point, so the solve measured the x axis and held the drawn rifle 45 degrees up with every model (Steve, Wesker,
+  the cutscene models, Alexia, imports); Claire herself (no model) was level. A weapon without a second point beyond the
+  muzzle whose muzzle lies far off the x axis (more than 3 units out, sideways more than 0.7 of that: only the sniper
+  rifle) is now measured along the line from the grip to the muzzle. The bow gun's point at 1, 0, -1 is beside the grip,
+  not on its bolt: measured towards it the bow gun pointed down, so it stays on the x axis. Frames with every other
+  weapon (and Claire with the sniper rifle) are identical to before.
 * Sniper rifle and linear launcher switch to the game's scope (first person, [Scope](#scope)); no bend.
 
 ### Aim height

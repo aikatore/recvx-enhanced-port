@@ -2219,8 +2219,17 @@ void tps_calc_model(void)
         if (!actor_aim_hand(plp, h)) { aim_corr = 0; return; }   /* no model: the hand's pitch */
         const NJS_POINT3 *f = &WpnTab[plp->wpnr_no].wp_fps1, *f2 = &WpnTab[plp->wpnr_no].wp_fps2;
         float ax[3] = { f2->x - f->x, f2->y - f->y, f2->z - f->z }, l = sqrtf(ax[0] * ax[0] + ax[1] * ax[1] + ax[2] * ax[2]);
-        if (l < 0.01f || ax[0] * f->x + ax[1] * f->y + ax[2] * f->z <= 0) ax[0] = 1, ax[1] = ax[2] = 0;   /* no second point
-            beyond the muzzle (the same, unset, or behind it: the rocket launcher's back end): the x axis */
+        if (l < 0.01f || ax[0] * f->x + ax[1] * f->y + ax[2] * f->z <= 0) {   /* no second point beyond the muzzle (the same,
+            unset, or behind it: the rocket launcher's back end): the x axis, or towards the muzzle where it lies far off that
+            axis on a long gun (the sniper rifle's at 6.15, 0, -6.16, aimed normally: held at 45 degrees as the grenade
+            launcher; solved on the x axis it pointed 45 degrees up on every model). Not the bow gun's at 1, 0, -1 (a point
+            beside the grip: solved towards it, the bow gun pointed down) */
+            float side = sqrtf(f->y * f->y + f->z * f->z);
+            if (f->x > 3.0f && side > 0.7f * f->x) {
+                l = sqrtf(f->x * f->x + side * side);
+                ax[0] = f->x / l, ax[1] = f->y / l, ax[2] = f->z / l;
+            } else ax[0] = 1, ax[1] = ax[2] = 0;
+        }
         else for (int j = 0; j < 3; j++) ax[j] /= l;
         for (it = 0; steady && it < 4 && (it == 0 || actor_aim_hand(plp, h)); it++) {
             float m[3], b[3], e, sg;
