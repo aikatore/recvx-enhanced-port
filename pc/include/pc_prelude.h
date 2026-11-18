@@ -216,6 +216,17 @@ int   pc_battle_unlocked(void);               /* host.c: setting "Battle Game un
 int   pc_difficulty_select(void);             /* host.c: setting "Difficulty select" (adv.c CheckButton: NEW GAME opens the difficulty menu) */
 void  coop_fx_particle(struct BH_PWORK* ewP, int lnk, const void* offP, const void* dirP, unsigned int col, unsigned int dst, int typ, int mk2);   /* effsub3.c bhSetEffParticle(Mk2) */
 void  coop_fx_pool(struct BH_PWORK* ewP, const void* posP, int ay, const void* tabP, int bank);   /* effsub3.c bhSetBloodPoolLnk (protocol 57) */
+/* (protocol 58) effect starters that take a node's matrix or a work, sent as the call (EV_FX FX_CALL; coop_proto.h FXN_*, the same
+   numbers): effsub3.c rySetEffBlood(2) (a: its type and mode bits), effsub4.c bhEff_SetPtcl (a: tex_id) / SetPtcl2 / SetPtcl2V
+   (a: wcnt), en19.c bhEne19_SetClawPlane (a: colour, b: time, v: src_x dst_x) and its camera shakes (a: the row) */
+#define FXN_BLOOD 0
+#define FXN_BLOOD2 1
+#define FXN_PTCL 2
+#define FXN_PTCL2 3
+#define FXN_PTCL2V 4
+#define FXN_CLAW 5
+#define FXN_SHAKE 6
+void  coop_fx_call(int fn, struct BH_PWORK* ewP, const void* mtxP, int a, int b, const void* v0, const void* v1);
 /* "You appear as" (pc/glue/actor_glue.c): another model drawn in place of the player / of the
    played character's cutscene double; appear_on: in use without co-op (coop_control_remote runs) */
 extern int actor_on, appear_on;

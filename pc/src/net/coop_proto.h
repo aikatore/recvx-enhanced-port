@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 57                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 58                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -94,7 +94,10 @@ extern "C" {
                                            57: bosses go with their state when their runner leaves through a door (own_types p3 2, their
                                                rm_flg bits after their work), a Black Widow with its legs off (EV_ESTATE: leg records
                                                after the body), EV_FX x1/ao (an effect's exp1 as a word of its owner's work: Alexia 1's
-                                               burning blood) and FX_POOL (a blood pool as its call) */
+                                               burning blood) and FX_POOL (a blood pool as its call);
+                                           58: EV_FX FX_CALL (effect starters that take a node's matrix, as their call: the Tyrant's
+                                               blood, claw planes and camera shakes, Steve's sparks and dust) and effect 301 (blood
+                                               stains) as a generic entry */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per datagram (the receiver's check; a frame sends up to 96: coop_glue.c EV_BURST) */
 #define COOP_SNAP_BUDGET 2400           /* enemy snapshot bytes per frame (records past it wait, by priority) */
@@ -248,6 +251,15 @@ static inline int coop_fx_get(uint8_t b, uint8_t refs, int bit) { return refs & 
 #define FX_ARM 1000                     /* not an effect: a Bandersnatch's arm length (its AI sets node offsets) */
 #define FX_REACT 1001                   /* not an effect: a zombie's flinch where the sender's shot hit it (protocol 40) */
 #define FX_POOL 1002                    /* (protocol 57) a blood pool (effect 300, two eff[] entries): EV_FX carries the bhSetBloodPoolLnk call */
+#define FX_CALL 1003                    /* (protocol 58) an effect starter's call with a node of an enemy (fxc, FXN_*) */
+#define FXN_BLOOD 0                     /* FX_CALL's fn (pc_prelude.h: the same) */
+#define FXN_BLOOD2 1
+#define FXN_PTCL 2
+#define FXN_PTCL2 3
+#define FXN_PTCL2V 4
+#define FXN_CLAW 5
+#define FXN_SHAKE 6
+#define FXN_N 7
 #define FX_REACT_REGIONS 6              /* FX_REACT region: 1..5 (tps_glue.c RG_*: head, right/left arm, right/left leg) */
 #define FX_RAW_WORDS 18
 /* EV_FX's generic entries (protocol 28): only the effects a sender's window can start (an enemy's step,
@@ -405,6 +417,19 @@ typedef struct Event {
             int32_t srt_dir[5];         /* vertices 0..15 */
             float pos[3], srd_pos, bld_spd, srt_spd[5];
         } fxb;
+        struct {                        /* (protocol 58) EV_FX of FX_CALL; Event.idx: the enemy slot whose node `node` (FXN_BLOOD,
+                                           FXN_BLOOD2, FXN_PTCL2, FXN_CLAW) or work (FXN_PTCL: its texture list `a`; FXN_CLAW,
+                                           FXN_SHAKE: a Tyrant) the call takes, or with FXR_IDX in refs a player (FX_*: the
+                                           blood of a player the Tyrant hit); FXN_PTCL2V: none (255) */
+            uint16_t id;                /* FX_CALL */
+            uint8_t fn, node;           /* FXN_*; the node */
+            int32_t a;                  /* BLOOD(2): its type (0..5) and mode bits 30, 31; PTCL: tex_id; PTCL2V: its delay;
+                                           CLAW: the colour; SHAKE: the row (1, 2) */
+            int16_t b;                  /* CLAW: its time */
+            uint8_t refs, pad;          /* FXR_IDX (BLOOD, BLOOD2 only): Event.idx holds FX_RECEIVER or FX_SENDER */
+            float v[6];                 /* BLOOD(2): position, direction; PTCL, PTCL2: position; PTCL2V: position, direction;
+                                           CLAW: src_x, dst_x */
+        } fxc;
         struct {                        /* EV_FX of FX_ARM; Event.idx: the enemy slot (no refs) */
             uint16_t id, pad;
             float len[4];               /* x offsets of the arm's nodes 7..10 */

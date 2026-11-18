@@ -253,8 +253,10 @@ static int fx_ref(int r) { return r < COOP_ENE_SLOTS || (r >= FX_RECEIVER && r <
    step or a room/event table (not in a window), an enemy's Init step (the window opens after it: 258 261
    262 270), and those that cannot go as fields: OR_WORK effects whose state overlays the fields (307
    309..312 349), raw pointers in their counters (304), exp0 an extra eff[] slot or a drawing function the
-   creator sets (300 365 366), gunfire the receiver makes itself (3 9 14 132 229), 301/302 and 308 (they
-   go as their call), 17 and 29 (lkwkp a barrel or a room record). */
+   creator sets (300 365 366: 300 goes as FX_POOL, 365 366 as FX_CALL), gunfire the receiver makes itself (3 9 14 132 229),
+   302 and 308 (they go as their call), 17 and 29 (lkwkp a barrel or a room record). Protocol 58: 301, the blood stains
+   (before, left out as if it went as a call: the stains of the Gulp Worm, the Black Widows, the moth, Alexia 2 showed in
+   the runner's game only). */
 #define A FXC_ANY
 #define ANYF -128, 127
 static const FxRule fx_rules[] = {
@@ -284,6 +286,7 @@ static const FxRule fx_rules[] = {
     { 275, 0xFFFF, 0,                                        0,        0,                          FXV_ANY, ANYF,    0, 63, { A, A, A, A } },  /* fire */
     { 297,   6, 0,                                           0,        FXF_LINK_REQ,               3,       ANYF,    0, 63, { A, A, A, A } },  /* blood burst: TypeList[type], BloodCol[mdlver] */
     { 298,  40, 0,                                           0,        FXF_LINK,                   FXV_ANY, ANYF,    0, 63, { A, A, A, A } },  /* acid generator: type its count */
+    { 301,   6, 0,                                           0,        0,                          3,       ANYF,    0, 63, { A, A, A, A } },  /* (protocol 58) blood stain (zonzon1.c bhEne_SetBloodstain): Eff301Prm[type], ani_ct mdlver */
     { 303,   7, 0,                                           0,        0,                          3,       ANYF,    0, 63, { A, A, A, A } },  /* PrmTbl[type], ani_ct mdlver */
     { 305,   3, 0,                                           0,        FXF_LINK,                   FXV_ANY, ANYF,    0, 63, { A, A, A, A } },  /* Eff305Prm[type] */
     { 306,   7, 0,                                           0,        FXF_LINK_REQ,               FXV_ANY, ANYF,    0, 63, { A, A, A, A } },
@@ -477,6 +480,19 @@ int coop_check_event(const Event* e, int from_host)
             if (e->u.fxb.bank > 3 || e->u.fxb.refs > FXR_IDX || !fx_ref(coop_fx_get(e->idx, e->u.fxb.refs, FXR_IDX))) return COOP_BAD_FIELD;
             return fins(e->u.fxb.pos, 3) && fins(&e->u.fxb.srd_pos, 7) && fabsf(e->u.fxb.pos[0]) < 10000 && fabsf(e->u.fxb.pos[2]) < 10000 &&
                    fabsf(e->u.fxb.bld_spd) < 100 ? COOP_OK : COOP_BAD_FLOAT;
+        }
+        if (e->u.fx.id == FX_CALL) {   /* (protocol 58) the receiver checks the node and texture against its enemy */
+            const int32_t a = e->u.fxc.a;
+            int fn = e->u.fxc.fn, nv = fn == FXN_CLAW ? 2 : fn == FXN_PTCL || fn == FXN_PTCL2 ? 3 : fn == FXN_SHAKE ? 0 : 6;
+            if (fn >= FXN_N || e->u.fxc.node >= 64 || e->u.fxc.pad || (e->u.fxc.refs & ~FXR_IDX) ||
+                (e->u.fxc.refs ? (fn != FXN_BLOOD && fn != FXN_BLOOD2) || e->idx > FX_SENDER - FX_RECEIVER : fn == FXN_PTCL2V ? e->idx != 255 : e->idx >= COOP_ENE_SLOTS)) return COOP_BAD_FIELD;
+            if (((fn == FXN_BLOOD || fn == FXN_BLOOD2) && ((a & 0x3FFFFFFF) > 5)) || (fn == FXN_PTCL && (a < 0 || a > 255)) ||
+                (fn == FXN_PTCL2V && (a < 0 || a > 60)) || (fn == FXN_SHAKE && a != 1 && a != 2) ||
+                (fn == FXN_CLAW ? e->u.fxc.b < 0 || e->u.fxc.b > 64 : e->u.fxc.b != 0) || (fn != FXN_CLAW && fn != FXN_BLOOD && fn != FXN_BLOOD2 && fn != FXN_PTCL2 && e->u.fxc.node)) return COOP_BAD_FIELD;
+            for (k = nv; k < 6; k++) if (e->u.fxc.v[k] != 0) return COOP_BAD_FIELD;
+            if (!fins(e->u.fxc.v, 6)) return COOP_BAD_FLOAT;
+            for (k = 0; k < 6; k++) if (fabsf(e->u.fxc.v[k]) > 10000) return COOP_BAD_FIELD;
+            return COOP_OK;
         }
         if (e->u.fx.id == FX_PARTICLE)
             return e->u.fxp.typ < FX_PTCL_TYPES && e->u.fxp.mk2 <= 1 && e->u.fxp.lnk < 64 && e->u.fxp.refs <= FXR_IDX &&

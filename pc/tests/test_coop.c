@@ -359,7 +359,7 @@ static void test_events(void)
             CHECK((coop_check_event(&e, 1) == COOP_OK) == (coop_fx_rule(id) != NULL));
             n += coop_fx_rule(id) != NULL;
         }
-        CHECK(n == 42);
+        CHECK(n == 43);   /* (protocol 58: 301) */
 #define BADFX(id_, stmt) do { Event e_ = fx_sample(id_); Event* e = &e_; CHECK(coop_check_event(e, 1) == COOP_OK); stmt; CHECK(coop_check_event(e, 1) == COOP_BAD_FIELD); } while (0)
         BADFX(265, e->u.fx.x1 = 0);                          /* (protocol 57) its exp1: a word of its owner's work */
         BADFX(265, e->u.fx.x1 = FX_X1_MAX + 1);
@@ -470,6 +470,31 @@ static void test_events(void)
         e.u.fxb.pos[2] = 20000; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxb.pos[2] = 0;
         e.u.fxb.refs = 0; e.idx = 7; CHECK(coop_check_event(&e, 1) == COOP_OK);   /* (it follows enemy 7) */
         e.idx = 255; CHECK(coop_check_event(&e, 1) != COOP_OK);
+    }
+    {   /* (protocol 58) an effect starter's call with a node of an enemy */
+        Event e = ev(EV_FX);
+        memset(&e.u, 0, sizeof(e.u));
+        e.idx = 2; e.u.fxc.id = FX_CALL; e.u.fxc.fn = FXN_BLOOD; e.u.fxc.node = 9; e.u.fxc.a = 2 | (int32_t)0x80000000u; e.u.fxc.v[4] = 1;
+        CHECK(coop_check_event(&e, 1) == COOP_OK && coop_check_event(&e, 0) == COOP_OK);
+        e.u.fxc.a = 6; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxc.a = 5;   /* rySetEffBlood's table: 6 types */
+        e.u.fxc.node = 64; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxc.node = 9;
+        e.idx = 255; CHECK(coop_check_event(&e, 1) != COOP_OK); e.idx = 2;
+        e.u.fxc.v[1] = NAN; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxc.v[1] = 20000; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxc.v[1] = 0;
+        e.u.fxc.fn = FXN_N; CHECK(coop_check_event(&e, 1) != COOP_OK);
+        e.u.fxc.fn = FXN_CLAW; e.u.fxc.a = -1; e.u.fxc.b = 16; e.u.fxc.v[4] = 0; e.u.fxc.v[0] = -2; e.u.fxc.v[1] = 3;
+        CHECK(coop_check_event(&e, 1) == COOP_OK);
+        e.u.fxc.b = 65; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxc.b = 16;
+        e.u.fxc.v[2] = 1; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxc.v[2] = 0;   /* (floats past its own: none) */
+        e.u.fxc.fn = FXN_SHAKE; memset(e.u.fxc.v, 0, sizeof(e.u.fxc.v)); e.u.fxc.b = 0; e.u.fxc.node = 0; e.u.fxc.a = 2;
+        CHECK(coop_check_event(&e, 1) == COOP_OK);
+        e.u.fxc.a = 3; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxc.a = 1;
+        e.u.fxc.node = 1; CHECK(coop_check_event(&e, 1) != COOP_OK); e.u.fxc.node = 0;
+        e.u.fxc.fn = FXN_PTCL2V; e.u.fxc.a = 3; e.u.fxc.v[4] = 1;
+        CHECK(coop_check_event(&e, 1) != COOP_OK);   /* (it takes no enemy) */
+        e.idx = 255; CHECK(coop_check_event(&e, 1) == COOP_OK);
+        e.u.fxc.a = 61; CHECK(coop_check_event(&e, 1) != COOP_OK);
+        e.u.fxc.fn = FXN_PTCL; e.idx = 4; e.u.fxc.a = 8; e.u.fxc.v[4] = 0; CHECK(coop_check_event(&e, 1) == COOP_OK);
+        e.u.fxc.v[4] = 1; CHECK(coop_check_event(&e, 1) != COOP_OK);
     }
     {   /* a particle call */
         Event e = ev(EV_FX);
@@ -1091,6 +1116,8 @@ static int sane(const Event* e)
         for (k = 0; k < 10; k++) if (e->u.ts.inv[k] && (((e->u.ts.inv[k] >> 16) & 0xFF) > 155 || (e->u.ts.inv[k] & 0xFFFF) > 999)) return 0;
         if (e->u.ts.give && (((e->u.ts.give >> 16) & 0xFF) == 0 || (e->u.ts.give & 0xFFFF) > 999)) return 0;
     }
+    if (e->type == EV_FX && e->u.fx.id == FX_CALL)   /* (protocol 58) a call: an enemy slot (none for PTCL2V), a node, a function */
+        return e->u.fxc.fn < FXN_N && e->u.fxc.node < 64 && (e->u.fxc.fn == FXN_PTCL2V ? e->idx == 255 : e->idx < 255);
     if (e->type == EV_FX && e->u.fx.id != FX_BURST) {   /* what it follows: a slot 0..254 or FX_* */
         int r = coop_fx_get(e->idx, e->u.fx.id == FX_PARTICLE ? e->u.fxp.refs : e->u.fx.id == FX_POOL ? e->u.fxb.refs : e->u.fx.id == FX_ARM ? 0 : e->u.fx.refs, FXR_IDX);
         if (r == 255 || r > FX_NONE) return 0;
