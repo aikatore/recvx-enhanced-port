@@ -16,6 +16,8 @@
 - The sniper rifle aimed normally no longer points up in the over-the-shoulder camera when you play as another model.
 - **Smoother Motion**: effects such as fire, sparks, muzzle flashes, searchlights, particles and rain now move smoothly
   too.
+- **Co-op**: the partner now sees boss effects such as Alexia's burning blood and fire, the Tyrant's blood and claws
+  and Steve's dust, also when arriving later in the fight.
 - With an imported language, shots hitting walls and some other effects no longer show boxes with letters or
   coloured squares instead of sparks, smoke or gas.
 
