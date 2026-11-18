@@ -634,6 +634,18 @@ joint rotations come from the source (`actor_glue.c rig_build`, `retarget`).
   the height: room motions move cutscene doubles across the room with the root. Test aid
   `RECVX_FEET_TRACE=1`: every 15 ticks each display slot's lowest ankle or toe and the source's over the
   base matrix, the hips and rest ankle heights and the shift.
+* **Cutscene hands** (the double, the cast; not an imported model, not the player): each hand goes where the record
+  has it, measured from between its shoulders and scaled by the model's reach (from there to the wrist in the rest
+  pose), by the two-bone IK below on the model's own arm (elbow in its bend plane, the hand turned as the record's;
+  then no grip IK: both hands are placed already). The joint rotations alone are the record's exactly (checked:
+  the model's upper arm, forearm and hand matrices equal the record's to 0.03), but they put the hands where the
+  model's shoulders and bones take them: models with narrower shoulders or shorter arms than the record's held them
+  off what it touches (its belly, thighs, the table, the bottle in its other hand), 0.3 to 0.9 units from the
+  record's place in proportion and up to 1.2 for the models standing in for Rodrigo in the opening (wide shoulders,
+  long arms, no clavicle), 2 for a zombie. Now on it (0.00). Test aids `RECVX_CAST_REACH=0` (as before) and
+  `RECVX_CAST_GHOST=d`: the record drawn as itself too, d units to the right on screen of its model, in the same
+  frame (its hand pieces stay on the model), to compare the poses; frames of two runs are not comparable in a
+  cutscene (its timing follows the streamed dialogue, and a dump every few frames slows it).
 * **Post-passes**: the two-handed grip IK and the lighter IK (below), the face mask's jaw, tongue and
   eyes, the cutscene doubles' hand pieces, as before.
 * **A missing hand**: what the game links to a source hand the model does not have (Nosferatu's right
@@ -726,7 +738,17 @@ weapon of a hand the model lacks floated at the invisible source's hand.
   Wesker's, Alexia's and Rodrigo's tables, which many of the others' lines use) the model's first bank
   is played instead, so its mouth moves with every line (before, Wesker's, Alexia's and Rodrigo's
   stayed shut through all of Alfred's lines in 1020). The expressions' muscles are not copied (each face has
-  its own). A player file chosen as the appearance is shown
+  its own), but for the **eyelids**: the record's blinks and closed eyes are expressions of the room (`bhSetMask`,
+  face sets made for that character's mask, keyed muscles), and muscles 8 and 9 are both lids on every cast mask
+  (0 open, 0.87 shut; the opening: Rodrigo's blink at tick 615, eyes shut 778..816 and 1190..1210). `face_step` runs
+  `bhControlMask` without its face computing (`sys->loop_now` moved off the frame's last loop) and computes the face
+  itself there, with the record's lids on the model's muscles 8 and 9 (a still face, `flg2 0x80`, is computed again
+  when they change). Before, the models kept their eyes open through every blink and every closed-eyes shot. A face
+  without lid muscles does not move them; a record without a mask (the event models 42..49) leaves the model's face
+  at rest, as before. An imported model (its own lid bones, "Faces" in [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md))
+  takes the record's lids for its blink (`imp_face`: the larger of the two, 0.05 .. 0.8 as open .. shut) in place of
+  its random one while it stands in for a record with a mask. Test aid `RECVX_CAST_LIDS=x`: every cast face's lids
+  held at x; the `RECVX_CAST_TRACE` face line shows both lids. A player file chosen as the appearance is shown
   on the double as the same character's cutscene model. `face_src` copies rest meshes to 64-byte
   boundaries (the morph reads them with `lq`). A mask that does not fit leaves the model without.
 * **Custom Cutscene Model** (APPEARANCE page and F1, ini `appear_in_cutscenes`, default 1). Off: the
@@ -1245,7 +1267,7 @@ the same in Claire's part and in Chris's.
   record's and shown with its hand, on any model.
 * Records drawn as the same model share its face mask: the one posed last talks.
 * A line whose bank of mouth shapes the model lacks (or has still) is played with the model's first bank
-  (as for the double); expressions keep the model's neutral face, only the eyes follow.
+  (as for the double); expressions keep the model's neutral face, only the eyes and the eyelids follow.
 * Each model is read from its room file during the room load (as the enemy spawner reads one), at most
   six per room.
 * Test aids: `RECVX_CAST=0|1[:all][:random][:imports]` sets the options; `RECVX_CAST_TRACE=1` logs the
