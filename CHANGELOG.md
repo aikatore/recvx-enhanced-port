@@ -13,6 +13,9 @@
 - **Umbrella Chronicles import**: the player characters of Resident Evil: The Umbrella Chronicles (Wii, from your own
   .rvz disc image) can be imported under IMPORT > CHARACTERS and used as character models, with blinking and lip
   movement.
+- **Break Free Pushes Enemies**: breaking free from any grab knocks back every enemy close by, and for a moment none
+  can grab you again. On by default only with the Enemy Randomizer or Extra Enemies, so several enemy types can no
+  longer pass you from grab to grab.
 - **Aim Scoped Weapons Normally**: an option to aim and fire the sniper rifle and the linear launcher like other
   weapons, with auto-aim, instead of through the scope.
 
