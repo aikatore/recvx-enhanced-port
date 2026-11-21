@@ -8,6 +8,8 @@
 - **What's New**: a button on the title screen shows the changes of the installed version.
 - **Imported models**: each import source (such as Outbreak File 2) can be hidden from the model lists and random picks
   without deleting it, under IMPORT > CHARACTERS or with a quick toggle in the lists.
+- **BioRand**: a new extra option, Show Randomized Item Models, shows the item you will actually get on the floor
+  instead of the original one.
 - **Aim Scoped Weapons Normally**: an option to aim and fire the sniper rifle and the linear launcher like other
   weapons, with auto-aim, instead of through the scope.
 
