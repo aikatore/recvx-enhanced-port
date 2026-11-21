@@ -532,15 +532,67 @@ static void draw_inventory(void)
     }
 }
 
-/* system.c bhSysCallItemselect, after StatusMain */
-void wpn_menu_draw(void)
+/* ---------------------------------------------------------------- the strip (Menu Style Redesigned, --dev: menu_glue.c) */
+/* the eight shortcuts under the item list, two rows of four (mirrored in Arabic): shown in the inventory once a shortcut is
+   assigned, or while a weapon is dragged (a drop on a slot assigns it); nothing for a player without shortcuts */
+#define SX 432.0f
+#define SY 344.0f
+#define SW 50.0f
+#define SH 44.0f
+static float strip_x(int s) { int col = lang_rtl_text() ? 3 - (s & 3) : (s & 3); return SX + col * SW; }
+static float strip_y(int s) { return SY + (s >> 2) * SH; }
+static int strip_any(void)
 {
-    if (!pc_weapon_shortcuts_on() || (sys->ts_flg & 0x200)) return;
-    pc_item_icons(ICON_USER, ms.open);
+    for (int s = 0; s < WPN_SLOTS; s++) if (g_wpn_slots[chr()][s]) return 1;
+    return 0;
+}
+int wpn_strip_hit(float x, float y)   /* the slot under 2D point x, y, -1 none */
+{
+    if (!pc_weapon_shortcuts_on() || x < SX || x >= SX + 4 * SW || y < SY || y >= SY + 2 * SH) return -1;
+    for (int s = 0; s < WPN_SLOTS; s++)
+        if (x >= strip_x(s) && x < strip_x(s) + SW && y >= strip_y(s) && y < strip_y(s) + SH) return s;
+    return -1;
+}
+void wpn_strip_drop(int slot, int id)   /* a weapon dropped on a slot: assigned (already there: kept) */
+{
+    if (slot >= 0 && slot < WPN_SLOTS && weapon(id) && g_wpn_slots[chr()][slot] != id) assign(slot, id);
+}
+/* drag: the item id being dragged (a weapon shows the strip), hot: the slot under the pointer */
+void wpn_strip_draw(int drag, int hot)
+{
+    unsigned int* iv = inv();
+    char k[32];
+    int s;
+    if (!pc_weapon_shortcuts_on() || ms.open || (!strip_any() && !weapon(drag))) return;
     njColorBlendingMode(0, 8);
     njColorBlendingMode(1, 6);
-    if (ms.open) draw_screen();
-    else draw_inventory();
+    for (s = 0; s < WPN_SLOTS; s++) {
+        int id = g_wpn_slots[chr()][s], have = id && wpn_bag_find(iv, bag_n(), id), two = (itemdata[id].type & 0x100) != 0;
+        int eq = have && iv[0] && ID(iv[iv[0]]) == id;
+        float x = strip_x(s) + 1, y = strip_y(s) + 1, w = SW - 2, h = SH - 2, sc = two ? 0.34f : 0.6f;
+        float t = eq || s == hot ? 2 : 1;   /* an outline and the panel over it: two quads a slot, not five */
+        pc_ui_rect(x, y, x + w, y + h, s == hot ? pulse(0xFFE060) : eq ? 0xFFF0D040 : 0xFF405878, Z_ROW);
+        pc_ui_rect(x + t, y + t, x + w - t, y + h - t, 0xFF060C18, Z_EDGE);
+        bind_code_name(BIND_KB, bind_get(B_WPN1 + s, BIND_KB, 0), k, sizeof(k));
+        pc_ui_text(lang_rtl_text() ? x + w - 3 - pc_ui_text_w(k, 0.4f) : x + 3, y + 1, k, 0.4f, 0xFFFFE080);
+        if (id) pc_item_icon((unsigned int)id << 16, x + (w - (two ? 136 : 68) * sc) / 2, y + 10 + (h - 10 - 48 * sc) / 2, sc,
+                             have ? 0xFFFFFFFF : 0xFF484848, Z_ICON);
+    }
+}
+
+/* system.c bhSysCallItemselect, after StatusMain */
+void menu_overlay_draw(void);   /* menu_glue.c: Menu Style Redesigned's overlay */
+void wpn_menu_draw(void)
+{
+    if (sys->ts_flg & 0x200) return;
+    if (pc_weapon_shortcuts_on()) {
+        pc_item_icons(ICON_USER, ms.open);
+        njColorBlendingMode(0, 8);
+        njColorBlendingMode(1, 6);
+        if (ms.open) draw_screen();
+        else draw_inventory();
+    }
+    menu_overlay_draw();
 }
 
 /* the wheel: the page's four slots around the d-pad, the equipped one framed, a missing one greyed */

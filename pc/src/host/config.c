@@ -58,7 +58,8 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "quick_knife", &g_config.quick_knife, 0, 1 },
     { "weapon_shortcuts", &g_config.weapon_shortcuts, 0, 1 },
     { "button_icons", &g_button_icons, 0, 4 },   /* the new menu's button hints: 0 automatic, 1 Xbox, 2 PlayStation, 3 Switch, 4 keyboard */
-    { "legacy_menu", &g_legacy_menu, 0, 1 },     /* the old menus (menu_layout.h; --legacy-menu, --new-menu for one run) */
+    { "legacy_menu", &g_legacy_menu, 0, 1 },     /* the old menus (menu_layout.h; --legacy-menu, --new-menu for one run); 1 = Menu Style Legacy */
+    { "menu_style", &g_menu_style, 0, 2 },       /* Menu Style: 0 Legacy, 1 Standard, 2 Redesigned (--dev only; menu_layout.h) */
     { "auto_stairs", &g_config.auto_stairs, 0, 1 },
     { "head_blowoff", &g_config.head_blowoff, 0, 1 },
     { "model_cull", &g_config.model_cull, 0, 1 },

@@ -233,7 +233,7 @@ static void usage(void)
         "  --coop-server ADDR   co-op server (host or host:port, UDP 7141)  --coop-conn auto|direct|server  --coop-pw PASSWORD\n"
         "  --dev              developer tools (the object placer in the F2 window)\n"
         "  --legacy-menu      the previous menus for this run (OPTION, ENHANCED SETTINGS, the old lobby; docs/MENUS.md)\n"
-        "  --new-menu         the new menus for this run (the default) even with Legacy Menu on\n"
+        "  --new-menu         the new menus for this run (the default) even with Menu Style Legacy\n"
         "  --spoof-version V  report version V (e.g. 0.6.0) to the update check, to test the update offer\n"
         "  --quiet\n"
         "  --version         print the version and exit\n"
@@ -296,7 +296,7 @@ static void parse_args(int argc, char** argv)
         else if (!strcmp(argv[i], "--hd-textures") && i + 1 < argc) { SDL_strlcpy(g_config.hd_textures_dir, argv[++i], sizeof(g_config.hd_textures_dir)); }
         else if (!strcmp(argv[i], "--third-person")) g_tps.on = 1;
         else if (!strcmp(argv[i], "--dev")) g_dev_tools = 1;     /* developer tools (the F2 object placer); BioRand and the importers are shown without it */
-        else if (!strcmp(argv[i], "--new-menu")) g_menu_cli = 1;   /* this run: the new menus (the default) even with Legacy Menu on (menu_layout.h) */
+        else if (!strcmp(argv[i], "--new-menu")) g_menu_cli = 1;   /* this run: the new menus (the default) even with Menu Style Legacy (menu_layout.h) */
         else if (!strcmp(argv[i], "--legacy-menu")) g_menu_cli = 0;   /* this run: the old menus (menu_layout.h, docs/MENUS.md) */
         else if (!strcmp(argv[i], "--quiet")) g_config.log_level = 0;
         else if (!strcmp(argv[i], "--voice-plan") && i + 1 < argc) { voice_plan = atoi(argv[++i]); g_config_readonly = 1; }
@@ -389,7 +389,7 @@ int main(int argc, char** argv)
 #endif
     config_load();
     parse_args(argc, argv);   /* command line overrides the saved settings */
-    menu_choice_apply();   /* the new menus, or the old ones (Legacy Menu, --legacy-menu) */
+    menu_choice_apply();   /* the new menus, or the old ones (Menu Style Legacy, --legacy-menu) */
     { extern void variants_load(void); variants_load(); enemy_rates_load(); }   /* mods/enemies.ini: custom enemies (variants.h), then "Custom"'s rates of them (enemies.h) */
     biorand_scan();   /* mods/biorand: BioRand's pack (biorand.h) */
     if (SDL_getenv("RECVX_IMPORT")) {   /* headless import (docs/IMPORT_OUTBREAK.md): RECVX_IMPORT=outbreak2, then exit */

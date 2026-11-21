@@ -459,7 +459,7 @@ void pc_title_mouse(int level, int flag)
 {
     ADV_WORK* ap = &AdvWork;
     int hit = -1, i, n = ap->CursorMax[level];
-    if (level == 0) menu_choice_apply();   /* Legacy Menu switched (menu_layout.h): here, with no menu of ours or OPTION open */
+    if (level == 0) menu_choice_apply();   /* Menu Style Legacy switched (menu_layout.h): here, with no menu of ours or OPTION open */
     menu_mouse_take(&mt);
     if (level == 0 && coop_biorand_offer(NULL)) {   /* a co-op guest (F3, --coop-join): the host's BioRand seed, offered on the
                                                        BIORAND screen as from its row (the lobby opens it itself: pc_lobby);
