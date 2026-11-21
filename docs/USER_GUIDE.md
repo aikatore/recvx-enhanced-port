@@ -333,6 +333,7 @@ until the right square on the white strip is.
 | Types per Room | No Limit | Wild and Custom aim for that many different kinds of enemies in a room (1..8) as far as its enemies allow; Mild stays under it |
 | Randomize Event Enemies | On | event enemies change too |
 | Enemy Seed | 0 | the same seed gives the same enemies (and the same cutscene cast) |
+| Break Free Pushes Enemies | Auto | breaking free from a grab knocks back every enemy close by (zombies, anatomists, Cerberus, Hunters and Sweepers, Bandersnatches, Black Widows on the floor; not bosses) with its own hit reaction, without damage, and for 1.8 s no enemy can grab you (other attacks still hit). Auto: on while the Enemy Randomizer or Extra Enemies is on. Off: as the original, where only a shaken-off zombie knocks down the zombies it flies into. In co-op the host's |
 | Randomize Cutscene Cast | Off | see [Cutscene cast](#cutscene-cast): the story characters as other models in cutscenes |
 | Model Selection | Cutscene Models | where the characters' new looks come from |
 | Choose Models | | with Custom, right under Model Selection: opens the list of models to check (below) |
@@ -460,7 +461,7 @@ Music And Voice, Sound Effects: 0-100%, default 100%.
 ### Co-op
 
 On the CO-OP page and in F3. HOST RULES settings count only on the host. F3 also has the other host rules
-(Free Typewriter Saves, Extra Item Boxes and Herbs, Headshots & Piercing) and Character Models. Details:
+(Free Typewriter Saves, Extra Item Boxes and Herbs, Headshots & Piercing, Break Free Pushes Enemies) and Character Models. Details:
 COOP.md, "Settings".
 
 | Setting | Default | What it does |

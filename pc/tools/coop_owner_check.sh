@@ -42,7 +42,9 @@ pos=$(seq -s, 900 5 3800)
 pair() {   # pair NAME PORT HOST_TP GUEST_TP [FLAGS [GUEST_KILL [HOST_ENV]]]
     local o=$out/$1 p=$2
     (export RECVX_COOP_CODE=TEST-KEYS RECVX_INPUT="$newgame" RECVX_TELEPORT="$3" RECVX_COOP_ENEPOS="$pos" RECVX_FLAGS="$5" RECVX_COOP_OWNERSHIP=${7:-0}
-     run "$o/host" "enemy_extra = 5\nenemy_random = 1\nenemy_seed = 88119\n" 3850 --coop-host "$p") &
+     run "$o/host" "enemy_extra = 5\nenemy_random = 1\nenemy_seed = 88119\nbreak_free = 0\n" 3850 --coop-host "$p") &   # (break_free:
+       # its Auto is on with these options, and a Hunter it knocks against a wall (en05 DG09) snaps to where its body lies:
+       # a "jump" for the position samples below, whoever runs it)
     sleep 2
     (export RECVX_TELEPORT="$4" RECVX_COOP_KILL="$6" RECVX_COOP_ENEPOS="$pos" RECVX_FLAGS="$5"
      run "$o/guest" "coop_follow = 0\n" 3910 --coop-join "127.0.0.1:$p#TEST-KEYS") &

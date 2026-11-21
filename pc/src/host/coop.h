@@ -88,6 +88,8 @@ int coop_quick_start(void);
 int coop_extra_objects(void);
 /* the session's "Headshots & Piercing" rule (OPT2_HEADSHOTS): hosting our setting, joining the host's (coop_glue.c) */
 int coop_headshots(void);
+/* the session's "Break Free Pushes Enemies" rule in effect (OPT2_SHOVE): hosting ours (Auto resolved), joining the host's */
+int coop_break_free(void);
 /* the session's "Shared Enemy Control" rule (OPT2_OWNERSHIP): hosting our setting (or RECVX_COOP_OWNERSHIP), joining the host's */
 int coop_shared_enemies(void);
 /* a co-op session's game runs (not the title, the lobby or the attract demo): Shared Enemy Control is locked */

@@ -71,6 +71,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "rifle_stack", &g_config.rifle_stack, 0, 1 },     /* rifle ammo stacks (forced on while BioRand is on) */
     { "no_ink_ribbon", &g_config.no_ink_ribbon, 0, 1 },   /* typewriters save without an ink ribbon (co-op: the host's) */
     { "extra_objects", &g_config.extra_objects, 0, 1 },   /* extra item boxes and blue herb planters (co-op: the host's) */
+    { "break_free", &g_config.break_free, 0, 2 },         /* breaking free from a grab pushes every enemy around (co-op: the host's) */
     { "save_system", &g_config.save_system, 0, 1 },     /* 0 native files, 1 memory card */
     { "update_check", &g_config.update_check, 0, 2 },  /* 0 off, 1 ask to install (the old "on"), 2 notify only: the newest version once per start (net/update.h) */
     { "native_3d", &g_config.native_3d, 0, 1 },

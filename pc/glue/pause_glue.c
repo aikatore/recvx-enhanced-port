@@ -340,7 +340,8 @@ static void this_game(float y)
 {
     static const char* const diff[] = { "Normal", "Easy", "Very Easy" };
     static const char* const rows[] = { "Enemy Randomizer", "Enemy Selection", "Extra Enemies", "Rearranged Enemies", "Extra Item Boxes and Herbs",
-                                        "Free Typewriter Saves", "Randomize Cutscene Cast", "Randomize Voice Lines", "Headshots & Piercing" };
+                                        "Free Typewriter Saves", "Randomize Cutscene Cast", "Randomize Voice Lines", "Headshots & Piercing",
+                                        "Break Free Pushes Enemies" };
     char t[160], v[96];
     int n = 0;
     text_m(PANEL_X0 + 10, y, "THIS GAME", 0.55f, C_GOLD);

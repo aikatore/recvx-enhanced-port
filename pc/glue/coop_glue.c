@@ -3842,12 +3842,42 @@ static void capture_hits(void)
         hit_send(i, ep, take_at[i] != 0);
     }
 }
+/* "Break Free Pushes Enemies" (shove_glue.c, protocol 59): our player broke free next to enemy i, which the partner's game
+   runs (or will: as a hit, kept or passed on), so that game knocks it back - a COOP_HIT_SHOVE EV_ENE_HIT from the point
+   (x, z). marker: only so the partner knows (its immunity), nothing to push. 0: we run it, the caller pushes it */
+int pc_shove_apply(BH_PWORK* ep, float cx, float cz);
+void pc_shove_partner(void);
+int coop_runs(int i) { return we_run(i) && !giving[i]; }
+int coop_plp_partner(void) { return plp == &ply2; }
+int coop_shove(int i, float x, float z, int marker)
+{
+    Event e = { 0 };
+    int n;
+    if (i < 0 || i >= PC_ENE_SLOTS || (coop_runs(i) && !marker) || echo_delay) return 0;
+    for (n = 0; n < 6; n++) e.u.eh.jnt[n] = -1;
+    e.type = EV_ENE_HIT; e.idx = i;
+    e.u.eh.flg = COOP_HIT_SHOVE | (marker ? COOP_HIT_MARK : 0);
+    e.u.eh.djnt_no = -1;
+    e.u.eh.dp[0] = x; e.u.eh.dp[1] = plp->py; e.u.eh.dp[2] = z;
+    if (take_at[i] && !marker) { e.stg = sys->stg_no; e.rom = sys->rom_no; defer_hit(&e); }
+    else queue_event(&e);
+    return 1;
+}
+
 /* a hit (EV_ENE_HIT) on an enemy we run: its damage code takes it at its next step */
 static void hit_apply(const Event* e)
 {
     BH_PWORK* ep = &ene[e->idx];
     int n;
     if (e->idx >= sys->ewk_n || !(ep->flg & 0x1) || !ep->mlwP) return;
+    if (e->u.eh.flg & COOP_HIT_SHOVE) {   /* (protocol 59) a push, not a hit */
+        if (!(e->u.eh.flg & COOP_HIT_MARK)) {
+            int m0 = ep->mode0, m2 = ep->mode2, ok = pc_shove_apply(ep, e->u.eh.dp[0], e->u.eh.dp[2]);
+            host_log("breakfree: enemy %d (id %d) mode %d/%d %s for the partner%s\n", e->idx, ep->id, m0, m2, ok ? "pushed" : "not pushed",
+                     ok ? "" : m0 == 2 || m0 == 3 ? " (busy: pushed if it walks again soon)" : "");
+        }
+        return;
+    }
     for (n = 0; n < 6; n++)   /* joints of its model only (coop_check_event: 0..63, damage bounded) */
         if (e->u.eh.jnt[n] >= (int)ep->mlwP->obj_num) return;
     for (n = 0; n < 6; n++)
@@ -5171,6 +5201,16 @@ int pc_headshots(void)
     return g_tps.headshots;
 }
 int coop_headshots(void) { return is_host ? g_tps.headshots : rule(OPT2_HEADSHOTS << 8); }   /* the guest's lobby: the host's */
+/* "Break Free Pushes Enemies" (OPT2_SHOVE, protocol 59; shove_glue.c): the setting in effect (Auto: with the Enemy
+   Randomizer or Extra Enemies on), a guest plays by the host's once it knows it */
+int pc_cfg_break_free(void);            /* host.c: 0 Off, 1 Auto, 2 On */
+static int shove_local(void) { const EnemyOpts* o = enemy_opts(); int v = pc_cfg_break_free(); return v == 2 || (v == 1 && o && (o->rand || o->extra)); }
+int coop_shove_rule(void)
+{
+    if (coop_on && !is_host && !echo_delay && peer_opts >= 0) return (peer_opts & (OPT2_SHOVE << 8)) != 0;
+    return shove_local();
+}
+int coop_break_free(void) { return is_host ? shove_local() : rule(OPT2_SHOVE << 8); }   /* the guest's GAME SETUP: the host's (in effect) */
 
 /* Shared loot, "important items for both" (OPT_IMPORTANT, docs/COOP.md "Loot modes"): the item kinds each player
    takes for itself, as individual loot does for every item - one taking it leaves the partner's copy lying. Without
@@ -8237,6 +8277,10 @@ static int apply_event(const Event* e)
                        e->type == EV_PLY_HIT ? (plp ? plp->hp : 0) : e->idx < PC_ENE_SLOTS ? ene[e->idx].hp : 0);
     if (e->type == EV_ENE_HIT && sys && plp) {   /* (by the room of our enemies: in a door we hand them over, a hit then is the receiver's) */
         int i = e->idx, ours = (e->stg * 256 + e->rom) == (run_room & 0xFFFF);
+        if ((e->u.eh.flg & COOP_HIT_SHOVE) && !(e->u.eh.flg & COOP_HIT_FWD)) {   /* (protocol 59) the partner broke free: no grab on it for a while */
+            pc_shove_partner();
+            if (e->u.eh.flg & COOP_HIT_MARK) return 1;
+        }
         if (!ours || i >= (int)sys->ewk_n || i >= PC_ENE_SLOTS || !(ene[i].flg & 0x1)) {
             if (!ours && !(e->u.eh.flg & COOP_HIT_FWD) && have_peer && (e->stg != sys->stg_no || e->rom != sys->rom_no)) {   /* (we left that
                                                     room: the partner plays there, it runs them) */
@@ -9289,7 +9333,8 @@ void coop_frame(void)
                         (pc_cfg_no_ink_ribbon() ? OPT_NO_RIBBON : 0) | (g_coop.skip_sync ? OPT_SKIP_SYNC : 0) |
                         (g_coop.gameover_both ? OPT_GAMEOVER_BOTH : 0) | (g_coop.skip_detector ? OPT_SKIP_DETECTOR : 0) |
                         (g_coop.quick_start && !biorand_next() ? OPT_QUICK_START : 0) : 0;   /* BioRand: its own start inventory */
-    tx.opts2 = is_host ? (pc_cfg_extra_objects() ? OPT2_EXTRA_OBJECTS : 0) | (g_tps.headshots ? OPT2_HEADSHOTS : 0) | (p3_env() ? OPT2_OWNERSHIP : 0) : 0;   /* (protocols 33, 41, 46) */
+    tx.opts2 = is_host ? (pc_cfg_extra_objects() ? OPT2_EXTRA_OBJECTS : 0) | (g_tps.headshots ? OPT2_HEADSHOTS : 0) | (p3_env() ? OPT2_OWNERSHIP : 0) |
+                         (shove_local() ? OPT2_SHOVE : 0) : 0;   /* (protocols 33, 41, 46, 59) */
     tx.regroup = regroups;
     tx.seq = frame_no;
     if (echo_delay) {

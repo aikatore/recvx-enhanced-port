@@ -106,6 +106,7 @@ static int host_val(const Setting* s, int* v)
     else if (!strcmp(l, "Metal Detector")) *v = coop_skip_detector();
     else if (!strcmp(l, "Quick Start")) *v = coop_quick_start();
     else if (!strcmp(l, "Shared Enemy Control")) *v = coop_shared_enemies();
+    else if (!strcmp(l, "Break Free Pushes Enemies")) { *v = coop_break_free() ? 2 : 0; return 1; }   /* (the host's in effect: On or Off) */
     else return 0;
     *v = *v != 0;
     return 1;
@@ -589,6 +590,10 @@ static int modifiers(char out[MOD_MAX][128], int brief)
     {
         int k = menu_setting("Headshots & Piercing"), d;
         if (k >= 0 && menu_default(k, &d) && val(k) != d) ADD("%s: %s", tr("Headshots and Piercing"), tr(val(k) ? "On" : "Off"));
+    }
+    {   /* (Auto: on with the randomizer or extra enemies of this setup) */
+        int b = val_of("Break Free Pushes Enemies");
+        if (b == 2 || (b == 1 && (val_of("Enemy Randomizer") || val_of("Extra Enemies")))) ADD("%s", tr("Break Free Pushes Enemies"));
     }
 #undef ADD
     return n;
