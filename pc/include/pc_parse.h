@@ -56,8 +56,10 @@ typedef struct PcCvxm {
     uint32_t nv;
     uint32_t end;       /* where what the game reads ends (the texture block's end mark); the skin, read by imp_skin
                            only, lies after it in the files of impmodel.c */
+    uint32_t morph, nmorph; /* version 5: the blink's vertex offsets (CvxmMorph, by vertex), 0 none */
 } PcCvxm;
 #define PC_CVXM_NODES 64          /* objects (impmodel.c CV_MAX; the rig's NODES) */
+#define PC_CVXM_VERTS 12288       /* vertices (impmodel.h CVXM_VERTS, pc_prelude.h PC_VERTEX_ENTRIES) */
 #define PC_CVXM_TEX 16            /* textures (IMP_TEX) */
 int pc_cvxm_check(const uint8_t* f, uint32_t n, PcCvxm* out, char* why, int wn);
 

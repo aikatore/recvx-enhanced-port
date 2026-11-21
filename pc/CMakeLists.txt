@@ -54,6 +54,17 @@ FetchContent_Declare(libnatpmp GIT_REPOSITORY https://github.com/miniupnp/libnat
                      GIT_TAG 134fc89e2781e154e40042641f4d8bcbe42579f1 EXCLUDE_FROM_ALL)
 FetchContent_MakeAvailable(miniupnpc libnatpmp)
 
+# zstd (BSD-3-Clause): only its decompressor, for Wii disc images in Dolphin's RVZ format (src/import/rvz.c)
+FetchContent_Declare(zstd GIT_REPOSITORY https://github.com/facebook/zstd.git GIT_TAG v1.5.7 GIT_SHALLOW TRUE SOURCE_SUBDIR none)
+FetchContent_MakeAvailable(zstd)
+add_library(zstd_dec STATIC
+    ${zstd_SOURCE_DIR}/lib/common/debug.c ${zstd_SOURCE_DIR}/lib/common/entropy_common.c ${zstd_SOURCE_DIR}/lib/common/error_private.c
+    ${zstd_SOURCE_DIR}/lib/common/fse_decompress.c ${zstd_SOURCE_DIR}/lib/common/xxhash.c ${zstd_SOURCE_DIR}/lib/common/zstd_common.c
+    ${zstd_SOURCE_DIR}/lib/decompress/huf_decompress.c ${zstd_SOURCE_DIR}/lib/decompress/zstd_ddict.c
+    ${zstd_SOURCE_DIR}/lib/decompress/zstd_decompress.c ${zstd_SOURCE_DIR}/lib/decompress/zstd_decompress_block.c)
+target_include_directories(zstd_dec PUBLIC ${zstd_SOURCE_DIR}/lib)
+target_compile_definitions(zstd_dec PRIVATE ZSTD_DISABLE_ASM ZSTD_LEGACY_SUPPORT=0 XXH_NAMESPACE=ZSTD_)
+
 # Co-op server (pc/server: recvx-server) and Monocypher, which the game shares for the
 # end-to-end encryption of server sessions (src/net/rdv_proto.c)
 add_subdirectory(server)
@@ -167,7 +178,7 @@ target_compile_options(recvx_platform PRIVATE
     -fno-strict-aliasing -fwrapv -ffp-contract=off -msse2 -mfpmath=sse
     -Wall -Wno-unused-function
 )
-target_link_libraries(recvx_platform PRIVATE SDL3::SDL3 imgui miniupnpc::miniupnpc natpmp monocypher)
+target_link_libraries(recvx_platform PRIVATE SDL3::SDL3 imgui miniupnpc::miniupnpc natpmp monocypher zstd_dec)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_compile_options(recvx_platform PRIVATE -fno-pie)
 endif()
@@ -189,7 +200,7 @@ if(WIN32)
 endif()
 add_executable(recvx ${LAYOUT_PAD_SRC} ${RECVX_RES} $<TARGET_OBJECTS:recvx_game> $<TARGET_OBJECTS:recvx_platform>
                $<$<TARGET_EXISTS:glibc_compat>:$<TARGET_OBJECTS:glibc_compat>>)
-target_link_libraries(recvx PRIVATE imgui SDL3::SDL3 miniupnpc::miniupnpc natpmp monocypher m)
+target_link_libraries(recvx PRIVATE imgui SDL3::SDL3 miniupnpc::miniupnpc natpmp monocypher zstd_dec m)
 if(WIN32)
     target_link_libraries(recvx PRIVATE ws2_32 pthread shell32 dwmapi)   # co-op UDP (src/net); clock_gettime (winpthreads); borderless corners (settings.c)
     target_link_libraries(recvx PRIVATE winhttp)   # the BioRand CLI download (src/net/biorand_dl.c), a system DLL
@@ -288,8 +299,8 @@ add_executable(test_appear tests/test_appear.c src/host/actors.c)
 add_test(NAME appear COMMAND test_appear)
 
 # imports (src/import): SLD, TIM2, the glTF and .cvxm writers on a synthetic model
-add_executable(test_import tests/test_import.c src/import/impmodel.c src/import/ob2.c src/import/import.c src/import/lang.c src/host/glyphs.c src/host/actors.c src/host/fileio.c src/host/parse.c)
-target_link_libraries(test_import PRIVATE SDL3::SDL3 m)
+add_executable(test_import tests/test_import.c src/import/impmodel.c src/import/ob2.c src/import/uc.c src/import/rvz.c src/import/import.c src/import/lang.c src/host/glyphs.c src/host/actors.c src/host/fileio.c src/host/parse.c)
+target_link_libraries(test_import PRIVATE SDL3::SDL3 zstd_dec m)
 add_test(NAME import COMMAND test_import ${CMAKE_CURRENT_BINARY_DIR})
 
 # our translations (src/host/tr_table.inc) against their languages' game fonts (src/host/glyphs.c): no missing letter

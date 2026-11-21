@@ -2,6 +2,7 @@
    palette order), the two writers on a small synthetic humanoid (no disc data), and the "You
    appear as" registry growing append-only. */
 #include "../src/import/impmodel.h"
+#include "../include/pc_parse.h"
 #include "../src/import/import.h"
 #include "../src/host/actors.h"
 #include <SDL3/SDL.h>
@@ -202,6 +203,52 @@ int main(int argc, char** argv)
     fclose(f);
     CHECK(rd(d) == 0x46546C67 && rd(d + 4) == 2 && rd(d + 8) == n && rd(d + 16) == 0x4E4F534A);
     CHECK(strstr((char*)d + 20, "\"skins\"") && strstr((char*)d + 20, "\"inverseBindMatrices\""));
+
+    {   /* Umbrella Chronicles (uc.c): a vertex per corner welded (the UVs move to the strip), the blink morph, clamped UVs */
+        float (*pos)[3] = realloc(m.pos, 8 * 12), (*nrm)[3] = realloc(m.nrm, 8 * 12), (*uv)[2] = realloc(m.uv, 8 * 8), (*wg)[4] = realloc(m.wgt, 8 * 16);
+        unsigned char (*jn)[4] = realloc(m.jnt, 8 * 4);
+        int* ix = realloc(m.idx, 8 * sizeof(int));
+        CHECK(pos && nrm && uv && wg && jn && ix);
+        m.pos = pos; m.nrm = nrm; m.uv = uv; m.wgt = wg; m.jnt = jn; m.idx = ix;
+        m.morph = calloc(8, 12);
+        for (int i = 4; i < 8; i++) {   /* the same four vertices again, other UVs */
+            memcpy(m.pos[i], m.pos[i - 4], 12); memcpy(m.nrm[i], m.nrm[i - 4], 12); memcpy(m.jnt[i], m.jnt[i - 4], 4); memcpy(m.wgt[i], m.wgt[i - 4], 16);
+            m.uv[i][0] = 0.1f * i; m.uv[i][1] = 0.5f;
+        }
+        m.morph[1][1] = m.morph[5][1] = -0.4f;   /* (the lid: down when closed) */
+        m.nv = 8; m.nidx = 8; m.ns = 2;
+        ImpStrip* st = realloc(m.strip, 2 * sizeof(ImpStrip));
+        CHECK(st);
+        m.strip = st;
+        for (int i = 0; i < 8; i++) m.idx[i] = i;
+        m.strip[0] = (ImpStrip){ 0, 4, 0, 1 }; m.strip[1] = (ImpStrip){ 4, 4, 1, 1 };
+        CHECK(imp_weld(&m) == 4 && m.idx[5] == m.idx[1] && m.iuv[5][0] > 0.49f && m.iuv[5][0] < 0.51f && m.iuv[0][0] == 2.25f);
+        snprintf(p, sizeof(p), "%s/test_import_uc.cvxm", dir);
+        CHECK(imp_write_cvxm(&m, p, 1.0f, 0xE00000, NULL, err, sizeof(err)) || (printf("%s\n", err), 0));
+        f = fopen(p, "rb");
+        CHECK(f);
+        n = fread(d, 1, sizeof(d), f);
+        fclose(f);
+        PcCvxm cv;
+        char why[96];
+        CHECK(pc_cvxm_check(d, (uint32_t)n, &cv, why, sizeof(why)) && cv.nv == 4 && cv.nmorph == 1 && rd(d + 4) == 5);
+        const CvxmMorph* mo = (const CvxmMorph*)(d + cv.morph);
+        CHECK(mo->v == (uint32_t)m.idx[1] && mo->d[1] < -0.39f && mo->d[1] > -0.41f && mo->d[0] == 0);
+        const uint16_t want[6] = { (uint16_t)m.idx[0], 2302, 2015, (uint16_t)m.idx[1], 2813, 2015 };   /* (clamped: u 2.25, not moved by tiles) */
+        int found = 0;
+        for (size_t q = 64; q + sizeof(want) <= n && !found; q += 2) found = !memcmp(d + q, want, sizeof(want));
+        CHECK(found);
+        /* a picture as an 8-bit TIM2: up to 256 colours exactly */
+        unsigned char rgba[16 * 16 * 4], *back;
+        for (int i = 0; i < 256; i++) { rgba[4 * i] = (unsigned char)i; rgba[4 * i + 1] = (unsigned char)(255 - i); rgba[4 * i + 2] = 7; rgba[4 * i + 3] = i < 16 ? 0 : 255; }
+        int tl, tw, th;
+        unsigned char* q8 = imp_tim2_from_rgba(rgba, 16, 16, &tl);
+        CHECK(q8 && imp_tim2_rgba(q8, tl, &tw, &th, &back) && tw == 16 && th == 16);
+        int same = 1;
+        for (int i = 0; i < 256; i++) same &= !memcmp(back + 4 * i, rgba + 4 * i, 3) && (back[4 * i + 3] == 0) == (i < 16);
+        CHECK(same);
+        free(back); free(q8);
+    }
     imp_free(&m);
 
     /* the registry: grouped at the first load; a second manifest (another order, one model gone, one

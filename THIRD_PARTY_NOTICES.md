@@ -26,6 +26,7 @@ or CRI Middleware.
 | Monocypher | 4.0.2 | https://github.com/LoupVaillant/Monocypher | BSD-2-Clause or CC0-1.0 (dual) |
 | xxHash (header only: XXH3, the hash PCSX2 names texture replacements by) | v0.8.3 | https://github.com/Cyan4973/xxHash | BSD-2-Clause |
 | bcdec (header only: BC1-BC7 decoding for HD texture packs) | 80859ed3 | https://github.com/iOrange/bcdec | MIT or Unlicense (dual) |
+| zstd (its decompressor only, `lib/common` and `lib/decompress`: Wii disc images in Dolphin's RVZ format for the Umbrella Chronicles import) | v1.5.7 | https://github.com/facebook/zstd | BSD-3-Clause (dual with GPL-2.0; used under BSD), Copyright (c) Meta Platforms, Inc. and affiliates |
 
 The built binaries link these libraries statically; ship their license texts
 with any binary release.

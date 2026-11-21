@@ -6,7 +6,7 @@ and renders a preview PNG (rest pose front and back; for a .glb also a test pose
 lowered through the skin). Needs numpy and Pillow. Never commit its output (game data).
     pc/tools/import_check.py MODEL.glb|MODEL.cvxm OUT.png
 """
-import sys, json, struct, io
+import sys, os, json, struct, io
 import numpy as np
 from PIL import Image
 
@@ -147,7 +147,7 @@ def check_glb(path, out):
 def check_cvxm(path, out, clamp_u=True):
     d = open(path, 'rb').read()
     magic, ver, moff, toff, soff, nv, nn = struct.unpack_from('<4sIIIIII', d, 0)
-    assert magic == b'RXIM' and 1 <= ver <= 4 and moff == 60
+    assert magic == b'RXIM' and 1 <= ver <= 5 and moff == 60
     face = list(d[28:33]) if ver >= 2 else []   # the face bones' objects (lids, jaw), 255 none
     mlb = 64
     hs, on = struct.unpack_from('<HH', d, mlb + 4); to, oo = struct.unpack_from('<ii', d, mlb + 8)
@@ -176,6 +176,10 @@ def check_cvxm(path, out, clamp_u=True):
     n = struct.unpack_from('<H', d, v + 6)[0]
     V = np.frombuffer(d, np.float32, n * 8, v + 64).reshape(n, 8)
     P = V[:, :3] + rest[1]
+    if ver >= 5 and os.environ.get('SHUT'):   # SHUT=1: the blink morph applied (eyes closed)
+        mo, mn = struct.unpack_from('<II', d, 44)
+        for k in range(mn):
+            vi, = struct.unpack_from('<I', d, mo + 16 * k); P[vi] = P[vi] + float(os.environ['SHUT']) * np.array(struct.unpack_from('<3f', d, mo + 16 * k + 4))
     # textures
     texs = []
     q = toff

@@ -372,7 +372,7 @@ static int read_mesh(Rd* r, const Mesh* me, const Amo* a, int mi, const int* mes
             if (!(q = realloc(m->strip, sizeof(ImpStrip) * (m->ns + 1)))) return 0;
     m->strip = q;
             ImpStrip* st = &m->strip[m->ns++];
-            st->first = m->nidx; st->n = (int)n; st->tex = -1;
+            st->first = m->nidx; st->n = (int)n; st->tex = -1; st->clamp = 0;
             for (uint32_t k = 0; k < n; k++) {
                 uint32_t x = u32(r, sp + 4 * k);
                 m->idx[m->nidx++] = x < nv ? base + (int)x : base;

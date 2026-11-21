@@ -1057,6 +1057,7 @@ static void import_window(void)
     static char when[IMPORT_SOURCES][64];
     ImportProgress* pg = &g_import_progress;
     int running = __atomic_load_n(&pg->running, __ATOMIC_ACQUIRE);
+    if (!loaded) for (int s = 0; s < IMPORT_SOURCES; s++) what[s] = IMPORT_PLAYERS;   /* (each source: its playable characters checked) */
     if (!loaded || (was_running && !running)) {   /* the manifests: at the first opening and after an extraction */
         for (int s = 0; s < IMPORT_SOURCES; s++) n[s] = import_results(s, items[s], 1024, when[s], sizeof(when[s]));
         if (loaded) { import_registry_load(); lang_scan(); }   /* new player models for "You appear as", new languages */
@@ -1083,8 +1084,9 @@ static void import_window(void)
         wrapped(tr("Disc image: %s"), g_import.iso[s][0] ? g_import.iso[s] : tr("(none chosen)"));
         ImGui::BeginDisabled(running != 0);
         if (ImGui::Button(tr("Choose Disc Image..."))) {
-            static const SDL_DialogFileFilter filters[] = { { "PS2 disc image (*.iso)", "iso" }, { "All files", "*" } };
-            SDL_ShowOpenFileDialog(import_picked, (void*)(intptr_t)s, win, filters, 2, g_import.iso[s][0] ? g_import.iso[s] : NULL, false);
+            static const SDL_DialogFileFilter filters[] = { { "PS2 disc image (*.iso)", "iso" }, { "All files", "*" } },
+                                              rvz[] = { { "Wii disc image, Dolphin RVZ (*.rvz)", "rvz" }, { "All files", "*" } };
+            SDL_ShowOpenFileDialog(import_picked, (void*)(intptr_t)s, win, src->ext ? rvz : filters, 2, g_import.iso[s][0] ? g_import.iso[s] : NULL, false);
         }
         import_source_dir(s, dir, sizeof(dir));
         ImGui::TextDisabled(tr("Output: %s"), dir);
@@ -1106,13 +1108,13 @@ static void import_window(void)
             ImGui::PopID();
             continue;
         }
-        {   /* (only the groups offered, IMPORT_OFFERED) */
+        {   /* (only the groups offered: ImportSource.offered) */
             static const struct { const char* label; int bit; } groups[] = {
                 { "Playable Characters", IMPORT_PLAYERS }, { "Cutscene Models", IMPORT_CUTSCENE }, { "Other Characters", IMPORT_NPCS }, { "Enemies", IMPORT_ENEMIES } };
             int first = 1;
-            what[s] &= IMPORT_OFFERED;
+            what[s] &= src->offered;
             for (const auto& g : groups) {
-                if (!(IMPORT_OFFERED & g.bit)) continue;
+                if (!(src->offered & g.bit)) continue;
                 if (!first) ImGui::SameLine();
                 ImGui::CheckboxFlags(tr(g.label), &what[s], g.bit);
                 first = 0;
@@ -1135,7 +1137,7 @@ static void import_window(void)
         int ok = 0, players = 0, failed = 0;
         for (int i = 0; i < n[s]; i++) {
             const ImportItem* x = &items[s][i];
-            if (x->group < 0 || !(IMPORT_OFFERED & (1 << x->group))) continue;
+            if (x->group < 0 || !(src->offered & (1 << x->group))) continue;
             ok += x->ok; players += x->player; failed += !x->ok;
         }
         if (!n[s]) ImGui::TextDisabled(tr("Nothing extracted yet."));
@@ -1143,7 +1145,7 @@ static void import_window(void)
             ImGui::Text(tr("Extracted %s: %d models, %d usable as player models, %d failed"), when[s], ok, players, failed);
             static const char* const gname[IMPORT_GROUPS] = { "Playable Characters", "Cutscene Models", "Other Characters", "Enemies" };
             for (int g = 0; g < IMPORT_GROUPS; g++) {
-                if (!(IMPORT_OFFERED & (1 << g))) continue;   /* (an older run's other groups: not listed) */
+                if (!(src->offered & (1 << g))) continue;   /* (an older run's other groups: not listed) */
                 int gn = 0, gp = 0;
                 for (int i = 0; i < n[s]; i++) if (items[s][i].group == g) { gn++; gp += items[s][i].player != 0; }
                 if (!gn) continue;

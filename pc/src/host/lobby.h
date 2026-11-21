@@ -22,6 +22,7 @@ typedef struct LobbyIO {
     volatile int file_req;          /* game thread sets 1 (file: the folder or file to start in, or ""); the main thread opens
                                        the system's file dialog (2), then file is the chosen one and 3, or 4 cancelled */
     char file[1024];
+    int file_rvz;                   /* the file dialog's filter: 1 Wii disc images (*.rvz), 0 PS2 ones (*.iso) */
 } LobbyIO;
 extern LobbyIO g_lobby_io;
 

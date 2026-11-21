@@ -97,6 +97,10 @@ typedef struct Disguise {
     signed char fbone[IMP_FACES - 1];   /* its face bones (IMP_FACE_* - 1: lids, jaw), -1 none */
     int blink, blink_wait;              /* the blink: step 0..7 of it (-1 none), ticks since the last */
     float lid_travel[2];                /* how far each upper lid goes down to close (imp_face) */
+    const CvxmMorph* morph;             /* version 5: the blink as vertex offsets (in file; nmorph of them, by vertex) */
+    int nmorph;
+    float shut;                         /* the lids: 0 open .. 1 closed (imp_face, for imp_skin's blink morph) */
+    float jaw_gain;                     /* version 5: the jaw's angle times this (1; Umbrella Chronicles' made jaw less) */
     float talk;                         /* the jaw (degrees) from the player's voice, imp_face */
     unsigned int seed;                  /* (its own random numbers: the game's rand() stays the game's) */
     struct {   /* the player characters' cutscene models: the head part the scripts link to them (Claire's
@@ -771,6 +775,8 @@ static void unload(Disguise* d)
     memset(&d->w, 0, sizeof(d->w));
     d->rig.ok = 0;
     d->skin = NULL;
+    d->morph = NULL;
+    d->nmorph = 0;
     d->vtx = NULL;
     free(d->file);
     d->file = NULL;
@@ -1260,6 +1266,15 @@ static int load_import_model(Disguise* d, int k)
     d->skin = (const CvxmSkin*)(d->file + cv.skin);
     d->vtx = (float*)(d->keep + cv.vtx);
     d->nv = (int)cv.nv;
+    d->morph = cv.nmorph ? (const CvxmMorph*)(d->file + cv.morph) : NULL;   /* (Umbrella Chronicles' blink) */
+    d->nmorph = (int)cv.nmorph;
+    d->shut = 0;
+    d->jaw_gain = 1;
+    if (rd32(d->keep + 4) >= 5) {
+        float g;
+        memcpy(&g, d->keep + 52, 4);
+        if (g > 0 && g <= 2) d->jaw_gain = g;
+    }
     for (int k = 0; k < IMP_FACES - 1; k++)   /* (version 1: no face bones) */
         d->fbone[k] = rd32(d->keep + 4) >= 2 && d->keep[28 + k] < d->w.mdl[0].obj_num ? (signed char)d->keep[28 + k] : -1;
     d->blink = -1;
@@ -1321,7 +1336,8 @@ static void imp_face(Disguise* d, const BH_PWORK* src, int step)
     }
     if (getenv("RECVX_IMPORT_JAW")) jaw = (float)atof(getenv("RECVX_IMPORT_JAW"));   /* test aid: the jaw open this far (degrees) */
     if (getenv("RECVX_IMPORT_POSE") && step && d == &dg[ACTOR_DOUBLE] && jaw != 0) host_log("import: double's jaw %.1f frame %d\n", jaw, (int)gs_frame_count());   /* (test aid) */
-    jaw *= 3.14159265f / 180.0f;
+    jaw *= d->jaw_gain * 3.14159265f / 180.0f;
+    d->shut = shut;   /* (a model with a blink morph closes its eyes in imp_skin) */
     for (k = 0; k < 2; k++) {   /* the lid down along the head's up axis until its margin meets the bottom of the eye's
         opening (the crease above it and the brow stay) */
         int up = d->fbone[2 * k], c;
@@ -1347,16 +1363,21 @@ static void imp_skin(Disguise* d)
 {
     const O_WORK* ow = d->w.mlwP->owP;
     const float* m1 = ow[1].mtx;
-    int n = d->rig.n, i, j, c;
+    int n = d->rig.n, i, j, c, mi = 0;
     if (!d->skin || !d->rig.ok) return;
     for (i = 0; i < d->nv; i++) {
         const CvxmSkin* s = &d->skin[i];
-        float p[3] = { 0 }, q[3] = { 0 }, l[3], *o = d->vtx + 8 * i;
+        float p[3] = { 0 }, q[3] = { 0 }, l[3], b[3], *o = d->vtx + 8 * i;
+        for (c = 0; c < 3; c++) b[c] = s->pos[c];
+        if (mi < d->nmorph && d->morph[mi].v == (uint32_t)i) {   /* the blink morph: the bind position towards the closed lids */
+            for (c = 0; c < 3; c++) b[c] += d->shut * d->morph[mi].d[c];
+            mi++;
+        }
         for (j = 0; j < 4 && s->w[j] > 0; j++) {
             int k = s->node[j] < n ? s->node[j] : 1;
             const float* m = ow[k].mtx;
             float r[3];
-            for (c = 0; c < 3; c++) r[c] = s->pos[c] - d->rig.rest[k][c];
+            for (c = 0; c < 3; c++) r[c] = b[c] - d->rig.rest[k][c];
             for (c = 0; c < 3; c++) {   /* (row vectors: p * M) */
                 p[c] += s->w[j] * (r[0] * m[c] + r[1] * m[4 + c] + r[2] * m[8 + c] + m[12 + c]);
                 q[c] += s->w[j] * (s->nrm[0] * m[c] + s->nrm[1] * m[4 + c] + s->nrm[2] * m[8 + c]);

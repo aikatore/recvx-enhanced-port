@@ -4,7 +4,7 @@
  * pc_ui_dialog). Pages, each a list of rows:
  *   P_CATS   what can be imported: CHARACTERS, LANGUAGES (cats[], IMPORT_CAT_*)
  *   P_GAMES  the games a category reads (import_sources[] of that category)
- *   P_OPTS   one game: the groups (characters: Playable Characters, NPCs: IMPORT_OFFERED), the disc image (the system's
+ *   P_OPTS   one game: the groups (characters: Playable Characters, NPCs: the source's offered ones), the disc image (the system's
  *            file dialog, lobby_io.c; ini import_<key>_iso), START IMPORT, DELETE, and what is imported (languages:
  *            lang.h, docs/LANGUAGES.md)
  * States: IS_MENU the page; IS_WORK the extraction's thread (import_start: g_import_progress) with a bar; IS_RESULT a
@@ -42,6 +42,7 @@ void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, fl
 enum { BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000, BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_SELECT = 0x100 };
 enum { P_CATS, P_GAMES, P_OPTS, P_SAVES };
 enum { IS_MENU, IS_ASK, IS_WORK, IS_RESULT };
+#define OFFERED (import_sources[im.src].offered)   /* the groups the game offers (ImportSource.offered) */
 enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK, K_CARD, K_HEAD, K_SHOW };   /* K_SHOW: "Show in Model Lists" (actors.h g_import_hidden) */
 typedef struct { int kind, idx; } Row;
 
@@ -77,7 +78,7 @@ static struct {
     int open, state, page, row, sel;    /* sel: IS_ASK 0 Yes 1 No */
     int cat, src, what;                 /* the category, the game (import_sources[]), the groups to extract */
     int picking;                        /* the file dialog is open (lobby_io.c) */
-    int players, npcs, have;            /* what the game's manifest lists as playable (IMPORT_OFFERED groups); a manifest is there */
+    int players, npcs, have;            /* what the game's manifest lists as playable (its offered groups); a manifest is there */
     char when[64];
     char msg[320], say[192];
     int err, say_t, say_err;
@@ -143,8 +144,8 @@ static void build_rows(void)
             for (int i = 0; i < IMPORT_SOURCES; i++) if (import_sources[i].cat == im.cat) add(K_GAME, i);
         } else {
             if (langs() < 0) add(K_HEAD, 2);
-            if (langs() < 0 && (IMPORT_OFFERED & IMPORT_PLAYERS)) add(K_PLAYERS, 0);
-            if (langs() < 0 && (IMPORT_OFFERED & IMPORT_NPCS)) add(K_NPCS, 0);
+            if (langs() < 0 && (OFFERED & IMPORT_PLAYERS)) add(K_PLAYERS, 0);
+            if (langs() < 0 && (OFFERED & IMPORT_NPCS)) add(K_NPCS, 0);
             add(K_HEAD, 4);
             add(K_DISC, 0);
             add(K_START, 0);
@@ -158,8 +159,8 @@ static void build_rows(void)
     if (im.page == P_CATS) for (int i = 0; i < N_CATS; i++) add(K_CAT, i);
     else if (im.page == P_GAMES) { for (int i = 0; i < IMPORT_SOURCES; i++) if (import_sources[i].cat == im.cat) add(K_GAME, i); }
     else {
-        if (langs() < 0 && (IMPORT_OFFERED & IMPORT_PLAYERS)) add(K_PLAYERS, 0);
-        if (langs() < 0 && (IMPORT_OFFERED & IMPORT_NPCS)) add(K_NPCS, 0);
+        if (langs() < 0 && (OFFERED & IMPORT_PLAYERS)) add(K_PLAYERS, 0);
+        if (langs() < 0 && (OFFERED & IMPORT_NPCS)) add(K_NPCS, 0);
         add(K_DISC, 0);
         add(K_START, 0);
         add(K_DELETE, 0);
@@ -176,8 +177,8 @@ static void look(void)
     im.players = im.npcs = 0;
     for (int i = 0; i < n; i++) {
         if (!items[i].player) continue;
-        if (items[i].group == IMPORT_GROUP_PLAYERS && (IMPORT_OFFERED & IMPORT_PLAYERS)) im.players++;
-        if (items[i].group == IMPORT_GROUP_NPCS && (IMPORT_OFFERED & IMPORT_NPCS)) im.npcs++;
+        if (items[i].group == IMPORT_GROUP_PLAYERS && (OFFERED & IMPORT_PLAYERS)) im.players++;
+        if (items[i].group == IMPORT_GROUP_NPCS && (OFFERED & IMPORT_NPCS)) im.npcs++;
     }
     im.have = n > 0;
 }
@@ -230,7 +231,7 @@ static const char* row_why(const Row* r)
     case K_START:
         if (running()) return "An import is running.";
         if (!g_import.iso[im.src][0]) return "Choose the disc image first.";
-        if (langs() < 0 && !(im.what & IMPORT_OFFERED)) return "Turn on Playable Characters or NPCs first.";
+        if (langs() < 0 && !(im.what & OFFERED)) return OFFERED & IMPORT_NPCS ? "Turn on Playable Characters or NPCs first." : "Turn on Playable Characters first.";
         return NULL;
     case K_DELETE:
         if (running()) return "An import is running.";
@@ -265,9 +266,9 @@ static void toggle(const Row* r)
 
 static void start(void)
 {
-    if (!import_start(im.src, im.what & IMPORT_OFFERED)) { result("An import is already running.", 1); return; }
+    if (!import_start(im.src, im.what & OFFERED)) { result("An import is already running.", 1); return; }
     im.state = IS_WORK;
-    host_log("import menu: %s, groups %d, from %s\n", import_sources[im.src].key, im.what & IMPORT_OFFERED, g_import.iso[im.src]);
+    host_log("import menu: %s, groups %d, from %s\n", import_sources[im.src].key, im.what & OFFERED, g_import.iso[im.src]);
 }
 
 /* DELETE's Yes: the game's folder, then the list asked again (it only grows while the game runs: actors.h) */
@@ -319,6 +320,7 @@ static int activate(const Row* r)
     case K_DISC:
         if (why) { refuse(why); return 0; }
         snprintf(g_lobby_io.file, sizeof(g_lobby_io.file), "%s", g_import.iso[im.src]);
+        g_lobby_io.file_rvz = import_sources[im.src].ext != NULL;   /* (the dialog's filter: Wii RVZ images) */
         __atomic_store_n(&g_lobby_io.file_req, 1, __ATOMIC_RELEASE);   /* the main thread opens the dialog */
         im.picking = 1;
         CallSystemSe(0, 3);
@@ -428,7 +430,7 @@ static const char* row_help(const Row* r)
                                                                               : "Import from your own disc image of this game.";
     case K_PLAYERS: return "The playable characters and their costumes.";
     case K_NPCS: return "The other people of the game. Some have no names; they are listed by their file.";
-    case K_DISC: return "Choose your disc image (.iso) in a file dialog.";
+    case K_DISC: return import_sources[im.src].ext ? "Choose your disc image (.rvz, Dolphin's format) in a file dialog." : "Choose your disc image (.iso) in a file dialog.";
     case K_START: return langs() >= 0 ? "Import every language of the disc image. This takes a few seconds."
                                        : "Import the chosen groups from the disc image. This takes a few seconds to a minute.";
     case K_DELETE: return langs() >= 0 ? "Delete the imported languages from the mods folder." : "Delete the imported models of this game from the mods folder.";
@@ -502,7 +504,8 @@ static void draw_page(void)
         if (old) snprintf(t + strlen(t), sizeof(t) - strlen(t), " %s", tr("An older import: import again."));
         info_line(INFO_Y + 52, t, old ? 0xFFFFC060 : 0xFFFFFFFF);
     } else if (im.page == P_OPTS) {
-        snprintf(t, sizeof(t), tr("Needs a clean US disc image of %s: %s."), title_of(im.src), import_sources[im.src].serial);
+        if (import_sources[im.src].need) snprintf(t, sizeof(t), tr(import_sources[im.src].need), import_sources[im.src].serial);
+        else snprintf(t, sizeof(t), tr("Needs a clean US disc image of %s: %s."), title_of(im.src), import_sources[im.src].serial);
         pc_ui_text(ROW_X - 4, INFO_Y, tr("DISC"), SMALL_SC, 0xFFFFE080);
         info_line(INFO_Y + 16, t, 0xFFFFFFFF);
         pc_ui_text(ROW_X - 4, INFO_Y + 36, tr("IMPORTED"), SMALL_SC, 0xFFFFE080);
@@ -588,7 +591,7 @@ void import_menu_open(int mc, const char* root)
 {
     memset(&im, 0, sizeof(im));
     im.open = im.nm = 1;
-    im.what = IMPORT_OFFERED;
+    im.what = IMPORT_ALL;   /* (each game's offered groups, OFFERED) */
     snprintf(im.root, sizeof(im.root), "%s", root);
     nm_cat(mc - MC_IMPORT_CHARS);
     if (running()) { im.page = P_OPTS; im.state = IS_WORK; look(); }
@@ -762,7 +765,8 @@ static const char* nm_disc(int src, char* t, int n)
     if (langs() >= 0) {
         if (import_sources[src].need) snprintf(t, n, tr(import_sources[src].need), import_sources[src].serial);
         else snprintf(t, n, tr("Needs a clean European disc image of %s: %s."), "Resident Evil Code: Veronica X", import_sources[src].serial);
-    } else snprintf(t, n, tr("Needs a clean US disc image of %s: %s."), title_of(src), import_sources[src].serial);
+    } else if (import_sources[src].need) snprintf(t, n, tr(import_sources[src].need), import_sources[src].serial);
+    else snprintf(t, n, tr("Needs a clean US disc image of %s: %s."), title_of(src), import_sources[src].serial);
     im.src = keep;
     return t;
 }
@@ -858,7 +862,7 @@ int pc_import_menu(void)
     if (!im.open) {
         memset(&im, 0, sizeof(im));
         im.open = 1;
-        im.what = IMPORT_OFFERED;
+        im.what = IMPORT_ALL;   /* (each game's offered groups, OFFERED) */
         if (running()) { im.page = P_OPTS; im.state = IS_WORK; look(); }
         host_log("import menu: open\n");
     }

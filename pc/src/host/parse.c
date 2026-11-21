@@ -164,7 +164,7 @@ int pc_cvxm_check(const uint8_t* f, uint32_t n, PcCvxm* out, char* why, int wn)
     memset(out, 0, sizeof(*out));
     if (n < 64 || pc_rd32(f) != CVXM_MAGIC) return no(why, wn, "not a .cvxm file");
     ver = pc_rd32(f + 4);
-    if (ver < 1 || ver > 4 || pc_rd32(f + 8) != 60) return no(why, wn, "version %u is not known", ver);
+    if (ver < 1 || ver > 5 || pc_rd32(f + 8) != 60) return no(why, wn, "version %u is not known", ver);
     toff = pc_rd32(f + 12); soff = pc_rd32(f + 16); nv = pc_rd32(f + 20);
     /* the chunk list: one MLB, then the end */
     csz = pc_rd32(f + 60);
@@ -207,7 +207,8 @@ int pc_cvxm_check(const uint8_t* f, uint32_t n, PcCvxm* out, char* why, int wn)
                 if ((hdr + vl) % 16 || !pc_range_ok(vl, 64, len)) return no(why, wn, "object %u: bad vertex chunk", i);
                 v = b + vl;
                 cnt = pc_rd16(v + 6);
-                if (v[0] != 51 || pc_rd16(v + 4) || !cnt || 4 + 4 * (uint32_t)pc_rd16(v + 2) != 64 + 32 * cnt || !pc_range_ok(vl, 64 + 32 * cnt, len))
+                if (v[0] != 51 || pc_rd16(v + 4) || !cnt || cnt > PC_CVXM_VERTS || !pc_range_ok(vl, 64 + 32 * cnt, len) ||
+                    4 + 4 * (uint32_t)pc_rd16(v + 2) != (64 + 32 * cnt > 0x40000 ? 0x40000u : 64 + 32 * cnt))   /* (above 8189 vertices the size word holds 0xFFFF) */
                     return no(why, wn, "object %u: bad vertex chunk", i);
                 if (i == 1) vtx = 64 + hdr + vl + 64;
             }
@@ -235,6 +236,13 @@ int pc_cvxm_check(const uint8_t* f, uint32_t n, PcCvxm* out, char* why, int wn)
         q = a + sz;
     }
     if (!nv || soff % 4 || !pc_range_ok(soff, (uint64_t)nv * CVXM_SKIN, n)) return no(why, wn, "bad skin array (%u vertices)", nv);
+    if (ver >= 5 && pc_rd32(f + 48)) {   /* the blink's vertex offsets (16 bytes each), by vertex */
+        uint32_t mo = pc_rd32(f + 44), mn = pc_rd32(f + 48);
+        if (mo % 4 || mn > nv || !pc_range_ok(mo, (uint64_t)mn * 16, n)) return no(why, wn, "bad morph block");
+        for (uint32_t i = 0; i < mn; i++)
+            if (pc_rd32(f + mo + 16 * i) >= nv || (i && pc_rd32(f + mo + 16 * i) <= pc_rd32(f + mo + 16 * i - 16))) return no(why, wn, "bad morph block");
+        out->morph = mo; out->nmorph = mn;
+    }
     out->vtx = vtx; out->skin = soff; out->nv = nv; out->end = q + 8;
     return 1;
 }

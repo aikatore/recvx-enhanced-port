@@ -262,8 +262,10 @@ void  actor_hands_back(void);                 /* game.c, before bhControlPlayer:
    inside the PS2 address window: the whole image must end below 0x40000000 (ps2/memory.c). */
 #define PC_ARENA_EXTRA (64 << 20)
 /* The vertex work buffer above it (vwbmemp, njInit3D: 64-byte entries, one per vertex of the node
-   being drawn): 5120 entries fit on the PS2 although njInit3D is told 8192; the PC adds the rest. */
-#define PC_VERTEX_EXTRA ((8192 - 5120) * 64)
+   being drawn): 5120 entries fit on the PS2 although njInit3D is told 8192; the PC adds the rest and
+   takes 12288 (imported models of up to 12288 vertices: impmodel.h CVXM_VERTS; the game's own stay below 8192). */
+#define PC_VERTEX_ENTRIES 12288
+#define PC_VERTEX_EXTRA ((PC_VERTEX_ENTRIES - 5120) * 64)
 /* Ordering table of translucent/sorted primitives per frame (ps2_dummy.c Ps2AddOT): 8192 entries
    and a 1.75 MB packet buffer on the PS2 (a native-path entry takes 128 bytes of it), unchecked. */
 #define PC_OT_ENTRIES 32768
