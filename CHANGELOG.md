@@ -20,6 +20,9 @@
   and Steve's dust, also when arriving later in the fight.
 - In the over-the-shoulder camera, the effect of a shot hitting a wall now appears where the crosshair is, also at close
   walls and in front of shelves or stairs.
+- **Outbreak import**: Yoko's default outfit no longer shows a torn patch on the back, Cindy's skirt now moves with
+  her legs, and small texture glitches on other outfits (belts, badges, shoes) are gone. Import the characters again
+  to get the fixes.
 - With an imported language, shots hitting walls and some other effects no longer show boxes with letters or
   coloured squares instead of sparks, smoke or gas.
 
