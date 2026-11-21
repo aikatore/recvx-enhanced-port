@@ -22,6 +22,7 @@
 #include "../src/net/biorand_dl.h"
 #include "../src/host/menu_layout.h"
 #include "../src/host/bindings.h"
+#include "../src/host/actors.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -41,7 +42,7 @@ void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, fl
 enum { BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000, BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_SELECT = 0x100 };
 enum { P_CATS, P_GAMES, P_OPTS, P_SAVES };
 enum { IS_MENU, IS_ASK, IS_WORK, IS_RESULT };
-enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK, K_CARD, K_HEAD };
+enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK, K_CARD, K_HEAD, K_SHOW };   /* K_SHOW: "Show in Model Lists" (actors.h g_import_hidden) */
 typedef struct { int kind, idx; } Row;
 
 /* the categories (IMPORT_CAT_*) */
@@ -121,6 +122,17 @@ static const char* lang_list(char* t, int n, int* old)
     return t;
 }
 
+/* "Show in Model Lists": a character source with models listed (or hidden); without, the page is as before */
+static int shown_src(void) { return !((g_import_hidden >> im.src) & 1); }
+static int show_row(void) { return langs() < 0 && (((actor_import_sources() | g_import_hidden) >> im.src) & 1); }
+static void show_toggle(void)
+{
+    g_import_hidden ^= 1u << im.src;
+    settings_save_later();
+    CallSystemSe(0, 2);
+    host_log("import menu: %s models %s in the model lists\n", import_sources[im.src].key, shown_src() ? "shown" : "hidden");
+}
+
 static void build_rows(void)
 {
     nrows = 0;
@@ -137,6 +149,7 @@ static void build_rows(void)
             add(K_DISC, 0);
             add(K_START, 0);
             add(K_DELETE, 0);
+            if (show_row()) { add(K_HEAD, 5); add(K_SHOW, 0); }
         }
         if (im.row >= nrows) im.row = nrows - 1;
         while (im.row < nrows - 1 && rows[im.row].kind == K_HEAD) im.row++;
@@ -150,6 +163,7 @@ static void build_rows(void)
         add(K_DISC, 0);
         add(K_START, 0);
         add(K_DELETE, 0);
+        if (show_row()) add(K_SHOW, 0);
     }
     add(K_BACK, 0);
     if (im.row >= nrows) im.row = nrows - 1;
@@ -301,6 +315,7 @@ static int activate(const Row* r)
     case K_CAT: CallSystemSe(0, 3); im.cat = r->idx; set_page(P_GAMES); return 0;   /* (cats[] in IMPORT_CAT_* order) */
     case K_GAME: CallSystemSe(0, 3); im.src = r->idx; set_page(P_OPTS); return 0;
     case K_PLAYERS: case K_NPCS: toggle(r); return 0;
+    case K_SHOW: show_toggle(); return 0;
     case K_DISC:
         if (why) { refuse(why); return 0; }
         snprintf(g_lobby_io.file, sizeof(g_lobby_io.file), "%s", g_import.iso[im.src]);
@@ -372,6 +387,7 @@ static int input(void)
         r = &rows[im.row];
         if (m->left && hit >= 0) {
             if ((r->kind == K_PLAYERS || r->kind == K_NPCS) && m->x >= VAL_X - 10) { toggle(r); return 0; }
+            if (r->kind == K_SHOW) { show_toggle(); return 0; }
             return activate(r);
         }
         if (m->right || (press & cancel)) {
@@ -382,6 +398,7 @@ static int input(void)
         if (rept & BTN_UP) { im.row = (im.row + nrows - 1) % nrows; im.say_t = 0; CallSystemSe(0, 2); }
         else if (rept & BTN_DOWN) { im.row = (im.row + 1) % nrows; im.say_t = 0; CallSystemSe(0, 2); }
         else if ((rept & (BTN_LEFT | BTN_RIGHT)) && (r->kind == K_PLAYERS || r->kind == K_NPCS)) toggle(r);
+        else if ((rept & (BTN_LEFT | BTN_RIGHT)) && r->kind == K_SHOW) show_toggle();
         else if (press & ok) return activate(r);
         return 0;
     }
@@ -415,6 +432,7 @@ static const char* row_help(const Row* r)
     case K_START: return langs() >= 0 ? "Import every language of the disc image. This takes a few seconds."
                                        : "Import the chosen groups from the disc image. This takes a few seconds to a minute.";
     case K_DELETE: return langs() >= 0 ? "Delete the imported languages from the mods folder." : "Delete the imported models of this game from the mods folder.";
+    case K_SHOW: return "Off: this game's models leave every model list and random pool, without deleting them. A look you already use stays until you change it.";
     default: return im.page == P_CATS ? "Back to the title menu (also cancel or a right click)." : "Back (also cancel or a right click).";
     }
 }
@@ -426,7 +444,7 @@ static void draw_row(int i)
     float y = row_y(i);
     unsigned int col = !live ? (sel ? 0xFF909090 : 0xFF686868) : sel ? 0xFFFFFFFF : 0xFFB0B0B0;
     static const char* const names[] = { "", "", "Playable Characters", "NPCs", "Disc Image", "START IMPORT", "DELETE IMPORTED MODELS", "BACK" };
-    const char* label = r->kind == K_DELETE && langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : names[r->kind];
+    const char* label = r->kind == K_DELETE && langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : r->kind <= K_BACK ? names[r->kind] : "";
     const char* v = NULL;
     if (sel) pc_ui_rect(ROW_X - 8, y - 3, 600, y + ROW_H - 4, 0x50FFFFFF, Z_ROW);
     switch (r->kind) {
@@ -435,6 +453,7 @@ static void draw_row(int i)
     case K_PLAYERS: v = (im.what & IMPORT_PLAYERS) ? "On" : "Off"; break;
     case K_NPCS: v = (im.what & IMPORT_NPCS) ? "On" : "Off"; break;
     case K_DISC: v = disc_name(); break;
+    case K_SHOW: v = shown_src() ? "On" : "Off"; label = "Show in Model Lists"; break;
     }
     pc_ui_text(ROW_X, y, tr(label), ROW_SC, col);
     if (r->kind == K_DISC) {   /* the file's name, its end cut when it is long */
@@ -641,6 +660,7 @@ static int nm_input(int port)
     if (m->left && hit >= 0) {
         const Row* r = &rows[hit];
         if ((r->kind == K_PLAYERS || r->kind == K_NPCS) && mx >= N_VALUE - 16) { toggle(r); return 0; }
+        if (r->kind == K_SHOW) { show_toggle(); return 0; }
         return r->kind == K_CARD ? (CallSystemSe(0, 3), card(), 0) : activate(r);
     }
     if (m->right || esc_edge || (press & cancel)) return nm_back();
@@ -648,6 +668,7 @@ static int nm_input(int port)
     if (rept & BTN_UP) nm_move(-1);
     else if (rept & BTN_DOWN) nm_move(1);
     else if ((rept & (BTN_LEFT | BTN_RIGHT)) && (rows[im.row].kind == K_PLAYERS || rows[im.row].kind == K_NPCS)) toggle(&rows[im.row]);
+    else if ((rept & (BTN_LEFT | BTN_RIGHT)) && rows[im.row].kind == K_SHOW) show_toggle();
     else if (press & ok) {
         if (rows[im.row].kind == K_CARD) { CallSystemSe(0, 3); card(); return 0; }
         return activate(&rows[im.row]);
@@ -663,7 +684,7 @@ static void nm_text(float x, float y, const char* s, float sc, float w, unsigned
 
 static void nm_row(int i)
 {
-    static const char* const heads[] = { "GAMES", "EDITIONS OF THIS GAME", "WHAT TO IMPORT", "MEMORY CARD", "YOUR DISC" };
+    static const char* const heads[] = { "GAMES", "EDITIONS OF THIS GAME", "WHAT TO IMPORT", "MEMORY CARD", "YOUR DISC", "MODEL LISTS" };
     const Row* r = &rows[i];
     int sel = i == im.row, live = !row_why(r);
     float y = nm_y(i);
@@ -677,10 +698,11 @@ static void nm_row(int i)
         if (import_present(r->idx)) nm_text(N_VALUE, y, tr("Imported"), 0.55f, 104, col);
         nm_arrow(N_X1 - 6, y + 9, 1, col);
         return;
-    case K_PLAYERS: case K_NPCS: {
-        const char* s = tr((im.what & (r->kind == K_PLAYERS ? IMPORT_PLAYERS : IMPORT_NPCS)) ? "On" : "Off");
+    case K_PLAYERS: case K_NPCS: case K_SHOW: {
+        int on = r->kind == K_SHOW ? shown_src() : im.what & (r->kind == K_PLAYERS ? IMPORT_PLAYERS : IMPORT_NPCS);
+        const char* s = tr(on ? "On" : "Off");
         float w = pc_ui_text_w(s, 0.55f);
-        nm_text(N_LABEL, y, tr(r->kind == K_PLAYERS ? "Playable Characters" : "NPCs"), 0.55f, N_VALUE - N_LABEL - 16, col);
+        nm_text(N_LABEL, y, tr(r->kind == K_SHOW ? "Show in Model Lists" : r->kind == K_PLAYERS ? "Playable Characters" : "NPCs"), 0.55f, N_VALUE - N_LABEL - 16, col);
         if (live) { nm_arrow(N_VALUE - 12, y + 9, -1, col); nm_arrow(N_VALUE + w + 13, y + 9, 1, col); }
         nm_t(N_VALUE, y, s, 0.55f, col);
         return;
@@ -777,8 +799,8 @@ static void nm_draw(void)
         switch (r->kind) {
         case K_GAME: nm_text(20, N_HELP - 2, title_of(r->idx), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_CARD: nm_text(20, N_HELP - 2, tr("Import Memory Card Saves"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
-        case K_PLAYERS: case K_NPCS: case K_DISC:
-            nm_text(20, N_HELP - 2, tr(r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_NPCS ? "NPCs" : "Disc Image"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
+        case K_PLAYERS: case K_NPCS: case K_DISC: case K_SHOW:
+            nm_text(20, N_HELP - 2, tr(r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_NPCS ? "NPCs" : r->kind == K_SHOW ? "Show in Model Lists" : "Disc Image"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_START: nm_text(20, N_HELP - 2, tr("START IMPORT"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_DELETE: nm_text(20, N_HELP - 2, tr(langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : "DELETE IMPORTED MODELS"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         }

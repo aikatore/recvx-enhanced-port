@@ -72,6 +72,15 @@ int cast_role(int c, int ply, int pending, int partner)
 
 static int listed(void) { return __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE); }   /* (the main thread appends) */
 static int imports_n(int imports) { return imports > 0 && imports <= listed() ? imports : 0; }
+/* a hidden source's models out of a pool (actors.h g_import_hidden; after "Custom"'s bits, which keep their positions) */
+static int hidden_import(int m) { return m >= ACTOR_MODELS && m < ACTOR_PART && !actor_import_shown(m - ACTOR_MODELS); }
+static int drop_hidden(int* out, int n)
+{
+    int i, k;
+    if (!g_import_hidden) return n;
+    for (i = k = 0; i < n; i++) if (!hidden_import(out[i])) out[k++] = out[i];
+    return k;
+}
 
 /* a zombie look (the zombies' 27 looks, the scripted ones too; not the anatomist): in "All models" they are one entry,
    else they were most of the pool and most characters became zombies */
@@ -161,7 +170,7 @@ int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
         for (i = k = 0; i < n; i++) if (!cast_off_at(off, i)) out[k++] = out[i];
         n = k;
     }
-    return n;
+    return drop_hidden(out, n);
 }
 
 /* the story character or creature a model shows (a pick of the same one is no change), -1 */
@@ -269,7 +278,7 @@ static int appear_pool(int all, int imports, int* out, const unsigned char* off)
         for (i = k = 0; i < n; i++) if (!cast_off_at(off, i)) out[k++] = out[i];
         n = k;
     }
-    return n;
+    return drop_hidden(out, n);
 }
 
 int cast_appear_pick(unsigned seed, int all, int imports, const unsigned char* off, int c)
@@ -307,7 +316,7 @@ int cast_custom_list(int list, int imports, short* pos, int* model, int max)
             if (j == nb || (list == 2 && j < mon ? 0 : 2 - is_cine(m)) != pass) continue;
             pos[n] = (short)j; model[n++] = m;
         }
-    for (k = 0; k < imps(list, imports) && n < max; k++) { pos[n] = (short)(nb + k); model[n++] = ACTOR_MODELS + k; }
+    for (k = 0; k < imps(list, imports) && n < max; k++) if (actor_import_shown(k)) { pos[n] = (short)(nb + k); model[n++] = ACTOR_MODELS + k; }
     return n;
 }
 
@@ -363,24 +372,26 @@ void cast_enemy_default(unsigned char* eoff)
 
 int cast_custom_count(int list, const unsigned char* off, int imports, int* total)
 {
-    int b[BUILTIN_MAX], n = builtins(b, list) + imps(list, imports), j, on = 0;
-    for (j = 0; j < n; j++) on += !cast_off_at(off, j);
-    if (total) *total = n;
+    int b[BUILTIN_MAX], nb = builtins(b, list), n = nb + imps(list, imports), j, on = 0, shown = 0;
+    for (j = 0; j < n; j++) if (j < nb || actor_import_shown(j - nb)) { shown++; on += !cast_off_at(off, j); }   /* (a hidden source's: not counted) */
+    if (total) *total = shown;
     return on;
 }
 
 unsigned cast_import_id(void)
 {
     static int last = -1;
-    static unsigned id;
+    static unsigned id, last_hidden;
     unsigned h = 2166136261u;
     int n = listed();
-    if (n == last) return id;   /* (append-only: the count names the list) */
+    if (n == last && g_import_hidden == last_hidden) return id;   /* (append-only: the count names the list) */
     last = n;
+    last_hidden = g_import_hidden;
     if (!n) return id = 0;
-    for (int k = 0; k < n; k++) {
+    for (int k = 0; k < n; k++) {   /* (with whether its source is hidden: in co-op the cast takes imports only while both
+                                       sides list and show the same, so both pools are the same; else neither takes any) */
         for (const char* s = actor_imports[k].name; s && *s; s++) h = (h ^ (unsigned char)*s) * 16777619u;
-        h = (h ^ (0x100u | actor_import_group[k])) * 16777619u;
+        h = (h ^ (0x100u | actor_import_group[k] | (actor_import_shown(k) ? 0 : 0x200u))) * 16777619u;
     }
     return id = h ? h : 1;
 }

@@ -93,10 +93,54 @@ _Static_assert(ACTOR_MODELS + ACTOR_IMPORT_MAX <= ACTOR_PART, "ACTOR_PART");
 ActorModel actor_imports[ACTOR_IMPORT_MAX];
 const char* actor_import_file[ACTOR_IMPORT_MAX];
 unsigned char actor_import_group[ACTOR_IMPORT_MAX];
+unsigned char actor_import_src[ACTOR_IMPORT_MAX];
 int actor_import_n;
+unsigned g_import_hidden;
+int (*appear_in_use)(int chr);
 
 static int imports(void) { return __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE); }
 static int import_of(int chr) { int k = chr - COOP_CHR_IMPORT; return k >= 0 && k < imports() ? k : -1; }   /* -1: not an import */
+
+int actor_import_shown(int k) { return !((g_import_hidden >> (actor_import_src[k] & 31)) & 1); }
+
+unsigned actor_import_sources(void)
+{
+    unsigned m = 0;
+    for (int k = 0, n = imports(); k < n; k++) m |= 1u << (actor_import_src[k] & 31);
+    return m;
+}
+
+void appear_sources_toggle(void)
+{
+    static unsigned before;   /* (the sources hidden before the toggle hid them all) */
+    unsigned have = actor_import_sources();
+    if (have & ~g_import_hidden) { before = g_import_hidden; g_import_hidden |= have; }
+    else g_import_hidden = have & ~before ? before : g_import_hidden & ~have;
+}
+
+/* import k is in the lists: its source shown, or the look in use */
+static int listed_import(int k) { return actor_import_shown(k) || (appear_in_use && appear_in_use(COOP_CHR_IMPORT + k)); }
+static int listed_imports(void)
+{
+    int n = imports(), c = 0;
+    if (!g_import_hidden) return n;
+    for (int k = 0; k < n; k++) c += listed_import(k);
+    return c;
+}
+static int listed_import_at(int i)   /* the i-th listed import, -1 */
+{
+    int n = imports();
+    if (!g_import_hidden) return i >= 0 && i < n ? i : -1;
+    for (int k = 0; k < n && i >= 0; k++) if (listed_import(k) && i-- == 0) return k;
+    return -1;
+}
+static int listed_import_pos(int k)   /* among the listed ones (one not listed: the next listed one's place) */
+{
+    int c = 0;
+    if (!g_import_hidden) return k;
+    for (int j = 0; j < k; j++) c += listed_import(j);
+    return c;
+}
 
 const ActorModel* actor_model(int idx)
 {
@@ -206,7 +250,7 @@ int appear_count(void)
 {
     int n = 1;
     for (int c = 0; c <= COOP_CHR_MAX; c++) n += appear_canon(c) == c;
-    return n + imports();
+    return n + listed_imports();
 }
 
 int appear_at(int i)
@@ -216,8 +260,8 @@ int appear_at(int i)
     for (int c = 0; c <= COOP_CHR_MAX; c++)
         if (head(c) && i-- == 0) return c;
     if (i >= 0 && i < TAILS) return tail[i];
-    i -= TAILS;
-    return i >= 0 && i < imports() ? COOP_CHR_IMPORT + i : 0;
+    i = listed_import_at(i - TAILS);
+    return i >= 0 ? COOP_CHR_IMPORT + i : 0;
 }
 
 int appear_pos(int chr)
@@ -225,8 +269,9 @@ int appear_pos(int chr)
     int n = 0, t = tail_at(chr = appear_canon(chr)), k = import_of(chr);
     if (chr == COOP_CHR_CINE) return 1;
     for (int c = 0; c < (t >= 0 || k >= 0 ? COOP_CHR_MAX + 1 : chr); c++) n += head(c);
-    n += (t >= 0 ? t : 0) + (k >= 0 ? TAILS + k : 0);
-    return n + (n > 0);   /* (everything but "As played" after "As played (cutscene)") */
+    n += (t >= 0 ? t : 0) + (k >= 0 ? TAILS + listed_import_pos(k) : 0);
+    n += n > 0;   /* (everything but "As played" after "As played (cutscene)") */
+    return k >= 0 && n >= appear_count() ? appear_count() - 1 : n;   /* (a hidden one past the last listed: the last) */
 }
 
 int appear_step(int chr, int dir)
@@ -241,7 +286,7 @@ const char* appear_group(int chr)
 {
     static const char* const imp[4] = { "Outbreak Characters", "Outbreak Cutscenes", "Outbreak Supporting Cast", "Outbreak Enemies" };
     int k = import_of(chr), id;
-    if (k >= 0) return imp[actor_import_group[k] & 3];
+    if (k >= 0) return actor_import_shown(k) ? imp[actor_import_group[k] & 3] : "Hidden Source (Still in Use)";
     chr = appear_canon(chr);
     if (chr < COOP_CHR_ACTOR || chr == COOP_CHR_CINE) return "Code: Veronica Characters";
     if (tail_at(chr) >= 0) return "Code: Veronica Cutscenes";

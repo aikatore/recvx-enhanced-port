@@ -25,7 +25,7 @@ void pc_ui_text(float x, float y, const char* s, float sc, unsigned int argb);
 float pc_ui_text_w(const char* s, float sc);
 void pc_ui_rect(float x0, float y0, float x1, float y1, unsigned int argb, float z);
 
-enum { BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };   /* Pad[] bits */
+enum { BTN_L1 = 0x4, BTN_R1 = 0x8, BTN_TRI = 0x10, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000, BTN_LEFT = 0x8000 };   /* Pad[] bits */
 #define Z 0.3f
 #define BAR 7.0f                        /* the scroll bar's width, at the right edge */
 #define GAP 6.0f
@@ -135,6 +135,15 @@ int cast_list_input(const MouseTake* m, unsigned int press, unsigned int rept, u
     if (hit >= 0 && (m->moved || m->left || m->wheel) && hit != cl.cur) { cl.cur = hit; CallSystemSe(0, 2); }
     if (m->left && hit >= 0) return act(hit);
     if (m->right || (press & cancel)) { CallSystemSe(0, 0); return 1; }
+    if ((press & BTN_TRI) && imports() && actor_import_sources()) {   /* the imported models out of the list or back (actors.h) */
+        appear_sources_toggle();
+        settings_save_later();
+        CallSystemSe(0, 3);
+        refresh();
+        if (cl.cur > C_LIST + cl.n) cl.cur = C_LIST + cl.n;
+        scroll(0);
+        return 0;
+    }
     if (rept & BTN_UP) to(cl.cur == C_LIST ? C_ALL : cl.cur - 1 - (cl.cur == C_NONE), 1);   /* (SELECT ALL and DESELECT ALL: one row) */
     else if (rept & BTN_DOWN) to(cl.cur < C_LIST ? C_LIST : cl.cur + 1, 1);
     else if ((rept & (BTN_LEFT | BTN_RIGHT)) && cl.cur < C_LIST) { cl.cur ^= 1; CallSystemSe(0, 2); }
@@ -204,6 +213,8 @@ const char* cast_list_help(void)
                                               : "Uncheck every model. With none checked, the characters keep their own looks.";
     if (cl.cur >= C_LIST + cl.n) return "Back. Your choices are saved.";
     if (cl.list == 2) return "Monsters seen only in cutscenes appear only as the enemies you check. Confirm or click: check or uncheck.";
+    if (imports() && actor_import_sources())
+        return "Characters appear only as the models you check. Confirm or click: check or uncheck. Triangle: hide or show the imported models.";
     return "Characters appear only as the models you check. Confirm or click: check or uncheck. Scroll with L1/R1 or the wheel.";
 }
 

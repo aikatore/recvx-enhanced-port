@@ -1122,6 +1122,10 @@ static void import_window(void)
         if (ImGui::Button(tr("Import Characters"))) import_start(s, what[s]);
         ImGui::EndDisabled();
         ImGui::EndDisabled();
+        if (((actor_import_sources() | g_import_hidden) >> s) & 1) {   /* (actors.h; IMPORT > CHARACTERS has it too) */
+            bool shown = !((g_import_hidden >> s) & 1);
+            if (ImGui::Checkbox(tr("Show in Model Lists"), &shown)) { g_import_hidden ^= 1u << s; settings_save_later(); }
+        }
         if (running || pg->total) {
             char ov[64];
             SDL_snprintf(ov, sizeof(ov), "%d / %d", pg->done, pg->total);

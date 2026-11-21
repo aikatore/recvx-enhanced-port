@@ -185,6 +185,7 @@ void import_registry_load(void)
             if (!f || !nm) { SDL_free(f); SDL_free(nm); full++; continue; }
             actor_import_file[k] = f;
             actor_import_group[k] = (unsigned char)(items[i].group >= 0 ? items[i].group : 0);
+            actor_import_src[k] = (unsigned char)src;
             actor_imports[k] = (ActorModel){ .name = nm, .anim = items[i].female ? ANIM_FEMALE : ANIM_MALE };
             k++;
         }

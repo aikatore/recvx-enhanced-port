@@ -1686,7 +1686,8 @@ floor or trigger, "Yes" chosen, an item used) hold only where the player did it.
   nothing per record is sent (it is only drawn: the records, their slots and snapshots are untouched). A side that runs
   out of display slots or texture memory shows that record as itself, only on its own screen.
 * **Imported models** in the cast: each side sends the identity of its imported models list in
-  `PoseExt.imp_id` (`cast_import_id`: a hash of the names and groups in list order, 0 none). With the
+  `PoseExt.imp_id` (`cast_import_id`: a hash of the names and groups in list order, and of which ones a hidden
+  source's are, [IMPORT_OUTBREAK.md](IMPORT_OUTBREAK.md) "Show in Model Lists"; 0 none). With the
   host's IMPORTED MODELS on, each side uses them only while the partner's `imp_id` equals its own (the
   same models in the same order, so the same picks); otherwise both pick from the built-in models
   alone, and nobody sees a model the other lacks. A game without a partner yet (the host before the

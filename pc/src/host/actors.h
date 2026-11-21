@@ -34,7 +34,18 @@ extern const ActorModel actor_models[];
 extern ActorModel actor_imports[ACTOR_IMPORT_MAX];
 extern const char* actor_import_file[ACTOR_IMPORT_MAX];   /* its .cvxm */
 extern unsigned char actor_import_group[ACTOR_IMPORT_MAX];   /* IMPORT_GROUP_* (import.h) */
+extern unsigned char actor_import_src[ACTOR_IMPORT_MAX];     /* the source it came from (import.h IMPORT_*, import_sources[]) */
 extern int actor_import_n;
+/* "Show in Model Lists" (IMPORT > CHARACTERS > a game; ini import_<key>_shown = 0): bit 1 << source hidden. A hidden
+   source's models leave every model list (appear_*, the cast's "Custom" lists) and every random pool (cast.c); no file
+   is deleted. A look already chosen stays in use and listed (appear_in_use) until it is changed. */
+extern unsigned g_import_hidden;
+int actor_import_shown(int k);        /* import k's source is not hidden */
+unsigned actor_import_sources(void);  /* bit 1 << source of every source with a listed model */
+void appear_sources_toggle(void);     /* the lists' quick toggle: hide every source if one shows, else the ones shown before */
+/* a look in use (settings.c: Your Look, Claire's, Chris's, a random look of this game): kept listed though its source is
+   hidden. NULL: none (tests) */
+extern int (*appear_in_use)(int chr);
 const ActorModel* actor_model(int idx);   /* catalogue entry or import idx, NULL if none */
 
 /* "Use gender-matched animations" (ini appear_gender_anim, default 1): a model of the other sex

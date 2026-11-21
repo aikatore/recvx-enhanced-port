@@ -590,6 +590,20 @@ one page back, from the first to EXTRA.
   any unreadable file (`actor_set` remembers the failure). Importing again brings the files back under the same
   entries. A restart lists only what is there.
 - Both use the same thread, one extraction at a time.
+- **Show in Model Lists** (heading MODEL LISTS on the game's page; F9 has the same checkbox; ini
+  `import_<key>_shown = 0`, written only while hidden, any character source of `import_sources[]`): Off takes the
+  game's models out of every model list (the look picker, Your Look / Claire's / Chris's, F3, the cast's and the
+  random look's "Custom" lists) and out of every random pool (the random look, the cutscene cast with Include
+  Imported Models), without deleting a file. The row shows only when the game has models listed (or is hidden), so a
+  page without imports is as before. The look picker and the "Custom" lists have a quick toggle on Triangle ("Hide
+  Imported Models" / "Show Imported Models" in the new look picker's button bar): every source with models hidden,
+  then the ones shown before back. Decided: a look already chosen from a hidden game (Your Look, Claire's, Chris's,
+  this game's random looks: `actors.h appear_in_use`) stays in use and listed, under the group "Hidden Source (Still
+  in Use)", until it is changed; a "Custom" list keeps the hidden models' checks for when they show again. Co-op:
+  the hidden sources are each side's own for its lists; `cast_import_id` (`PoseExt.imp_id`) includes which
+  imported models are hidden, so the cast takes imports only while both sides list and show the same ones (else
+  neither does), and the cast's plan key (cast_glue.c) changes with it. Each import remembers its source
+  (`actor_import_src`), so a future importer only adds its `import_sources[]` entry.
 
 Tests (2026-10-28, Linux, headless; job dir `extramenu/imp.sh`): EXTRA > IMPORT > CHARACTERS > the game, the disc
 through the test aid, START IMPORT with both groups: 306 models, 0 failed, "30 playable characters and 238 NPCs can be

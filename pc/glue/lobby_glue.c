@@ -1700,6 +1700,21 @@ static void pick_take(void)
     CallSystemSe(0, 3);
 }
 
+/* Triangle: the imported models out of the list or back (actors.h appear_sources_toggle; IMPORT > CHARACTERS has a game's
+   own "Show in Model Lists"), the cursor kept on its model (a hidden one: the next listed) */
+static int pick_hides(void) { return (actor_import_sources() & ~g_import_hidden) != 0; }   /* the toggle hides (else shows) */
+static void pick_sources(void)
+{
+    int n = appear_count(), chr = lb.pick < n ? appear_at(lb.pick) : -1;
+    appear_sources_toggle();
+    settings_save_later();
+    CallSystemSe(0, 3);
+    lb.pick = chr >= 0 ? appear_pos(chr) : appear_count();
+    lb.top = lb.pick - pick_rows() / 2;
+    pick_scroll(0);
+    host_log("lobby: model page: imported models %s (%d models)\n", pick_hides() ? "shown" : "hidden", appear_count());
+}
+
 /* the position under the pointer (appear_count(): BACK), -1 none */
 static int pick_at(float x, float y)
 {
@@ -1732,6 +1747,7 @@ static void pick_input(unsigned int press, unsigned int rept, unsigned int ok, u
     if (hit >= 0 && (mt.moved || mt.left || mt.wheel) && hit != lb.pick) { lb.pick = hit; CallSystemSe(0, 2); }
     if (mt.left && hit >= 0) { pick_take(); return; }
     if (mt.right) { back(); return; }
+    if ((press & 0x10) && actor_import_sources()) { pick_sources(); return; }   /* (Triangle) */
     if (rept & BTN_UP) pick_to(lb.pick - 1, 1);
     else if (rept & BTN_DOWN) pick_to(lb.pick + 1, 1);
     else if (rept & (BTN_L1 | BTN_LEFT)) pick_to(lb.pick - page, 0);
@@ -2086,7 +2102,8 @@ static void mp_frame_new(void)
     rect(20, 452, 620, 453, 0x80FFFFFF, Z_FRONT);
     x = ui_hint(20, 458, ui_glyph(UG_OK, g, sizeof(g)), "Use This Look", 0);
     x = ui_hint(x, 458, ui_glyph(UG_BACK, g, sizeof(g)), "Back", 0);
-    ui_hint(x, 458, ui_glyph(UG_CAT, g, sizeof(g)), "Page", 0);
+    x = ui_hint(x, 458, ui_glyph(UG_CAT, g, sizeof(g)), "Page", 0);
+    if (actor_import_sources()) ui_hint(x, 458, ui_glyph(UG_TRI, g, sizeof(g)), pick_hides() ? "Hide Imported Models" : "Show Imported Models", 0);
     AdvEasySetTextureList(0);
 }
 

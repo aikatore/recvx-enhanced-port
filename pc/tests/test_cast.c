@@ -364,6 +364,22 @@ int main(void)
         CHECK(seen);
         for (s = 0; s < 40; s++)
             for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL) < ACTOR_MODELS);
+        /* a hidden source (actors.h g_import_hidden): out of every pool and "Custom" list, the pool's identity changes */
+        actor_import_src[1] = 1;
+        g_import_hidden = 2;
+        CHECK(cast_import_id() != id && cast_pool(0, 2, p, 16, NULL) == nc + 1 && p[nc] == ACTOR_MODELS);
+        for (s = 0; s < 40; s++) {
+            for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 2, NULL, CAST_ENEMY_SAME, NULL) != ACTOR_MODELS + 1);
+            for (c = 0; c < 3; c++) CHECK(cast_appear_pick((unsigned)s, 1, 2, NULL, c) != COOP_CHR_IMPORT + 1);
+        }
+        {
+            short pos[128];
+            int mdl[128], nl = cast_custom_list(0, 2, pos, mdl, 128), tot;
+            CHECK(mdl[nl - 1] == ACTOR_MODELS && cast_custom_count(0, cast_off, 2, &tot) == tot && tot == nl);
+        }
+        g_import_hidden = 0;
+        actor_import_src[1] = 0;
+        CHECK(cast_import_id() == id);
         actor_imports[2] = (ActorModel){ .name = "Jim", .anim = ANIM_MALE };
         actor_import_n = 3;
         CHECK(cast_import_id() != id);

@@ -13,6 +13,7 @@
 #include "../net/biorand_dl.h"
 #include "../net/update.h"
 #include "biorand_opts.h"
+#include "biorand.h"
 #include "../import/import.h"
 #include "lang.h"
 #include "weapons.h"
@@ -20,6 +21,7 @@
 #include "changelog.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int cast_custom_set;   /* 1: the cutscene cast's "Custom" list is its cast_custom_off lines (0: cast_default) */
@@ -204,13 +206,20 @@ static char* trim(char* s)
 
 static char ini_hd_dir[1024];
 
-/* "import_<key>_iso = <path>" (import.h): 1 if it is one */
+/* "import_<key>_iso = <path>" (import.h), "import_<key>_shown = 0|1" (actors.h g_import_hidden): 1 if it is one */
 static int import_iso_line(const char* line)
 {
     for (int s = 0; s < IMPORT_SOURCES; s++) {
         size_t n = strlen(import_sources[s].key);
         const char* v = line + 7 + n;
-        if (strncmp(line + 7, import_sources[s].key, n) || strncmp(v, "_iso", 4)) continue;
+        if (strncmp(line + 7, import_sources[s].key, n)) continue;
+        if (!strncmp(v, "_shown", 6)) {
+            for (v += 6; *v == ' '; v++) {}
+            if (*v++ != '=') return 0;
+            if (atoi(v)) g_import_hidden &= ~(1u << s); else g_import_hidden |= 1u << s;
+            return 1;
+        }
+        if (strncmp(v, "_iso", 4)) continue;
         for (v += 4; *v == ' '; v++) {}
         if (*v++ != '=') return 0;
         while (*v == ' ') v++;
@@ -222,12 +231,21 @@ static int import_iso_line(const char* line)
 
 static void path(char* out, size_t n) { SDL_snprintf(out, n, "%s/recvx.ini", g_config.save_dir); }
 
+/* a look in use stays listed while its source is hidden (actors.h appear_in_use): Your Look, Claire's, Chris's, this game's random looks */
+static int look_in_use(int chr)
+{
+    if (chr == g_coop.chr || chr == g_appear_own[0] || chr == g_appear_own[1]) return 1;
+    for (int p = 0; p < 3; p++) if (pc_biorand_appear(p) == chr) return 1;
+    return 0;
+}
+
 void config_load(void)
 {
     char p[1100], line[1100], k[64], val[128];
     int v;
     int combined_seen = 0, server_seen = 0, had_off = 0, migrate, enemy = g_enemy_opts.cast_enemy;
     FILE* f;
+    appear_in_use = look_in_use;
     path(p, sizeof(p));
     if (!(f = pc_fopen(p, "r"))) {   /* first start: the defaults (player_id saves them) */
         import_registry_load();
@@ -342,6 +360,7 @@ static int write_ini(FILE* f, void* ud)
     if (ini_hd_dir[0]) fprintf(f, "hd_textures_dir = %s\n", ini_hd_dir);   /* not --hd-textures */
     if (g_import.dir[0]) fprintf(f, "import_dir = %s\n", g_import.dir);
     for (int s = 0; s < IMPORT_SOURCES; s++) if (g_import.iso[s][0]) fprintf(f, "import_%s_iso = %s\n", import_sources[s].key, g_import.iso[s]);
+    for (int s = 0; s < IMPORT_SOURCES; s++) if ((g_import_hidden >> s) & 1) fprintf(f, "import_%s_shown = 0\n", import_sources[s].key);
     if (g_lang) fprintf(f, "language = %s\n", lang_codes[g_lang]);
     if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);
     if (g_update_skip[0]) fprintf(f, "update_skip = %s\n", g_update_skip);

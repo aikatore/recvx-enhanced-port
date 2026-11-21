@@ -5,6 +5,8 @@
 #include <string.h>
 #define CHECK(x) do { if (!(x)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); return 1; } } while (0)
 
+static int in_use(int chr) { return chr == COOP_CHR_IMPORT + 1; }
+
 int main(void)
 {
     int n = appear_count();
@@ -74,6 +76,23 @@ int main(void)
     CHECK(!strcmp(appear_group(COOP_CHR_ACTOR), "Code: Veronica Cutscenes") && !strcmp(appear_group(COOP_CHR_ACTOR + 13), "Code: Veronica Cast"));
     CHECK(!strcmp(appear_group(COOP_CHR_ACTOR + 61), "Code: Veronica Enemies"));
     CHECK(actor_model(ACTOR_MODELS + 1) == &actor_imports[1] && !actor_model(ACTOR_MODELS + 2) && actor_model(3) == &actor_models[3]);
+    /* a hidden source (actors.h g_import_hidden): its models leave the list, but a look in use */
+    actor_import_src[1] = 1;
+    CHECK(actor_import_sources() == 3);
+    g_import_hidden = 2;
+    CHECK(appear_count() == n + 1 && appear_at(n) == COOP_CHR_IMPORT && appear_at(n + 1) == 0 && appear_step(COOP_CHR_IMPORT, 1) == 0);
+    CHECK(appear_pos(COOP_CHR_IMPORT + 1) == n && !strcmp(appear_group(COOP_CHR_IMPORT), "Outbreak Characters"));   /* (not listed: the last's place) */
+    appear_in_use = in_use;
+    CHECK(appear_count() == n + 2 && appear_at(n + 1) == COOP_CHR_IMPORT + 1 && appear_pos(COOP_CHR_IMPORT + 1) == n + 1);
+    CHECK(!strcmp(appear_group(COOP_CHR_IMPORT + 1), "Hidden Source (Still in Use)"));
+    appear_in_use = NULL;
+    appear_sources_toggle();   /* the lists' quick toggle: every source hidden, then the ones shown before back */
+    CHECK(g_import_hidden == 3 && appear_count() == n);
+    appear_sources_toggle();
+    CHECK(g_import_hidden == 2);
+    g_import_hidden = 0;
+    CHECK(appear_count() == n + 2);
+    actor_import_src[1] = 0;
     actor_import_n = 0;
     printf("appear: ok, %d of %d listed\n", n, COOP_CHR_MAX + 1);
     return 0;
