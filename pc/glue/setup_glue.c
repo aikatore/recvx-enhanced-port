@@ -276,12 +276,13 @@ int setup_row_shown(const MenuRow* m, int shown)
     return shown;
 }
 
-/* a player's own row in GAME SETUP: YOU (and its Advanced page), Extra Mouth Movement */
+/* a player's own row in GAME SETUP: YOU (and its Advanced page), Extra Mouth Movement, Show Randomized Item Models */
 static int yours(const MenuRow* m)
 {
     return m->cat == MC_CHAR_ADV || (m->cat == MC_CHARACTERS && m->kind == ML_VAR && m->arg <= SV_RANDOM_IMPORTS)
            || (m->ref && (!strcmp(m->ref, "Character Model") || !strcmp(m->ref, "Claire's Model") || !strcmp(m->ref, "Chris's Model")
-                          || !strcmp(m->ref, "Custom Cutscene Model") || !strcmp(m->ref, "Talking Mouths")));
+                          || !strcmp(m->ref, "Custom Cutscene Model") || !strcmp(m->ref, "Talking Mouths")
+                          || !strcmp(m->ref, "Show Randomized Item Models")));   /* (what this player sees) */
 }
 
 /* in a game, a run's rule (RULES, ENEMIES, the cast's rows) that changes from the next room on (proposal §2.4) */

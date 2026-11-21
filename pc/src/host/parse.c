@@ -493,3 +493,71 @@ int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, 
     free(t);
     return np;
 }
+
+/* ---------------------------------------------------------------- a room's item models */
+static int mlb_at(const uint8_t* d, uint32_t n, uint32_t o) { return pc_range_ok(o, 16, n) && !memcmp(d + o, "MDL", 3); }
+static uint32_t next_above(const uint8_t* t, uint32_t cnt, uint32_t o, uint32_t lim)   /* the smallest table entry in (o, lim) */
+{
+    for (uint32_t i = 0; i < cnt; i++) { uint32_t v = pc_rd32(t + 4 * i); if (v > o && v < lim) lim = v; }
+    return lim;
+}
+
+int pc_room_items(const uint8_t* d, uint32_t n, PcRoomItem* out, int max)
+{
+    enum { KEYS = 1024 };
+    uint32_t keys[KEYS], ids[256 + 64];
+    uint32_t h1, h2, h4, rw, ene, obj, itm, nm = 1, i, m = 1, owners = 0, nk = 0, ni, cnt;
+    int k = 0;
+    if (n < 0x80) return -1;
+    rw = pc_rd32(d + 0x10); h1 = pc_rd32(d + 0x14); h2 = pc_rd32(d + 0x18); h4 = pc_rd32(d + 0x20);
+    if (!pc_range_ok(rw, 0x3EC, n)) return -1;
+    ene = pc_rd32(d + rw + 0x88); obj = pc_rd32(d + rw + 0x8C); itm = pc_rd32(d + rw + 0x90);
+    if (ene > 1024 || obj > 256 || itm > 256 || !pc_range_ok(pc_rd32(d + rw + 0x08), 0x24ull * ene, n) ||
+        !pc_range_ok(pc_rd32(d + rw + 0x0C), 0x24ull * obj, n) || !pc_range_ok(pc_rd32(d + rw + 0x10), 0x24ull * itm, n) || !pc_range_ok(h4, 4, n))
+        return -1;
+    const uint8_t *en = d + pc_rd32(d + rw + 0x08), *ob = d + pc_rd32(d + rw + 0x0C), *it = d + pc_rd32(d + rw + 0x10);
+    for (i = 0; i < ene; i++) nm += pc_rd32(en + 0x24 * i) & 1;
+    nm += (obj > 4 ? obj - 4 : 0) + itm;
+    cnt = pc_rd32(d + h4);
+    if (!pc_range_ok(h1, 4ull * nm, n) || cnt > 4096 || !pc_range_ok(h4 + 4, 4ull * cnt, n)) return -1;
+    const uint8_t *mt = d + h1, *tt = d + h4 + 4;
+    for (i = 0; i < ene; i++) {   /* enemies: the first (type, model version, textured part) of each owns the next list */
+        const uint8_t* r = en + 0x24 * i;
+        uint32_t o, t = 0;
+        int32_t dt;
+        if (!(pc_rd32(r) & 1)) continue;
+        for (o = pc_rd32(mt + 4 * m++); pc_range_ok(o, 4, n) && (dt = (int32_t)pc_rd32(d + o)) != -1; o += 4 + (uint32_t)dt) {
+            if (dt < 0 || !pc_range_ok(o + 4, (uint32_t)dt, n)) break;
+            if (dt >= 16 && memcmp(d + o + 4, "MASK", 4) && memcmp(d + o + 4, "SKIN", 4) && pc_rd32(d + o + 12) != 0xFFFFFFFFu) {
+                uint32_t key = (uint32_t)pc_rd16(r + 4) << 16 | (uint32_t)r[9] << 8 | (t++ & 0xFF), j;
+                for (j = 0; j < nk && keys[j] != key; j++) {}
+                if (j == nk) { if (nk == KEYS) return -1; keys[nk++] = key; owners++; }
+            }
+        }
+    }
+    for (int pass = 0; pass < 2; pass++) {   /* objects 4.., then items: the first textured record of an id owns the next list */
+        uint32_t first = pass ? 0 : 4, last = pass ? itm : obj, own[256 + 64];
+        ni = 0;
+        for (i = first; i < last; i++) {
+            const uint8_t* r = (pass ? it : ob) + 0x24 * i;
+            uint32_t o = pc_rd32(mt + 4 * m++), at = o, j, tex = 0, ti = 0;
+            if (!pass && pc_range_ok(o, 4, n) && !mlb_at(d, n, o)) at = o + 8 + pc_rd32(d + o);   /* (skin size, u32, SKIN, MLB) */
+            if (at >= o && mlb_at(d, n, at) && pc_rd32(d + at + 8) != 0xFFFFFFFFu) {
+                for (j = 0; j < ni && ids[j] != pc_rd16(r + 4); j++) {}
+                if (j == ni) { ids[ni] = pc_rd16(r + 4); own[ni++] = owners++; }
+                tex = 1; ti = own[j];
+            }
+            if (!pass || k == max) continue;
+            out[k].id = pc_rd16(r + 4);
+            out[k].moff = mlb_at(d, n, o) ? o : 0;
+            out[k].mlen = out[k].moff ? next_above(mt, nm, o, h2 > o && h2 <= n ? h2 : n) - o : 0;
+            out[k].toff = out[k].tlen = 0;
+            if (tex && ti + 1 < cnt && pc_rd32(tt + 4 * (ti + 1)) < n) {   /* (list 0 is the room model's) */
+                out[k].toff = pc_rd32(tt + 4 * (ti + 1));
+                out[k].tlen = next_above(tt, cnt, out[k].toff, n) - out[k].toff;
+            }
+            k++;
+        }
+    }
+    return k;
+}

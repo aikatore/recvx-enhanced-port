@@ -433,6 +433,63 @@ static void test_lang_parts(void)
     CHECK(pc_lang_parts(l, nl, d, nd, 0, 1, NULL, p, 8) == 2);   /* both the disc's: the bank too */
 }
 
+/* ---------------------------------------------------------------- a room's item models */
+/* a room: an enemy (one textured part), objects 0..3 and an object id 7 (textured, skin form), items id 12, 12, 21
+   (textured, the 21 last), texture lists: room model, enemy, object 7, item 12, item 21 */
+enum { RI_ROM = 0x80, RI_ENE = 0x500, RI_OBJ = 0x540, RI_ITM = 0x600, RI_MDL = 0x700, RI_TEX = 0x740, RI_DATA = 0x800, RI_N = 0xA00 };
+static void ri_mlb(uint8_t* d, uint32_t o, int textured) { memcpy(d + o, "MDL", 3); put32(d + o + 8, textured ? 0x10 : 0xFFFFFFFFu); }
+static void mk_items_room(uint8_t* d)
+{
+    static const uint16_t ids[3] = { 12, 12, 21 };
+    memset(d, 0, RI_N);
+    put32(d + 0x10, RI_ROM); put32(d + 0x14, RI_MDL); put32(d + 0x18, RI_DATA + 0x1F0); put32(d + 0x20, RI_TEX);
+    put32(d + RI_ROM + 0x08, RI_ENE); put32(d + RI_ROM + 0x0C, RI_OBJ); put32(d + RI_ROM + 0x10, RI_ITM);
+    put32(d + RI_ROM + 0x88, 1); put32(d + RI_ROM + 0x8C, 5); put32(d + RI_ROM + 0x90, 3);
+    put32(d + RI_ENE, 1); put16(d + RI_ENE + 4, 4);
+    put16(d + RI_OBJ + 4 * 0x24 + 4, 7);
+    for (int i = 0; i < 3; i++) put16(d + RI_ITM + 0x24 * i + 4, ids[i]);
+    /* models: room, enemy list (one 16-byte textured MLB), object (skin form), items at 0x900, 0x940, 0x980 */
+    put32(d + RI_MDL, RI_DATA); put32(d + RI_MDL + 4, RI_DATA + 0x40); put32(d + RI_MDL + 8, RI_DATA + 0x80);
+    put32(d + RI_MDL + 12, 0x900); put32(d + RI_MDL + 16, 0x940); put32(d + RI_MDL + 20, 0x980);
+    ri_mlb(d, RI_DATA, 1);
+    put32(d + RI_DATA + 0x40, 16); ri_mlb(d, RI_DATA + 0x44, 1); put32(d + RI_DATA + 0x54, 0xFFFFFFFFu);
+    put32(d + RI_DATA + 0x80, 8); memcpy(d + RI_DATA + 0x88, "SKIN", 4); ri_mlb(d, RI_DATA + 0x90, 1);
+    ri_mlb(d, 0x900, 1); ri_mlb(d, 0x940, 1); ri_mlb(d, 0x980, 1);
+    put32(d + RI_TEX, 5);
+    for (int i = 0; i < 5; i++) put32(d + RI_TEX + 4 + 4 * i, 0x9C0 + 8 * i);
+}
+static void test_room_items(void)
+{
+    uint8_t d[RI_N];
+    PcRoomItem it[8];
+    mk_items_room(d);
+    CHECK(pc_room_items(d, RI_N, it, 8) == 3);
+    CHECK(it[0].id == 12 && it[0].moff == 0x900 && it[0].mlen == 0x40 && it[0].toff == 0x9C0 + 24 && it[0].tlen == 8);   /* list 3 */
+    CHECK(it[1].id == 12 && it[1].moff == 0x940 && it[1].toff == it[0].toff);                                       /* shared */
+    CHECK(it[2].id == 21 && it[2].moff == 0x980 && it[2].mlen == 0x70 && it[2].toff == 0x9C0 + 32 && it[2].tlen == RI_N - 0x9E0);   /* list 4, to the end; the model to hed02 */
+    mk_items_room(d); put32(d + RI_ENE, 0);   /* no enemy model: one list fewer is read before the items' (and one model entry less) */
+    put32(d + RI_MDL + 4, RI_DATA + 0x80); put32(d + RI_MDL + 8, 0x900); put32(d + RI_MDL + 12, 0x940); put32(d + RI_MDL + 16, 0x980);
+    CHECK(pc_room_items(d, RI_N, it, 8) == 3 && it[0].toff == 0x9C0 + 16 && it[2].toff == 0x9C0 + 24);
+    mk_items_room(d); ri_mlb(d, 0x980, 0);   /* untextured: no list */
+    CHECK(pc_room_items(d, RI_N, it, 8) == 3 && it[2].tlen == 0 && it[2].toff == 0);
+    mk_items_room(d); CHECK(pc_room_items(d, RI_N, it, 2) == 2);
+    mk_items_room(d); put32(d + RI_ROM + 0x90, 0x7FFFFFFF); CHECK(pc_room_items(d, RI_N, it, 8) < 0);
+    mk_items_room(d); put32(d + RI_TEX, 0xFFFFFFF0u); CHECK(pc_room_items(d, RI_N, it, 8) < 0);
+    mk_items_room(d); put32(d + RI_DATA + 0x40, 0x7FFFFFF0); CHECK(pc_room_items(d, RI_N, it, 8) == 3);   /* a broken enemy list: its parts end there */
+    for (uint32_t n = 0; n <= RI_N; n++) {   /* every cut: nothing read outside the file (ASan), every range inside it */
+        mk_items_room(d);
+        int c = pc_room_items(d, n, it, 8);
+        for (int i = 0; i < c; i++) CHECK(pc_range_ok(it[i].moff, it[i].mlen, n) && pc_range_ok(it[i].toff, it[i].tlen, n));
+    }
+    for (int seed = 1; seed < 4000; seed++) {   /* random bytes changed */
+        mk_items_room(d);
+        srand((unsigned)seed);
+        for (int k = 0; k < 6; k++) d[rand() % RI_N] = (uint8_t)rand();
+        int c = pc_room_items(d, RI_N, it, 8);
+        for (int i = 0; i < c; i++) CHECK(pc_range_ok(it[i].moff, it[i].mlen, RI_N) && pc_range_ok(it[i].toff, it[i].tlen, RI_N));
+    }
+}
+
 int main(void)
 {
     test_lang_parts();
@@ -442,6 +499,7 @@ int main(void)
     test_dds();
     test_startkit();
     test_mes();
+    test_room_items();
     if (!fails) printf("parsers: all passed\n");
     return fails != 0;
 }

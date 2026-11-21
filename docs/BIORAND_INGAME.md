@@ -1350,6 +1350,43 @@ in 6100 a sniper rifle on screen; after it the handgun (weapon 3) or nothing, ke
 sniper rifle in the bag (`RECVX_EQUIP` 3:10): weapon 13, its slot in the hand. NEW GAME (no BioRand): weapon 13 as
 retail.
 
+### Item models (2026-11-21)
+
+**Show Randomized Item Models** (GAMEPLAY setting, ini `biorand_item_models`, default 0; also GAME SETUP > BIORAND under
+ITEMS and the BIORAND screen's EXTRA OPTIONS; each player's own, as it only changes what is drawn): in a BioRand game an
+item spot whose pickup BioRand changed (the record's `type`, [ROOM_FORMAT.md](modding/ROOM_FORMAT.md) "Generated
+pickups") shows the new item instead of the old one. Picking it up is unchanged (the record keeps id, type and amount).
+
+- **Where the models come from** (`biorand.c` `biorand_item_model`, `parse.c` `pc_room_items`): per item id the MLB of
+  its first floor record in the room files as the game loads them, and the texture list `room.c bhSetRoom` uploads for
+  that record (its owner index replayed: room model, enemy parts, object ids, item ids). Read once per run on a thread of
+  its own while the setting is on (`biorand_frame` asks; ~2.3 s at the start, before a game is started; 111 item ids,
+  7.4 MB kept in memory for the run). Nothing derived from the disc is written anywhere.
+- **Items no room has on its floor** (gunpowder 35, gunpowder arrows 36, ...): the item's display model (ITEM AFS file of
+  its display id, as `coop_glue.c grant_model`), read at the room load and kept for the run. It is the same mesh as the
+  floor models (vertex chunk 41 instead of 51, the same positions: checked for item 12), so the same size.
+- **At the room load** (`itemmdl_glue.c itemmdl_room`, from `enemy_room_finished` after `bhFinishRoom`): a copy of the
+  MLB in the spawn pool (`spawn_pool_alloc`, emptied with the next room set up), realized as `bhSetItmMdl` does, its
+  textures uploaded (item textures carry their own CLUT: no palette bank of the room is touched; a texture the room has
+  already is shared by its global index) and kept for the room's release (`spawn_keep_texlist`), O_WORKs from the room
+  arena for at least the original's node count. The spot is moved up or down so the new model's lowest point is where
+  the original's was (`rest_shift`; its nodes' rotations are not counted). A spot whose room effect or light follows a
+  node the new model lacks keeps its own model.
+- **Lifetime**: the swapped spots' original `ML_WORK`s are put back before the room's textures are released
+  (`spawn_release` from `bhReleaseMainTexture`, and on `njReleaseTextureAll`), so the room's own release is the
+  original's and nothing points at the copy any more; every frame `itemmdl_check` makes sure a swapped spot's copy is
+  still in the pool and its textures still kept (else it logs and shows the original again; never seen).
+- Not in the Battle Game or a game without BioRand. Co-op: each side swaps its own room's records the same way (both
+  play the same pack); nothing is sent.
+
+**Tests (2026-11-21, Linux; job dir `itemmodels/`, not committed):** with the user's pack (seed 424710, copied by
+symlinks into a temporary mods folder): a tour of 74 room files (70 spots swapped, none crashed), the cost of the swap per
+room load: median 0.38 ms, 90th percentile 1.3 ms, at most 7.2 ms (117 loads); 60 room changes 0/11 <-> 0/7 every 25 game
+frames with 240 Hz presents (Smoother Motion's in-between images), the status screen opened and closed, a pickup on the
+swapped magnum spot (gives Magnum Bullets as with the setting off); a game over and Yes on the retry twice in 0/11; F2
+Save Now and Load Game twice into 0/11. Texture entries and heap the same on each visit; no "released while shown". ctest
+`parsers` (`pc_room_items` on crafted and cut rooms) also under ASan/UBSan.
+
 ## Risks and open questions
 
 1. **Memory: the CLI peaked at 6.0 GB RSS** for one CVX pack. With the game running, 8 GB

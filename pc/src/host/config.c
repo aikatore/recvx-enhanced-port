@@ -73,6 +73,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "rifle_stack", &g_config.rifle_stack, 0, 1 },     /* rifle ammo stacks (forced on while BioRand is on) */
     { "no_ink_ribbon", &g_config.no_ink_ribbon, 0, 1 },   /* typewriters save without an ink ribbon (co-op: the host's) */
     { "extra_objects", &g_config.extra_objects, 0, 1 },   /* extra item boxes and blue herb planters (co-op: the host's) */
+    { "biorand_item_models", &g_config.item_models, 0, 1 },   /* BioRand item spots show the new item's ground model (each player's own) */
     { "save_system", &g_config.save_system, 0, 1 },     /* 0 native files, 1 memory card */
     { "update_check", &g_config.update_check, 0, 2 },  /* 0 off, 1 ask to install (the old "on"), 2 notify only: the newest version once per start (net/update.h) */
     { "native_3d", &g_config.native_3d, 0, 1 },

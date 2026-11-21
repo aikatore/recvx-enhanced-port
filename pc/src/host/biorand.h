@@ -59,6 +59,16 @@ int  biorand_iso_known(void);         /* the game's disc image path is set */
 int  biorand_generate(const char* seed_string);   /* the private settings.json, then the CLI's thread (biorand_cli_generate):
                                                      1 started, 0 a job runs, -1 settings.json not written */
 void biorand_frame(void);             /* game thread, every frame: rifle ammo stacking, Nosferatu's poison ending with him (biorand_glue.c) */
+/* "Show Randomized Item Models" (GAMEPLAY ini biorand_item_models, default 0; pc/glue/itemmdl_glue.c): an item spot whose
+   pickup BioRand changed shows the new item's ground model. Its catalogue: per item id the MLB of its first item record
+   in the room files (mmis: that record's offset mod 64, as the copy wants it) and the texture list the room uploads for
+   it (tmis likewise; ends with a code -1; NULL untextured), read on a thread of its own at the first want (any thread
+   reads it after; it never changes). want: 1 ready, 0 not yet (started now while the setting is on; biorand_frame asks) */
+typedef struct BrItemModel { const unsigned char *mlb, *tex; int mlen, tlen, mmis, tmis, room; } BrItemModel;
+int biorand_item_models_want(void);
+const BrItemModel* biorand_item_model(int id);   /* NULL: no ground model of item id (or not read yet) */
+int biorand_item_models_on(void);     /* the setting is on and this game plays a pack */
+double biorand_ms(void);              /* a monotonic clock in ms (the room load's cost in the log) */
 
 /* game thread (biorand_glue.c): the save words, a co-op guest's start inventory */
 void pc_biorand_stamp(void);                       /* the game state's save words: the current BioRand state */

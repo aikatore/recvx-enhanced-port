@@ -115,6 +115,14 @@ int pc_lang_parts(const uint8_t* l, uint32_t nl, const uint8_t* d, uint32_t nd, 
 /* the palette banks (0..127) the textures of keep (a bit mask by index, as above) of the file l draw with */
 void pc_lang_banks(const uint8_t* l, uint32_t nl, uint64_t keep, uint64_t* banks);
 
+/* ---------------------------------------------------------------- a room's item models ("Show Randomized Item Models")
+   d: an expanded room file (n bytes, docs/modding/ROOM_FORMAT.md). Per item record (at most max): its id, its MLB
+   (from its model table entry to the next entry of the table or hed02) and the texture list room.c bhSetRoom uploads
+   for it (the table entry its id owns, replaying the order: room model, enemy parts, object ids, item ids; to the next
+   entry or the file's end; tlen 0: none). Returns the count, -1 if the tables are not inside the file. */
+typedef struct PcRoomItem { uint16_t id; uint32_t moff, mlen, toff, tlen; } PcRoomItem;
+int pc_room_items(const uint8_t* d, uint32_t n, PcRoomItem* out, int max);
+
 #ifdef __cplusplus
 }
 #endif

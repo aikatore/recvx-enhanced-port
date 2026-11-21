@@ -8,6 +8,8 @@
 #include "biorand_opts.h"
 #include "spoiler.h"
 #include "lang.h"
+#include "cast.h"
+#include "../audio/audio.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -254,4 +256,68 @@ const Spoiler* biorand_spoiler(int* state)
     host_log("\n");
     *state = sl.state;
     return sl.sp;
+}
+
+/* ---------------------------------------------------------------- "Show Randomized Item Models" (pc/glue/itemmdl_glue.c)
+   Per item id: the ground model (MLB) of its first item record in the room files as the game loads them, and the texture
+   list room.c uploads for it (pc_room_items), copied out of the room files once per run on a thread of its own when the
+   setting first wants them. Nothing derived from the disc is written anywhere. */
+static BrItemModel imodel[256];
+static int istate;   /* 0 not read, 1 reading, 2 ready */
+
+static void item_room(int room, const unsigned char* d, int n, void* ud)
+{
+    PcRoomItem it[64];
+    int c = pc_room_items(d, (uint32_t)n, it, 64), *found = ud;
+    for (int i = 0; i < c; i++) {
+        BrItemModel* m = &imodel[it[i].id & 255];
+        unsigned char* b;
+        if (it[i].id > 255 || m->mlb || it[i].mlen < 16 || it[i].mlen > (1u << 20) || it[i].tlen > (4u << 20)) continue;
+        if (!(b = malloc(it[i].mlen + it[i].tlen + 8))) continue;
+        memcpy(b, d + it[i].moff, it[i].mlen);
+        memcpy(b + it[i].mlen, d + it[i].toff, it[i].tlen);
+        memset(b + it[i].mlen + it[i].tlen, 0xFF, 8);   /* a chunk code -1 ends the list (a file's last list has none) */
+        m->tex = it[i].tlen ? b + it[i].mlen : NULL;
+        m->mlen = (int)it[i].mlen;
+        m->tlen = it[i].tlen ? (int)it[i].tlen + 8 : 0;
+        m->mmis = (int)(it[i].moff & 63);
+        m->tmis = (int)(it[i].toff & 63);
+        m->room = room;
+        m->mlb = b;
+        ++*found;
+    }
+}
+
+static int SDLCALL item_scan(void* ud)
+{
+    Uint64 t0 = SDL_GetTicks();
+    int found = 0, n = room_each(item_room, &found);
+    size_t bytes = 0;
+    (void)ud;
+    for (int i = 0; i < 256; i++) bytes += imodel[i].mlb ? (size_t)(imodel[i].mlen + imodel[i].tlen) : 0;
+    host_log("biorand: item models: %d item ids with a ground model in %d room files, %u KB (%u ms)\n", found, n, (unsigned)(bytes >> 10),
+             (unsigned)(SDL_GetTicks() - t0));
+    __atomic_store_n(&istate, 2, __ATOMIC_RELEASE);   /* (none found: none shown this run) */
+    return 0;
+}
+
+int biorand_item_models_want(void)
+{
+    uint32_t lsn, size;
+    int s = __atomic_load_n(&istate, __ATOMIC_ACQUIRE);
+    if (s || !g_config.item_models) return s == 2;
+    if (!g_config.iso_path[0] || !adx_afs_locate(17, 204, &lsn, &size)) return 0;   /* (the disc's room archive not open yet) */
+    __atomic_store_n(&istate, 1, __ATOMIC_RELEASE);
+    SDL_Thread* t = SDL_CreateThread(item_scan, "itemmodels", NULL);
+    if (t) SDL_DetachThread(t);
+    else __atomic_store_n(&istate, 0, __ATOMIC_RELEASE);
+    return 0;
+}
+
+int biorand_item_models_on(void) { return g_config.item_models && biorand_active(); }
+double biorand_ms(void) { return (double)SDL_GetTicksNS() / 1e6; }
+
+const BrItemModel* biorand_item_model(int id)
+{
+    return __atomic_load_n(&istate, __ATOMIC_ACQUIRE) == 2 && id >= 0 && id < 256 && imodel[id].mlb ? &imodel[id] : NULL;
 }
