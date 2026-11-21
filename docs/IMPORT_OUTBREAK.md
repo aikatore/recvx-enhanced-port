@@ -34,6 +34,7 @@ other games can be added as further sources.
 | 19. IMPORT screen | the in-game version of F9: title menu EXTRA > IMPORT > CHARACTERS > the game; the groups, the disc image, START IMPORT with progress, the counts, DELETE IMPORTED MODELS ("IMPORT screen") |
 | 20. Blink, hair (round 7) | fixed: only the brows moved (the crease bone was taken for the lid); hair see-through, too bright in streaks, with holes (Outbreak's alpha is 0..255, read as the PS2's 0..128); some NPCs lost hair pieces, visors and lenses (taken for the eyeball overlay). `.cvxm` version 4; older files get the alpha fixed when loaded, blink after importing again ("Round 7") |
 | 21. High-detail models (round 8) | each character's first costume is converted from its high-detail model (`HP<c>`: 512x512 textures, 5400..6900 vertices, real eyeballs, its hair locks) instead of the in-game one, in gameplay, cutscenes and co-op alike; blink and jaw on its own face rig; the other 22 costumes have no such model and stay. Same `.cvxm` version; importing again brings them ("Round 8") |
+| 22. Yoko's jeans, Cindy's skirt (round 9) | fixed: Yoko's first costume showed skin over the seat of her jeans (strips across a texture tile edge were moved into the wrong tile; the game clamps); Cindy's skirt front stayed rigid and her thighs ran through it (its flap bones were merged into the pelvis; now onto the thighs). Better textures on 13 more costumes and up to 73 NPCs. **Importing again is needed** ("Round 9") |
 
 Resume notes: build with `cmake --build build`; headless run:
 `RECVX_MODS=<out> RECVX_IMPORT=outbreak2 RECVX_IMPORT_ISO=<image> build/pc/recvx --save-dir <tmp>`
@@ -213,7 +214,8 @@ can map ([ACTORS.md](ACTORS.md#retargeting)). `imp_write_cvxm` (impmodel.c) buil
 * **Mesh**: all of the model's meshes as one mesh on the pelvis: a vertex chunk 51 (`CvVnPs2`:
   64-byte header, position and normal per vertex, w = 1) and per texture a material chunk, a
   texture chunk and strip chunks 66 (`CsUvh`: index, u, v with 1023 = 1.0; double-sided). UVs
-  above 1 are moved back by whole tiles per strip (Code: Veronica clamps u). Strips that show
+  outside 0..1 are moved back by whole tiles per strip (the game clamps; a strip across a tile edge goes
+  into the tile that holds most of it: "Round 9"). Strips that show
   see-through texels (fringes, lashes) are drawn last and alpha-blended, else they hide the face.
 * **Skin**: Code: Veronica's own skin (`SKIN`, `npCalcSkin`) blends a vertex between a node and
   its parent's rotation only; Outbreak's are real weights (up to 3 joints). So the `.cvxm` carries
@@ -235,8 +237,8 @@ Checked in game: walking, running, the handgun aimed and fired (the gun in the m
 zombie grabs, third person; front and back views (`RECVX_TPS_ORBIT`).
 
 Limits: no finger poses or expressions; costume pieces that hang (Cindy's ponytail chain,
-coats) follow their body node rigidly; skirts tear open a little in long strides (Outbreak's own
-weights put the skirt on the legs); the feet sink up to ~0.5 units (5 cm) into the floor at the
+coats) follow their body node rigidly (Cindy's skirt flaps follow the thighs: "Round 9"); skirts tear open a
+little in long strides (Outbreak's own weights put the skirt on the legs); the feet sink up to ~0.5 units (5 cm) into the floor at the
 toe-off of the walk (the model has no toe bone; Claire's foot pitch is copied to its ankle); the
 co-op partner sees the played character.
 
@@ -492,6 +494,43 @@ as Claire's double: the lips move with the lines. The cast with only the 8 high-
 (two of them in one room, RM_2050 / RM_9320). Co-op: both sides on high-detail models, and the host on one and
 the guest on a version 3 file of the same id: no resynchronisation, each side shows its own. `layout_check.sh`:
 156 vanilla and 311 enhanced frames identical to main's.
+
+### Round 9: Yoko's jeans, Cindy's skirt
+
+Report: "after the conversion for the latest version, Yokos default outfit is glitched in the butt/back area. Also
+Cindy's default outfit when she runs her legs clip through the skirt [...] there is an additional Cindy model used in
+Wild Things (N072) and it doesn't have any clipping issues".
+
+* **Yoko** (a regression of round 8: only her high-detail model, `HP06`, has it): the seat of the jeans showed bare
+  skin with a pocket torn off. Its strips have v 1.99..2.14 on the body texture, across the edge between two tiles
+  (the jeans' top is at the texture's top, the skin block at its bottom; Outbreak repeats the texture). The
+  converter moved every strip into the tile of its lowest UV, so v ran 0.99..1.14 and the game, which clamps, drew
+  most of it from the bottom row: the skin. Now a strip goes into the tile of its highest UV when less of it sticks
+  out that way (`impmodel.c tile`): v -0.01..0.14, the jeans. Her in-game first costume (`P06_00`, imported before round 8) has no such strip.
+* **The same fix elsewhere**: 13 more player models (Kevin's, Mark's, Jim's and Alyssa's high-detail
+  ones, Mark's 2, David's 2 and 3, Alyssa's 5, Yoko's 4, Cindy's 2..5) and up to 73 NPCs had small strips across a tile
+  edge, drawn from the texture's edge instead: David's belt pouch (a dark block), Alyssa's ID badge, Jim's shoes,
+  Cindy's collars and neck (a blue patch in costume 5). They are textured now. George's and the other files are
+  byte for byte the same as before.
+* **Cindy** (old: the in-game `P07_00` had it too): her first costume has a chain of two flap bones on each side of the skirt's
+  front (`HP07` 75..79, `P07_00` 38..42, under the hip pivot), which Outbreak's motions swing with the legs. The
+  converter merged them into the pelvis like every other dropped node: the front of the skirt stayed put and the
+  thighs came through it when running. Their weights now go to the thigh on their side (`ob2.c flaps_to_thighs`;
+  a vertex between both flaps half on each), which is how `N72` (the same costume as an NPC, without flap bones)
+  is weighted: hem closed in every stride, front and side. The NPC `N207` has the same bones and is fixed with it.
+  No other model has bones there.
+* **N72** is not offered as a further Cindy: with the fix, `P07_00` (high-detail, Claire's motions, face) runs as
+  cleanly; `N72` stays in the NPC list ("Character N72", a man's motions as every NPC).
+* **Animations**: the skeleton, the bind pose and every other weight are unchanged (only the flap bones' weights
+  moved and strips' UVs); idle, walk, run, turn, aim and the opening scene as the double checked old against new.
+* **Importing again is needed**: the fixes are in the conversion; files from an earlier import keep the glitches
+  (same `.cvxm` version 4, nothing to correct when loading).
+
+Checked (Linux, headless, `RECVX_TPS_ORBIT` 0 / 90 / 150 / 180 / 200, camera at hip height): Yoko and Cindy old
+against new (back, side, front; walking, running stride by stride, turning, aiming; the opening scene as Claire's
+double); old against new for Kevin, Mark (2), Jim, George, David (2), Alyssa (2), Yoko's 4th, Cindy's 2..5 and
+`N207`: the only differences are the textures above. A full import: 306 models, 268 playable, 0 failed.
+Screenshots stay in the job directory (game content, not committed).
 
 ## F9 window
 

@@ -403,6 +403,13 @@ static int cv_tex(Buf* b, const unsigned char* t, int len, unsigned gindex, int*
     return !b->bad;
 }
 
+/* the whole tile a strip spanning lo..hi is moved by: lo's, or hi's when less of the strip lies outside that one */
+static float tile(float lo, float hi)
+{
+    float a = floorf(lo), b = ceilf(hi) - 1;
+    return b > a && b - lo < hi - (a + 1) ? b : a;
+}
+
 int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gindex, const ImpFit* fit, char* err, int en)
 {
     int map[IMP_NODES], kept[CV_MAX], par[CV_MAX], nk = 0, order[CV_MAX], no = 0, ok = 0;
@@ -552,9 +559,15 @@ int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gi
             for (; s < m->ns && plist.n - head < 120000 && cnt < 0x3FFF; s++) {
                 const ImpStrip* st = &m->strip[s];
                 if (st->tex != k || st->n < 3 || st->n > 32767 || (see && see[s]) != pass) continue;
-                float fu = 1e30f, fv = 1e30f;
-                for (int i = 0; i < st->n; i++) { fu = fminf(fu, m->uv[m->idx[st->first + i]][0]); fv = fminf(fv, m->uv[m->idx[st->first + i]][1]); }
-                fu = floorf(fu); fv = floorf(fv);   /* the strip moved by whole tiles (the textures repeat) */
+                float fu = 1e30f, fv = 1e30f, u1 = -1e30f, v1 = -1e30f;
+                for (int i = 0; i < st->n; i++) {
+                    const float* t = m->uv[m->idx[st->first + i]];
+                    fu = fminf(fu, t[0]); fv = fminf(fv, t[1]); u1 = fmaxf(u1, t[0]); v1 = fmaxf(v1, t[1]);
+                }
+                /* the strip moved by whole tiles (the textures repeat in Outbreak, the game clamps): into the tile
+                   of its lowest UV, or of its highest when less of it sticks out that way (Yoko's jeans: v 1.99..2.14,
+                   the seat drawn from the skin at the texture's bottom edge) */
+                fu = tile(fu, u1); fv = tile(fv, v1);
                 put16(&plist, (uint16_t)st->n);
                 for (int i = 0; i < st->n; i++) {
                     int x = m->idx[st->first + i];

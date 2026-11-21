@@ -635,6 +635,27 @@ static void hd_face(ImpModel* m)
     m->see_cut = 240;
 }
 
+/* Bones that hang from the hip pivot (3) beside the legs: Cindy's skirt flaps (P07_00 38..42, HP07 75..79), on
+   which Outbreak's own motions swing the skirt's front. Merged into the pelvis like the other dropped nodes, the
+   front stayed rigid and the thighs ran through it. Their weights go to the thigh (4 / 7) on their side, as the
+   NPC model of the same costume (N72, without flap bones) has them; one in the middle keeps the pelvis. */
+static void flaps_to_thighs(ImpModel* m)
+{
+    float (*W)[16];
+    if (!human_skeleton(m) || !(W = calloc(m->nn, sizeof(*W)))) return;
+    imp_world(m, W);
+    unsigned char to[IMP_NODES];
+    for (int i = 0; i < m->nn; i++) {
+        int a = i;
+        to[i] = (unsigned char)i;
+        while (a >= 0 && !m->node[a].keep && a != 3) a = m->node[a].parent;
+        if (a == 3 && i != 3 && fabsf(W[i][12]) > 0.5f) to[i] = W[i][12] > 0 ? 4 : 7;   /* (4: Outbreak's +x, the left thigh) */
+    }
+    free(W);
+    for (int v = 0; v < m->nv; v++)
+        for (int k = 0; k < 4; k++) m->jnt[v][k] = to[m->jnt[v][k]];
+}
+
 static void ob2_fit(const char* id, const ImpModel* m, ImpFit* fit)
 {
     float in = 0, down = 0, (*W)[16];
@@ -754,6 +775,7 @@ int ob2_extract(const char* isopath, const char* outdir, int what, ImportItem* i
                 char e2[160] = "";
                 ImpFit fit;
                 keep_body(&m);
+                flaps_to_thighs(&m);
                 if (hd >= 0) hd_face(&m);
                 else lid_falloff(&m);
                 ob2_fit(id, &m, &fit);

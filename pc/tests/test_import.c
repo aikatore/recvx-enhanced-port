@@ -156,7 +156,7 @@ int main(int argc, char** argv)
     m.jnt = calloc(4, sizeof(*m.jnt)); m.wgt = calloc(4, sizeof(*m.wgt));
     for (int i = 0; i < 4; i++) {
         m.pos[i][0] = 30.0f + 5 * (i & 1); m.pos[i][1] = 140.0f + 5 * (i >> 1); m.nrm[i][2] = 1;
-        m.uv[i][0] = 2.25f + 0.5f * (i & 1); m.uv[i][1] = 0.5f * (i >> 1);   /* (u past 1: moved back by whole tiles) */
+        m.uv[i][0] = 2.25f + 0.5f * (i & 1); m.uv[i][1] = 1.97f + 0.12f * (i >> 1);   /* (u past 1: moved back by whole tiles; v across 2) */
         m.jnt[i][0] = 18; m.wgt[i][0] = 0.75f; m.jnt[i][1] = 7; m.wgt[i][1] = 0.25f;   /* the finger: its hand takes it */
     }
     m.ns = 1; m.nidx = 4;
@@ -182,6 +182,12 @@ int main(int argc, char** argv)
         uint32_t q = rd(d + 12), k = 0;
         while (q + 8 <= n && rd(d + q) == 0x324D4954) { CHECK(rd(d + q + 32 + 8) == 0xF00000 + k); q += 32 + rd(d + q + 4); k++; }
         CHECK(k == 2 && rd(d + q) == 0xFFFFFFFF);
+    }
+    {   /* the strip (CsUvh: index, u, v): u moved back by 2 tiles; v 1.97..2.09 into the tile that holds most of it (0..0.09) */
+        static const uint16_t want[9] = { 0, 256, 0, 1, 767, 0, 2, 256, 92 };
+        int found = 0;
+        for (size_t q = 64; q + sizeof(want) <= n && !found; q += 2) found = !memcmp(d + q, want, sizeof(want));
+        CHECK(found);
     }
     {   /* skin: the finger's weight went to its hand, the largest first, normalised */
         const CvxmSkin* s = (const CvxmSkin*)(d + rd(d + 16));
