@@ -6,7 +6,7 @@
  * build after a release) comes first, the earlier ones after a separator. Up / Down a line, Left / Right or Page Up /
  * Down a page, L1 / R1 a version, Home / End, the wheel, the scroll bar dragged; Cancel, Triangle, Esc or a right click
  * go back. The changelog stays English (the game's font, our own bold and bullets); its labels are translated.
- * Same screen with the new menu and Legacy Menu. Game thread. */
+ * Same screen with the new menu and Menu Style Legacy. Game thread. */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
 #include "../../decomp/include/ps2/veronica/prog/adv.h"

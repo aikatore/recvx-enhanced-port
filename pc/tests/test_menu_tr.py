@@ -2,7 +2,7 @@
 """ctest "menu_tr": every text the new menu (docs/MENUS.md) shows is translated into every language of
 src/host/tr_table.inc. The texts: menu_layout.c's category names, headings, labels, value names and help; the string
 literals the new menu's screens pass to tr(), ui_hint(), the text functions and the dialogs (ui_rows.c, setup_glue.c,
-pause_glue.c, text_grid.c, import_menu.c, lobby_glue.c: the MULTIPLAYER screens and the lobby, give_list.c). A text without a row, or
+pause_glue.c, text_grid.c, import_menu.c, lobby_glue.c: the MULTIPLAYER screens and the lobby, give_list.c; menu_glue.c: the Redesigned overlay). A text without a row, or
 with an empty column, fails ("" = English shown; where the word is the same in a language, write it out). A button bar's
 word is looked up as "word (button hint)" first (lang.h tr_ctx). Reads the sources.
    test_menu_tr.py <pc dir>"""
@@ -14,7 +14,8 @@ LANGS = ['fr', 'de', 'es', 'ja', 'ru', 'tr', 'pt-BR', 'ar', 'ko', 'it']
 # not words: names, keys, codes the screens draw as they are
 KEEP = {'Claire', 'Chris', 'Steve', 'Wesker', 'BioRand', 'BIORAND', 'Esc', 'Del', 'Enter', 'Return', 'Backspace', 'Ctrl F',
         'Ctrl+V', 'Ctrl\\tV', 'button hint', 'XXXX-XXXX', 'OK', 'Resident Evil Code: Veronica X', 'COPY JOIN ADDRESS: both'}
-SCREENS = ['glue/ui_rows.c', 'glue/setup_glue.c', 'glue/pause_glue.c', 'glue/text_grid.c', 'glue/import_menu.c', 'glue/lobby_glue.c', 'glue/give_list.c', 'glue/whatsnew_menu.c']
+SCREENS = ['glue/ui_rows.c', 'glue/setup_glue.c', 'glue/pause_glue.c', 'glue/text_grid.c', 'glue/import_menu.c', 'glue/lobby_glue.c', 'glue/give_list.c', 'glue/whatsnew_menu.c',
+           'glue/menu_glue.c']
 CALLS = r'\b(?:tr|ui_hint|text|text_c|text_m|text_fit|line_at|say|ui_rows_say|pc_ui_text\w*|pc_ui_dialog\w*|nm_text)\('
 
 

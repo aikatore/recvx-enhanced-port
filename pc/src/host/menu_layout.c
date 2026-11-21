@@ -4,12 +4,15 @@
    .names / .help when given. New words are English and go through tr() where they are drawn. */
 #include "menu_layout.h"
 #include "settings.h"
+#include "bindings.h"
 #include <string.h>
 
 int g_new_menu = 1;
 int g_legacy_menu;
+int g_menu_style = 1;
 int g_menu_cli = -1;
-void menu_choice_apply(void) { g_new_menu = g_menu_cli >= 0 ? g_menu_cli : !g_legacy_menu; }
+void menu_choice_apply(void) { g_new_menu = g_menu_cli >= 0 ? g_menu_cli : !(g_legacy_menu || g_menu_style == 0); }
+int menu_redesigned(void) { return g_dev_tools && g_new_menu && g_menu_style == 2 && !g_legacy_menu; }
 
 const MenuCat menu_cats[MC_COUNT] = {
     [MC_GAMEPLAY] = { MS_SETTINGS, "GAMEPLAY", -1 },
@@ -63,7 +66,7 @@ const MenuRow menu_rows[] = {
     { MC_GAMEPLAY, "STARTUP AND UNLOCKS", ML_SET, "Skip Intro" },
     { MC_GAMEPLAY, NULL, ML_SET, "Check For Updates", .label = "Check for Game Updates" },
     { MC_GAMEPLAY, NULL, ML_SET, "Battle Game Unlocked", .label = "Unlock Battle Game" },
-    { MC_GAMEPLAY, NULL, ML_SET, "Legacy Menu" },
+    { MC_GAMEPLAY, NULL, ML_SET, "Menu Style" },
     { MC_GAMEPLAY, NULL, ML_RETIRED, "Difficulty Select" },   /* D4: Difficulty is a GAME SETUP row (P2); the old menu keeps it */
 
     /* ---------------------------------------------------------------- SETTINGS > CAMERA AND HUD */

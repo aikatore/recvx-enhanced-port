@@ -1441,7 +1441,7 @@ and game frames for game-state aids, as noted. Co-op test aids (`RECVX_COOP_*`,
 | `RECVX_PAD_TRACE=1` | DS2 buttons of the pad report when they change |
 | `RECVX_RUMBLE_TRACE=1` | the game's motor values and what goes to the gamepad (`rumble: frame N motors small S large L -> gamepad low X high Y`) when they change; `RECVX_VPAD`'s virtual gamepad has motors (unless `RECVX_VPAD_RUMBLE=0`) and logs what SDL sends them |
 | `RECVX_MODERN_TRACE=1` | modern controls: each frame a direction is translated, the direction, cut (and whether the previous cut is held), target and facing angle, the player's place on screen and the camera |
-| `RECVX_MENU_TRACE=1` | menu clicks with the menu state |
+| `RECVX_MENU_TRACE=1` | menu clicks with the menu state; every state change of the inventory screens (`menu-state: frame ...`, pc/tools/screens_check.sh); Redesigned's drops (`menu: drag: ...`) |
 | `RECVX_MOUSE_TRACE=1` | who has the mouse, on each change: captured (third person), OS cursor shown, a menu screen up, the player in control, overlay, focus |
 | `RECVX_ITEM_TRACE=1` | the bag (equipped slot, lighter slot, slots), the item box's first 16 entries (`sys->itm[64]`) and the metal detector's security boxes (`sys->itm[192]`, `[224]`) whenever a word changes, with the box screen's cursors, by presented frame; in 0/9 also the detector's floor zone (`sys->flr_idx`), its "metal carried" flag (`rm_flg` bit 2) and whether it went off (`ev_flg` bit 53) |
 | `RECVX_PROFILE=file` | sampling profiler (as `--profile-samples`) |

@@ -1,4 +1,4 @@
-/* The new menu's tree (the default; Legacy Menu or --legacy-menu: the old menus; docs/MENUS.md): which screen, category and group each row of the
+/* The new menu's tree (the default; Menu Style Legacy or --legacy-menu: the old menus; docs/MENUS.md): which screen, category and group each row of the
    settings table (settings.c g_settings[]) lives in, under which words. Pure data (menu_layout.c) over the table: values,
    ranges, help, locks and apply stay in g_settings[]; a row here names its setting by the table's label (21 rows have no
    variable, so settings_of() cannot find them) and may override the label, the value names and the help without
@@ -12,10 +12,13 @@ extern "C" {
 #endif
 
 extern int g_new_menu;     /* the new menus are up: OPTION opens SETTINGS, in a game the PAUSE menu (menu_choice_apply) */
-extern int g_legacy_menu;  /* ini legacy_menu, the setting "Legacy Menu": the old OPTION, ENHANCED SETTINGS, lobby, BIORAND */
+extern int g_legacy_menu;  /* ini legacy_menu (1: Menu Style Legacy, the old OPTION, ENHANCED SETTINGS, lobby, BIORAND; written with menu_style) */
+extern int g_menu_style;   /* ini menu_style, the setting "Menu Style": 0 Legacy, 1 Standard, 2 Redesigned (only with --dev) */
 extern int g_menu_cli;     /* host.c: -1 none, 0 --legacy-menu, 1 --new-menu (over the ini until the setting is changed) */
 void menu_choice_apply(void);   /* g_new_menu from the two: at the start and on the title menu (lobby_glue.c pc_title_mouse),
                                    never inside the OPTION task or a screen of ours, which read g_new_menu as they go */
+int menu_redesigned(void);      /* Menu Style Redesigned is in effect: --dev, the new menus, menu_style 2 (docs/MENUS.md "Menu Style");
+                                   read live by the game screens' overlay (menu_glue.c), so it applies on a screen's next open */
 
 enum { MS_SETTINGS, MS_SETUP, MS_CHEATS, MS_IMPORT, MS_COUNT };   /* screens: OPTION > SETTINGS, GAME SETUP, PAUSE > CHEATS AND TOOLS, EXTRA > IMPORT */
 

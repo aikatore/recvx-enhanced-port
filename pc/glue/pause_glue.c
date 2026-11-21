@@ -1,7 +1,7 @@
 /* The new menu in the game's OPTION task (docs/MENUS.md): at the title OPTION opens SETTINGS (level 4, the
  * row screen ui_rows.c), in a game it opens the PAUSE menu in level 0's place. Called from adv.c (Adv_GameOptionScreen,
  * DisplayOptionPlateLevel0, DisplayOptionBg, the sub-screens' way back) and options_glue.c (level 4, closing).
- * With Legacy Menu (or --legacy-menu) none of this runs: pc_new_menu_on() is 0 and the old OPTION screen is unchanged.
+ * With Menu Style Legacy (or --legacy-menu) none of this runs: pc_new_menu_on() is 0 and the old OPTION screen is unchanged.
  *
  * PAUSE: RESUME, Camera (Fixed / Over Shoulder, the F5 setting), SETTINGS, GAME SETUP (this game's rules: the same row
  * screen), CO-OP (in a session: the F3 window), SPOILER LOG (the F8 screen, a BioRand game outside co-op), CHEATS AND

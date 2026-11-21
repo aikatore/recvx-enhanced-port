@@ -1,13 +1,14 @@
-# The menus (new by default; Legacy Menu for the old ones)
+# The menus (new by default; Menu Style Legacy for the old ones)
 
-The port's reworked menus are the default. The old ones stay as an option: **Legacy Menu** (SETTINGS > GAMEPLAY >
-STARTUP AND UNLOCKS; in the old ENHANCED SETTINGS and F1 under GAMEPLAY > GENERAL; ini `legacy_menu = 1`) brings back
+The port's reworked menus are the default. The old ones stay as an option: **Menu Style** Legacy (SETTINGS > GAMEPLAY >
+STARTUP AND UNLOCKS; in the old ENHANCED SETTINGS and F1 under GAMEPLAY > GENERAL; ini `menu_style = 0`, or the older
+`legacy_menu = 1`, which still means Legacy) brings back
 OPTION, ENHANCED SETTINGS, the old MULTIPLAYER lobby and the BIORAND screen as they were. A change takes effect on the
 title menu: at the title as soon as SETTINGS (or OPTION) closes, in a game once you are back at the title; never under
 the cursor, since the OPTION task and our screens read the choice as they go (`menu_layout.h menu_choice_apply`, called
 by `lobby_glue.c pc_title_mouse` at level 0). For one run `--legacy-menu` gives the old menus and `--new-menu` the new
-ones whatever the ini says; changing Legacy Menu in a menu ends that. `--dev` no longer has anything to do with the
-menus. The menu rework is done in phases; this page describes what is in now (phases P0 to P4) and how it is built.
+ones whatever the ini says; changing Menu Style in a menu ends that. `--dev` adds a third value, Redesigned, for
+testing (below, "Menu Style / Redesigned (--dev)"). The menu rework is done in phases; this page describes what is in now (phases P0 to P4) and how it is built.
 Some game rules changed with P2 and P3 for both menus: see "Behaviour changes" below.
 
 ## What a player sees
@@ -17,7 +18,7 @@ under the panel). Eight categories on the left:
 
 | Category | Rows |
 |---|---|
-| GAMEPLAY | GENERAL (door animations, loading, quick knife, stairs, Your Character ▸), COMBAT (aim and hit options: Move While Aiming (Third Person) and (Fixed Cameras), Aim Scoped Weapons Normally; Headshots and Piercing ▸), SAVES (Save System, Import Memory Card Saves ▸: IMPORT's MEMORY CARD SAVES), STARTUP AND UNLOCKS (Skip Intro, updates, Battle Game, Legacy Menu) |
+| GAMEPLAY | GENERAL (door animations, loading, quick knife, stairs, Your Character ▸), COMBAT (aim and hit options: Move While Aiming (Third Person) and (Fixed Cameras), Aim Scoped Weapons Normally; Headshots and Piercing ▸), SAVES (Save System, Import Memory Card Saves ▸: IMPORT's MEMORY CARD SAVES), STARTUP AND UNLOCKS (Skip Intro, updates, Battle Game, Menu Style) |
 | CAMERA AND HUD | THIRD-PERSON CAMERA (on/off, field of view, shoulder, lighting; Advanced ▸ distances and height), HUD |
 | CONTROLS | INPUT (Fixed-camera Movement, devices, Control Type ▸ = the game's KEY CONFIG, Button Icons, Vibration), MOUSE, CONTROLLER (Advanced ▸ dead zones), BUTTONS (Customize Keyboard and Mouse ▸, Customize Controller ▸) |
 | DISPLAY | WINDOW, PICTURE (aspect, brightness, contrast, gamma, Screen Position ▸ = SCREEN SETUP, Monitor Test ▸ = MONITOR ADJUSTMENT), WIDESCREEN, INFO (Show Frame Rate, Performance Graph: F1's Performance section as a panel in the top right corner; not saved) |
@@ -170,7 +171,7 @@ Window (F3); the partner, ping and connection on the right.
 
 ### Behaviour changes (both menus, P2)
 
-These are game rules, so they also hold with Legacy Menu; the old menus' rows are unchanged:
+These are game rules, so they also hold with Menu Style Legacy; the old menus' rows are unchanged:
 
 * **Random look in every game (D3).** "Randomize Character Model" (ini `biorand_appear`, the old BIORAND screen's
   RANDOMIZER page) picks a look at every new game, not only in BioRand games: seeded by the enemy seed + an offset outside
@@ -287,6 +288,74 @@ pressed last). A hold (Default) fills a gold bar under its icon.
 - **Hold for Default** is Triangle: Square confirms in key types A, C and D and cancels in B, so it cannot be the hold
   button; Triangle is free in every type.
 
+## Menu Style / Redesigned (--dev)
+
+A test of a redesign of the game's own screens (the "Modern UI" assessment's P0 and P1). It exists only with `--dev`;
+without it nothing of this is listed, honoured or drawn, and the game's screens are byte for byte as before.
+
+**The setting.** SETTINGS > GAMEPLAY > STARTUP AND UNLOCKS > **Menu Style** (also the old ENHANCED SETTINGS and F1;
+ini `menu_style`): **Legacy** (the old menus, what Legacy Menu was), **Standard** (the default: the new menus, the
+game's screens as they are), **Redesigned** (the new menus, and the overlay below on the game's inventory; listed only
+with `--dev`, and an ini `menu_style = 2` reads as Standard without it). `legacy_menu = 1` in an older ini still means
+Legacy; choosing a style writes both keys. Legacy and Standard switch on the title menu as before; Redesigned applies
+the next time the inventory opens. The name avoids "Modern", which is the fixed-camera controls' word.
+
+**What Redesigned adds (P1)**: an overlay on the vanilla inventory, input and drawing only (`menu_glue.c`, the strip
+in `weapon_glue.c`). Every mouse action becomes the game's own presses and cursor moves, one step per frame once the
+state takes input (`macro`): the game's ItemCommand, ItemCombination and ItemBox decide, refuse and speak as they do for
+a pad, so co-op's item sync, BioRand's items and the randomizer see nothing new. Keyboard and controller are unchanged.
+
+| With the mouse | Becomes |
+|---|---|
+| Drag an item (6 px or more) onto another | COMBINE: the item, Confirm, COMBINE, the target, Confirm |
+| Drag a weapon onto EQUIPMENT | its EQUIP (the item, Confirm, EQUIP) |
+| Item box: drag a bag item onto a row of the box list, or a box row onto a bag cell | the box's exchange: the cell, Confirm, the list stepped to the row (as the wheel steps it), Confirm |
+| Drag a weapon onto a slot of the shortcut strip | that weapon shortcut (port state, as the 1-8 keys in the inventory) |
+| Press and release without moving | a click, taken on the release (Standard takes it on the press) |
+| Rest on an item | a tooltip: its name (the game's item name, the disc's language) and amount |
+
+While an item is dragged its icon follows the pointer with what a drop there does (Combine, Equip, Exchange, Shortcut
+n) and the target framed. The **shortcut strip** (two rows of four under ITEM LIST, mirrored in Arabic) shows the eight
+Weapon Shortcuts with their keys; it draws nothing for a player with no shortcut assigned, and appears while a weapon is
+dragged. Not touched: the command list, COMBINE's target grid and CHECK's 3D view (clicks as in Standard), the map,
+files, the save and load screens, the co-op trade screen and the Weapon Shortcuts screen. The overlay's words are in
+`tr_table.inc` (ctest `menu_tr` reads `menu_glue.c` too); in Arabic the labels and tooltip sit left of the pointer.
+
+**Guard rails (P0).** `pc/tools/screens_check.sh BIN_A BIN_B OUTDIR [ISO]` dumps the title, LOAD GAME, the inventory
+(cursor, command list, COMBINE's grid, CHECK), MAP, FILE, the item box and the typewriter's save screen of two builds
+with the same input and compares them byte for byte (MENU=legacy for the old menus, ARGS=--dev, INI, IMPORT with a
+language). Main against this work with Standard: 0 frames differ (also with `--dev` and with Legacy); `layout_check.sh`
+MENU=legacy and MENU=new: 0 differ. `RECVX_MENU_TRACE=1` logs every menu state change (`menu-state: frame ...`), from
+which the script prints the transitions; measured at 30 fps (presses to the last state change):
+
+| Transition | Frames | | Transition | Frames |
+|---|---|---|---|---|
+| inventory open (items take input) | 22 (0.73 s) | | inventory closed (back in play) | 20 (0.67 s) |
+| command list slid in | 6 | | COMBINE's target grid | 2 |
+| CHECK (3D view zoomed in) | 24 (0.80 s) | | CHECK back to the items | 12 |
+| MAP open | 24 (0.80 s) | | MAP back to the inventory | 26 (0.87 s) |
+| FILE open | 28 (0.93 s) | | FILE back | 12 |
+| item box open (from its first frame) | 10 | | item box closed | 15 (0.50 s) |
+| item box: bag to box list, and back | 1 each | | title: LOAD GAME until its screen settles | 150 (5.0 s) |
+
+These are the game's own fades and slides (`BGFadeIn`/`BGFadeOut`, the title's mode 10 to 8 fade); the assessment's
+"Fast Menu Transitions" (independent of the style) would start from them.
+
+**Performance** (`--profile` CSV, the inventory open for 900 frames: Redesigned with an item dragged over the strip
+the whole time, the worst case, against Standard with the pointer on a cell; medians of 3 runs):
+
+| | game thread mean (p99) | render thread mean | peak RSS |
+|---|---|---|---|
+| 1280x960, Standard / Redesigned | 0.255 (0.36) / 0.297 (0.42) ms | 0.856 / 0.927 ms | 175 / 175 MB |
+| 1920x1080, Standard / Redesigned | 0.246 (0.36) / 0.293 (0.43) ms | 0.823 / 0.924 ms | 179 / 179 MB |
+| llvmpipe on 2 cores (`LIBGL_ALWAYS_SOFTWARE=1 taskset -c 0,1`), 1280x960 | | 33.3 / 34.9 ms | 387 / 390 MB |
+
+Within the budget (+0.2 ms game, +0.5 ms p99, +0.3 ms render, +10 MB) on this machine's GPU. The software rasteriser
+proxy is over its +1 ms (+1.6 ms, run-to-run spread about 2 ms; that setup misses 30 fps with either style): the
+icons (one textured quad each) cost most there. The icons load once as the inventory opens (ITEM AFS 145, as the trade
+screen's): the opening frames' game time stays at Standard's (about 1.2 ms at most) and the items take input on the same
+frame. No new shader, render target or per-frame allocation; about 60 quads plus the glyphs at worst.
+
 ## Testing headless
 
 ```
@@ -340,7 +409,7 @@ fails when a text the new menu shows has no row or an empty column), and in Arab
 the lobby are mirrored too (the lobby's rows and GAME SETUP box in their own place right of the models), the dialogs'
 lines wrap from the right. The button bar's words that mean something else in the table ("Select" the button, "Back"
 the walking binding) are looked up as "Select (button hint)" first (`lang.h tr_ctx`). Left: the user's wording pass (the
-translations follow it) and the user guide. The new menu is now the default, the old one is Legacy Menu (above);
+translations follow it) and the user guide. The new menu is now the default, the old one is Menu Style Legacy (above);
 its code goes when the user says so.
 
 A co-op guest that generated the host's BioRand game in the lobby now gets into the host's game (P3 saw it stay in the
