@@ -218,6 +218,7 @@ const MenuRow menu_rows[] = {
     { MC_RULES, NULL, ML_SET, "Free Typewriter Saves", .label = "Save Without Ink Ribbons" },
     { MC_RULES, NULL, ML_SET, "Extra Item Boxes and Herbs" },
     { MC_RULES, NULL, ML_SET, "Headshots & Piercing", .label = "Headshots and Piercing" },
+    { MC_RULES, NULL, ML_SET, "Break Free Pushes Enemies" },
 
     /* ---------------------------------------------------------------- GAME SETUP > ENEMIES */
     { MC_ENEMIES, NULL, ML_SET, "Extra Enemies" },
@@ -368,7 +369,7 @@ const int menu_preset_n = (int)(sizeof(menu_preset) / sizeof(menu_preset[0]));
 /* GAME SETUP Preset (proposal §1.4, D2): the rows it owns, put to their defaults first (Original is all of them there),
    then Remix's or Chaos's values. Not the Enemy Randomizer Seed, Extra Mouth Movement (yours), BioRand, co-op rules or SETTINGS. */
 const char* const menu_setup_owned[] = {
-    "Free Typewriter Saves", "Extra Item Boxes and Herbs", "Headshots & Piercing",
+    "Free Typewriter Saves", "Extra Item Boxes and Herbs", "Headshots & Piercing", "Break Free Pushes Enemies",
     "Extra Enemies", "Rearranged Enemies", "Enemy Randomizer", "Enemy Selection", "Types per Room", "Randomize Event Enemies",
     "Randomize Cutscene Cast", "Model Selection", "Enemy Models", "Model Assignment", "Include Imported Models", "Randomize Voice Lines",
 };

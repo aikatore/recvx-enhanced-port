@@ -299,6 +299,76 @@ and assault rifle, while it staggers or falls too (`bhEne01_DmgCheck` -> `pc_bur
 **Third person, "Locational Hit Reactions"** ([THIRDPERSON.md](THIRDPERSON.md#locational-hit-reactions)): a
 zombie hit on its head, an arm or a leg also flinches that part while it is drawn; its state is untouched.
 
+## Breaking free
+
+**The game**: only a zombie's grab pushes others. A zombie shaken off (`en01.c` MV16 mode3 3: the lever count of
+`bhEne_LeverCheck` runs out) flies back from the player (about 9 units from its 6) with its exp0 `0x40` bit `0x100`
+set, and `bhEne01_CollCheckPush` knocks down every zombie or anatomist (ids 1, 26 only; not the crawling and eating
+types 2, 3, 6, 7, 9, 10) it runs into while that one walks (mode0 1): mode0 3 with mode2 3 / 4 (falls, from its back
+or front) or 2 (a stagger from the side), direction `dv` along its facing. Nothing else pushes anything: the
+Cerberus (`en04.c` NG00 lever) and the Black Widow are thrown off but touch no one, the Bandersnatch's grab
+(`en09.c` MV12/MV13, NG01: lift and throw, no lever) ends standing next to the player, the Hunter has no grab (its
+decapitation kills). With randomized or extra enemies the next enemy then grabbed or hit the player at once:
+in the headless runs below 2 to 28 frames after a break free, several times per run, until the player died.
+
+**"Break Free Pushes Enemies"** (GAME SETUP > RULES and the old ENHANCED SETTINGS, ini `break_free`; Off / **Auto**
+/ On, Auto: on while the Enemy Randomizer or Extra Enemies is on, so a game without them plays as the original;
+co-op: the host's, `OPT2_SHOVE`). `pc/glue/shove_glue.c`, from `eneset.c bhControlEnemy` before the enemies' steps:
+when our player leaves the grab state (player mode0 4, `bhCPM0_nage`) alive (not to mode0 3 or 6, death), every
+enemy within 20 units (28 for one attacking, mode0 2: the Bandersnatch grabs with its arm from ~21), on its floor
+(1 storey: 8 units) and not behind a wall (`bhCollisionCheckLine`), is knocked back by the reaction its own damage code
+picks for a strong hit from the player's side, without damage:
+
+| Type | Reaction (mode0 3, mode2) | Measured: pushed back (units), until it walks again (game frames) |
+|---|---|---|
+| zombie (1) | the game's own push above, from the player instead of the flying zombie (DG03 / DG04 falls, DG02 a stagger) | 8 to 13, 37 to 41 |
+| anatomist (26) | the same, its DG02 | 6 to 7, more than 60 |
+| Cerberus (4) | `bhEne04_DmgChk` / `ChgDmgMode`: DG00, the knock-back slide (exp0 `0x10` bit `0x100`: hit from the front) | up to 7, 32 to 34 |
+| Hunter / Sweeper (5) | `bhEne05_InitDamage`'s heavy hit: DG11 (flies back and lies), from behind DG00, at a wall DG09, at a ledge DG12 | 15 to 30, more than 60 |
+| Bandersnatch (9) | `bhEne09_ChgDmgMode` act 3: DG03 from the front, DG04 from behind | 10 to 15, 35 to 38 |
+| Black Widow (3) | `bhEne03_Damage`'s heavy hit on the floor, DG03 (not on a wall or the ceiling) | 0 to 1 (it reels in place), 35 to 38 |
+
+An enemy attacking or reeling then (mode0 2 or 3: the Bandersnatch letting go) is pushed when it walks again within 45
+frames. Left alone: bosses and the other types, enemy variants, the records the room's scripts act on
+(`enemy_rec_scripted`), a Cerberus of another type or lying (exp0 `0x10` bit `0x100000`: one thrown off a grab), a
+Hunter in the air, a Bandersnatch holding a player, the dead, the hidden, linked parts. Then for **54 game frames
+(1.8 s)** no enemy can start a grab on that player (`pc_grab_immune` where the types decide to grab: `en01.c`
+`bhEne01_ActionModeCheck` (the player counts as busy: the zombie waits beside it, as during a partner's grab) and
+`bhEne01_EatCheck`, `en26.c` the same two, `en04.c` `bhEne04_PlyDamageCheck` (the leap's grab below 12 HP misses),
+`en09.c bhEne09_PlyNageCheck`, `en03.c` the leap's two grab tests); every other attack still hits. 1.8 s: about
+the time a pushed zombie needs to get up and reach the player again, longer than a Cerberus's or a Bandersnatch's
+reaction; long enough to turn and run, short enough that standing still among enemies stays dangerous.
+
+**Co-op**: each game watches its own player. Enemies our game runs are pushed at once; one the partner's game runs gets
+an `EV_ENE_HIT` with `COOP_HIT_SHOVE` (no joints, damage or hit bits; `dp`: where the player broke free) and its runner
+pushes it (`hit_apply` -> `pc_shove_apply`), passed on or kept for a hand-over like a shot (protocol 59). Receiving one
+starts the partner's 54 frames in our game (the grabs our game decides on the partner's stand-in, `plp == &ply2`);
+with no enemy of the partner's game near, one `COOP_HIT_MARK` event carries only that.
+
+**Measured** (headless, `RECVX_SHOVE_TRACE=1`: grabs, break frees, a trace of the enemies around every 5 frames for 150
+frames; cross pressed every 4 frames, the player standing still; old = rule Off, new = On):
+
+| Room, enemies | Old: break free -> next grab (frames) | New | Old / new end |
+|---|---|---|---|
+| 3/6, 3 zombies + zombie, Hunter, Cerberus | 96, 10, 152, 28, 198, 70, 2, 58, 10 | 140, 166, 169, 240, 189, 151, 138, 172 | dead at 2075 / alive at 3100, no hit between grabs |
+| 3/9, 3 Cerberus + zombie, Hunter | 181 | 163, 236 | dead at 880 / alive |
+| 3/9, 3 Cerberus + anatomist, Hunter | 85 | 125, 114, 127 | dead at 810 / alive |
+| 3/9, 3 Cerberus + Black Widow, zombie | 9, 152, 182, 228, 198, 246, 216 | 100, 123, 154, 129 | alive / alive |
+| 1/6, 2 Bandersnatches + zombie | 9 | 108, 121, 109 | dead at 785 / dead at 1160 (30 HP a Bandersnatch grab) |
+| 5/62 randomized (Custom rates, 4 extras, seed 77: 2 Bandersnatches), old Off / new Auto | 16, 121 | 123, 151, 123, 89 | dead at 740 / dead at 1185 |
+
+A grab by the Cerberus (3/9 at 11 HP) was thrown off as the game does and left alone (lying), the zombie spawned
+next to the player then tried to grab it 3 to 9 frames into the 54 and was refused. Layout check (`layout_check.sh`,
+`MENU=legacy`, the rule at its default): 156 + 311 frames, none differs from main.
+
+Co-op (two instances over loopback, 3/9 with two zombies, a Hunter and a Bandersnatch spawned by the host, both
+mashing): the guest broke free 5 times and the host 9 times; each sent the enemies the other game ran as pushes (10
+and 13 events), and their runner knocked back those that walked or stood or did within 45 frames (2 and 5; the others
+were busy with the other player, mostly holding it); the partner's immunity refused 64 (the guest's game) and 9 (the
+host's, Shared Enemy Control on) grab tests on the partner's stand-in. Both screens show the same falls. `coop_owner_check.sh` keeps the rule
+off: its position samples read the end of a Hunter's wall knock-back (DG09 puts its position where its body lies) as a
+jump when the other game has just come into the room.
+
 ## Requirements for randomizers and difficulty options
 
 1. **Record count and order** stay (scripts, `wrk_no`, model/motion/texture tables, co-op slots).

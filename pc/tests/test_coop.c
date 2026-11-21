@@ -104,7 +104,19 @@ static void test_events(void)
     BAD(EV_ENE_HIT, 0, e->u.eh.dam[1] = 5);              /* damage on an absent joint */
     BAD(EV_ENE_HIT, 0, e->u.eh.flg = 0x80);
     BAD(EV_ENE_HIT, 0, e->u.eh.flg = 4 | COOP_HIT_AIM | 0x100);   /* the aim height is at_flg 0xE << 8, nothing else */
-    BAD(EV_ENE_HIT, 0, e->u.eh.flg = 4 | 0x8000);
+    BAD(EV_ENE_HIT, 0, e->u.eh.flg = 4 | 0x8000);      /* (59) a push is no hit */
+    {   /* (protocol 59) "Break Free Pushes Enemies": a push for the runner from dp, no joints, damage or hit bits; the marker only with it */
+        Event e = ev(EV_ENE_HIT);
+        int k;
+        for (k = 0; k < 6; k++) { e.u.eh.jnt[k] = -1; e.u.eh.dam[k] = 0; }
+        e.u.eh.flg = COOP_HIT_SHOVE; e.u.eh.wpnr_no = 0; e.u.eh.djnt_no = -1;
+        CHECK(coop_check_event(&e, 0) == COOP_OK && coop_check_event(&e, 1) == COOP_OK);
+        e.u.eh.flg = COOP_HIT_SHOVE | COOP_HIT_MARK | COOP_HIT_FWD; CHECK(coop_check_event(&e, 1) == COOP_OK);
+        e.u.eh.flg = COOP_HIT_MARK; CHECK(coop_check_event(&e, 1) == COOP_BAD_FIELD);
+        e.u.eh.flg = COOP_HIT_SHOVE | COOP_HIT_AIM; CHECK(coop_check_event(&e, 1) == COOP_BAD_FIELD);
+        e.u.eh.flg = COOP_HIT_SHOVE; e.u.eh.comb_flg = 0x10; CHECK(coop_check_event(&e, 1) == COOP_BAD_FIELD);
+        e.u.eh.comb_flg = 0; e.u.eh.jnt[0] = 3; e.u.eh.dam[0] = 10; CHECK(coop_check_event(&e, 1) == COOP_BAD_FIELD);
+    }
     { Event e = ev(EV_ENE_HIT); e.u.eh.flg = 4 | COOP_HIT_AIM | COOP_HIT_FWD; CHECK(coop_check_event(&e, 1) == COOP_OK); }   /* (56) passed on to the runner */
     { Event e = ev(EV_ENE_HIT); e.u.eh.flg = 4 | COOP_HIT_AIM | 0xE00; CHECK(coop_check_event(&e, 0) == COOP_OK); }
     { Event e = ev(EV_ENE_HIT); e.u.eh.flg = 4 | COOP_HIT_AIM | 0x400 | COOP_HIT_PRECISE; CHECK(coop_check_event(&e, 0) == COOP_OK); }
@@ -641,6 +653,7 @@ static void test_dgrams(void)
     BADP(q.opts = OPT_QUICK_START, COOP_OK);      /* protocol 23: the quick start rule (every option bit is in use) */
     BADP(q.opts2 = OPT2_EXTRA_OBJECTS, COOP_OK);  /* protocol 33: more rules, extra item boxes and herbs */
     BADP(q.opts2 = OPT2_HEADSHOTS, COOP_OK);      /* protocol 41: third person "Headshots & Piercing" */
+    BADP(q.opts2 = OPT2_SHOVE, COOP_OK);          /* protocol 59: "Break Free Pushes Enemies" */
     BADP(q.opts2 = OPT2_ALL + 1, COOP_BAD_FIELD); /* only the rules this protocol has */
     {   /* the PoseExt's enumerations (protocol 16) */
         PoseExt x;

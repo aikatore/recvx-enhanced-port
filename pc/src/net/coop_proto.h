@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 58                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 59                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -97,7 +97,9 @@ extern "C" {
                                                burning blood) and FX_POOL (a blood pool as its call);
                                            58: EV_FX FX_CALL (effect starters that take a node's matrix, as their call: the Tyrant's
                                                blood, claw planes and camera shakes, Steve's sparks and dust) and effect 301 (blood
-                                               stains) as a generic entry */
+                                               stains) as a generic entry;
+                                           59: OPT2_SHOVE ("Break Free Pushes Enemies"), EV_ENE_HIT COOP_HIT_SHOVE / COOP_HIT_MARK
+                                               (a push from the point dp for the enemy's runner; the sender broke free) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per datagram (the receiver's check; a frame sends up to 96: coop_glue.c EV_BURST) */
 #define COOP_SNAP_BUDGET 2400           /* enemy snapshot bytes per frame (records past it wait, by priority) */
@@ -125,7 +127,8 @@ enum { OPT2_EXTRA_OBJECTS = 1,          /* Pose.opts2 (protocol 33): extra item 
        OPT2_HEADSHOTS = 2,              /* (protocol 41) third person "Headshots & Piercing": rifle head damage, head bursts, piercing (tps_glue.c) */
        OPT2_OWNERSHIP = 4,              /* (protocol 46) "Shared Enemy Control", engaged-player enemy ownership: common enemies
                                            run in the game of the player they are engaged with (coop_glue.c "Phase 3") */
-       OPT2_ALL = 7 };
+       OPT2_SHOVE = 8,                  /* (protocol 59) "Break Free Pushes Enemies" in effect (shove_glue.c) */
+       OPT2_ALL = 15 };
 enum { BUSY_NONE, BUSY_EVENT, BUSY_MENU, BUSY_BOX, BUSY_TRADE,
        BUSY_PAUSED,                     /* (protocol 56) in game, its enemies stand still (a scene, a message): it runs none */
        BUSY_DOOR };                     /* (protocol 56) in a door or the next room loading (before: BUSY_NONE): not in the room yet */
@@ -302,6 +305,9 @@ enum { COOP_ROOM_CLAIM, COOP_ROOM_DONE, COOP_ROOM_GUEST, COOP_ROOM_HOST };   /* 
                                            into the guest's room and asks for its claims; the guest's claims are all sent; (unused); the
                                            host's verdict when both came at once: the host's room */
 #define COOP_HIT_FWD 0x4000u            /* (protocol 56) EV_ENE_HIT flg: passed on by the game that got it and did not run the enemy (once at most) */
+#define COOP_HIT_SHOVE 0x8000u          /* (protocol 59) EV_ENE_HIT flg: no hit but "Break Free Pushes Enemies": the sender broke free at dp,
+                                           the runner knocks the enemy back (shove_glue.c pc_shove_apply); no joints, damage or other bits */
+#define COOP_HIT_MARK 0x10000u          /* (protocol 59) with COOP_HIT_SHOVE: only the news (the sender's grab immunity), nothing pushed */
 typedef struct Event {
     uint32_t id;
     uint8_t type, idx, stg, rom;        /* enemy slot; events for another room are dropped */

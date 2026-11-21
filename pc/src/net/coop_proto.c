@@ -383,7 +383,10 @@ int coop_check_event(const Event* e, int from_host)
             if (e->u.eh.jnt[k] < -1 || e->u.eh.jnt[k] >= 64) return COOP_BAD_FIELD;
             if (e->u.eh.dam[k] < 0 || e->u.eh.dam[k] > 10000 || (e->u.eh.jnt[k] < 0 && e->u.eh.dam[k])) return COOP_BAD_FIELD;
         }
-        if ((e->u.eh.flg & ~(4u | 0xE00u | COOP_HIT_AIM | COOP_HIT_PRECISE | COOP_HIT_FWD)) || (e->u.eh.flg2 & ~4u) || (e->u.eh.comb_flg & ~0x70u)) return COOP_BAD_FIELD;
+        if ((e->u.eh.flg & ~(4u | 0xE00u | COOP_HIT_AIM | COOP_HIT_PRECISE | COOP_HIT_FWD | COOP_HIT_SHOVE | COOP_HIT_MARK)) || (e->u.eh.flg2 & ~4u) || (e->u.eh.comb_flg & ~0x70u)) return COOP_BAD_FIELD;
+        if ((e->u.eh.flg & COOP_HIT_MARK) && !(e->u.eh.flg & COOP_HIT_SHOVE)) return COOP_BAD_FIELD;
+        if ((e->u.eh.flg & COOP_HIT_SHOVE) && ((e->u.eh.flg & ~(COOP_HIT_SHOVE | COOP_HIT_MARK | COOP_HIT_FWD)) || e->u.eh.flg2 || e->u.eh.comb_flg ||
+                                             e->u.eh.jnt[0] != -1)) return COOP_BAD_FIELD;   /* (protocol 59) a push: nothing of a hit */
         if (e->u.eh.wpnr_no < 0 || e->u.eh.wpnr_no >= 23 || e->u.eh.djnt_no < -1 || e->u.eh.djnt_no >= 64) return COOP_BAD_FIELD;
         return fins(e->u.eh.dp, 3) && fins(e->u.eh.dv, 3) ? COOP_OK : COOP_BAD_FLOAT;
     case EV_PLY_HIT:

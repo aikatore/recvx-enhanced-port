@@ -244,6 +244,10 @@ int   pc_variant_is(struct BH_PWORK* ep);               /* ep is (part of) an en
 int   pc_variant_draw(struct BH_PWORK* ep);             /* eneset.c bhDrawEnemy, in place of bhPutModel(ep): 1 = drawn */
 int   pc_variant_sound(int enemy_no, int se, signed char* bank);   /* sdfunc.c RequestEnemySeBasic: the sound to request */
 void  actor_hands_back(void);                 /* game.c, before bhControlPlayer: the source's own head and hands back */
+/* "Break Free Pushes Enemies" (pc/glue/shove_glue.c): breaking free from a grab knocks the enemies around back and no
+   enemy starts a grab on that player for a moment */
+void  pc_shove_frame(void);                   /* eneset.c bhControlEnemy, before the enemies' steps */
+int   pc_grab_immune(void);                   /* the grab checks of en01, en03, en04, en09, en26: 1 = no grab on plp now */
 /* PS2 budgets raised on the PC (docs/ENEMIES.md "Budgets on the PC"): the texture heap (the EE copies of the
    TIM2s the GS loads from; 10 MB on the PS2) and its entry table (256). Vanilla rooms use the same
    first entries and bytes as before; only what used to exit(0) now fits. */
