@@ -431,6 +431,7 @@ static void build_rows(void)
         add_label("Chris's Model");
         add(K_HEAD, H_ITEMS);
         add_label("Extra Item Boxes and Herbs");   /* (a GAMEPLAY setting; for the randomizers' games) */
+        add_label("Show Randomized Item Models");
     } else
         for (int i = 0; i < biorand_opt_n; i++)
             if (biorand_opt[i].group == bm.page) add(K_OPT, i);

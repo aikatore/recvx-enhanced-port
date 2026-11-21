@@ -284,6 +284,7 @@ const MenuRow menu_rows[] = {
     { MC_BIORAND, "ITEMS", ML_BIO, "RandomItems", .label = "Randomize Items" },
     { MC_BIORAND, NULL, ML_BIO, "AlternativeRoutes", .label = "Allow Alternative Routes" },
     { MC_BIORAND, NULL, ML_BIO, "HiddenKeyItems", .label = "Hidden Key Items" },
+    { MC_BIORAND, NULL, ML_SET, "Show Randomized Item Models" },
     { MC_BIORAND, NULL, ML_PAGE, NULL, MC_BIO_POOL, "Item Pool and Weapons", .help = "Placement, the item pool's shares, the start inventory and the weapons BioRand may place." },
     { MC_BIO_POOL, NULL, ML_BIO, "Segmented", .label = "Segmented Placement" },
     { MC_BIO_POOL, NULL, ML_BIO, "ShuffleItems", .label = "Custom Item Pool" },

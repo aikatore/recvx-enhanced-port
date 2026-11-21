@@ -35,7 +35,8 @@ const char* spawn_refused(int id);
 const ActorModel* variant_base(const EnemyVariant* v);   /* variant_glue.c */
 void variant_room(void);
 void cast_room(const EnemyOpts* o);   /* cast_glue.c */
-void spawn_keep_texlist(const NJS_TEXLIST* l);
+void itemmdl_room(void);              /* itemmdl_glue.c */
+int spawn_keep_texlist(const NJS_TEXLIST* l);
 void bhCheckEneWorkNum(void);   /* eneset.h */
 void bhStFlg(unsigned int* flg, unsigned int bit);   /* flag.h */
 int bhCkFlg(unsigned int* flg, unsigned int bit);
@@ -919,6 +920,7 @@ void enemy_room_finished(void)
     variant_room();   /* (the slots' enemy variants) */
     extras_room();    /* "Extra Item Boxes and Herbs": their walls and triggers (extras_glue.c) */
     if (!rom || !sys) return;
+    itemmdl_room();   /* "Show Randomized Item Models" (itemmdl_glue.c) */
     o = enemy_opts();
     scan_script();   /* (it only reads the script: co-op ownership, the test aids) */
     enemy_room_hash();

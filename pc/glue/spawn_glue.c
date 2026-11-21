@@ -121,20 +121,25 @@ static void release_textures(void)
 }
 
 void cast_release(void);   /* cast_glue.c */
-void spawn_release(void) { variant_release(); cast_release(); release_textures(); }   /* ps2_texture.c bhReleaseMainTexture; also the enemy variants' and the cutscene cast's models */
+void itemmdl_release(void);   /* itemmdl_glue.c */
+void itemmdl_room_setup(void);
+/* ps2_texture.c bhReleaseMainTexture; also the enemy variants' and the cutscene cast's models, and the item spots'
+   original models back (before the room's own item textures are released) */
+void spawn_release(void) { itemmdl_release(); variant_release(); cast_release(); release_textures(); }
 
-void spawn_textures_released(void) { tl_n = tn_n = 0; memset(spawned, 0, sizeof(spawned)); }   /* njReleaseTextureAll */
+void spawn_textures_released(void) { itemmdl_release(); tl_n = tn_n = 0; memset(spawned, 0, sizeof(spawned)); }   /* njReleaseTextureAll */
 
 /* a copy of an uploaded texlist, released with the room (also for the randomizer: the texlists of
-   the record a new type replaced) */
-void spawn_keep_texlist(const NJS_TEXLIST* l)
+   the record a new type replaced, and the item models of itemmdl_glue.c); 0: the table is full (not kept) */
+int spawn_keep_texlist(const NJS_TEXLIST* l)
 {
-    if (tl_n >= TEX_LISTS || tn_n + (int)l->nbTexture > TEX_NAMES) { host_log("spawn: texture list table full\n"); return; }
+    if (tl_n >= TEX_LISTS || tn_n + (int)l->nbTexture > TEX_NAMES) { host_log("spawn: texture list table full\n"); return 0; }
     memcpy(&tn[tn_n], l->textures, l->nbTexture * sizeof(NJS_TEXNAME));
     tl[tl_n].textures = &tn[tn_n];
     tl[tl_n++].nbTexture = l->nbTexture;
     tn_n += l->nbTexture;
     room_key = room_file_now();
+    return 1;
 }
 
 static int empty_set(const MN_WORK* m)
@@ -166,16 +171,33 @@ static const char* tex_full(int entries, int heap)
 static unsigned char pool[POOL_SIZE] __attribute__((aligned(64)));
 static int pool_n;
 static void sound_release(void);
-void spawn_room_setup(void) { pool_n = 0; pc_enemy_added = 0; sound_release(); }
+void spawn_room_setup(void) { pool_n = 0; pc_enemy_added = 0; sound_release(); itemmdl_room_setup(); }
+
+/* len bytes of the pool at mis mod 64 (the item models of itemmdl_glue.c too), NULL: full */
+unsigned char* spawn_pool_alloc(int len, int mis)
+{
+    int at = ((pool_n + 63) & ~63) + (mis & 63);
+    if (len < 0 || at + len > POOL_SIZE) return NULL;
+    pool_n = at + len;
+    return pool + at;
+}
+
+int spawn_pool_owns(const void* p) { return (const unsigned char*)p >= pool && (const unsigned char*)p < pool + pool_n; }
+
+/* the texture list l is kept for the room's release (its first texture is one of a kept list's) */
+int spawn_texlist_kept(const NJS_TEXLIST* l)
+{
+    for (int i = 0; i < tl_n; i++)
+        if (l->nbTexture && tl[i].nbTexture == l->nbTexture && tl[i].textures[0].texaddr == l->textures[0].texaddr) return 1;
+    return 0;
+}
 
 /* a copy at the source's alignment (mod 64) */
 static unsigned char* pool_copy(const unsigned char* src, int len)
 {
-    int at = ((pool_n + 63) & ~63) + (int)((unsigned int)src & 63);
-    if (at + len > POOL_SIZE) return NULL;
-    memcpy(pool + at, src, len);
-    pool_n = at + len;
-    return pool + at;
+    unsigned char* p = spawn_pool_alloc(len, (int)((unsigned int)src & 63));
+    if (p) memcpy(p, src, len);
+    return p;
 }
 
 /* what the screens copy above sys->memp: the room model's textures (bhCopyTexmem2MainmemSub);
@@ -192,6 +214,9 @@ static int room_tex_push(void)
     }
     return n;
 }
+
+/* room arena bytes free above what the screens copy there (itemmdl_glue.c) */
+int spawn_room_left(void) { return (int)(sys->endp - sys->memp) - room_tex_push(); }
 
 /* (sys->rdtp: the room file, which room_tex_push reads while the room's textures are not all up; it is
    still NULL when a guest that died rejoins and the host's EV_SPAWN arrives before its first room load -

@@ -467,6 +467,8 @@ const Setting g_settings[] = {
       .help = "Save at typewriters without using ink ribbons. In co-op, the host decides." },
     { SP_GAMEPLAY, "Extra Item Boxes and Herbs", V(g_config.extra_objects), 0, 1, 1, .group = "ITEMS",
       .help = "Add item boxes and blue herb planters to some rooms. Useful with the randomizers. In co-op, the host decides." },
+    { SP_GAMEPLAY, "Show Randomized Item Models", V(g_config.item_models), 0, 1, 1,
+      .help = "In BioRand games, show each randomized item as the item you will get, where the game has a model for it. From the next room." },
     { SP_GAMEPLAY, "Extra Enemies", V(g_enemy_opts.extra), 0, ENEMY_EXTRA_MAX, 1, extras, .help = "Add 0 to this many enemies (random) to rooms with enemies, not save or boss rooms, where the player can walk and away from the doors. Killed ones stay dead. From the next room. In co-op, the host decides.", .group = "ENEMIES" },
     { SP_GAMEPLAY, "Rearranged Enemies", V(g_enemy_opts.place), 0, 1, 1, .help = "Move roaming enemies to new starting positions; story and boss enemies stay. Applies next room." },
     { SP_GAMEPLAY, "Enemy Randomizer", V(g_enemy_opts.rand), 0, 1, 1, .help = "Replace enemies with other types that fit the room; bosses stay. Applies next room." },

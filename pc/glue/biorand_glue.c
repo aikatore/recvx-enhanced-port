@@ -27,6 +27,7 @@ void host_log(const char* fmt, ...);
 
 int pc_in_game(void);   /* options_glue.c */
 static void shot_frame(void);
+void itemmdl_check(void);   /* itemmdl_glue.c */
 void spoiler_tick(void);   /* spoiler_menu.c */
 
 /* "Rifle ammo stacks" (GAMEPLAY), always while BioRand is on (biorand_rifle_stack): the stack flag of the rifle and
@@ -36,6 +37,8 @@ void biorand_frame(void)
     unsigned short on = biorand_rifle_stack() ? 0x200 : 0;
     itemdata[40].type = (itemdata[40].type & ~0x200) | on;
     itemdata[42].type = (itemdata[42].type & ~0x200) | on;
+    biorand_item_models_want();   /* (the setting on: its catalogue read at the start, on a thread of its own) */
+    itemmdl_check();              /* (the item spots it swapped still hold their models: itemmdl_glue.c) */
     /* Nosferatu's poison (stflg 0x200000, en15.c PoisonAttack; herbs don't cure it) ends with him (ed_flg 205) in a
        BioRand game. The story cures it as Chris in 9/15: RM_6100 sets ev_flg 307 while Claire is poisoned, and there
        Chris brings the Serum (PlayerPoison2Cr clears Claire's saved ply_stflg[0]). With doors on BioRand takes the

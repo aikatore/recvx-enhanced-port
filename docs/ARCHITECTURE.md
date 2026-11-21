@@ -944,6 +944,7 @@ options: [ENEMIES.md](ENEMIES.md#enemy-options); bindings: [Binding ini format](
 | Aim Scoped Weapons Normally | `scope_normal` ([THIRDPERSON.md](THIRDPERSON.md#scoped-weapons-aimed-normally)) |
 | (lobby GAME RULES) BIORAND, Save System, Free Typewriter Saves | `biorand`, `save_system` (0 Separate Files, 1 Memory Card), `no_ink_ribbon` |
 | Extra Item Boxes and Herbs | `extra_objects` ([DEV_PLACEMENTS.md](DEV_PLACEMENTS.md#extra-item-boxes-and-herbs)) |
+| Show Randomized Item Models | `biorand_item_models` ([BIORAND_INGAME.md](BIORAND_INGAME.md#item-models-2026-11-21)) |
 | Input Devices, Gamepad | `input_source` (0 Auto, 1 Keyboard and Mouse, 2 Gamepad Only), `input_pad` (0 Any, 1-4) |
 | Vibration Strength, Mouse In Menus, Fixed Camera Controls | `rumble_strength`, `menu_mouse`, `fixed_cam_controls` (0 Classic, 1 Modern, 2 Combined) |
 | Move While Aiming (Fixed Cameras) | `fixed_aim_walk` ([THIRDPERSON.md](THIRDPERSON.md#moving-while-aiming)) |
