@@ -63,7 +63,7 @@ static int save(const char* path, const void* d, size_t n)
 
 void imp_free(ImpModel* m)
 {
-    free(m->pos); free(m->nrm); free(m->uv); free(m->jnt); free(m->wgt); free(m->strip); free(m->idx);
+    free(m->pos); free(m->nrm); free(m->uv); free(m->jnt); free(m->wgt); free(m->strip); free(m->idx); free(m->iuv); free(m->morph);
     for (int i = 0; i < m->ntex; i++) free(m->tim2[i]);
     memset(m, 0, sizeof(*m));
 }
@@ -177,6 +177,155 @@ static int png(const ImpModel* m, int k, const char* path, Buf* b)
     return ok;
 }
 int imp_write_png(const ImpModel* m, int k, const char* path) { return png(m, k, path, NULL); }
+
+/* ---------------------------------------------------------------- RGBA to an 8-bit TIM2 */
+typedef struct Col { uint32_t c, n; int box; } Col;   /* a colour of the picture (RGBA, little endian), its pixels, its entry */
+static int col_cmp(const void* a, const void* b) { uint32_t x = ((const Col*)a)->c, y = ((const Col*)b)->c; return x < y ? -1 : x > y; }
+static int ch(uint32_t c, int k) { return (c >> (8 * k)) & 255; }
+static int split_ch;
+static int ch_cmp(const void* a, const void* b) { return ch(((const Col*)a)->c, split_ch) - ch(((const Col*)b)->c, split_ch); }
+static int nearest(const float (*pal)[4], int np, uint32_t c)
+{
+    int best = 0;
+    float bd = 1e30f;
+    for (int k = 0; k < np; k++) {
+        float d = 0;
+        for (int j = 0; j < 4; j++) { float e = (ch(c, j) - pal[k][j]) * (j == 3 ? 2.0f : 1.0f); d += e * e; }   /* (alpha counts twice: hair edges) */
+        if (d < bd) { bd = d; best = k; }
+    }
+    return best;
+}
+
+unsigned char* imp_tim2_from_rgba(const unsigned char* rgba, int w, int h, int* len)
+{
+    int n = w * h, nu = 0, np = 0;
+    Col* u = malloc(sizeof(Col) * (size_t)n);
+    float (*pal)[4] = calloc(256, sizeof(*pal));
+    int lo[256], hi[256];   /* the boxes: ranges of u (median cut) */
+    if (!u || !pal) { free(u); free(pal); return NULL; }
+    for (int i = 0; i < n; i++) { memcpy(&u[i].c, rgba + 4 * i, 4); u[i].n = 1; u[i].box = 0; }
+    qsort(u, (size_t)n, sizeof(Col), col_cmp);
+    for (int i = 0; i < n; i++)
+        if (nu && u[nu - 1].c == u[i].c) u[nu - 1].n++;
+        else u[nu++] = u[i];
+    lo[0] = 0; hi[0] = nu; np = 1;
+    while (np < 256) {   /* split the box with the widest channel range (times the root of its pixels) at its weighted median */
+        int bb = -1, bc = 0;
+        float bs = 0;
+        for (int b = 0; b < np; b++) {
+            if (hi[b] - lo[b] < 2) continue;
+            uint32_t px = 0;
+            int mn[4] = { 255, 255, 255, 255 }, mx[4] = { 0 };
+            for (int i = lo[b]; i < hi[b]; i++) {
+                px += u[i].n;
+                for (int j = 0; j < 4; j++) { int v = ch(u[i].c, j); if (v < mn[j]) mn[j] = v; if (v > mx[j]) mx[j] = v; }
+            }
+            for (int j = 0; j < 4; j++) {
+                float sc = (float)(mx[j] - mn[j]) * (j == 3 ? 2.0f : 1.0f) * sqrtf((float)px);
+                if (sc > bs) { bs = sc; bb = b; bc = j; }
+            }
+        }
+        if (bb < 0) break;
+        split_ch = bc;
+        qsort(u + lo[bb], (size_t)(hi[bb] - lo[bb]), sizeof(Col), ch_cmp);
+        uint32_t tot = 0, acc = 0;
+        for (int i = lo[bb]; i < hi[bb]; i++) tot += u[i].n;
+        int m = lo[bb] + 1;
+        for (int i = lo[bb]; i < hi[bb] - 1; i++) { acc += u[i].n; m = i + 1; if (acc * 2 >= tot) break; }
+        lo[np] = m; hi[np] = hi[bb]; hi[bb] = m; np++;
+    }
+    for (int b = 0; b < np; b++) {   /* the boxes' weighted means */
+        double s[4] = { 0 }, t = 0;
+        for (int i = lo[b]; i < hi[b]; i++) { for (int j = 0; j < 4; j++) s[j] += (double)ch(u[i].c, j) * u[i].n; t += u[i].n; }
+        for (int j = 0; j < 4; j++) pal[b][j] = (float)(s[j] / t);
+    }
+    for (int it = 0; it < 3 && nu > np; it++) {   /* refined (k-means) */
+        static double s[256][4], t[256];
+        memset(s, 0, sizeof(s)); memset(t, 0, sizeof(t));
+        for (int i = 0; i < nu; i++) {
+            int k = nearest((const float (*)[4])pal, np, u[i].c);
+            for (int j = 0; j < 4; j++) s[k][j] += (double)ch(u[i].c, j) * u[i].n;
+            t[k] += u[i].n;
+        }
+        for (int k = 0; k < np; k++) if (t[k] > 0) for (int j = 0; j < 4; j++) pal[k][j] = (float)(s[k][j] / t[k]);
+    }
+    for (int i = 0; i < nu; i++) u[i].box = nearest((const float (*)[4])pal, np, u[i].c);
+    qsort(u, (size_t)nu, sizeof(Col), col_cmp);   /* (by colour again: looked up per pixel) */
+    int size = 16 + 48 + n + 1024;
+    unsigned char* t = calloc(1, (size_t)size);
+    if (!t) { free(u); free(pal); return NULL; }
+    uint32_t total = 48 + (uint32_t)n + 1024, clut = 1024, img = (uint32_t)n;
+    uint16_t hs = 48, nc = 256, ww = (uint16_t)w, hh = (uint16_t)h;
+    memcpy(t, "TIM2", 4); t[4] = 4; t[6] = 1;
+    memcpy(t + 16, &total, 4); memcpy(t + 20, &clut, 4); memcpy(t + 24, &img, 4); memcpy(t + 28, &hs, 2); memcpy(t + 30, &nc, 2);
+    t[33] = 1; t[34] = 3; t[35] = 5; memcpy(t + 36, &ww, 2); memcpy(t + 38, &hh, 2);
+    for (int i = 0; i < n; i++) {
+        Col key;
+        memcpy(&key.c, rgba + 4 * i, 4);
+        const Col* f = bsearch(&key, u, (size_t)nu, sizeof(Col), col_cmp);
+        t[64 + i] = (unsigned char)(f ? f->box : 0);
+    }
+    for (int k = 0; k < 256; k++) {   /* the CLUT in CSM1 order (entries 8..15 and 16..23 of every 32 swapped) */
+        int s = (k & ~0x18) | ((k & 0x08) << 1) | ((k & 0x10) >> 1);
+        unsigned char* c = t + 64 + n + 4 * s;
+        for (int j = 0; j < 3; j++) c[j] = (unsigned char)lroundf(fminf(255, fmaxf(0, pal[k][j])));
+        c[3] = (unsigned char)((lroundf(fminf(255, fmaxf(0, pal[k][3]))) * 128 + 127) / 255);
+    }
+    free(u); free(pal);
+    *len = size;
+    return t;
+}
+
+/* ---------------------------------------------------------------- welding */
+typedef struct WKey { int32_t k[17]; int v; } WKey;
+static int wkey_cmp(const void* a, const void* b)
+{
+    const WKey *x = a, *y = b;
+    for (int i = 0; i < 17; i++) if (x->k[i] != y->k[i]) return x->k[i] < y->k[i] ? -1 : 1;
+    return x->v - y->v;
+}
+
+int imp_weld(ImpModel* m)
+{
+    int nv = m->nv ? m->nv : 1, n = 0;
+    WKey* w = malloc(sizeof(WKey) * (size_t)nv);
+    int* to = malloc(sizeof(int) * (size_t)nv);
+    float (*pos)[3] = malloc(12 * (size_t)nv), (*nrm)[3] = malloc(12 * (size_t)nv), (*uv)[2] = malloc(8 * (size_t)nv), (*wgt)[4] = malloc(16 * (size_t)nv);
+    float (*mo)[3] = m->morph ? malloc(12 * (size_t)nv) : NULL;
+    unsigned char (*jnt)[4] = malloc(4 * (size_t)nv);
+    if (!m->iuv && (m->iuv = malloc(sizeof(*m->iuv) * (size_t)(m->nidx ? m->nidx : 1))))
+        for (int i = 0; i < m->nidx; i++) memcpy(m->iuv[i], m->uv[m->idx[i]], 8);
+    if (!w || !to || !pos || !nrm || !uv || !wgt || !jnt || (m->morph && !mo) || !m->iuv) {
+        free(w); free(to); free(pos); free(nrm); free(uv); free(wgt); free(jnt); free(mo);
+        return m->nv;
+    }
+    for (int v = 0; v < m->nv; v++) {
+        int32_t* k = w[v].k;
+        for (int c = 0; c < 3; c++) { k[c] = (int32_t)lroundf(m->pos[v][c] * 1e4f); k[3 + c] = (int32_t)lroundf(m->nrm[v][c] * 1e3f); }
+        for (int j = 0; j < 4; j++) { k[6 + j] = m->wgt[v][j] > 0 ? m->jnt[v][j] : -1; k[10 + j] = (int32_t)lroundf(m->wgt[v][j] * 1e3f); }
+        for (int c = 0; c < 3; c++) k[14 + c] = m->morph ? (int32_t)lroundf(m->morph[v][c] * 1e4f) : 0;
+        w[v].v = v;
+    }
+    qsort(w, (size_t)m->nv, sizeof(WKey), wkey_cmp);
+    for (int i = 0; i < m->nv; i++) {   /* (the first of equal ones gives the data) */
+        int v = w[i].v;
+        if (i && !memcmp(w[i].k, w[i - 1].k, sizeof(w[i].k))) { to[v] = to[w[i - 1].v]; continue; }
+        to[v] = n;
+        memcpy(pos[n], m->pos[v], 12); memcpy(nrm[n], m->nrm[v], 12); memcpy(uv[n], m->uv[v], 8);
+        memcpy(jnt[n], m->jnt[v], 4); memcpy(wgt[n], m->wgt[v], 16);
+        if (mo) memcpy(mo[n], m->morph[v], 12);
+        n++;
+    }
+    for (int i = 0; i < m->nidx; i++) m->idx[i] = to[m->idx[i]];
+    free(w); free(to);
+    free(m->pos); free(m->nrm); free(m->uv); free(m->jnt); free(m->wgt); free(m->morph);
+    m->pos = pos; m->nrm = nrm; m->uv = uv; m->jnt = jnt; m->wgt = wgt; m->morph = mo;
+    m->nv = n;
+    return n;
+}
+
+/* the UV of strip index i (imp_weld moved them out of the vertices) */
+static const float* suv(const ImpModel* m, int i) { return m->iuv ? m->iuv[i] : m->uv[m->idx[i]]; }
 
 /* ---------------------------------------------------------------- rest pose */
 /* column-major 4x4 (glTF) world rest matrices */
@@ -502,9 +651,10 @@ int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gi
     {   /* vertex chunk 51 (njCnkCvVnPs2): a 64-byte header, then per vertex position and normal (w = 1),
            the rest pose in the pelvis's frame; actor_glue.c rewrites them every frame */
         uint32_t words = (60 + 32 * (uint32_t)m->nv) / 4;
-        if (words > 0xFFFF || m->nv > 8000) { free(W); free(sk); free(mlb.p); return fail(err, en, "%d vertices: too many for one chunk", m->nv); }
+        if (m->nv > CVXM_VERTS) { free(W); free(sk); free(mlb.p); return fail(err, en, "%d vertices: more than %d", m->nv, CVXM_VERTS); }
         unsigned char hd[64] = { 51, 0 };
-        uint16_t sz = (uint16_t)words, ofs = 0, nv = (uint16_t)m->nv;
+        uint16_t sz = (uint16_t)(words > 0xFFFF ? 0xFFFF : words), ofs = 0, nv = (uint16_t)m->nv;   /* (njCnkCvVnPs2 reads the count, not the
+                                                                                                   size: above 8189 vertices it holds 0xFFFF) */
         memcpy(hd + 2, &sz, 2); memcpy(hd + 4, &ofs, 2); memcpy(hd + 6, &nv, 2);
         put(&mlb, hd, 64);
         for (int v = 0; v < m->nv; v++) {
@@ -532,7 +682,7 @@ int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gi
             if (st->tex != k) continue;
             float u0 = 1e30f, v0 = 1e30f, u1 = -1e30f, v1 = -1e30f;
             for (int i = 0; i < st->n; i++) {
-                const float* t = m->uv[m->idx[st->first + i]];
+                const float* t = suv(m, st->first + i);
                 u0 = fminf(u0, t[0]); u1 = fmaxf(u1, t[0]); v0 = fminf(v0, t[1]); v1 = fmaxf(v1, t[1]);
             }
             int x0 = (int)floorf(u0 * w), x1 = (int)ceilf(u1 * w), y0 = (int)floorf(v0 * h), y1 = (int)ceilf(v1 * h);
@@ -561,17 +711,19 @@ int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gi
                 if (st->tex != k || st->n < 3 || st->n > 32767 || (see && see[s]) != pass) continue;
                 float fu = 1e30f, fv = 1e30f, u1 = -1e30f, v1 = -1e30f;
                 for (int i = 0; i < st->n; i++) {
-                    const float* t = m->uv[m->idx[st->first + i]];
+                    const float* t = suv(m, st->first + i);
                     fu = fminf(fu, t[0]); fv = fminf(fv, t[1]); u1 = fmaxf(u1, t[0]); v1 = fmaxf(v1, t[1]);
                 }
                 /* the strip moved by whole tiles (the textures repeat in Outbreak, the game clamps): into the tile
                    of its lowest UV, or of its highest when less of it sticks out that way (Yoko's jeans: v 1.99..2.14,
                    the seat drawn from the skin at the texture's bottom edge) */
-                fu = tile(fu, u1); fv = tile(fv, v1);
+                if (st->clamp) fu = fv = 0;   /* (a clamped texture (Wii): the game clamps too, the UVs as they are) */
+                else { fu = tile(fu, u1); fv = tile(fv, v1); }
                 put16(&plist, (uint16_t)st->n);
                 for (int i = 0; i < st->n; i++) {
                     int x = m->idx[st->first + i];
-                    float u = (m->uv[x][0] - fu) * 1023.0f + 0.5f, v = (m->uv[x][1] - fv) * 1023.0f + 0.5f;
+                    const float* t = suv(m, st->first + i);
+                    float u = (t[0] - fu) * 1023.0f + 0.5f, v = (t[1] - fv) * 1023.0f + 0.5f;
                     put16(&plist, (uint16_t)x);
                     put16(&plist, (uint16_t)(u < 0 ? 0 : u > 65535 ? 65535 : u));
                     put16(&plist, (uint16_t)(v < 0 ? 0 : v > 65535 ? 65535 : v));
@@ -624,6 +776,8 @@ int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gi
     }
     align(&f, 36, 0);
     for (int k = 0; k < 2; k++) { float t = m->lid_travel[k] * scale; uint32_t u; memcpy(&u, &t, 4); put32(&f, u); }
+    align(&f, 52, 0);
+    { uint32_t u; memcpy(&u, &m->jaw_gain, 4); put32(&f, u); }
     align(&f, 60, 0);
     put32(&f, (uint32_t)(16 + mlb.n));
     {   /* MLB header: "MDL", status 0xbc (a chunk model, as the game's), header size, objects, texlist, objects */
@@ -648,6 +802,17 @@ int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gi
     align(&f, 16, 0);
     set32(&f, 16, (uint32_t)f.n);
     put(&f, sk, sizeof(*sk) * (size_t)m->nv);
+    if (m->morph) {   /* the blink: offsets of the vertices that move, in the game's space */
+        uint32_t at = (uint32_t)f.n, n = 0;
+        for (int v = 0; v < m->nv; v++) {
+            const float* d = m->morph[v];
+            if (fabsf(d[0]) + fabsf(d[1]) + fabsf(d[2]) < 1e-5f) continue;
+            CvxmMorph e = { (uint32_t)v, { -d[0] * scale, d[1] * scale, -d[2] * scale } };
+            put(&f, &e, sizeof(e));
+            n++;
+        }
+        if (n) { set32(&f, 44, at); set32(&f, 48, n); }
+    }
     PcCvxm cv;
     char why[96];
     if (f.bad || mlb.bad) fail(err, en, "out of memory");

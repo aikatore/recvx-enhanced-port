@@ -251,7 +251,7 @@ const MenuRow menu_rows[] = {
     { MC_CHAR_ADV, NULL, ML_SET, "Match Model Animations" },
     { MC_CHAR_ADV, NULL, ML_SET, "Animated Faces (Experimental)" },
     { MC_CHARACTERS, NULL, ML_IMPORT, NULL, MC_IMPORT_CHARS, "Import Characters",
-      .help = "Add characters from Resident Evil Outbreak File 2 as looks. Shortcut: EXTRA > IMPORT > CHARACTERS." },
+      .help = "Add characters from Resident Evil Outbreak File 2 and Resident Evil: The Umbrella Chronicles as looks. Shortcut: EXTRA > IMPORT > CHARACTERS." },
     { MC_CHARACTERS, "STORY CHARACTERS IN CUTSCENES", ML_VAR, NULL, SV_STORY, "Story Characters", N("Original", "Swapped", "Any Model", "Custom"),
       .help = "Steve, Wesker, Alfred, Alexia and Rodrigo in cutscenes. Swapped: each other's looks, e.g. Alfred as Steve. Any Model: "
               "also creatures, e.g. Rodrigo as a Hunter. Claire and Chris follow YOU." },

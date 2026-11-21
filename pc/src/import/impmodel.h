@@ -1,8 +1,9 @@
 /* A skinned model read from another game's disc, and what it is written as: glTF (.glb, with
    PNG textures) and the "You appear as" format of this port (.cvxm). docs/IMPORT_OUTBREAK.md */
 #pragma once
+#include <stdint.h>
 
-#define IMP_NODES 128
+#define IMP_NODES 192        /* (Umbrella Chronicles' players: up to 138 bones) */
 #define IMP_TEX 16
 
 typedef struct ImpNode {
@@ -16,13 +17,17 @@ typedef struct ImpNode {
    lid bones are both on the upper lid; the crease's skin reaches up to the brow and stays), the jaw */
 enum { IMP_FACE_NONE, IMP_FACE_LID_L, IMP_FACE_CREASE_L, IMP_FACE_LID_R, IMP_FACE_CREASE_R, IMP_FACE_JAW, IMP_FACES };
 
-typedef struct ImpStrip { int first, n, tex; } ImpStrip;   /* idx[first .. first + n): a triangle strip; tex: texture slot or -1 */
+typedef struct ImpStrip {   /* idx[first .. first + n): a triangle strip; tex: texture slot or -1 */
+    int first, n, tex;
+    int clamp;              /* its texture clamps (Wii: GX_CLAMP): UVs taken as they are; 0: it repeats (Outbreak), the strip moved by whole tiles */
+} ImpStrip;
 
 typedef struct ImpModel {
     int nmesh;              /* meshes of the source model (information) */
     int eyes_left_out;      /* eyeball overlay meshes not converted (ob2.c read_mesh) */
     float eye[2][4];        /* per eye (left, right) the overlay's x min, x max, y min, y max: the opening; y max <= y min: not known */
     float lid_travel[2];    /* the blink: how far the upper lid (left, right) goes down to close (model units; ob2.c lid_falloff) */
+    float jaw_gain;         /* the jaw turned this times the game's angle (0: 1; uc.c: a jaw made on closed lips, which only stretch) */
     int see_cut;            /* a strip is see-through (drawn last, blended) where a texel under it has alpha (0..255) below
                                this; 0: 255. The high-detail models' skin has 250..254 in places (ob2.c hd_face) */
     int nn;
@@ -34,6 +39,8 @@ typedef struct ImpModel {
     int ns, nidx;
     ImpStrip* strip;
     int* idx;
+    float (*iuv)[2];        /* per strip index its UV (imp_weld: one vertex then serves several UVs); NULL: uv[idx] */
+    float (*morph)[3];      /* per vertex its offset with the eyes closed (Umbrella Chronicles' blink morph); NULL: none */
     int ntex;
     unsigned char* tim2[IMP_TEX];   /* PS2 TIM2 files (one picture each), owned */
     int tim2_len[IMP_TEX];
@@ -47,6 +54,12 @@ int  imp_tim2_rgba(const unsigned char* t, int len, int* w, int* h, unsigned cha
 /* a TIM2 picture whose CLUT gives alpha as 0..255 (Outbreak's: 0xFF opaque, every texture's largest)
    moved to the PS2 convention the rest of this code and the game's blending use (0x80 opaque), in place */
 void imp_tim2_alpha_255(unsigned char* t, int len);
+/* an RGBA8 picture (w, h: powers of two up to 1024) as an 8-bit TIM2 with a 32-bit CLUT (256 colours by median cut,
+   then refined; alpha moved to the PS2 range, 0x80 opaque), malloc'd (*len bytes); NULL: out of memory */
+unsigned char* imp_tim2_from_rgba(const unsigned char* rgba, int w, int h, int* len);
+/* merges vertices of the same position, normal, weights and morph (the strips' UVs move into iuv): Wii models
+   give a vertex per triangle corner. Returns the vertices left. */
+int  imp_weld(ImpModel* m);
 /* texture slot k as a PNG file */
 int  imp_write_png(const ImpModel* m, int k, const char* path);
 /* glTF 2.0 binary: the skeleton, one skinned mesh (a primitive per texture), embedded PNGs;
@@ -76,10 +89,16 @@ int  imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned g
         bones the other way round: the crease first)
         36: float lid_travel[2] (left, right; the game's units; version 3, else 0; version 4: from the
         lid's margin to the bottom of the eye's opening)
+        44: u32 morph offset, 48: u32 morph entries (version 5; 0: none): the blink as vertex offsets,
+        per entry u32 vertex, float d[3] (the game's units, eyes fully closed), by vertex
+        52: float jaw gain (version 5; 0: 1): the jaw turned this times the angle imp_face computes
+     vertices: at most CVXM_VERTS (version 5; before 8189: the chunk's size word; above that it holds 0xFFFF)
      version 4 also: the CLUTs' alpha in the PS2 range (0x80 opaque; before: Outbreak's 0..255)
      model chunk list: u32 size, MLB (bhMlbBinRealize), u32 -1
      texture block: "TIM2" chunks as bhSetMemPvpTexture reads them, then an end chunk (-1)
      skin: per vertex float pos[3], nrm[3] (model space, the game's units), u8 node[4], float w[4] */
 #define CVXM_MAGIC 0x4D495852u   /* "RXIM" */
-#define CVXM_VERSION 4
+#define CVXM_VERSION 5
+#define CVXM_VERTS 12288      /* the vertex work buffer's entries (pc_prelude.h PC_VERTEX_ENTRIES) */
 typedef struct CvxmSkin { float pos[3], nrm[3]; unsigned char node[4]; float w[4]; } CvxmSkin;
+typedef struct CvxmMorph { uint32_t v; float d[3]; } CvxmMorph;

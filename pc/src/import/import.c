@@ -16,7 +16,8 @@ ImportSettings g_import;
 ImportProgress g_import_progress;
 volatile int g_import_reload;
 const ImportSource import_sources[IMPORT_SOURCES] = {
-    { "outbreak2", "Resident Evil Outbreak File #2", "SLUS-20984", IMPORT_CAT_CHARACTERS, NULL, NULL },
+    { "outbreak2", "Resident Evil Outbreak File #2", "SLUS-20984", IMPORT_CAT_CHARACTERS, NULL, NULL, IMPORT_OFFERED, NULL,
+      { "Outbreak Characters", "Outbreak Cutscenes", "Outbreak Supporting Cast", "Outbreak Enemies" } },
     { "sles50306", "Resident Evil Code: Veronica X (Europe)", "SLES-50306", IMPORT_CAT_LANGUAGES,
       "French, German and Spanish, with cutscene subtitles. Import them from your own disc image of the European release (SLES-50306).", NULL },
     { "slus20184ru", "Resident Evil Code: Veronica X (Russian fan translation)", "SLUS-20184", IMPORT_CAT_LANGUAGES,
@@ -40,6 +41,10 @@ const ImportSource import_sources[IMPORT_SOURCES] = {
     { "sles50306it", "Resident Evil Code: Veronica X (Italian fan translation)", "SLES-50306", IMPORT_CAT_LANGUAGES,
       "Italian fan translation by KimeraVX, with cutscene subtitles. Import it from your own disc image of the European release (SLES-50306) with the Italian patch.",
       "Needs the European disc image with the Italian fan translation by KimeraVX: %s." },
+    { "umbrella", "Resident Evil: The Umbrella Chronicles", "RBUE08", IMPORT_CAT_CHARACTERS,
+      "Chris, Jill, Rebecca, Richard, Kenneth, Billy, Carlos, Ada, HUNK and Wesker, in their costumes. Import them from your own disc image of the US Wii release (RBUE08) in Dolphin's RVZ format.",
+      "Needs a clean US disc image of Resident Evil: The Umbrella Chronicles in Dolphin's RVZ format: %s.", IMPORT_PLAYERS, "rvz",
+      { "Umbrella Chronicles Characters", "Umbrella Chronicles Cutscenes", "Umbrella Chronicles Supporting Cast", "Umbrella Chronicles Enemies" } },
 };
 
 #define ITEMS_MAX 1024
@@ -105,7 +110,7 @@ int import_results(int src, ImportItem* out, int max, char* when, int wn)
         x->ok = atoi(fld[3]); x->nodes = atoi(fld[4]); x->meshes = atoi(fld[5]); x->verts = atoi(fld[6]);
         x->tris = atoi(fld[7]); x->textures = atoi(fld[8]); x->player = atoi(fld[9]); x->female = atoi(fld[10]);
         snprintf(x->note, sizeof(x->note), "%s", fld[11] ? fld[11] : "");
-        x->group = ob2_group(x->id);   /* (one source so far) */
+        x->group = src == IMPORT_UMBRELLA ? uc_group(x->id) : ob2_group(x->id);
     }
     fclose(f);
     return n;
@@ -126,7 +131,8 @@ int import_run(int src, int what)
         host_log("import: %s: %s\n", import_sources[src].key, pg->phase);
         return r;
     }
-    r = ob2_extract(g_import.iso[src], dir, what & IMPORT_OFFERED, items, ITEMS_MAX, &n);
+    what &= import_sources[src].offered;
+    r = src == IMPORT_UMBRELLA ? uc_extract(g_import.iso[src], dir, what, items, ITEMS_MAX, &n) : ob2_extract(g_import.iso[src], dir, what, items, ITEMS_MAX, &n);
     if (r < 0) { host_log("import: %s: %s\n", import_sources[src].key, pg->phase); return -1; }
     Save s = { src, n, items, g_import.iso[src] };
     snprintf(p, sizeof(p), "%s/manifest.txt", dir);
@@ -174,7 +180,7 @@ void import_registry_load(void)
         for (int i = 0; i < n; i++) {
             char file[1200], name[96];
             int j;
-            if (!items[i].player || (items[i].group > 0 ? items[i].group : 0) != g || !(IMPORT_OFFERED & (1 << g))) continue;
+            if (!items[i].player || (items[i].group > 0 ? items[i].group : 0) != g || !(import_sources[src].offered & (1 << g))) continue;
             SDL_snprintf(file, sizeof(file), "%s/%s/%s.cvxm", dir, items[i].id, items[i].id);
             for (j = 0; j < k && strcmp(actor_import_file[j], file); j++) {}
             if (j < k) continue;   /* listed already: it keeps its place (a later extraction appends) */
@@ -186,6 +192,7 @@ void import_registry_load(void)
             actor_import_file[k] = f;
             actor_import_group[k] = (unsigned char)(items[i].group >= 0 ? items[i].group : 0);
             actor_import_src[k] = (unsigned char)src;
+            actor_import_heading[k] = import_sources[src].groups[actor_import_group[k] & 3];
             actor_imports[k] = (ActorModel){ .name = nm, .anim = items[i].female ? ANIM_FEMALE : ANIM_MALE };
             k++;
         }

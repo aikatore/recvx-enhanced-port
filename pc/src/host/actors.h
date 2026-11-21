@@ -35,6 +35,7 @@ extern ActorModel actor_imports[ACTOR_IMPORT_MAX];
 extern const char* actor_import_file[ACTOR_IMPORT_MAX];   /* its .cvxm */
 extern unsigned char actor_import_group[ACTOR_IMPORT_MAX];   /* IMPORT_GROUP_* (import.h) */
 extern unsigned char actor_import_src[ACTOR_IMPORT_MAX];     /* the source it came from (import.h IMPORT_*, import_sources[]) */
+extern const char* actor_import_heading[ACTOR_IMPORT_MAX];   /* its group's heading in the lists (ImportSource.groups; NULL: Outbreak's) */
 extern int actor_import_n;
 /* "Show in Model Lists" (IMPORT > CHARACTERS > a game; ini import_<key>_shown = 0): bit 1 << source hidden. A hidden
    source's models leave every model list (appear_*, the cast's "Custom" lists) and every random pool (cast.c); no file

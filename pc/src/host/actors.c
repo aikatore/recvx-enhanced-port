@@ -94,6 +94,7 @@ ActorModel actor_imports[ACTOR_IMPORT_MAX];
 const char* actor_import_file[ACTOR_IMPORT_MAX];
 unsigned char actor_import_group[ACTOR_IMPORT_MAX];
 unsigned char actor_import_src[ACTOR_IMPORT_MAX];
+const char* actor_import_heading[ACTOR_IMPORT_MAX];
 int actor_import_n;
 unsigned g_import_hidden;
 int (*appear_in_use)(int chr);
@@ -286,7 +287,7 @@ const char* appear_group(int chr)
 {
     static const char* const imp[4] = { "Outbreak Characters", "Outbreak Cutscenes", "Outbreak Supporting Cast", "Outbreak Enemies" };
     int k = import_of(chr), id;
-    if (k >= 0) return actor_import_shown(k) ? imp[actor_import_group[k] & 3] : "Hidden Source (Still in Use)";
+    if (k >= 0) return !actor_import_shown(k) ? "Hidden Source (Still in Use)" : actor_import_heading[k] ? actor_import_heading[k] : imp[actor_import_group[k] & 3];
     chr = appear_canon(chr);
     if (chr < COOP_CHR_ACTOR || chr == COOP_CHR_CINE) return "Code: Veronica Characters";
     if (tail_at(chr) >= 0) return "Code: Veronica Cutscenes";

@@ -15,16 +15,16 @@ extern "C" {
 #endif
 
 enum { IMPORT_OUTBREAK2, IMPORT_SLES50306, IMPORT_SLUS20184RU, IMPORT_SLPM65022, IMPORT_SLES50306TR, IMPORT_SLUS20184PT, IMPORT_SLES50306AR,
-       IMPORT_SLPM65022KO, IMPORT_SLES50306IT, IMPORT_SOURCES };
+       IMPORT_SLPM65022KO, IMPORT_SLES50306IT, IMPORT_UMBRELLA, IMPORT_SOURCES };   /* (new ones at the end: g_import_hidden's bits) */
 enum { IMPORT_CAT_CHARACTERS, IMPORT_CAT_LANGUAGES };   /* what a source gives (the IMPORT screen's categories) */
 
 /* the groups of models (F9 lists them by group), and what to extract: bits 1 << group (F9 checkboxes,
    RECVX_IMPORT_WHAT) */
 enum { IMPORT_GROUP_PLAYERS, IMPORT_GROUP_CUTSCENE, IMPORT_GROUP_NPCS, IMPORT_GROUP_ENEMIES, IMPORT_GROUPS };
 enum { IMPORT_PLAYERS = 1, IMPORT_CUTSCENE = 2, IMPORT_NPCS = 4, IMPORT_ENEMIES = 8, IMPORT_ALL = 15 };
-/* the groups offered for now: F9's checkboxes and table, what import_run extracts and what "You appear
-   as" lists (a manifest of an older run may hold the others: left out). The cutscene / high-detail
-   versions and the enemies work the same way; IMPORT_ALL here brings them back. */
+/* the groups offered for now (Outbreak's; each source has its own, ImportSource.offered): F9's checkboxes and table, what
+   import_run extracts and what "You appear as" lists (a manifest of an older run may hold the others: left out). The
+   cutscene / high-detail versions and the enemies work the same way; IMPORT_ALL here brings them back. */
 #define IMPORT_OFFERED (IMPORT_PLAYERS | IMPORT_NPCS)
 
 typedef struct ImportSettings {
@@ -53,6 +53,9 @@ typedef struct ImportSource {
     int cat;              /* IMPORT_CAT_* */
     const char* help;     /* the IMPORT screen's line for it (NULL: the category's) */
     const char* need;     /* its DISC line, a format with the serial (NULL: the category's) */
+    int offered;          /* a character source: the groups offered (IMPORT_* bits: its checkboxes, what is extracted and listed) */
+    const char* ext;      /* the disc image's file type for the file dialogs (NULL: iso) */
+    const char* groups[IMPORT_GROUPS];   /* its groups' headings in the model lists (actors.c appear_group) */
 } ImportSource;
 extern const ImportSource import_sources[IMPORT_SOURCES];
 
@@ -82,8 +85,10 @@ void import_registry_load(void);
 /* any thread: 1 asks the main thread for import_registry_load (host.c, every frame; the IMPORT screen's runs) */
 extern volatile int g_import_reload;
 
-/* source-specific extractors (ob2.c, lang.c) */
+/* source-specific extractors (ob2.c, uc.c, lang.c) */
 int ob2_group(const char* id);   /* IMPORT_GROUP_* of a disc file name, -1: not a character model */
+int uc_group(const char* id);
+int uc_extract(const char* rvz, const char* outdir, int what, ImportItem* items, int max, int* n);
 int ob2_extract(const char* iso, const char* outdir, int what, ImportItem* items, int max, int* n);
 int lang_extract(int src, const char* iso, const char* outdir);   /* languages: how many failed, -1 the disc is unusable */
 /* lang.c: a language's SYSMES.ALD (l, *n bytes) in the US order (us, nus bytes; fstbl / fsheader the US file tables), malloc'd
@@ -97,6 +102,13 @@ typedef struct AfsFile { int64_t off; uint32_t size; char name[32]; } AfsFile;
 int imp_iso_find(FILE* f, const char* path, int64_t* off, uint32_t* size);
 int64_t imp_read_at(FILE* f, int64_t off, void* buf, size_t n);
 AfsFile* imp_afs_list(FILE* f, int64_t base, uint64_t size, int* count);
+/* Wii disc images in Dolphin's RVZ format (rvz.c): open (id: the disc's 6-character id, also when it is refused; NULL: not an
+   RVZ image of zstd or stored groups), a file of the game partition by path (malloc'd), a file of a U8 archive by name */
+typedef struct RvzDisc RvzDisc;
+RvzDisc* rvz_open(const char* path, char* id, int idn);
+unsigned char* rvz_file(RvzDisc* d, const char* path, uint32_t* size);
+void rvz_close(RvzDisc* d);
+int u8_find(const unsigned char* d, uint32_t n, const char* name, const unsigned char** out, uint32_t* size);
 
 #ifdef __cplusplus
 }
