@@ -112,9 +112,26 @@ int cast_appear_pick(unsigned seed, int all, int imports, const unsigned char* o
    says random lines of that character, with their mouth movements. The catalogue: every cutscene line a LipSet gives
    to a story character, per character, from the room files (voice_scan_room on the teleport list's thread, then
    voice_scan_done; read-only after that). insn: the script instructions' lengths (net/coop_proto.c coop_insn_len_raw). */
+/* The voice characters (VoiceLine.chr): the cast's 7 (cast_character), then those of the imported voice lines (Umbrella
+   Chronicles: docs/IMPORT_UMBRELLA.md "Voice lines"), ids kept for Outbreak's survivors (no lines yet), then the pools of the
+   imported lines of Chris and Wesker (never mixed with their own: an imported model of theirs says those, voice_model_chr).
+   VOICE_NAMED: the names the voice tool's curation knows (pc/tools/voice_curation.py), in this order. */
+enum { VOICE_JILL = CAST_CHARACTERS, VOICE_REBECCA, VOICE_BILLY, VOICE_CARLOS, VOICE_RICHARD, VOICE_ADA, VOICE_HUNK,
+       VOICE_KEVIN, VOICE_MARK, VOICE_JIM, VOICE_GEORGE, VOICE_DAVID, VOICE_ALYSSA, VOICE_YOKO, VOICE_CINDY,
+       VOICE_NAMED, VOICE_UC_CHRIS = VOICE_NAMED, VOICE_UC_WESKER, VOICE_CHARACTERS };
+#define VOICE_DISC_UC 3   /* VoiceLine.disc of an imported Umbrella Chronicles line: <import dir>/umbrella/voice/<vid>.adx */
+const char* voice_name(int c);   /* "Jill"; the cast's: cast_name; the imported pools: "Chris", "Wesker" */
+int voice_base(int c);           /* the cast character c's pool stands in for (VOICE_UC_CHRIS: Chris), else c */
+/* voices.txt of the Umbrella Chronicles import (import.c import_registry_load; NULL: none): its lines whose speaker is
+   known (sure, by the scenario, guessed; or checked by hand, voice_curated(VOICE_DISC_UC, n)) join the catalogue at its next
+   build. voice_import_hash: of the text, 0 none (the catalogue's and co-op's keys); voice_import_count: its lines of
+   character c by the guesses */
+void voice_import_load(const char* text);
+unsigned voice_import_hash(void);
+int voice_import_count(int c);
 typedef struct VoiceLine {
-    unsigned short room, vid;   /* the room file it is said in (VOICE_NO_ROOM: a line checked by hand no script says); its file in the disc's voice archive */
-    unsigned char disc, chr;    /* 1 VOICE1.AFS (stages 0..5), 2 VOICE2.AFS; the character (cast_character) */
+    unsigned short room, vid;   /* the room file it is said in (VOICE_NO_ROOM: a line checked by hand no script says, or imported); its file in the disc's voice archive */
+    unsigned char disc, chr;    /* 1 VOICE1.AFS (stages 0..5), 2 VOICE2.AFS, VOICE_DISC_UC; the voice character */
     unsigned short lip_n;       /* its lip entry: pairs phoneme 0..5, time; 0xFF last (face.c bhSetLip); 0 none (a line checked by hand) */
     unsigned char grunt;        /* a grunt, gasp or short sound (checked by hand: VOICE_GRUNT) */
     const unsigned char* lip;
@@ -139,7 +156,9 @@ int voice_lipset(const unsigned char* p, int n, int (*insn)(const unsigned char*
 /* ... or right before it: 1 when only LipStart and MessageSet lie between p (the end of a LipSet) and von (a VoiceOn): the
    two lines of the disc whose mouth starts first (Claire's cry behind the glass in RM_3130, one in RM_6051) */
 int voice_lipset_before(const unsigned char* p, const unsigned char* von, int (*insn)(const unsigned char*));
-int voice_model_chr(int m);   /* the story character (cast_character) model m ("You appear as" actor index) is, -1: none (no lines) */
+int voice_model_chr(int m);   /* the voice character model m ("You appear as" actor index) speaks as, -1: none (no lines). An imported
+   Umbrella Chronicles player model by its id: Chris and Wesker the pools of their imported lines while there are any, else
+   their own; Jill, Rebecca, Billy, Carlos, Richard, Ada, HUNK theirs while there are any, else none */
 /* a lip entry (pairs phoneme 0..5, time in 1/60 s; 0xFF last, as VoiceLine.lip) for a sound of n ticks of 1/30 s whose loudness
    per tick is lv (audio_adx_levels: 0..255 for 0..1/4 of full scale): the mouth shut in its pauses, wider the louder (the
    phonemes as loud as the scenes' lips show them); into out (max bytes); its length, 0 none */

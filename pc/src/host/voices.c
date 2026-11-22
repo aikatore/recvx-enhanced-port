@@ -7,6 +7,7 @@
    in its place and how its mouth moves. Read from the room files as the teleport list reads them (teleport.c, its
    thread); nothing of the disc is in the repository. No game state here: ctest "cast". */
 #include "cast.h"
+#include "../import/import.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -30,11 +31,108 @@ int voice_lipset_before(const unsigned char* p, const unsigned char* von, int (*
     return p == von;
 }
 
+static const char* const voice_names[VOICE_CHARACTERS] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, "Jill", "Rebecca", "Billy", "Carlos",
+    "Richard", "Ada", "HUNK", "Kevin", "Mark", "Jim", "George", "David", "Alyssa", "Yoko", "Cindy", "Chris", "Wesker" };
+const char* voice_name(int c) { return c >= CAST_CHARACTERS && c < VOICE_CHARACTERS ? voice_names[c] : cast_name(c); }
+int voice_base(int c) { return c == VOICE_UC_CHRIS ? 1 : c == VOICE_UC_WESKER ? 3 : c; }
+
+/* the imported lines (voice_import_load): published whole, never freed (the scan thread may read the one before) */
+typedef struct { unsigned short vid; signed char chr; unsigned char conf, grunt; } VoiceImp;   /* conf: 0 sure, 1 pair, 2 guess, 3 none */
+typedef struct { const VoiceImp* l; int n; unsigned hash; int count[VOICE_CHARACTERS]; } Imports;
+static Imports* imports;
+static const Imports* imp_now(void) { return __atomic_load_n(&imports, __ATOMIC_ACQUIRE); }
+unsigned voice_import_hash(void) { const Imports* m = imp_now(); return m ? m->hash : 0; }
+int voice_import_count(int c) { const Imports* m = imp_now(); return m && c >= 0 && c < VOICE_CHARACTERS ? m->count[c] : 0; }
+
+/* a voices.txt name as a voice character of the imported lines (Chris, Wesker: their imported pools), -1 none */
+static int imp_char(const char* s, size_t n)
+{
+    for (int c = CAST_CHARACTERS; c < VOICE_NAMED; c++) if (strlen(voice_names[c]) == n && !strncmp(s, voice_names[c], n)) return c;
+    return n == 5 && !strncmp(s, "Chris", 5) ? VOICE_UC_CHRIS : n == 6 && !strncmp(s, "Wesker", 6) ? VOICE_UC_WESKER : -1;
+}
+
+void voice_import_load(const char* text)
+{
+    unsigned h = 2166136261u;
+    Imports* m;
+    VoiceImp* l;
+    int cap = 0;
+    if (!text) { if (imp_now()) __atomic_store_n(&imports, (Imports*)NULL, __ATOMIC_RELEASE); return; }
+    for (const char* p = text; *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
+    h = h ? h : 1;
+    if (imp_now() && imp_now()->hash == h) return;
+    for (const char* p = text; *p; p++) cap += *p == '\n';
+    if (!(m = calloc(1, sizeof *m)) || !(l = calloc((size_t)cap + 2, sizeof *l))) { free(m); return; }
+    for (const char* p = text; *p;) {   /* n | source id | speaker | confidence | ms | kind | scenario */
+        const char *f[7], *e = strchr(p, '\n');
+        size_t len[7];
+        int k = 0;
+        if (!e) e = p + strlen(p);
+        for (const char* q = p; k < 7 && q <= e; k++) {
+            const char* bar = memchr(q, '|', (size_t)(e - q));
+            const char* end = bar ? bar : e;
+            while (q < end && *q == ' ') q++;
+            f[k] = q; len[k] = (size_t)(end - q);
+            while (len[k] && (f[k][len[k] - 1] == ' ' || f[k][len[k] - 1] == '\r')) len[k]--;
+            q = end + 1;
+        }
+        if (k == 7 && *p != '#' && m->n < cap + 1 && f[0][0] >= '0' && f[0][0] <= '9') {
+            VoiceImp* v = &l[m->n++];
+            static const char* const conf[] = { "sure", "pair", "guess" };
+            v->vid = (unsigned short)atoi(f[0]);
+            v->chr = (signed char)imp_char(f[2], len[2]);
+            for (v->conf = 0; v->conf < 3 && (len[3] != strlen(conf[v->conf]) || strncmp(f[3], conf[v->conf], len[3])); v->conf++);
+            v->grunt = len[5] == 5 && !strncmp(f[5], "grunt", 5);
+            if (v->chr >= 0 && v->conf < 3 && (v->grunt || (len[5] == 4 && !strncmp(f[5], "line", 4)))) m->count[v->chr]++;
+            else if (!(len[5] == 4 && !strncmp(f[5], "line", 4)) && !v->grunt) v->chr = -1;   /* (radio, the civilians: nobody's) */
+        }
+        p = *e ? e + 1 : e;
+    }
+    m->l = l; m->hash = h;
+    __atomic_store_n(&imports, m, __ATOMIC_RELEASE);
+}
+
+/* the imported lines as the catalogue takes them: of a known speaker, or checked by hand (VOICE_CONFIRMED: theirs, Chris's
+   and Wesker's the imported pools; "do not use", a later part: none); by character and file */
+static int imp_cmp(const void* a, const void* b)
+{
+    const VoiceLine *x = a, *y = b;
+    return x->chr != y->chr ? x->chr - y->chr : x->vid - y->vid;
+}
+static VoiceLine* imp_lines(int* count)
+{
+    const Imports* m = imp_now();
+    VoiceLine* out = m && m->n ? calloc((size_t)m->n, sizeof *out) : NULL;
+    int n = 0;
+    for (int i = 0; out && i < m->n; i++) {
+        const VoiceImp* v = &m->l[i];
+        const VoiceCurated* cv = voice_curated(VOICE_DISC_UC, v->vid);
+        int chr = v->conf < 3 ? v->chr : -1;
+        if (cv && cv->flags & (VOICE_EXCLUDE | VOICE_PART)) continue;
+        if (cv && cv->flags & VOICE_CONFIRMED) chr = cv->chr == 1 ? VOICE_UC_CHRIS : cv->chr == 3 ? VOICE_UC_WESKER : cv->chr >= CAST_CHARACTERS ? cv->chr : -1;
+        if (chr < CAST_CHARACTERS || chr >= VOICE_CHARACTERS) continue;   /* (never in the cast's own pools) */
+        out[n++] = (VoiceLine){ .room = VOICE_NO_ROOM, .vid = v->vid, .disc = VOICE_DISC_UC, .chr = (unsigned char)chr,
+                                .grunt = (unsigned char)(v->grunt || (cv && cv->flags & VOICE_GRUNT)) };
+    }
+    if (n) qsort(out, (size_t)n, sizeof *out, imp_cmp);
+    *count = n;
+    return out;
+}
+
 int voice_model_chr(int m)
 {
     if (m >= 0 && m < ACTOR_MODELS) return cast_character(actor_models[m].id, actor_models[m].mdlver);
     if (m >= ACTOR_PART && m < ACTOR_PART + 5) return (m - ACTOR_PART) & 3;   /* the player files (4: Claire's second costume) */
-    return -1;   /* imported models, the zombies' entry: no lines of their own */
+    if (m >= ACTOR_MODELS && m < ACTOR_MODELS + __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) && actor_import_src[m - ACTOR_MODELS] == IMPORT_UMBRELLA &&
+        actor_import_file[m - ACTOR_MODELS]) {   /* an Umbrella Chronicles player model, by its id (<dir>/<id>/<id>.cvxm) */
+        static const struct { char id[4]; int c; } ids[] = { { "PCR", VOICE_UC_CHRIS }, { "PWS", VOICE_UC_WESKER }, { "PJL", VOICE_JILL },
+            { "PRB", VOICE_REBECCA }, { "PBI", VOICE_BILLY }, { "PCA", VOICE_CARLOS }, { "PRC", VOICE_RICHARD }, { "PAD", VOICE_ADA }, { "PHK", VOICE_HUNK } };
+        const char *f = actor_import_file[m - ACTOR_MODELS], *s = strrchr(f, '/');
+        s = s ? s + 1 : f;
+        for (int i = 0; i < (int)(sizeof ids / sizeof ids[0]); i++)
+            if (!strncmp(s, ids[i].id, 3)) return voice_import_count(ids[i].c) ? ids[i].c : voice_base(ids[i].c) != ids[i].c ? voice_base(ids[i].c) : -1;
+    }
+    return -1;   /* other imported models, the zombies' entry: no lines of their own */
 }
 
 int g_voice_mouths = 1;
@@ -49,7 +147,7 @@ typedef struct { unsigned short room, vid; unsigned char rec, k0; } Sure;
 /* the catalogue: built on the scan thread (scan, sure), published whole (voice_scan_done, voice_cache_load), read-only after
    that. A newer one replaces it (other room files: the mods, BioRand; ponytail: the old one is kept, a few KB a rebuild,
    since the game thread may still point into it) */
-typedef struct { const VoiceLine* lines; int first[CAST_CHARACTERS + 1]; const Sure* sure; int sure_n; } Cat;
+typedef struct { const VoiceLine* lines; int first[VOICE_CHARACTERS + 1]; const Sure* sure; int sure_n; } Cat;
 static Cat* cat;
 static VoiceLine* scan;
 static Sure* sure;
@@ -288,11 +386,16 @@ int voice_said_by(int room, int vid)
 }
 int voice_sure_count(void) { const Cat* c = cat_now(); return c ? c->sure_n : -1; }
 
-static void publish(const VoiceLine* l, int n, const Sure* su, int sn)
+static void publish(VoiceLine* l, int n, const Sure* su, int sn)
 {
     Cat* c = calloc(1, sizeof *c);
+    int ni;
+    VoiceLine *im = imp_lines(&ni), *q;
+    if (ni && (q = realloc(l, sizeof *l * (size_t)(n + ni + 1)))) { memcpy(q + n, im, sizeof *l * (size_t)ni); l = q; n += ni; }   /* (the imported
+        lines after the cast's: by character still) */
+    free(im);
     if (!c) return;
-    for (int k = 0, at = 0; k <= CAST_CHARACTERS; k++) {
+    for (int k = 0, at = 0; k <= VOICE_CHARACTERS; k++) {
         while (at < n && l[at].chr < k) at++;
         c->first[k] = at;
     }
@@ -315,7 +418,7 @@ void voice_scan_done(void)
     int i, j, n = 0;
     unsigned char* two;
     for (const VoiceCurated* c = cur; c->disc; c++) {   /* the lines checked by hand that no room's script says (room VOICE_NO_ROOM) */
-        if (c->chr < 0 || !(c->flags & (VOICE_CONFIRMED | VOICE_GRUNT)) || c->flags & (VOICE_EXCLUDE | VOICE_PART)) continue;
+        if (c->chr < 0 || c->chr >= CAST_CHARACTERS || c->disc > 2 || !(c->flags & (VOICE_CONFIRMED | VOICE_GRUNT)) || c->flags & (VOICE_EXCLUDE | VOICE_PART)) continue;
         for (i = 0; i < scan_n && (scan[i].disc != c->disc || scan[i].vid != c->vid); i++);
         if (i == scan_n) add(VOICE_NO_ROOM, c->disc, c->vid, c->chr, NULL, 0, c->flags & VOICE_GRUNT);
     }
@@ -336,13 +439,13 @@ int voice_count(int chr)
 {
     const Cat* c = cat_now();
     if (!c) return -1;
-    return chr >= 0 && chr < CAST_CHARACTERS ? c->first[chr + 1] - c->first[chr] : 0;
+    return chr >= 0 && chr < VOICE_CHARACTERS ? c->first[chr + 1] - c->first[chr] : 0;
 }
 
 const VoiceLine* voice_line(int chr, int i)
 {
     const Cat* c = cat_now();
-    return c && chr >= 0 && chr < CAST_CHARACTERS && i >= 0 && i < c->first[chr + 1] - c->first[chr] ? &c->lines[c->first[chr] + i] : NULL;
+    return c && chr >= 0 && chr < VOICE_CHARACTERS && i >= 0 && i < c->first[chr + 1] - c->first[chr] ? &c->lines[c->first[chr] + i] : NULL;
 }
 
 /* ---------------------------------------------------------------- the catalogue on disk (teleport.c voices_want)
@@ -363,6 +466,7 @@ unsigned voice_cat_hash(void)
         unsigned char r[7] = { c->disc, (unsigned char)c->vid, (unsigned char)(c->vid >> 8), (unsigned char)c->chr, c->flags, (unsigned char)c->next, (unsigned char)(c->next >> 8) };
         h = fnv(h, r, sizeof r);
     }
+    if (voice_import_hash()) { unsigned v = voice_import_hash(); h = fnv(h, (const unsigned char*)&v, sizeof v); }   /* (the imported lines: none, as before) */
     return h;
 }
 
@@ -471,7 +575,7 @@ const VoiceLine* voice_pick(unsigned seed, int room, int disc, int vid, int chr,
                             int (*age)(const VoiceLine*), int grunts)
 {
     const Cat* c = cat_now();
-    const VoiceLine* l = c && chr >= 0 && chr < CAST_CHARACTERS ? &c->lines[c->first[chr]] : NULL;
+    const VoiceLine* l = c && chr >= 0 && chr < VOICE_CHARACTERS ? &c->lines[c->first[chr]] : NULL;
     int n = l ? c->first[chr + 1] - c->first[chr] : 0, fit = grunts & VOICE_PICK_FIT, i, k, a, tier, pool = 0, cool, best = -1, best_v = 0;
     unsigned h, w, sum = 0;
     if (n <= 0) return NULL;

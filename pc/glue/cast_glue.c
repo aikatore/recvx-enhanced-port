@@ -27,6 +27,7 @@
 #include "../src/host/cast.h"
 #include "../src/host/enemies.h"
 #include "../src/host/fileio.h"
+#include "../src/import/import.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -548,9 +549,9 @@ static int creature_line(unsigned seed, int m, int disc, int vid, int sp, int ow
 /* a file's length, read once */
 static int file_ms(int disc, int vid)
 {
-    static short len[2][2048];   /* (ms / 8 + 1, 0 not read; the longest line is 28 s) */
+    static short len[3][2048];   /* (ms / 8 + 1, 0 not read; the longest line is 28 s) */
     int d = disc - 1;
-    if (d < 0 || d > 1 || vid < 0 || vid >= 2048) return 0;
+    if (d < 0 || d > 2 || vid < 0 || vid >= 2048) return 0;
     if (!len[d][vid]) len[d][vid] = (short)(adx_length_ms(VOICE_PT + d, vid) / 8 + 1);
     return (len[d][vid] - 1) * 8;
 }
@@ -565,15 +566,26 @@ static int group_ms(int disc, int vid)
 }
 static int line_ms(const VoiceLine* l) { return group_ms(l->disc, l->vid); }   /* (voice_pick) */
 
-/* the voice archives as partitions of their own (the game's 1 is the room's disc's), both for the lengths: 1 loaded, -1 not */
-static int part[2];
+/* the voice archives as partitions of their own (the game's 1 is the room's disc's), both for the lengths: 1 loaded, -1 not;
+   VOICE_PT + 2 the folder of the imported Umbrella Chronicles lines (<import dir>/umbrella/voice/<n>.adx: adx.c
+   adx_folder_partition), while there are any */
+int adx_folder_partition(int ptid, const char* dir);   /* audio/adx.c */
+static int part[3];
 static void voice_parts(void)
 {
+    static unsigned imp;
     for (int d = 0; d < 2; d++)
         if (!part[d]) {
             ADXF_LoadPartitionNw(VOICE_PT + d, d ? (char*)"\\VOICE2.AFS" : (char*)"\\VOICE1.AFS", NULL, NULL);
             part[d] = ADXF_GetPtStat(VOICE_PT + d) == 3 ? 1 : -1;   /* (ADXF_STAT_READEND) */
         }
+    if (!part[2] || imp != voice_import_hash()) {   /* (a new import: its folder again) */
+        char dir[1200];
+        imp = voice_import_hash();
+        import_voices_path(dir, (int)sizeof dir - 8);
+        if (strrchr(dir, '/')) strcpy(strrchr(dir, '/') + 1, "voice");
+        part[2] = imp && adx_folder_partition(VOICE_PT + 2, dir) ? 1 : -1;
+    }
 }
 
 /* the lips for line l as its sound goes: those of its scene (they came with it), else made from its sound once, when it is
@@ -583,13 +595,13 @@ static void voice_parts(void)
 int adx_levels(int ptid, int fid, unsigned char* out, int max);   /* audio/adx.c */
 static const unsigned char* line_lips(const VoiceLine* l)
 {
-    static unsigned char* made[2][2048];   /* (disc, file) */
+    static unsigned char* made[3][2048];   /* (disc, file) */
     static unsigned char lv[30 * 60];      /* (a minute: the longest line is 28 s) */
     unsigned char out[sizeof lv * 2 + 1];  /* (a pair per tick at most) */
     const VoiceCurated* c = voice_curated(l->disc, l->vid);
     int d = l->disc - 1, n = 0, m, k, vid = l->vid;
     uint64_t t0 = SDL_GetTicks();
-    if ((l->lip && !(c && c->next != 0xFFFF)) || d < 0 || d > 1 || l->vid >= 2048) return l->lip;
+    if ((l->lip && !(c && c->next != 0xFFFF)) || d < 0 || d > 2 || l->vid >= 2048) return l->lip;
     if (made[d][l->vid]) return made[d][l->vid];
     for (k = 0; k < 8 && (m = adx_levels(VOICE_PT + d, vid, lv + n, (int)sizeof lv - n)) > 0; k++) {   /* (a group's parts, in turn) */
         n += m;
@@ -672,7 +684,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     m = shown_model(sp);
     chr = voice_model_chr(m);
     if (own >= 0 && chr < 0 && creature_line((unsigned)o->seed, m, disc, vid, sp, own)) return -1;   /* (bhVoiceOn plays nothing) */
-    if (own >= 0 && chr == own) KEEP("shown as its own character");
+    if (own >= 0 && chr >= 0 && voice_base(chr) == own) KEEP("shown as its own character");   /* (an imported Chris too: his own lines) */
     if (own < 0 || chr < 0) KEEP(own < 0 ? "not a story character" : "shown as a model without lines");
     ms = adx_length_ms(PatId[1], vid);
     if (voice_count(0) < 0 || !plan_ready(o)) {   /* (the room files are being read: cast_room started it; the plan: the next room load makes it) */
@@ -695,12 +707,12 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
         ch = voice_choose_as(l, ms, full, pl, gap, cv && cv->flags & VOICE_GRUNT, line_ms);
     else {   /* (Claire's, Chris's records, each screen's own look; a line the plan does not know: a mod's, the speaker shown otherwise
         than planned): from the seed and the line alone */
-        if (own >= 2 && unplanned++ < 32) host_log("voices: room %04d line %d/%d at %d, shown as %s: not in the plan\n", room_file_now(), disc, vid, ofs, cast_name(chr));
+        if (own >= 2 && unplanned++ < 32) host_log("voices: room %04d line %d/%d at %d, shown as %s: not in the plan\n", room_file_now(), disc, vid, ofs, voice_name(chr));
         ch = voice_choose((unsigned)o->seed, room_file_now(), disc, vid, chr, ms, full, pl, gap, cv && cv->flags & VOICE_GRUNT, line_ms, NULL);
     }
     if (ch.l && part[ch.l->disc - 1] < 0) { gpart = 0xFFFF; KEEP("the archive did not load"); }
     if (!ch.l) {   /* (not the original's voice) */
-        host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) shown as %s: quiet (%s)\n", room_file_now(), sp, cast_name(own), disc, vid, ms, cast_name(chr), ch.why);
+        host_log("voices: room %04d record %d: %s's line %d/%d (%d ms) shown as %s: quiet (%s)\n", room_file_now(), sp, cast_name(own), disc, vid, ms, voice_name(chr), ch.why);
         return quiet(sp, ms);
     }
     l = ch.l; fit = ch.fit; lms = ch.lms;
@@ -714,7 +726,7 @@ int pc_voice_on(int vid, int kind, int rec, const unsigned char* next, int* ptid
     else if (ch.cut == VOICE_CUT_GRACE) snprintf(cut, sizeof cut, ", none out of the cooldown ends in time: cut at %d ms", fit);
     host_log("voices: room %04d record %d: %s's line %d/%d (%d ms%s%s%s), shown as %s -> %s's line %d/%d (%d ms%s%s%s) from %s, %s%s%s\n", room_file_now(), sp,
              cast_name(own), disc, vid, ms, here, sure ? ", speaker checked" : "", ch.grunts == VOICE_PICK_GRUNTS ? ", a grunt" : "",
-             m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?", cast_name(chr), l->disc, l->vid,
+             m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?", voice_name(chr), l->disc, l->vid,
              lms, l->grunt ? ", a grunt" : "", lc && lc->next != 0xFFFF ? ", a group" : "",
              cut, from,
              lip >= 0 ? "with its lips" : sure ? "the speaker checked by hand: " : "no lips in the script (the speaker is the VoiceOn's record): ",
@@ -822,7 +834,7 @@ static int plan_make(const EnemyOpts* o)
         else {
             int chr = p->chr = voice_model_chr(p->m);
             if (chr < 0 && p->m >= 0 && voice_creature(p->m, 0, &k, (unsigned char[64]){ 0 }, 64) > 0) { p->kind = "enemy"; p->res = "shown as an enemy: its sounds"; }
-            else if (chr == v->own) {
+            else if (chr >= 0 && voice_base(chr) == v->own) {
                 for (k = 0; v->own >= 2 && k < voice_count(chr); k++)
                     if (voice_line(chr, k)->disc == v->disc && voice_line(chr, k)->vid == v->vid) { voice_said_add(&plan_said, voice_line(chr, k)); break; }
                 p->res = "shown as its own character";
@@ -866,7 +878,8 @@ static int plan_find(int room, int ofs, int vid, int chr, const VoiceLine** l)
 
 /* what the plan depends on: the catalogue's key (the room files, the lines checked by hand), the played lengths, the seed
    and the cast options in effect (a co-op guest's: the host's); 0 none yet (the catalogue not read) */
-#define PLAN_FORMAT 2   /* (bump with a change to what the plan picks; 2: the looks and monsters of D20, coop_look_model, cast_want) */
+#define PLAN_FORMAT 3   /* (bump with a change to what the plan picks; 2: the looks and monsters of D20, coop_look_model, cast_want; 3: the
+                           imported voice lines, disc 3) */
 static unsigned plan_key(const EnemyOpts* o)
 {
     int imports = import_count(o);
@@ -992,11 +1005,11 @@ int voice_plan_export(int seed, const char* path)
         fprintf(f, "%s{\"disc\":%d,\"vid\":%d,\"speaker\":", order ? "," : "", v->disc, v->vid);
         if (v->own >= 0) fprintf(f, "\"%s\"", cast_name(v->own)); else fprintf(f, "null");
         if (m < 0) fprintf(f, ",\"drawn_as\":null");   /* (the character of the model it is drawn as; a model of none: its name) */
-        else fprintf(f, ",\"drawn_as\":\"%s\"", chr >= 0 ? cast_name(chr) : m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?");
+        else fprintf(f, ",\"drawn_as\":\"%s\"", chr >= 0 ? voice_name(chr) : m >= ACTOR_PART ? "a player model" : actor_model(m) ? actor_model(m)->name : "?");
         fprintf(f, ",\"order\":%d,\"orig_ms\":%d,\"played_ms\":%d,\"played_known\":%s,\"group\":", order++, ms, pl >= 0 ? pl : ms, pl >= 0 ? "true" : "false");
         if (head >= 0) fprintf(f, "%d", head); else fprintf(f, "null");
         fprintf(f, ",\"group_part\":%d,\"repl\":{\"kind\":\"%s\",", head >= 0 ? part_k : 0, p->kind);
-        if (ch->l) fprintf(f, "\"disc\":%d,\"vid\":%d,\"speaker_of_line\":\"%s\",\"ms\":%d,", ch->l->disc, ch->l->vid, cast_name(ch->l->chr), ch->lms);
+        if (ch->l) fprintf(f, "\"disc\":%d,\"vid\":%d,\"speaker_of_line\":\"%s\",\"ms\":%d,", ch->l->disc, ch->l->vid, voice_name(ch->l->chr), ch->lms);
         else if (!strcmp(p->kind, "original")) fprintf(f, "\"disc\":%d,\"vid\":%d,\"speaker_of_line\":%s%s%s,\"ms\":%d,", v->disc, v->vid,
                                                        v->own >= 0 ? "\"" : "", v->own >= 0 ? cast_name(v->own) : "null", v->own >= 0 ? "\"" : "", ms);
         else fprintf(f, "\"disc\":null,\"vid\":null,\"speaker_of_line\":null,\"ms\":null,");

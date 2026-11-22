@@ -377,6 +377,14 @@ static void voices_log(const char* how, Uint64 t0)
              "without lips %d %d %d %d %d %d %d); %d without a LipSet said surely by their record\n", how, (unsigned)(SDL_GetTicks() - t0),
              voice_count(0), voice_count(1), voice_count(2), voice_count(3), voice_count(4), voice_count(5), voice_count(6),
              g[0], g[1], g[2], g[3], g[4], g[5], g[6], nl[0], nl[1], nl[2], nl[3], nl[4], nl[5], nl[6], voice_sure_count());
+    if (voice_import_hash()) {   /* the imported lines (Umbrella Chronicles) */
+        char t[512];
+        int n = 0;
+        t[0] = 0;
+        for (int c = CAST_CHARACTERS; c < VOICE_CHARACTERS && n < (int)sizeof t - 40; c++)
+            if (voice_count(c) > 0) n += snprintf(t + n, sizeof t - (size_t)n, "%s%s %d", n ? ", " : "", voice_name(c), voice_count(c));
+        host_log("voices: imported lines: %s\n", n ? t : "none usable");
+    }
 }
 
 int room_each(void (*fn)(int room, const unsigned char* d, int n, void* ud), void* ud)

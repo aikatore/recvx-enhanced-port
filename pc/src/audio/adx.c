@@ -231,6 +231,37 @@ int ADXF_LoadPartitionNw(int ptid, const char* fname, void* dir, void* ptinfo)
 }
 int ADXF_GetPtStat(int ptid) { return pt_stat[ptid & (MAX_PT - 1)]; }
 
+/* a partition of a folder's files <dir>/<id>.adx instead of an AFS archive (the imported voice lines: cast_glue.c), dir NULL
+   none; 1 the folder is there */
+static char* pt_dir[MAX_PT];
+int adx_folder_partition(int ptid, const char* dir)
+{
+    if (ptid < 0 || ptid >= MAX_PT) return 0;
+    if (!dir) { SDL_free(pt_dir[ptid]); pt_dir[ptid] = NULL; return 0; }
+    if (!pt_dir[ptid] || strcmp(pt_dir[ptid], dir)) { SDL_free(pt_dir[ptid]); pt_dir[ptid] = SDL_strdup(dir); }
+    pt_stat[ptid] = SDL_GetPathInfo(dir, NULL) ? ADXF_STAT_READEND : ADXF_STAT_ERROR;
+    return pt_stat[ptid] == ADXF_STAT_READEND;
+}
+
+/* file fid of partition ptid from a file (its path, size): a folder partition's, else <mods>/<AFS file>/<id>; NULL: the disc's */
+static FILE* entry_open(int ptid, int fid, uint32_t* size, char* path, size_t npath)
+{
+    char name[64];
+    FILE* f;
+    long n;
+    if (ptid < 0 || ptid >= MAX_PT) return NULL;
+    if (pt_dir[ptid]) {
+        snprintf(path, npath, "%s/%d.adx", pt_dir[ptid], fid);
+        if (!(f = pc_fopen(path, "rb"))) return NULL;
+        if (fseek(f, 0, SEEK_END) || (n = ftell(f)) < 0 || n > 0x7FFFF800L) { fclose(f); return NULL; }
+        *size = (uint32_t)n;
+        return f;
+    }
+    if (!pt[ptid].name[0]) return NULL;
+    snprintf(name, sizeof(name), "%s/%d", pt[ptid].name, fid);
+    return mod_open_path(name, size, path, npath, NULL);
+}
+
 static AdxfFile* new_file(void)
 {
     for (int i = 0; i < 32; i++) if (!files[i].used) { memset(&files[i], 0, sizeof(files[i])); files[i].used = 1; files[i].stat = ADXF_STAT_STOP; return &files[i]; }
@@ -388,15 +419,12 @@ void ADXT_StartAfs(void* h, int ptid, int fid)
     AdxTalk* t = h;
     uint32_t lsn = 0, size;
     uint8_t hdr[SECTOR] = { 0 };
-    char name[64], path[512];
+    char path[1200];
     FILE* hf = NULL;
     int ok, mod = 0;
     if (!t) return;
     ADXT_Stop(h);
-    if (ptid >= 0 && ptid < MAX_PT && pt[ptid].name[0]) {   /* <mods>/<AFS file>/<id>, as ADXF_OpenAfs */
-        snprintf(name, sizeof(name), "%s/%d", pt[ptid].name, fid);
-        hf = mod_open_path(name, &size, path, sizeof path, NULL);
-    }
+    hf = entry_open(ptid, fid, &size, path, sizeof path);   /* <mods>/<AFS file>/<id>, as ADXF_OpenAfs; a folder partition's */
     if (hf) { rewind(hf); ok = fread(hdr, 1, SECTOR, hf) >= 0x34; fclose(hf); mod = 1; }
     else ok = adx_afs_locate(ptid, fid, &lsn, &size) && cdvd_read_sectors(lsn, 1, hdr);
     if (!ok || hdr[0] != 0x80) {
@@ -423,13 +451,10 @@ int adx_length_ms(int ptid, int fid)
 {
     uint32_t lsn, size;
     uint8_t hdr[SECTOR] = { 0 };
-    char name[64], path[512];
+    char path[1200];
     FILE* hf = NULL;
     int ok;
-    if (ptid >= 0 && ptid < MAX_PT && pt[ptid].name[0]) {
-        snprintf(name, sizeof(name), "%s/%d", pt[ptid].name, fid);
-        hf = mod_open_path(name, &size, path, sizeof path, NULL);
-    }
+    hf = entry_open(ptid, fid, &size, path, sizeof path);
     if (hf) { rewind(hf); ok = fread(hdr, 1, SECTOR, hf) >= 0x34; fclose(hf); }
     else ok = adx_afs_locate(ptid, fid, &lsn, &size) && cdvd_read_sectors(lsn, 1, hdr);
     if (!ok || hdr[0] != 0x80 || !be32(hdr + 8)) return 0;
@@ -440,12 +465,9 @@ int adx_length_ms(int ptid, int fid)
 int adx_levels(int ptid, int fid, unsigned char* out, int max)
 {
     uint32_t lsn = 0, size;
-    char name[64], path[512];
+    char path[1200];
     FILE* hf = NULL;
-    if (ptid >= 0 && ptid < MAX_PT && pt[ptid].name[0]) {
-        snprintf(name, sizeof(name), "%s/%d", pt[ptid].name, fid);
-        hf = mod_open_path(name, &size, path, sizeof path, NULL);
-    }
+    hf = entry_open(ptid, fid, &size, path, sizeof path);
     if (hf) { fclose(hf); return audio_adx_levels(path, 0, size, out, max); }
     return adx_afs_locate(ptid, fid, &lsn, &size) ? audio_adx_levels(g_config.iso_path, (uint64_t)lsn * SECTOR, size, out, max) : -1;
 }

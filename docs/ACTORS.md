@@ -1289,6 +1289,12 @@ Character Model" and *Per Character*), so it also works with the cast off. Code:
 catalogue and the picks, the enemy models' sounds; no game state, ctest `cast`), `pc/glue/cast_glue.c` `pc_voice_*`
 (in the game), hooks in `event.c` (`bhVoiceOn`, `bhLipSet`) and `sdfunc.c` (`CheckPlayEndAdx`, `StopVoice`).
 
+Imported voice lines (Umbrella Chronicles: [IMPORT_UMBRELLA.md](IMPORT_UMBRELLA.md) "Voice lines") add characters past
+the cast's 7 (`cast.h` `VOICE_CHARACTERS`: Jill, Rebecca, Billy, Carlos, Richard, Ada, HUNK, ids kept for Outbreak's
+survivors, and pools of their own for the imported lines of Chris and Wesker) and a third "disc" (`VOICE_DISC_UC`: file n of
+the import's `voice/` folder, partition 30): an imported model of one of them says that character's imported lines, chosen,
+planned, timed and lip-synced as the disc's. The cast itself keeps its 7.
+
 ### Lines and speakers
 
 * A cutscene line is op 25 `VoiceOn` (kind, voice number u16, mode, fade, record): file *voice* of `VOICE1.AFS`

@@ -68,4 +68,18 @@ assert played == [(30, 3800, 10, 3500, 3500), (40, 100, 10, 500, 500), (40, 300,
                   (1020, 500, 30, 1000, 1000),
                   (1020, 520, 40, 1500, 2000), (1020, 540, 60, 0, 0)], played   # (by
     # room file and offset)
+# the imported lines (disc 3, "imported": speakers by name, matched by source id to voices.txt's numbers; an id the import does
+# not have skipped; null or an unknown name: -1)
+with tempfile.TemporaryDirectory() as tmp:
+    vt, src, out = os.path.join(tmp, "voices.txt"), os.path.join(tmp, "c.json"), os.path.join(tmp, "c.inc")
+    open(vt, "w").write("# header\n0 | CV3_Gr_0 | Chris | sure | 400 | grunt | CV3\n1 | VO_1010001 | - | none | 900 | line | 10\n2 | VO_1010002 | Jill | sure | 800 | line | 10\n")
+    imp = lambda id_, vid, sp, **f: {"disc": 3, "vid": vid, "id": id_, "speaker": sp, "speaker_name": sp, "confirmed": f.get("c", False),
+                                      "exclude": f.get("x", False), "grunt": f.get("g", False), "notes": "", "group": None}
+    json.dump({"version": 1, "characters": CH, "groups": [], "lines": {}, "imported": {
+        "3:7": imp("VO_1010001", 7, "Chris", c=True),        # (renumbered: voices.txt's 1)
+        "3:2": imp("VO_1010002", 2, "Rebecca", c=True, g=True), "3:0": imp("CV3_Gr_0", 0, None, c=True),
+        "3:VO_9999999": imp("VO_9999999", 9, "Jill", c=True), "3:5": imp("VO_1010003", 5, "Sergei", x=True)}}, open(src, "w"))
+    subprocess.run([sys.executable, tool, "--voices", vt, src, out], check=True, stdout=subprocess.DEVNULL)
+    rows = [tuple(int(x, 0) for x in m) for m in re.findall(r"\{ (\d+), (\d+), (-?\d+), (\d+), (0x[0-9A-F]+|0) \}", open(out).read().split("#else")[0])]
+    assert rows[:-1] == [(3, 0, -1, 1, 0xFFFF), (3, 1, 1, 1, 0xFFFF), (3, 2, 8, 5, 0xFFFF)], rows   # (Chris 1, Rebecca cast.h VOICE_REBECCA 8)
 print("voice_curation: ok")

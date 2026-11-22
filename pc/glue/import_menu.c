@@ -45,7 +45,10 @@ enum { IS_MENU, IS_ASK, IS_WORK, IS_RESULT };
 #define OFFERED (import_sources[im.src].offered)   /* the groups the game offers (ImportSource.offered) */
 #define UC_SRC (im.src == IMPORT_UMBRELLA)   /* Umbrella Chronicles: its second group is its monsters and an office worker */
 #define NPCS_NAME (UC_SRC ? "Monsters and Others" : "NPCs")
-enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK, K_CARD, K_HEAD, K_SHOW };   /* K_SHOW: "Show in Model Lists" (actors.h g_import_hidden) */
+enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK, K_CARD, K_HEAD, K_SHOW, K_VOICES };   /* K_SHOW: "Show in Model Lists" (actors.h
+    g_import_hidden); K_VOICES: Umbrella Chronicles' "Voice Lines" (IMPORT_VOICES, uc_voice.c) */
+#define TOGGLES(k) ((k) == K_PLAYERS || (k) == K_NPCS || (k) == K_VOICES)   /* (the On / Off rows of what to import) */
+#define TOGGLE_BIT(k) ((k) == K_PLAYERS ? IMPORT_PLAYERS : (k) == K_NPCS ? IMPORT_NPCS : IMPORT_VOICES)
 typedef struct { int kind, idx; } Row;
 
 /* the categories (IMPORT_CAT_*) */
@@ -148,6 +151,7 @@ static void build_rows(void)
             if (langs() < 0) add(K_HEAD, 2);
             if (langs() < 0 && (OFFERED & IMPORT_PLAYERS)) add(K_PLAYERS, 0);
             if (langs() < 0 && (OFFERED & IMPORT_NPCS)) add(K_NPCS, 0);
+            if (langs() < 0 && (OFFERED & IMPORT_VOICES)) add(K_VOICES, 0);
             add(K_HEAD, 4);
             add(K_DISC, 0);
             add(K_START, 0);
@@ -163,6 +167,7 @@ static void build_rows(void)
     else {
         if (langs() < 0 && (OFFERED & IMPORT_PLAYERS)) add(K_PLAYERS, 0);
         if (langs() < 0 && (OFFERED & IMPORT_NPCS)) add(K_NPCS, 0);
+        if (langs() < 0 && (OFFERED & IMPORT_VOICES)) add(K_VOICES, 0);
         add(K_DISC, 0);
         add(K_START, 0);
         add(K_DELETE, 0);
@@ -229,11 +234,11 @@ static const char* disc_name(void)
 static const char* row_why(const Row* r)
 {
     switch (r->kind) {
-    case K_PLAYERS: case K_NPCS: case K_DISC: return running() ? "An import is running." : NULL;
+    case K_PLAYERS: case K_NPCS: case K_VOICES: case K_DISC: return running() ? "An import is running." : NULL;
     case K_START:
         if (running()) return "An import is running.";
         if (!g_import.iso[im.src][0]) return "Choose the disc image first.";
-        if (langs() < 0 && !(im.what & OFFERED)) return OFFERED & IMPORT_NPCS ? (UC_SRC ? "Turn on Playable Characters or Monsters and Others first." : "Turn on Playable Characters or NPCs first.") : "Turn on Playable Characters first.";
+        if (langs() < 0 && !(im.what & OFFERED & IMPORT_ALL)) return OFFERED & IMPORT_NPCS ? (UC_SRC ? "Turn on Playable Characters or Monsters and Others first." : "Turn on Playable Characters or NPCs first.") : "Turn on Playable Characters first.";
         return NULL;
     case K_DELETE:
         if (running()) return "An import is running.";
@@ -260,7 +265,7 @@ static void back(void)
 
 static void toggle(const Row* r)
 {
-    int bit = r->kind == K_PLAYERS ? IMPORT_PLAYERS : IMPORT_NPCS;
+    int bit = TOGGLE_BIT(r->kind);
     if (row_why(r)) { refuse(row_why(r)); return; }
     im.what ^= bit;
     CallSystemSe(0, 2);
@@ -317,7 +322,7 @@ static int activate(const Row* r)
     switch (r->kind) {
     case K_CAT: CallSystemSe(0, 3); im.cat = r->idx; set_page(P_GAMES); return 0;   /* (cats[] in IMPORT_CAT_* order) */
     case K_GAME: CallSystemSe(0, 3); im.src = r->idx; set_page(P_OPTS); return 0;
-    case K_PLAYERS: case K_NPCS: toggle(r); return 0;
+    case K_PLAYERS: case K_NPCS: case K_VOICES: toggle(r); return 0;
     case K_SHOW: show_toggle(); return 0;
     case K_DISC:
         if (why) { refuse(why); return 0; }
@@ -390,7 +395,7 @@ static int input(void)
         if (m->wheel) { im.row = ((im.row - m->wheel) % nrows + nrows) % nrows; CallSystemSe(0, 2); return 0; }
         r = &rows[im.row];
         if (m->left && hit >= 0) {
-            if ((r->kind == K_PLAYERS || r->kind == K_NPCS) && m->x >= VAL_X - 10) { toggle(r); return 0; }
+            if (TOGGLES(r->kind) && m->x >= VAL_X - 10) { toggle(r); return 0; }
             if (r->kind == K_SHOW) { show_toggle(); return 0; }
             return activate(r);
         }
@@ -401,7 +406,7 @@ static int input(void)
         }
         if (rept & BTN_UP) { im.row = (im.row + nrows - 1) % nrows; im.say_t = 0; CallSystemSe(0, 2); }
         else if (rept & BTN_DOWN) { im.row = (im.row + 1) % nrows; im.say_t = 0; CallSystemSe(0, 2); }
-        else if ((rept & (BTN_LEFT | BTN_RIGHT)) && (r->kind == K_PLAYERS || r->kind == K_NPCS)) toggle(r);
+        else if ((rept & (BTN_LEFT | BTN_RIGHT)) && TOGGLES(r->kind)) toggle(r);
         else if ((rept & (BTN_LEFT | BTN_RIGHT)) && r->kind == K_SHOW) show_toggle();
         else if (press & ok) return activate(r);
         return 0;
@@ -431,6 +436,7 @@ static const char* row_help(const Row* r)
                         : import_sources[r->idx].cat == IMPORT_CAT_LANGUAGES ? "Import the languages of your own disc image of this release."
                                                                               : "Import from your own disc image of this game.";
     case K_PLAYERS: return "The playable characters and their costumes.";
+    case K_VOICES: return "The characters' lines and shouts, for Randomize Voice Lines: the imported models say them. Who says each line is guessed.";
     case K_NPCS: return UC_SRC ? "The zombies, the Hunter, the Licker, Nemesis, the Tyrants, Lisa Trevor, the Eliminator, Ivy and an office worker." : "The other people of the game. Some have no names; they are listed by their file.";
     case K_DISC: return import_sources[im.src].ext ? "Choose your disc image (.rvz, Dolphin's format) in a file dialog." : "Choose your disc image (.iso) in a file dialog.";
     case K_START: return langs() >= 0 ? "Import every language of the disc image. This takes a few seconds."
@@ -456,6 +462,7 @@ static void draw_row(int i)
     case K_GAME: pc_ui_text(ROW_X, y, title_of(r->idx), ROW_SC, col); return;
     case K_PLAYERS: v = (im.what & IMPORT_PLAYERS) ? "On" : "Off"; break;
     case K_NPCS: v = (im.what & IMPORT_NPCS) ? "On" : "Off"; break;
+    case K_VOICES: v = (im.what & IMPORT_VOICES) ? "On" : "Off"; label = "Voice Lines"; break;
     case K_DISC: v = disc_name(); break;
     case K_SHOW: v = shown_src() ? "On" : "Off"; label = "Show in Model Lists"; break;
     }
@@ -593,7 +600,7 @@ void import_menu_open(int mc, const char* root)
 {
     memset(&im, 0, sizeof(im));
     im.open = im.nm = 1;
-    im.what = IMPORT_ALL;   /* (each game's offered groups, OFFERED) */
+    im.what = IMPORT_ALL | IMPORT_VOICES;   /* (each game's offered groups, OFFERED) */
     snprintf(im.root, sizeof(im.root), "%s", root);
     nm_cat(mc - MC_IMPORT_CHARS);
     if (running()) { im.page = P_OPTS; im.state = IS_WORK; look(); }
@@ -664,7 +671,7 @@ static int nm_input(int port)
     }
     if (m->left && hit >= 0) {
         const Row* r = &rows[hit];
-        if ((r->kind == K_PLAYERS || r->kind == K_NPCS) && mx >= N_VALUE - 16) { toggle(r); return 0; }
+        if (TOGGLES(r->kind) && mx >= N_VALUE - 16) { toggle(r); return 0; }
         if (r->kind == K_SHOW) { show_toggle(); return 0; }
         return r->kind == K_CARD ? (CallSystemSe(0, 3), card(), 0) : activate(r);
     }
@@ -672,7 +679,7 @@ static int nm_input(int port)
     if (press & (BTN_L1 | BTN_R1)) { nm_cat((im.cat + ((press & BTN_R1) ? 1 : 2)) % 3); CallSystemSe(0, 2); return 0; }
     if (rept & BTN_UP) nm_move(-1);
     else if (rept & BTN_DOWN) nm_move(1);
-    else if ((rept & (BTN_LEFT | BTN_RIGHT)) && (rows[im.row].kind == K_PLAYERS || rows[im.row].kind == K_NPCS)) toggle(&rows[im.row]);
+    else if ((rept & (BTN_LEFT | BTN_RIGHT)) && TOGGLES(rows[im.row].kind)) toggle(&rows[im.row]);
     else if ((rept & (BTN_LEFT | BTN_RIGHT)) && rows[im.row].kind == K_SHOW) show_toggle();
     else if (press & ok) {
         if (rows[im.row].kind == K_CARD) { CallSystemSe(0, 3); card(); return 0; }
@@ -703,11 +710,11 @@ static void nm_row(int i)
         if (import_present(r->idx)) nm_text(N_VALUE, y, tr("Imported"), 0.55f, 104, col);
         nm_arrow(N_X1 - 6, y + 9, 1, col);
         return;
-    case K_PLAYERS: case K_NPCS: case K_SHOW: {
-        int on = r->kind == K_SHOW ? shown_src() : im.what & (r->kind == K_PLAYERS ? IMPORT_PLAYERS : IMPORT_NPCS);
+    case K_PLAYERS: case K_NPCS: case K_VOICES: case K_SHOW: {
+        int on = r->kind == K_SHOW ? shown_src() : im.what & TOGGLE_BIT(r->kind);
         const char* s = tr(on ? "On" : "Off");
         float w = pc_ui_text_w(s, 0.55f);
-        nm_text(N_LABEL, y, tr(r->kind == K_SHOW ? "Show in Model Lists" : r->kind == K_PLAYERS ? "Playable Characters" : NPCS_NAME), 0.55f, N_VALUE - N_LABEL - 16, col);
+        nm_text(N_LABEL, y, tr(r->kind == K_SHOW ? "Show in Model Lists" : r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_VOICES ? "Voice Lines" : NPCS_NAME), 0.55f, N_VALUE - N_LABEL - 16, col);
         if (live) { nm_arrow(N_VALUE - 12, y + 9, -1, col); nm_arrow(N_VALUE + w + 13, y + 9, 1, col); }
         nm_t(N_VALUE, y, s, 0.55f, col);
         return;
@@ -864,7 +871,7 @@ int pc_import_menu(void)
     if (!im.open) {
         memset(&im, 0, sizeof(im));
         im.open = 1;
-        im.what = IMPORT_ALL;   /* (each game's offered groups, OFFERED) */
+        im.what = IMPORT_ALL | IMPORT_VOICES;   /* (each game's offered groups, OFFERED) */
         if (running()) { im.page = P_OPTS; im.state = IS_WORK; look(); }
         host_log("import menu: open\n");
     }
