@@ -21,6 +21,8 @@
 - **Dreamcast import**: Steve with his Dreamcast hairstyle can be imported from your own Dreamcast disc 1 (CUE/BIN, GDI
   or CHD): his cutscene, event and in-game models, used in cutscenes, when you play him, as a cast model or as your
   look, talking and blinking like the original.
+- **Enemy Models**: zombies (as one group), anatomists, Hunters, Sweepers, Bandersnatches and the Tyrant can be drawn
+  as other models while you fight them: a single model, or random picks from Code: Veronica or an imported game.
 - **Aim Scoped Weapons Normally**: an option to aim and fire the sniper rifle and the linear launcher like other
   weapons, with auto-aim, instead of through the scope.
 
