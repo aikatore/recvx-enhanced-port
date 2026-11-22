@@ -17,6 +17,7 @@ Model") and cutscene cast models, moving with Claire's / Chris's motions, blinki
 | 3. Faces | the blink (the game's own morph), a jaw made for the mouth; the monsters' own jaws, the Tyrant ETY0's lids |
 | 4. Monsters and others (phase 3) | done: 35 zombies (EZ00..EZ21, EZ26..EZ38), Hunter EHT1, Licker ELK1, Nemesis ENS1, Tyrants ETY0, ETY5..7, Lisa Trevor ELT1, Eliminator EEL0, Ivy EIV1, an office worker OSIT1: "Monsters and Others" |
 | 5. Skeleton review (phase 3) | done: the limbs posed to Code: Veronica's rest pose, the gun-grip hands, coat tails and skirts on the thighs, repeating textures cut into tiles |
+| 6. Mouths (phase 4) | done: the lips part when the made jaw turns (the lower lip on the jaw, the upper on the head, by the slit between them), a dark mouth inside behind them, Kenneth talks too. **Import again**: files from before keep the old jaw (the chin moves, the lips stay closed) |
 
 Headless: `RECVX_MODS=<out> RECVX_IMPORT=umbrella RECVX_IMPORT_ISO=<image>.rvz build/pc/recvx --save-dir <tmp>`
 (exit status 0 = no failures; the players only, about 8 seconds; `RECVX_IMPORT_WHAT=5` with the monsters and others, 62
@@ -125,13 +126,39 @@ Per model, in this order:
    turning (flat as before), by the vertices' weights (linear blend). After: every limb within 0.1 degrees, the ankles
    within 0.07. The spine keeps its own curve (the mesh is upright in both; only the joints' places differ). Monsters
    whose arms are not level at rest come out in the same pose.
-7. **The jaw** (`make_jaw`; the players have none): on the face's meshes (a texture named `face` or `lip`, or a mesh
-   of the blink), the head's share of the vertices below the mouth's line (a third of the way from the chin up to the
-   eyes: the eyes from the blink morph) and in front of the head's pivot moves to a new node under the head, at 0.75 of
-   that way, the head bone's depth: chin and lower lip, softly at the edges. The lips are closed meshes (no mouth
-   inside: Rebecca's teeth show a little): they stretch. So the jaw turns 0.6 of the game's angle (`.cvxm` header
-   `jaw gain`): Talking Mouths / the double's lip sync and the player's voice as for Outbreak. PKS1 (no face animation)
-   and PHK1 (a mask) get none. **A jaw bone of the model's own** (the zombies' `_24`, the Hunter's `_05`, `ago` of the
+7. **The jaw** (`make_jaw`; the players have none): a new node under the head, its pivot below the ears (0.75 of the
+   way from the chin up to the eyes: the eyes from the blink morph, else half way up the head; the head bone's depth),
+   on the face's meshes (a texture named `face` or `lip`, a material `*_lip` (Rebecca's lips on her jacket's texture)
+   or `M_head` (Kenneth: no face texture, no blink), or a mesh of the blink). Of each vertex the head's share moves
+   to it by how much it belongs to the lower jaw:
+   * **The mouth's slit.** UC's mouths are open in the mesh: the lips' inner edges are a boundary loop, 0.01..0.5 mm
+     apart on the closed mouths (on Rebecca's and Jill's lip meshes, on the face mesh of the others). The face's
+     meshes welded by position (0.05 mm: Rebecca's and Jill's lips join the face there), the slit is the widest
+     boundary loop 0.2..1 wide, at most a fifth as high, centred, in front of the head's pivot, between the chin and
+     the eyes. It is walked edge by edge: Chris's and Wesker's pinch near the corners (a vertex on four boundary
+     edges), where the walk keeps its direction and goes round the corner's little loop. Its two arcs between the
+     corners (the left- and rightmost vertex) are the lips' edges.
+   * **Upper or lower lip**: the arc a vertex reaches first over the mesh (breadth first from both arcs, not within
+     the outer tenth of the width: Wesker's lips join beyond the slit's end); the lips' inner faces curl past each
+     other (Carlos's lower edge lies above his upper one), so height alone cannot tell them. The upper lip is the side
+     whose vertices lie higher (Ada's arcs are 0.1 mm apart). Lower lip, chin: 1; upper lip, nose: 0; a corner 0.5;
+     beside the corners by height, the softer the farther out (cheeks); what lies behind the slit, not joined to
+     the lips (teeth, a backing) 0; towards the ears down to 0 at the head's pivot (except near the mouth).
+   * **Billy's lips are closed** (they share their line: no slit; the loop found is his teeth's): his line is in a
+     table (`closed_mouths`, measured on the disc's model: its height and half width). Near it a vertex goes by the
+     way it faces (the upper lip's inner face looks down, the lower's up: they lie 0.02 mm apart), what lies behind,
+     not joined to the face's front, stays.
+   * **The mouth's inside**: the lips' edges are the boundary already (no vertex shared), so the slit opens as the
+     lower lip turns. Behind it a pocket: a ring of copies of the slit's vertices and one 0.2 L back (L: chin to eyes;
+     pulled in to 0.8 of the width), quads between them and a fan closing the back, on a texture of its own (16x16
+     dark red; the model's 7..16th); each with its lip's share (upper on the head, lower on the jaw, the corners and
+     the back's middle half), so the walls follow the lips and the back opens with them. The teeth (Chris's, Rebecca's,
+     Wesker's box, Billy's) stay on the head in front of it. A flat backing behind the lips off the face (Jill's quad,
+     grey on PJL2's texture) is left out: the pocket takes its place. 17..61 vertices more (PCR2: 12226 of 12288).
+   No slit (none of the 15): chin and lower lip below the mouth's line (a third of the way up), the lips stretch. The
+   jaw turns half the game's angle (`.cvxm` header `jaw gain`): at the opening's loudest lines (10 degrees) the lips
+   part by about 1 cm, Claire's own a little less; Talking Mouths / the double's lip sync and the player's voice as for
+   Outbreak. PHK1 (a mask) gets none. **A jaw bone of the model's own** (the zombies' `_24`, the Hunter's `_05`, `ago` of the
    Licker, Nemesis, the Tyrants, the Eliminator; the office worker's mouth `kuchi`) becomes the jaw with what hangs from
    it, turned by half the game's angle (gain 0.5: the Licker gaped through every line at the full angle). **Lid bones** (the Tyrant ETY0's `mabu_l` / `mabu_r`) become the lids
    (`IMP_FACE_LID_L` / `_R`): they slide down by 2.5 times the height of what is on them (a thin flap; at most 0.29).
@@ -221,6 +248,20 @@ Phase 3 (the skeleton review, the monsters; sheets outside the repository):
   with the lines), Rodrigo as a random import (`RECVX_CAST=1:imports`: Lisa Trevor, Nemesis).
 * Outbreak: its players and NPCs (306 models) imported by main's build and this one: all 1032 files identical; main's
   files shown by both builds: the same game frames (Kevin, Alyssa, Cindy, HN13).
+
+Phase 4 (the mouths; sheets outside the repository):
+
+* The slit found on 14 of the 15 faces (Billy: the table), its lips checked on front / side plots of the welded face
+  (each vertex's lip). `check.py`: meshes, glTF weights, textures and blink as before; the `.cvxm`s 17..61 vertices
+  more (PCR2 12226, under 12288), PKS1 with a jaw; the monsters' files byte for byte the same (Lisa Trevor's and
+  HUNK's but for the unused gain); the hand poses as before.
+* In game, before (main's build and import) and after, each of the 15: face close-ups with the jaw held at 0, 7 and 14
+  degrees (`RECVX_IMPORT_JAW`), the lids shut with the jaw open; Claire's double in the opening's talk (all 15:
+  before, the chin moved and the lips stayed shut; after, they part with the lines, about as far as Claire's own and
+  a little less than two Outbreak imports). The zombies', Nemesis's, the Tyrant's and the office worker's own
+  jaws as before.
+* Outbreak: 1032 files identical. `layout_check.sh` (legacy menu) main vs this: 156 vanilla and 311 enhanced frames
+  identical. ctest.
 
 ## Next steps
 

@@ -190,6 +190,7 @@ typedef struct Uc {
     char tname[IMP_TEX][32];     /* the textures' names */
     int held, outside;           /* meshes left out: held in a hand (the weapons); reaching far out of the body (the Licker's tongue) */
     FILE* dump;                  /* test aid (RECVX_IMPORT_MESHES): per object what became of it */
+    const char* key;             /* the model's (PBI1 ...) */
 } Uc;
 
 static int find_bone(const Uc* u, const char* pat)   /* the first bone of the names "a|b|..." (exact names first) */
@@ -399,7 +400,7 @@ static const char* suffix(const char* n)   /* after the last "__" (a material's 
 }
 
 #define ENT_MAX 2048
-typedef struct Mat { uint32_t at; int index, xlu, nl; struct { const char* tex; int slot, ws, wt; } l[8]; } Mat;
+typedef struct Mat { uint32_t at; const char* name; int index, xlu, nl; struct { const char* tex; int slot, ws, wt; } l[8]; } Mat;
 
 static int read_mdl0(B* b, uint32_t mo, const Ent* tex, int ntexe, Uc* u, ImpModel* m, char* err, int en)
 {
@@ -473,7 +474,7 @@ static int read_mdl0(B* b, uint32_t mo, const Ent* tex, int ntexe, Uc* u, ImpMod
     b->bad = 0;
     /* materials and their texture layers (through the texture links) */
     n = SEC(sec_mats) ? dict(b, SEC(sec_mats), e, 512) : 0;
-    for (int i = 0; i < n; i++) { mats[i].at = e[i].at; mats[i].index = (int)U32(b, e[i].at + 0xC); mats[i].xlu = (U32(b, e[i].at + 0x10) >> 31) & 1; }
+    for (int i = 0; i < n; i++) { mats[i].at = e[i].at; mats[i].name = e[i].name; mats[i].index = (int)U32(b, e[i].at + 0xC); mats[i].xlu = (U32(b, e[i].at + 0x10) >> 31) & 1; }
     nmat = n;
     n = SEC(sec_texl) ? dict(b, SEC(sec_texl), e, ENT_MAX) : 0;
     for (int i = 0; i < n && !b->bad; i++) {
@@ -541,7 +542,9 @@ static int read_mdl0(B* b, uint32_t mo, const Ent* tex, int ntexe, Uc* u, ImpMod
         for (int k = 0; k < 8; k++) ntmi += (vcd >> (1 + k)) & 1;
         for (int k = 0; k < 4; k++) fmt[k] = (int)((vcd >> (9 + 2 * k)) & 3);
         for (int k = 0; k < 8; k++) fmt[4 + k] = (int)((vcd >> (17 + 2 * k)) & 3);
-        int slot[16], nv0 = m->nv, ns0 = m->ns, ni0 = m->nidx, face = tslot >= 0 && (SDL_strcasestr(u->tname[tslot], "face") || SDL_strcasestr(u->tname[tslot], "lip"));   /* (Jill's lips: a mesh of their own) */
+        int slot[16], nv0 = m->nv, ns0 = m->ns, ni0 = m->nidx, face = (tslot >= 0 && (SDL_strcasestr(u->tname[tslot], "face") || SDL_strcasestr(u->tname[tslot], "lip"))) ||
+            (mat->name && (SDL_strcasestr(mat->name, "_lip") || !SDL_strcasecmp(mat->name, "M_head")));   /* (Jill's lips: a mesh of their own;
+            Rebecca's: material M_lip on her jacket's texture; Kenneth's face: M_head, no face texture, no blink) */
         for (int k = 0; k < 16; k++) slot[k] = node;
         uint32_t p = prim;
         while (p < end && !b->bad) {
@@ -869,11 +872,38 @@ static void full_nodes(const Uc* u, ImpModel* m)
 /* ---------------------------------------------------------------- the conversion */
 static float smooth(float e0, float e1, float x) { float t = (x - e0) / (e1 - e0); t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); }
 
-/* The player characters have no jaw bone (UC's faces talk by animation of their own): one is made under the head.
-   Chin and lower lip go to it, its pivot below the ears: on the face's meshes (its texture, the blink's meshes),
-   below the mouth's line (a third of the way from the chin up to the eyes: the eyes from the blink morph, else
-   half way up the head), in front of the pivot, softly at the edges. Lips only: there is no mouth inside. */
-static int make_jaw(ImpModel* r, const unsigned char* face, float rest[ROLES][3])
+/* ---------------------------------------------------------------- the mouth
+   UC's faces have their mouth open in the mesh: the lips' inner edges are a boundary loop (the slit; on Rebecca's and
+   Jill's lip meshes, on the face mesh of the others), flat and wide, in the middle of the face, its upper and lower edge
+   apart by 0.01..0.5 mm on the closed mouths. Found on the face's meshes welded by position (the lips of their own
+   mesh join the face there). */
+typedef struct Slit {
+    int n, *loop;        /* the loop's welded vertices in order, loop[0] the left corner, loop[cr] the right */
+    int cr, upper;       /* upper: 1 the arc loop[0..cr] is the upper lip's, 0 the lower's */
+    float x0, x1, zmin;  /* the corners' x, the loop's deepest z */
+} Slit;
+static int cmp_q(const void* a, const void* b) { const int64_t* x = a; const int64_t* y = b; return x[0] < y[0] ? -1 : x[0] > y[0]; }
+static int cmp_e(const void* a, const void* b) { const int* x = a; const int* y = b; return x[0] != y[0] ? (x[0] > y[0]) - (x[0] < y[0]) : (x[1] > y[1]) - (x[1] < y[1]); }
+/* y of an arc (welded vertices a[0..n), in x order) at x */
+static float arc_y(const float (*P)[3], const int* a, int n, float x)
+{
+    for (int i = 0; i + 1 < n; i++) {
+        float xa = P[a[i]][0], xb = P[a[i + 1]][0];
+        if ((x - xa) * (x - xb) <= 0) return xa == xb ? P[a[i]][1] : P[a[i]][1] + (P[a[i + 1]][1] - P[a[i]][1]) * (x - xa) / (xb - xa);
+    }
+    return P[a[fabsf(x - P[a[0]][0]) < fabsf(x - P[a[n - 1]][0]) ? 0 : n - 1]][1];
+}
+
+/* The player characters have no jaw bone (UC's faces talk by animation of their own): one is made under the head, its
+   pivot below the ears (0.75 of the way from the chin up to the eyes: the eyes from the blink morph, else half way up
+   the head), on the face's meshes (its texture, the lips' material, the blink's meshes; Kenneth's M_head). The mouth
+   (the slit, above): the lower lip goes to the jaw, the upper lip stays (each lip by the arc of the slit it reaches
+   first over the mesh: the lips' inner faces curl past each other), the chin with it, the cheeks beside the corners
+   softly (the farther out, the softer), what lies behind the mouth unjoined (teeth, its dark backing) on the head;
+   towards the ears as far as the head's pivot. A dark pocket behind the slit (`dark`: its texture slot) is the mouth's
+   inside: walls on the lips' edges, a back that opens with them. No slit: chin and lower lip below the mouth's line (a
+   third of the way up); the lips stretch. */
+static int make_jaw(ImpModel* r, const unsigned char* face, float rest[ROLES][3], int dark, const float* closed)
 {
     float yc = 1e9f, ye = 0, top = -1e9f, n = 0, zf = -1e9f;
     for (int v = 0; v < r->nv; v++) {
@@ -890,11 +920,192 @@ static int make_jaw(ImpModel* r, const unsigned char* face, float rest[ROLES][3]
     float L = ye - yc, ym = yc + 0.36f * L, zp = rest[R_HEAD][2];
     if (L < 0.3f || L > 3.0f) return 0;
     rest[R_JAW][0] = 0; rest[R_JAW][1] = yc + 0.75f * L; rest[R_JAW][2] = zp;
+
+    /* the face's vertices welded by position (0.0005: 0.05 mm; Ada's lips lie 0.1 mm apart), its triangles' edges */
+    int nv = r->nv, nw = 0, ne = 0, ce = 0, nq = 0, nu = 0;
+    int *wid = malloc(sizeof(int) * (size_t)nv), *rep = malloc(sizeof(int) * (size_t)nv), (*E)[2] = NULL;
+    int64_t (*Q)[2] = malloc(sizeof(*Q) * (size_t)nv);
+    unsigned char *lab = NULL, *comp = NULL;
+    int *deg = NULL, *adj = NULL, *queue = NULL, *up = NULL, *lo = NULL, nup = 0, nlo = 0;
+    float (*P)[3] = NULL;
+    Slit sl = { 0 };
+    int ok = wid && rep && Q;
+    for (int v = 0; ok && v < nv; v++) {
+        wid[v] = -1;
+        if (!(face[v] & 1)) continue;
+        int64_t k = 0;
+        for (int c = 0; c < 3; c++) k = k * 2097152 + (int64_t)lroundf(r->pos[v][c] / 0.0005f) + 1048576;
+        Q[nq][0] = k; Q[nq][1] = v; nq++;
+    }
+    if (ok) qsort(Q, (size_t)nq, sizeof(*Q), cmp_q);
+    for (int i = 0; ok && i < nq; i++) {
+        if (!i || Q[i][0] != Q[i - 1][0]) rep[nw++] = (int)Q[i][1];
+        wid[Q[i][1]] = nw - 1;
+    }
+    for (int s = 0; ok && s < r->ns; s++) {
+        const int* x = r->idx + r->strip[s].first;
+        for (int k = 0; ok && k + 2 < r->strip[s].n; k++) {
+            int t[3] = { x[k], x[k + 1], x[k + 2] };
+            if (wid[t[0]] < 0 || wid[t[1]] < 0 || wid[t[2]] < 0) continue;
+            for (int c = 0; c < 3; c++) t[c] = wid[t[c]];
+            if (t[0] == t[1] || t[1] == t[2] || t[0] == t[2]) continue;
+            if (ne + 3 > ce) {
+                void* q = realloc(E, sizeof(*E) * (size_t)(ce = ce ? 2 * ce : 16384));
+                if (!q) { ok = 0; break; }
+                E = q;
+            }
+            for (int c = 0; c < 3; c++) { int a = t[c], b = t[(c + 1) % 3]; E[ne][0] = a < b ? a : b; E[ne][1] = a < b ? b : a; ne++; }
+        }
+    }
+    if (ok && ne) qsort(E, (size_t)ne, sizeof(*E), cmp_e);
+    for (int i = 0; ok && i < ne;) {   /* unique edges (bit 30: used by one triangle, the boundary) */
+        int j = i;
+        while (j < ne && E[j][0] == E[i][0] && E[j][1] == E[i][1]) j++;
+        E[nu][0] = E[i][0]; E[nu][1] = E[i][1] | (j - i == 1 ? 1 << 30 : 0); nu++;
+        i = j;
+    }
+#define EB(e) (E[e][1] >> 30 & 1)
+#define EO(e, v) (E[e][0] == (v) ? E[e][1] & 0x0FFFFFFF : E[e][0])
+    ok = ok && (deg = calloc((size_t)nw + 1, sizeof(int))) && (adj = malloc(sizeof(int) * (size_t)(2 * nu + 1))) &&
+         (lab = calloc((size_t)nw + 1, 1)) && (queue = malloc(sizeof(int) * (size_t)(nw + 1))) && (P = malloc(sizeof(*P) * (size_t)(nw + 1)));
+    if (ok) {   /* (adjacency: per welded vertex its edges adj[deg[v] .. deg[v + 1])) */
+        for (int i = 0; i < nw; i++) memcpy(P[i], r->pos[rep[i]], 12);
+        for (int i = 0; i < nu; i++) deg[E[i][0] + 1]++, deg[(E[i][1] & 0x3FFFFFFF) + 1]++;
+        for (int i = 0; i < nw; i++) deg[i + 1] += deg[i];
+        memcpy(queue, deg, sizeof(int) * (size_t)nw);
+        for (int i = 0; i < nu; i++) adj[queue[E[i][0]]++] = i, adj[queue[E[i][1] & 0x3FFFFFFF]++] = i;
+    }
+    /* the slit: a boundary loop 0.2..1 wide, at most 0.2 as high as wide, centred, in front of the head's pivot, between the
+       chin and the eyes; the widest. Walked edge by edge (Chris's and Wesker's pinch near the corners: a vertex on four
+       boundary edges; there the walk keeps its direction in x, so it goes round the corner's little loop and on) */
+    for (int s = 0; ok && s < nw; s++) {
+        int len = 0, v = s, cr = 0, bd = 0, cap = 0, *lp = NULL;
+        float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f, z = 0, zmin = 1e9f, dir = 0;
+        if (lab[s]) continue;
+        for (int i = deg[s]; i < deg[s + 1]; i++) bd += EB(adj[i]);
+        if (!bd) continue;
+        for (;;) {   /* (walked: lab 1, each edge once: bit 29) */
+            int e = -1;
+            if (len >= cap) {
+                int* q = realloc(lp, sizeof(int) * (size_t)(cap = cap ? 2 * cap : 64));
+                if (!q) { ok = 0; break; }
+                lp = q;
+            }
+            lab[v] = 1;
+            lp[len++] = v;
+            x0 = fminf(x0, P[v][0]); x1 = fmaxf(x1, P[v][0]); y0 = fminf(y0, P[v][1]); y1 = fmaxf(y1, P[v][1]); z += P[v][2]; zmin = fminf(zmin, P[v][2]);
+            for (int i = deg[v]; i < deg[v + 1]; i++)
+                if (EB(adj[i]) && !(E[adj[i]][1] & 1 << 29) && (e < 0 || (P[EO(adj[i], v)][0] - P[v][0]) * dir > (P[EO(e, v)][0] - P[v][0]) * dir)) e = adj[i];
+            if (e < 0) break;
+            E[e][1] |= 1 << 29;
+            dir = P[EO(e, v)][0] - P[v][0] < 0 ? -1.0f : 1.0f;
+            v = EO(e, v);
+        }
+        if (!ok) { free(lp); break; }
+        float w = x1 - x0;
+        len -= len > 1 && v == s;   /* (back where it started: once) */
+        if (v != s || w < 0.2f || w > 1.0f || y1 - y0 > 0.2f * w || fabsf(x0 + x1) > 0.3f * w || z / len < zp + 0.2f * L ||
+            (y0 + y1) / 2 < yc + 0.1f * L || (y0 + y1) / 2 > ye - 0.2f * L || w <= sl.x1 - sl.x0 || len > 250) { free(lp); continue; }
+        int c0 = 0;
+        for (int i = 1; i < len; i++) if (P[lp[i]][0] < P[lp[c0]][0]) c0 = i;
+        for (int i = 0; i < len; i++) queue[i] = lp[(c0 + i) % len];
+        memcpy(lp, queue, sizeof(int) * (size_t)len);
+        for (int i = 1; i < len; i++) if (P[lp[i]][0] > P[lp[cr]][0]) cr = i;
+        if (cr < 2 || len - cr < 2) { free(lp); continue; }
+        float ya = 0, yb = 0;
+        for (int i = 1; i < cr; i++) ya += P[lp[i]][1] / (float)(cr - 1);
+        for (int i = cr + 1; i < len; i++) yb += P[lp[i]][1] / (float)(len - cr - 1);
+        free(sl.loop);
+        sl.n = len; sl.loop = lp; sl.cr = cr; sl.upper = ya > yb; sl.x0 = x0; sl.x1 = x1; sl.zmin = zmin;
+    }
+    float xc = (sl.x0 + sl.x1) / 2, hw = (sl.x1 - sl.x0) / 2;
+    if (ok && sl.loop && !(up = malloc(sizeof(int) * 512))) ok = 0;
+    if (ok && sl.loop) {   /* the arcs, each from the left corner to the right; the lips: the arc a vertex reaches first over the mesh
+        between the corners (breadth first from both, kept off the outer tenth of each side: Wesker's lips join past the slit's end):
+        lab 1 upper, 2 lower, 3 a corner */
+        int qh = 0, qt = 0, *a0 = sl.upper ? up : up + 256, *a1 = sl.upper ? up + 256 : up, n0 = 0, n1 = 0;
+        for (int i = 0; i <= sl.cr; i++) a0[n0++] = sl.loop[i];
+        for (int i = sl.n; i >= sl.cr; i--) a1[n1++] = sl.loop[i % sl.n];
+        lo = up + 256;
+        nup = sl.upper ? n0 : n1; nlo = sl.upper ? n1 : n0;
+        memset(lab, 0, (size_t)nw);
+        for (int i = 1; i + 1 < nup; i++) lab[up[i]] = 1;
+        for (int i = 1; i + 1 < nlo; i++) lab[lo[i]] = lab[lo[i]] ? 3 : 2;   /* (on both: a pinch) */
+        lab[up[0]] = lab[up[nup - 1]] = 3;
+        for (int i = 0; i < nup; i++) if (lab[up[i]] == 1) queue[qt++] = up[i];
+        for (int i = 0; i < nlo; i++) if (lab[lo[i]] == 2) queue[qt++] = lo[i];
+        while (qh < qt) {
+            int v = queue[qh++];
+            for (int i = deg[v]; i < deg[v + 1]; i++) {
+                int o = EO(adj[i], v);
+                if (lab[o] || fabsf(P[o][0] - xc) >= 0.8f * hw ||
+                    fabsf(P[o][1] - (arc_y(P, up, nup, P[o][0]) + arc_y(P, lo, nlo, P[o][0])) / 2) > 0.5f * L) continue;
+                lab[o] = lab[v];
+                queue[qt++] = o;
+            }
+        }
+        float my[3] = { 0 }, cn[3] = { 0 };   /* (Ada's arcs lie 0.1 mm apart: which is the upper lip, by what each reached) */
+        for (int i = 0; i < nw; i++) if (lab[i] == 1 || lab[i] == 2) my[lab[i]] += P[i][1], cn[lab[i]]++;
+        if (cn[1] > 0 && cn[2] > 0 && my[1] / cn[1] < my[2] / cn[2]) {
+            int* t = up; up = lo; lo = t;
+            int tn = nup; nup = nlo; nlo = tn;
+            for (int i = 0; i < nw; i++) if (lab[i] == 1 || lab[i] == 2) lab[i] = (unsigned char)(3 - lab[i]);
+        }
+    }
+    /* a closed mouth (Billy's lips share their line: no slit; the loop found is his teeth's): its line from the table. Near it
+       (0.025 L) on the face's front (the welded piece holding the lips) a vertex goes by the way it faces: the upper lip's inner
+       face looks down, the lower's up (Billy's lips lie 0.02 mm apart there); what lies behind, unjoined (teeth, the mouth's
+       inside), stays */
+    float yl = 0, zfin[9];
+    int main_c = -1;
+    if (ok && closed) {
+        int best = -1, nc = 0;
+        yl = closed[0]; xc = 0; hw = closed[1];
+        nup = nlo = 0;
+        if (!(comp = malloc((size_t)nw))) ok = 0;
+        else {
+            memset(comp, 255, (size_t)nw);
+            for (int s = 0; s < nw; s++) {   /* (the welded pieces, numbered up to 254) */
+                int qh = 0, qt = 0;
+                if (comp[s] != 255) continue;
+                comp[s] = (unsigned char)(nc < 254 ? nc : 254); queue[qt++] = s;
+                while (qh < qt) {
+                    int v = queue[qh++];
+                    for (int i = deg[v]; i < deg[v + 1]; i++) { int o = EO(adj[i], v); if (comp[o] == 255) comp[o] = comp[s], queue[qt++] = o; }
+                }
+                nc++;
+            }
+            for (int s = 0; s < nw; s++)
+                if (fabsf(P[s][0]) < 0.05f && fabsf(P[s][1] - yl) < 0.1f * L && (best < 0 || P[s][2] > P[best][2])) best = s;
+            main_c = best >= 0 ? comp[best] : -1;
+            for (int i = 0; i < 9; i++) {   /* the lips' back along the line: 9 places corner to corner */
+                float x = -hw + hw * (float)i / 4;
+                zfin[i] = 1e9f;
+                for (int s = 0; s < nw; s++)
+                    if (comp[s] == main_c && fabsf(P[s][0] - x) < hw / 8 && fabsf(P[s][1] - yl) < 0.03f * L) zfin[i] = fminf(zfin[i], P[s][2]);
+                if (zfin[i] > 1e8f) ok = 0;
+            }
+        }
+    }
+#undef EB
+#undef EO
     int moved = 0;
-    for (int v = 0; v < r->nv; v++) {
+    for (int v = 0; ok && v < nv; v++) {
         if (!(face[v] & 1)) continue;
         const float* p = r->pos[v];
-        float j = smooth(ym + 0.03f * L, ym - 0.08f * L, p[1]) * smooth(zp + 0.1f * L, zp + 0.5f * L, p[2]);
+        float j;
+        if (nup || closed) {   /* s: above the mouth's line (between the arcs, flat beyond the corners); dl: out from a corner */
+            float x = fminf(fmaxf(p[0], xc - hw), xc + hw), s = p[1] - (closed ? yl : (arc_y(P, up, nup, x) + arc_y(P, lo, nlo, x)) / 2);
+            float dl = fmaxf(0, fabsf(p[0] - xc) - hw), b = 0.04f * L + 0.6f * dl, a;
+            int l = closed ? 0 : lab[wid[v]];
+            if (closed && dl <= 0 && fabsf(s) < 0.3f * L && comp[wid[v]] != main_c) a = 0;
+            else if (closed && dl <= 0 && fabsf(s) < 0.025f * L) a = smooth(-0.3f, 0.3f, r->nrm[v][1]);
+            else if (l == 3) a = 0.5f;
+            else if (l) a = l == 2;
+            else if (!closed && dl <= 0 && p[2] < sl.zmin && fabsf(s) < 0.3f * L) a = 0;
+            else a = smooth(b, -b, s);
+            j = a * fmaxf(dl <= 0 ? smooth(0.4f * L, 0.2f * L, fabsf(s)) : 0, smooth(zp + 0.1f * L, zp + 0.5f * L, p[2]));
+        } else j = smooth(ym + 0.03f * L, ym - 0.08f * L, p[1]) * smooth(zp + 0.1f * L, zp + 0.5f * L, p[2]);
         if (j <= 0) continue;
         for (int k = 0; k < 4; k++)
             if (r->jnt[v][k] == R_HEAD && r->wgt[v][k] > 0) {   /* (the head's share moves to the jaw: the neck keeps its own) */
@@ -908,6 +1119,70 @@ static int make_jaw(ImpModel* r, const unsigned char* face, float rest[ROLES][3]
                 break;
             }
     }
+    if (ok && moved && (nup || closed) && dark >= 0) {   /* the pocket: round the mouth (the slit's loop; a closed mouth's line there
+        and back) a ring on the lips' edge and one 0.2 L back (pulled in to 0.8 of the width), quads between them, a fan closing the
+        back; the head's share of each on the jaw as its lip's (upper 0, lower 1, the corners and the back's middle half) */
+        int m = closed ? 16 : sl.n, nv2 = nv + 2 * m + 1, ni = r->nidx, ns = r->ns, c = nv + 2 * m;
+        float D = 0.2f * L, zb = 1e9f;
+        void* q;
+        for (int s = 0; s < r->ns; s++) {   /* a flat backing behind the lips, off the face (Jill's: a quad, grey on PJL2's texture):
+            the pocket takes its place */
+            const int* x = r->idx + r->strip[s].first;
+            float z0 = 1e9f, z1 = -1e9f;
+            int in = r->strip[s].n >= 3;
+            for (int k = 0; k < r->strip[s].n && in; k++) {
+                const float* p = r->pos[x[k]];
+                float ys = closed ? yl : (arc_y(P, up, nup, p[0]) + arc_y(P, lo, nlo, p[0])) / 2, zs = closed ? zfin[4] : sl.zmin;
+                in = !(face[x[k]] & 1) && fabsf(p[0] - xc) < 1.2f * hw && fabsf(p[1] - ys) < 0.25f * L && p[2] < zs + 0.05f * L && p[2] > zs - 0.3f * L;
+                z0 = fminf(z0, p[2]); z1 = fmaxf(z1, p[2]);
+            }
+            if (in && z1 - z0 < 0.01f) r->strip[s].n = 0;
+        }
+#define GROWR(f, sz, cnt) do { if (ok && (q = realloc(r->f, (size_t)(sz) * (size_t)(cnt)))) r->f = q; else ok = 0; } while (0)
+        GROWR(pos, 12, nv2); GROWR(nrm, 12, nv2); GROWR(uv, 8, nv2); GROWR(jnt, 4, nv2); GROWR(wgt, 16, nv2);
+        if (r->morph) GROWR(morph, 12, nv2);
+        if (r->hand) GROWR(hand, 1, nv2);
+        GROWR(idx, sizeof(int), ni + 7 * m); GROWR(strip, sizeof(ImpStrip), ns + 2 * m);
+#undef GROWR
+        for (int i = 0; ok && i <= 2 * m; i++) {
+            int x = nv + i, k = i < 2 * m ? i % m : 0, f = closed ? (k <= 8 ? k : 16 - k) : 0, l = closed ? (k % 8 ? 1 + (k > 8) : 3) : lab[sl.loop[k]];
+            float a = i == 2 * m || l == 3 ? 0.5f : l == 2 ? 1 : l == 1 ? 0 : 0.5f, h = 0;
+            if (closed) {   /* (on the head alone) */
+                r->pos[x][0] = -hw + hw * (float)f / 4; r->pos[x][1] = yl; r->pos[x][2] = zfin[f];
+                r->jnt[x][0] = R_HEAD; r->jnt[x][1] = r->jnt[x][2] = r->jnt[x][3] = 0;
+                r->wgt[x][0] = 1; r->wgt[x][1] = r->wgt[x][2] = r->wgt[x][3] = 0;
+            } else {
+                memcpy(r->pos[x], r->pos[rep[sl.loop[k]]], 12); memcpy(r->jnt[x], r->jnt[rep[sl.loop[k]]], 4); memcpy(r->wgt[x], r->wgt[rep[sl.loop[k]]], 16);
+            }
+            for (int t = 0; t < 4; t++) if (r->jnt[x][t] == R_HEAD || r->jnt[x][t] == R_JAW) h += r->wgt[x][t], r->wgt[x][t] = 0;
+            for (int t = 0, put = 0; t < 4 && put < 2; t++)   /* (the freed slots: the head's, the jaw's) */
+                if (r->wgt[x][t] <= 0) r->jnt[x][t] = put ? R_JAW : R_HEAD, r->wgt[x][t] = put ? h * a : h * (1 - a), put++;
+            r->nrm[x][0] = r->nrm[x][1] = 0; r->nrm[x][2] = 1;
+            r->uv[x][0] = r->uv[x][1] = 0.5f;
+            if (r->morph) memset(r->morph[x], 0, 12);
+            if (r->hand) r->hand[x] = 0;
+            if (i >= m && i < 2 * m) {
+                r->pos[x][0] = xc + 0.8f * (r->pos[x][0] - xc);
+                r->pos[x][2] -= D;
+                zb = fminf(zb, r->pos[x][2]);
+            }
+        }
+        for (int i = 0; ok && i < m; i++) {
+            int* x = r->idx + ni;
+            x[0] = nv + i; x[1] = nv + m + i; x[2] = nv + (i + 1) % m; x[3] = nv + m + (i + 1) % m;
+            r->strip[ns++] = (ImpStrip){ ni, 4, dark, 1 };
+            ni += 4;
+            x = r->idx + ni;
+            x[0] = nv + m + i; x[1] = nv + m + (i + 1) % m; x[2] = c;
+            r->strip[ns++] = (ImpStrip){ ni, 3, dark, 1 };
+            ni += 3;
+        }
+        if (ok) {
+            r->pos[c][0] = xc; r->pos[c][1] = closed ? yl : (arc_y(P, up, nup, xc) + arc_y(P, lo, nlo, xc)) / 2; r->pos[c][2] = zb;
+            r->nv = nv2; r->nidx = ni; r->ns = ns;
+        }
+    }
+    free(wid); free(rep); free(Q); free(E); free(deg); free(adj); free(lab); free(queue); free(P); free(sl.loop); free(lo && lo < up ? lo : up); free(comp);
     return moved;
 }
 
@@ -1025,6 +1300,14 @@ static int tail_bone(const Uc* u, const Dist* d, int i)
     return 1;
 }
 
+/* the closed mouths (make_jaw): the line's height and half its width (the game's units, measured on the disc's model) */
+static const struct { const char* id; float line[2]; } closed_mouths[] = { { "PBI1", { 16.38f, 0.29f } } };
+static const float* closed_mouth(const char* id)
+{
+    for (size_t i = 0; id && i < sizeof(closed_mouths) / sizeof(closed_mouths[0]); i++) if (!strcmp(id, closed_mouths[i].id)) return closed_mouths[i].line;
+    return NULL;
+}
+
 /* the model on the converted skeleton (ROLES nodes): weights summed per role (twist bones split), the face */
 static int reduce(Uc* u, const ImpModel* m, ImpModel* r, char* err, int en)
 {
@@ -1105,10 +1388,10 @@ static int reduce(Uc* u, const ImpModel* m, ImpModel* r, char* err, int en)
     }
     /* the face: a jaw bone of the model's own (the monsters', the office worker's mouth) turns as the game's angle; the players
        get one made (make_jaw) */
-    int jaw = u->core[R_JAW] >= 0 || make_jaw(r, u->face, rest), lids = 0;
-    /* (closed lips stretch: Outbreak's angles, made for a mouth that opens, tear them at 14 degrees. A monster's own jaw opens wide
-       mouths: at the game's angles the Licker gaped through every line of a cutscene; half of them) */
-    r->jaw_gain = u->core[R_JAW] >= 0 ? 0.5f : 0.6f;
+    int jaw = u->core[R_JAW] >= 0 || make_jaw(r, u->face, rest, m->ntex < IMP_TEX ? m->ntex : -1, closed_mouth(u->key)), lids = 0;
+    /* (half the game's angles: the made jaw opens the lips by 1 cm at the opening's loudest lines, about Claire's own; a monster's
+       own jaw opens wide mouths: at the game's angles the Licker gaped through every line of a cutscene) */
+    r->jaw_gain = 0.5f;
     for (int e = 0; e < 2; e++) {   /* lid bones (the Tyrant ETY0's mabu_l / mabu_r): down by 2.5 times the height of what is on them (a thin flap
         over the eye: 0.06 high on ETY0; UC turns it, here it slides) */
         float y0 = 1e9f, y1 = -1e9f;
@@ -1170,6 +1453,7 @@ static int convert(const unsigned char* arc, uint32_t an, const char* key, const
     ImpModel m, r;
     Ent tex[256], top[16], mdl[8];
     memset(&m, 0, sizeof(m)); memset(&r, 0, sizeof(r));
+    if (u) u->key = key;
     snprintf(name, sizeof(name), "%s.brres", key);
     if (!u || !u8_find(arc, an, name, &br, &bn)) { snprintf(err, en, "The model is missing from %s.arc.", key); free(u); return 0; }
     B b = { br, bn, 0 };
@@ -1221,6 +1505,14 @@ static int convert(const unsigned char* arc, uint32_t an, const char* key, const
     it->verts = r.nv;
     for (int k = 0; k < m.ntex; k++) { r.tim2[k] = m.tim2[k]; r.tim2_len[k] = m.tim2_len[k]; m.tim2[k] = NULL; }
     r.ntex = m.ntex; m.ntex = 0;
+    for (int s = 0; s < r.ns && r.ntex < IMP_TEX; s++)
+        if (r.strip[s].tex == r.ntex) {   /* the mouth's inside (make_jaw): a dark red, 16 x 16 */
+            unsigned char px[16 * 16 * 4];
+            int len;
+            for (int i = 0; i < 16 * 16; i++) px[4 * i] = 40, px[4 * i + 1] = 14, px[4 * i + 2] = 14, px[4 * i + 3] = 255;
+            if ((r.tim2[r.ntex] = imp_tim2_from_rgba(px, 16, 16, &len))) r.tim2_len[r.ntex++] = len;
+            break;
+        }
     for (;;) {   /* what the game reads must fit the model buffer (actor_glue.c KEEP_SIZE, 1.5 MB; the cast's three of them in 3 MB):
         the textures at most 1 MB (Nemesis has six of 512x512), the largest halved until they are (the glTF keeps them whole) */
         int big = -1, w, h, len;
