@@ -39,9 +39,13 @@ typedef struct TpsConfig {
     int hud;                  /* "HUD": 0 Auto (with this camera only), 1 On (also the fixed cameras), 2 Off (hud_glue.c) */
     int hud_side;             /* "HUD Position": 0 the shoulder's side (fixed cameras: right), 1 left, 2 right */
     int hud_style;            /* "HUD Style": 0 Weapon Circle (a disc, a health arc), 1 Minimal (a health bar, the counts) */
+    int fp;                   /* "Camera Mode" First Person (with on): the camera at the eyes (tps_glue.c, docs/THIRDPERSON.md "First person") */
+    int fp_fov;               /* "First Person Field of View", degrees as fov */
+    int fp_hud;               /* "First Person HUD": 0 On (the HUD Style), 1 Off, 2 Minimal */
     /* published by the game thread */
     volatile int cam_active;  /* the third-person camera drew the last frame */
     volatile int aiming;      /* weapon raised (crosshair) */
+    volatile int fp_view;     /* the first-person view drew the last frame (the crosshair's dot) */
     volatile int pad_play;    /* modern gamepad scheme in third-person play: the gamepad's third-person
                                  rows play instead of its game rows (bindings.c) */
     volatile int kb_play;     /* third person in a game, no OPTION screen up: the keyboard's third-person keys
@@ -63,6 +67,7 @@ typedef struct TpsHud {
     volatile int icon_x, icon_y, icon_w, icon_h;   /* its icon cell in the icon picture (hud_icons), pixels; icon_w 0: none */
     volatile int rounds, rounds_pct;       /* loaded: a count, HUD_NONE / HUD_INF; pct: in percent (the inventory's) */
     volatile int spare, spare_pct;         /* the reload ammo in the bag, the same */
+    volatile int style;        /* 0 Weapon Circle, 1 Minimal (HUD Style, or First Person HUD Minimal) */
     volatile int round_kind;   /* the rounds loaded, for their colour: 0 plain (white), 1..3 the grenade launcher's acid, flame,
                                   gas rounds, 4 the bow gun's gunpowder arrows */
 } TpsHud;
@@ -93,6 +98,9 @@ void tps_input_event(const void* sdl_event);
 void tps_update_mouse_mode(void* window, int overlay_open);
 int  tps_mouse_captured(void);                /* relative mode as tps_update_mouse_mode last set it */
 void tps_frame(void);                         /* game thread, frame hand-off */
+/* "Camera Mode": 0 Fixed, 1 Over Shoulder, 2 First Person (g_tps.on, g_tps.fp; settings.c) */
+int tps_camera_mode(void);
+void tps_set_camera_mode(int m);
 
 #ifdef __cplusplus
 }

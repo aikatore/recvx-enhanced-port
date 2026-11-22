@@ -32,7 +32,7 @@ table has no help for get theirs from the layout, ctest `menu_help`); some rows 
 Off turns the game's vibration off (the system save's VIBRATION), a percentage turns it on at that strength.
 
 **Search** (SETTINGS only, the keyboard's): Ctrl+F or `/` (or a click on the bar's Search), then type. Every SETTINGS
-row whose label, old name (the table's label: "Over-the-shoulder"), help or value holds the text is listed under its
+row whose label, old name (the table's label, e.g. "Mouse Camera Style"), help or value holds the text is listed under its
 category; Enter or Down goes to the results, which change as anywhere else; Esc (Back) closes the search, L1 / R1 too.
 
 **Display Mode and Fullscreen Resolution** ask "Keep these settings? Reverting in 10 s." after a change: KEEP keeps it,
@@ -43,7 +43,7 @@ in a game (PAUSE > GAME SETUP's RULES, ENEMIES, the cast's CHARACTERS rows) a tu
 room. Their help says it too.
 
 **In a game OPTION opens PAUSE** (Select / View or Backspace as before; with the Modern third-person controller layout
-its Start): RESUME, Camera (Fixed / Third Person, the F5 setting), SETTINGS, GAME SETUP (this game's setup: OVERVIEW, RULES,
+its Start): RESUME, Camera (Fixed / Over Shoulder / First Person, the F5 setting; each press the next), SETTINGS, GAME SETUP (this game's setup: OVERVIEW, RULES,
 ENEMIES, CHARACTERS, BIORAND in a BioRand game, CO-OP RULES, on the same row screen, below), CO-OP (in a session: its own
 page, below), SPOILER LOG (the
 F8 screen; a BioRand game outside co-op, greyed otherwise), CHEATS AND TOOLS (cheats, actions, items, spawn, teleport;

@@ -404,7 +404,10 @@ static void settings_window(void)
         char key[96];
         SDL_snprintf(key, sizeof key, tr(tps_key_wait ? "Press a key (Esc cancels)" : "Camera Key: %s"), SDL_GetScancodeName((SDL_Scancode)g_tps.key));
         if (ImGui::Button(key)) tps_key_wait = true;
-        ImGui::TextDisabled("%s", tr(g_tps.free_cam
+        ImGui::TextDisabled("%s", tr(g_tps.fp
+                            ? "First person: move in the direction you look; use the mouse to look.\n"
+                              "Change action buttons under Controls; F1 releases the mouse."
+                            : g_tps.free_cam
                             ? "Move in the direction shown on screen; use the mouse to turn the camera.\n"
                               "Change action buttons under Controls; F1 releases the mouse."
                             : "Move forward or back and turn with your movement keys; use the mouse to look.\n"
@@ -970,7 +973,7 @@ static void hud_draw(void)
                                        IM_COL32(70, 230, 150, 240), IM_COL32(255, 150, 40, 240) };
     int rk = g_hud.round_kind >= 0 && g_hud.round_kind <= 4 ? g_hud.round_kind : 0;
     const ImU32 tint = A(round_col[rk]);
-    if (g_tps.hud_style == 1) {
+    if (g_hud.style == 1) {
         /* Minimal: the bar in the corner, filled from the outer end; above it at the outer end the icon, then the rounds
            loaded and "/spare" smaller, on one baseline */
         float m = vh * 0.05f, bw = vh * 0.26f, bh = vh * 0.016f, fs = vh * 0.042f, ss = fs * 0.72f, ox = hud_left ? x0 + m : x0 + vw - m;
@@ -1463,7 +1466,7 @@ static void overlay_frame(void)
     /* without a window ImGui leaves the cursor alone (menu_mouse_update shows/hides it) */
     if (windows) ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
     else ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-    bool crosshair = g_tps.on && g_tps.crosshair && g_tps.cam_active && g_tps.aiming;
+    bool crosshair = g_tps.on && g_tps.crosshair && g_tps.cam_active && (g_tps.aiming || g_tps.fp_view);   /* first person: a dot when not aiming */
     const char* hint = lobby_hint();
     bool tag = coop_on && tag_flags && !cs.trade_open && (g_coop.nametag || cs.busy_kind || cs.trade_hint[0]);   /* co-op: the partner is drawn in the frame shown */
     bool ping = g_config.show_ping && coop_on && cs.state == COOP_CONNECTED;   /* co-op: next to the frame rate */
@@ -1487,7 +1490,13 @@ static void overlay_frame(void)
     if (cheats_visible) placer_overlay();
     if (coop_visible) coop_window();
     if (import_visible) import_window();
-    if (crosshair) {   /* third person: the screen centre is where the shot goes (tps_glue.c) */
+    if (crosshair && !g_tps.aiming) {   /* first person, the weapon down: a small light dot where the view looks */
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        ImVec2 c(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
+        float t = ImGui::GetIO().DisplaySize.y / 400.0f;
+        dl->AddCircleFilled(ImVec2(c.x + 1, c.y + 1), t, IM_COL32(0, 0, 0, 120));
+        dl->AddCircleFilled(c, t, IM_COL32(230, 230, 230, 150));
+    } else if (crosshair) {   /* third person: the screen centre is where the shot goes (tps_glue.c) */
         ImDrawList* dl = ImGui::GetForegroundDrawList();
         ImVec2 c(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
         float s = ImGui::GetIO().DisplaySize.y / 120.0f, g = s * 0.6f, t = s > 8 ? 2.0f : 1.5f;
