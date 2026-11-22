@@ -248,6 +248,7 @@ void  actor_hands_back(void);                 /* game.c, before bhControlPlayer:
    enemy starts a grab on that player for a moment */
 void  pc_shove_frame(void);                   /* eneset.c bhControlEnemy, before the enemies' steps */
 int   pc_grab_immune(void);                   /* the grab checks of en01, en03, en04, en09, en26: 1 = no grab on plp now */
+void  pc_shove_release(void);                 /* the grab code of en01, en01b, en03, en04, en09, en26: the grabber lets go of plp alive */
 /* PS2 budgets raised on the PC (docs/ENEMIES.md "Budgets on the PC"): the texture heap (the EE copies of the
    TIM2s the GS loads from; 10 MB on the PS2) and its entry table (256). Vanilla rooms use the same
    first entries and bytes as before; only what used to exit(0) now fits. */

@@ -311,38 +311,51 @@ Cerberus (`en04.c` NG00 lever) and the Black Widow are thrown off but touch no o
 decapitation kills). With randomized or extra enemies the next enemy then grabbed or hit the player at once:
 in the headless runs below 2 to 28 frames after a break free, several times per run, until the player died.
 
-**"Break Free Pushes Enemies"** (GAME SETUP > RULES and the old ENHANCED SETTINGS, ini `break_free`; Off / **Auto**
-/ On, Auto: on while the Enemy Randomizer or Extra Enemies is on, so a game without them plays as the original;
-co-op: the host's, `OPT2_SHOVE`). `pc/glue/shove_glue.c`, from `eneset.c bhControlEnemy` before the enemies' steps:
-when our player leaves the grab state (player mode0 4, `bhCPM0_nage`) alive (not to mode0 3 or 6, death), every
-enemy within 20 units (28 for one attacking, mode0 2: the Bandersnatch grabs with its arm from ~21), on its floor
-(1 storey: 8 units) and not behind a wall (`bhCollisionCheckLine`), is knocked back by the reaction its own damage code
-picks for a strong hit from the player's side, without damage:
+**"Break Free Pushes Enemies"** (GAME SETUP > RULES and the old ENHANCED SETTINGS, ini `break_free`; **Off** / Auto
+/ On, Auto: on while the Enemy Randomizer or Extra Enemies is on; off by default, and the GAME SETUP Preset
+"Original" puts it back to Off; co-op: the host's, `OPT2_SHOVE`). `pc/glue/shove_glue.c`:
 
-| Type | Reaction (mode0 3, mode2) | Measured: pushed back (units), until it walks again (game frames) |
+**When**: the push goes out with the shove itself, not when the player stands again. Each grabber's code calls
+`pc_shove_release` where it lets go of the player alive: `en01.c` NG00 and NG02, `en01b.c` NG03B, `en26.c` NG00
+(the lever count runs out, `pl->mode3 = 2`), `en04.c` NG00 (the Cerberus thrown off), `en09.c` NG01 (the
+Bandersnatch's throw), `en03.c` NG00 / NG01 (the Black Widow lets go). The push follows 15 frames later
+(`SHOVE_DELAY`: the shaken-off zombie flies from its shove's frame 17), from `eneset.c bhControlEnemy` before the
+enemies' steps. Any other hold (and one the partner's game ran) still pushes when the player leaves the grab state
+(player mode0 4, `bhCPM0_nage`) alive. Measured: the grabber lets go 36 frames (zombie, anatomist), 41 (Black Widow,
+Bandersnatch) or 54 (Cerberus) before the player stands; the push now comes 21, 26 or 39 frames before it (before:
+on that frame, when the shaken-off zombie had already landed).
+
+**Who and how**: every enemy within 20 units (28 for one attacking, mode0 2: the Bandersnatch grabs with its arm from
+~21), on its floor (1 storey: 8 units) and not behind a wall (`bhCollisionCheckLine`), without damage. Only one
+pressed against the player (closer than 6 units, `KNOCK_R`: zombies queue at 6.5 to 7.5, a Bandersnatch reaches from
+6.2) gets its strong reaction and goes down; the others get a light one, stay on their feet and slide back 6.6 units
+over 10 frames (`SLIDE_N`, `SLIDE_V`; stopped by a wall), the way the game's own push mostly staggers the zombies:
+
+| Type | Light reaction (mode0 3, mode2) | Pressed against the player |
 |---|---|---|
-| zombie (1) | the game's own push above, from the player instead of the flying zombie (DG03 / DG04 falls, DG02 a stagger) | 8 to 13, 37 to 41 |
-| anatomist (26) | the same, its DG02 | 6 to 7, more than 60 |
-| Cerberus (4) | `bhEne04_DmgChk` / `ChgDmgMode`: DG00, the knock-back slide (exp0 `0x10` bit `0x100`: hit from the front) | up to 7, 32 to 34 |
-| Hunter / Sweeper (5) | `bhEne05_InitDamage`'s heavy hit: DG11 (flies back and lies), from behind DG00, at a wall DG09, at a ledge DG12 | 15 to 30, more than 60 |
-| Bandersnatch (9) | `bhEne09_ChgDmgMode` act 3: DG03 from the front, DG04 from behind | 10 to 15, 35 to 38 |
-| Black Widow (3) | `bhEne03_Damage`'s heavy hit on the floor, DG03 (not on a wall or the ceiling) | 0 to 1 (it reels in place), 35 to 38 |
+| zombie (1) | DG02, the stagger of the game's push | the game's own push (DG03 / DG04 falls; from the side DG02) |
+| anatomist (26) | DG02 (the game's push gives it nothing else) | the same |
+| Cerberus (4) | `bhEne04_DmgChk` / `ChgDmgMode`: DG00, the knock-back slide (its only reaction; exp0 `0x10` bit `0x100`: from the front); no extra slide | the same |
+| Hunter / Sweeper (5) | `bhEne05_InitDamage` for a hit of 20 to 40: DG03 from the front, DG02 from behind | the heavy hit: DG11 (flies back and lies), from behind DG00, at a wall DG09, at a ledge DG12 |
+| Bandersnatch (9) | `bhEne09_ChgDmgMode` act 2: DG02 | act 3: DG03 from the front, DG04 from behind |
+| Black Widow (3) | `bhEne03_DamageInit` for a hit of 30 to 50 on the floor: DG01, a reel (in place: its own steps keep it) | DG03 (not on a wall or the ceiling) |
 
-An enemy attacking or reeling then (mode0 2 or 3: the Bandersnatch letting go) is pushed when it walks again within 45
-frames. Left alone: bosses and the other types, enemy variants, the records the room's scripts act on
-(`enemy_rec_scripted`), a Cerberus of another type or lying (exp0 `0x10` bit `0x100000`: one thrown off a grab), a
-Hunter in the air, a Bandersnatch holding a player, the dead, the hidden, linked parts. Then for **54 game frames
-(1.8 s)** no enemy can start a grab on that player (`pc_grab_immune` where the types decide to grab: `en01.c`
-`bhEne01_ActionModeCheck` (the player counts as busy: the zombie waits beside it, as during a partner's grab) and
-`bhEne01_EatCheck`, `en26.c` the same two, `en04.c` `bhEne04_PlyDamageCheck` (the leap's grab below 12 HP misses),
-`en09.c bhEne09_PlyNageCheck`, `en03.c` the leap's two grab tests); every other attack still hits. 1.8 s: about
-the time a pushed zombie needs to get up and reach the player again, longer than a Cerberus's or a Bandersnatch's
-reaction; long enough to turn and run, short enough that standing still among enemies stays dangerous.
+An enemy attacking or reeling then (mode0 2 or 3: the grabber letting go) is pushed when it walks again within 99
+frames of the push (60 to 78 after the player stands). Left alone: bosses and the other types, enemy variants, the
+records the room's scripts act on (`enemy_rec_scripted`), a Cerberus of another type or lying (exp0 `0x10` bit
+`0x100000`: one thrown off a grab), a Hunter in the air, a Bandersnatch holding a player, the dead, the hidden,
+linked parts. Then for **75 game frames (2.5 s) from standing again** no enemy can start a grab on that player
+(`pc_grab_immune` where the types decide to grab: `en01.c` `bhEne01_ActionModeCheck` (the player counts as busy: the
+zombie waits beside it, as during a partner's grab) and `bhEne01_EatCheck`, `en26.c` the same two, `en04.c`
+`bhEne04_PlyDamageCheck` (the leap's grab below 12 HP misses), `en09.c bhEne09_PlyNageCheck`, `en03.c` the leap's two
+grab tests); every other attack still hits. 2.5 s (1.8 s while everyone fell): with the lighter push the enemies are
+back on their feet before the player stands, and with 54 frames the next grab came 58 to 68 frames after standing
+(with the falls: 87 and more); with 75 it comes 76 frames and later, time to turn and run.
 
-**Co-op**: each game watches its own player. Enemies our game runs are pushed at once; one the partner's game runs gets
+**Co-op**: each game watches its own player. Our game sees only its own player's release (the grab code runs where the grabbing enemy runs), so a hold the partner's game ran pushes as our player stands. Enemies our game runs are pushed at once; one the partner's game runs gets
 an `EV_ENE_HIT` with `COOP_HIT_SHOVE` (no joints, damage or hit bits; `dp`: where the player broke free) and its runner
 pushes it (`hit_apply` -> `pc_shove_apply`), passed on or kept for a hand-over like a shot (protocol 59). Receiving one
-starts the partner's 54 frames in our game (the grabs our game decides on the partner's stand-in, `plp == &ply2`);
+starts the partner's immunity in our game, 54 + 75 frames (it comes with the push, before the partner stands; 54, `SHOVE_LETGO`: the longest let-go), for the grabs our game decides on the partner's stand-in, `plp == &ply2`;
 with no enemy of the partner's game near, one `COOP_HIT_MARK` event carries only that.
 
 **Measured** (headless, `RECVX_SHOVE_TRACE=1`: grabs, break frees, a trace of the enemies around every 5 frames for 150
@@ -360,6 +373,19 @@ frames; cross pressed every 4 frames, the player standing still; old = rule Off,
 A grab by the Cerberus (3/9 at 11 HP) was thrown off as the game does and left alone (lying), the zombie spawned
 next to the player then tried to grab it 3 to 9 frames into the 54 and was refused. Layout check (`layout_check.sh`,
 `MENU=legacy`, the rule at its default): 156 + 311 frames, none differs from main.
+
+**Measured again, lighter push and push with the shove** (the same scripts, rule On; old = the push as the player
+stood with everyone knocked down, new = this; mixed rooms 3/9 and 3/6 with spawned zombies, anatomists, Hunters,
+Cerberus, Black Widows, Bandersnatches and the randomizer's 3/6 and 5/62): release -> push -> standing, game frames:
+zombie and anatomist 0 -> 15 -> 36, Black Widow and Bandersnatch 0 -> 15 -> 41, Cerberus 0 -> 15 -> 54 (old: the push
+on the standing frame). Reactions, light / down: zombie 16 / 4 (the 4 at 4.5 to 6.0 units), Hunter 7 / 0, Bandersnatch
+28 / 0, Black Widow 2 / 0, anatomist 1 / 0, Cerberus 8 knock-back slides; old: every one went down (zombie 4, Hunter 9,
+Black Widow 4, Bandersnatch 3, Cerberus 7). Distance from the player 30 frames after the push, gained: staggered
+zombies 1 to 10 (7 on average), Bandersnatches 0 to 7, Hunters -5 to 17 (they turn and come back at once), the Black
+Widow 0 (it reels in place). Standing -> next grab: 76 to 288 frames (old 87 to 249). A player standing still and
+mashing takes more of the other attacks after a break free (Hunters and Cerberus back within about a second instead of
+lying): 6 of 7 such runs died (at 755 to 1705) against 3 of 7 before (755 to 1470). Layout check (`MENU=legacy`, the rule at its
+default Off): 156 + 311 frames, none differs from main.
 
 Co-op (two instances over loopback, 3/9 with two zombies, a Hunter and a Bandersnatch spawned by the host, both
 mashing): the guest broke free 5 times and the host 9 times; each sent the enemies the other game ran as pushes (10
