@@ -129,7 +129,7 @@ if(SELFTEST)
     string(REPLACE "ML_SET, \"Quick Knife\" }," "ML_SET, \"Quick Knife\" }, { 0, NULL, ML_SET, \"Quick Knife\" }," broken "${layout}")
     menu_layout_check("${table}" "${broken}" e2)
     # a shortcut to nothing
-    string(REPLACE "ML_SHORTCUT, \"Headshots & Piercing\"" "ML_SHORTCUT, \"Headshots and Piercing\"" broken "${layout}")
+    string(REPLACE "ML_SHORTCUT, \"Import Memory Card Saves\"" "ML_SHORTCUT, \"Import Memory Card Save\"" broken "${layout}")
     menu_layout_check("${table}" "${broken}" e3)
     # a BioRand option dropped, an unknown key, a preset naming nothing
     string(REPLACE "ML_BIO, \"HiddenKeyItems\"" "ML_PAGE, NULL" broken "${layout}")
