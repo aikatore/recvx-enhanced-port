@@ -12,7 +12,8 @@
   instead of the original one.
 - **Umbrella Chronicles import**: the player characters, monsters and other characters of Resident Evil: The Umbrella
   Chronicles (Wii, from your own .rvz disc image) can be imported under IMPORT > CHARACTERS and used as character
-  models, with blinking, lip movement and hands that grip held weapons.
+  models, with blinking, lip movement and hands that grip held weapons. Their voice lines can be imported too, so
+  Randomize Voice Lines lets imported characters speak with their own voices.
 - **Break Free Pushes Enemies**: breaking free from any grab knocks back every enemy close by, and for a moment none
   can grab you again. On by default only with the Enemy Randomizer or Extra Enemies, so several enemy types can no
   longer pass you from grab to grab.
