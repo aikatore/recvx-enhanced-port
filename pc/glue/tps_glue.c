@@ -22,7 +22,7 @@
 #include "pc_rules.h"
 
 TpsConfig g_tps = { .fov = 75, .aim_fov = 65, .dist = 140, .aim_dist = 100, .height = 165, .shoulder = 35,
-                    .sens_x = 100, .sens_y = 100, .aim_sens = 70, .crosshair = 1, .fp_fov = 85, .precise = 1, .hit_react = 1, .headshots = 1, .atmos = 1, .key = 62 /* F5 */,
+                    .sens_x = 100, .sens_y = 100, .aim_sens = 70, .crosshair = 1, .fp_fov = 85, .fp_body = 1, .precise = 1, .hit_react = 1, .headshots = 1, .atmos = 1, .key = 62 /* F5 */,
                     .pad_modern = 1, .pad_sens_x = 100, .pad_sens_y = 100, .pad_aim_sens = 50, .pad_dead_move = 20, .pad_dead_look = 15 };
 int tps_on;            /* hooks active (changes only at the frame hand-off) */
 int tps_cam_active;    /* our camera is the view of the current frame */
@@ -103,9 +103,11 @@ static float fp_off[3];   /* the eye point on the head from the followed point, 
 static NJS_POINT3 fp_head;   /* the eye point on the head as the motion posed it this tick, before the free-aim bend
                                 (tps_calc_model): the view does not swing with the bend it aims */
 static int fp_head_ok;
+static float fp_back;   /* the eye moved back along the view (a weapon held low), eased */
 static float fp_hand;   /* the weapon hand's height then: aiming, the eye comes down to FP_ADS above it, so a weapon held
                            low (the shotgun, the rifles at the hip) is in the picture as a handgun held at the eyes is */
-#define FP_ADS 4.0f
+#define FP_ADS 3.0f
+#define FP_BACK 3.0f
 #define FP_REACH 1.0f
 #define FP_UP 1.5f        /* the eyes above the head node (cut.c bhSetPlEyeCamera's point, without its unit forward) */
 /* the eye from there along the view: a little to the left, up and ahead, so a raised weapon shows in the lower right
@@ -113,8 +115,12 @@ static float fp_hand;   /* the weapon hand's height then: aiming, the eye comes 
 #define FP_SIDE -1.3f
 #define FP_RISE 0.6f
 #define FP_FWD 0.2f
+#define FP_NECK 2.5f
 /* the view at the eyes: in control or hit (not thrown or held by an enemy: the shoulder camera shows the struggle) */
 static int fp_want(void) { return fp && plp && (plp->mode0 == 1 || plp->mode0 == 2); }
+static int fp_hip;     /* the weapon is up by the fire button alone (tps_pad): no zoom, the walking mouse speed */
+#define FP_HIP 30      /* game ticks it stays up after the last press (a second) */
+int pc_scoped(int wpn);
 
 /* the game's lock-on instead of free aim ("Game auto-aim"); with the gamepad it is the gentle aim assist. First
    person always aims freely (the crosshair is the view) */
@@ -456,7 +462,11 @@ static void fp_mix(NJS_POINT3* eye, NJS_POINT3* sh, const NJS_POINT3* o, float k
     NJS_POINT3 e, a;
     if (w <= 0) return;
     if (!env++ && getenv("RECVX_FP_EYE")) sscanf(getenv("RECVX_FP_EYE"), "%f:%f:%f", &tw[0], &tw[1], &tw[2]);
-    e.x = o->x + fp_off[0] - s * tw[2] + c * tw[0]; e.y = o->y + fp_off[1] * k + tw[1]; e.z = o->z + fp_off[2] - c * tw[2] - s * tw[0];
+    {   /* the eye turns about the neck (FP_NECK below it) with the pitch: looking down it comes forward over the chest, so the
+           body below shows from the front (First Person Body) */
+        float f = tw[2] - fp_back - sinf(RAD(pitch)) * FP_NECK;
+        e.x = o->x + fp_off[0] - s * f + c * tw[0]; e.y = o->y + fp_off[1] * k + tw[1] - (1.0f - cosf(RAD(pitch))) * FP_NECK; e.z = o->z + fp_off[2] - c * f - s * tw[0];
+    }
     if (place) { a = e; a.x = o->x; a.z = o->z; clear_of_mesh(&a, &e, 0.3f); }
     eye->x += (e.x - eye->x) * w; eye->y += (e.y - eye->y) * w; eye->z += (e.z - eye->z) * w;
     sh->x += (e.x - sh->x) * w; sh->y += (e.y - sh->y) * w; sh->z += (e.z - sh->z) * w;
@@ -476,7 +486,16 @@ static void fp_track(int init)
     const float* o = fol_move ? &fol.x : &plp->px;
     if (fp_head_ok) h = fp_head; else fp_head_get(&h);
     fp_head_ok = 0;
-    if (aiming() && fp_hand + FP_ADS - FP_RISE < h.y) h.y = fp_hand + FP_ADS - FP_RISE;
+    {   /* the weapon up or reloading: the eye comes down to FP_ADS above the weapon hand when that is lower, and back by
+           FP_BACK, so a weapon held low (the shotgun, the rifles, the launchers at the hip) is in the lower right as a
+           handgun held at the eyes is. A reload's hands go down: the hand's height as the weapon was last aimed */
+        static float aim_hand[32];   /* by weapon (0: not aimed yet) */
+        int w = plp->wpnr_no & 31, rld = plp->mode0 == 1 && ((plp->mode1 == 1 && plp->mode2 == 70) || reload_at_rest());
+        float hand = rld && aim_hand[w] ? aim_hand[w] : fp_hand, drop = 0;
+        if (aiming() && plp->mode2 >= 65 && plp->mode2 <= 69 && plp->mode2 != 68) aim_hand[w] = fp_hand;   /* (aimed, a shot; not lowering) */
+        if ((aiming() || rld) && hand + FP_ADS - FP_RISE < h.y) drop = h.y - (hand + FP_ADS - FP_RISE), h.y -= drop;
+        fp_back += ((drop < 2 ? drop / 2 : 1) * FP_BACK - fp_back) * (init ? 1.0f : 0.3f);
+    }
     for (int j = 0; j < 3; j++) {
         float d = (&h.x)[j] - o[j];
         fp_off[j] = init ? d : fp_off[j] + (d - fp_off[j]) * (j == 1 ? 0.2f : 0.3f);
@@ -593,7 +612,7 @@ void tps_camera(void)
     look(1.0f, 1.0f);
     cur_dist += ((aiming() ? g_tps.aim_dist : g_tps.dist) / 10.0f * actor_cam_scale() - cur_dist) * 0.35f;
     if (fp_want())   /* first person: aiming zooms in as much as the shoulder camera's aiming field of view does */
-        cur_fov += ((aiming() ? g_tps.fp_fov * (float)g_tps.aim_fov / (g_tps.fov > 0 ? g_tps.fov : 1) : (float)g_tps.fp_fov) - cur_fov) * 0.35f;
+        cur_fov += ((aiming() && !fp_hip ? g_tps.fp_fov * (float)g_tps.aim_fov / (g_tps.fov > 0 ? g_tps.fov : 1) : (float)g_tps.fp_fov) - cur_fov) * 0.35f;
     else
         cur_fov += ((float)(aiming() ? g_tps.aim_fov : g_tps.fov) - cur_fov) * 0.35f;
 
@@ -1024,7 +1043,7 @@ static int pad_sticks(unsigned int* pad)
         pad_target = modern_target(cx, cz, lx, ly);
         d = modern_wrap(pad_target - (short)plp->ay);
         free_turn = plp->mode1 == 0 && plp->mode2 <= 13 && plp->mode2 != 12 && !(plp->flg & 0x100000);
-        back = free_turn && fabsf(d) > DEG(100.0f);
+        back = free_turn && fabsf(fp ? modern_wrap(pad_target - yaw) : d) > DEG(100.0f);   /* (first person: from the view) */
         back_wait = back ? back_wait + 1 : 0;
         if (back && run && !run_was && back_wait <= QT_WAIT + 1) { qt_hold = 10; back_wait = QT_WAIT + 1; }   /* pulled back + run */
         *pad &= ~0x6F;   /* the stick's (and the d-pad's) directions and aim up/down */
@@ -1032,9 +1051,10 @@ static int pad_sticks(unsigned int* pad)
             if (!free_turn) {   /* stairs, steps, pushing, ...: on while it points ahead */
                 if (fabsf(d) < DEG(90.0f)) *pad |= 0x1;
             } else {
-                if (back) *pad |= d > 0 ? 0x4 : 0x8;   /* turn on the spot first */
+                if (back && fp) *pad |= 0x2, pad_target = modern_wrap(pad_target + 32768.0f);   /* first person: the back walk, facing away */
+                else if (back) *pad |= d > 0 ? 0x4 : 0x8;   /* turn on the spot first */
                 else *pad |= 0x1;
-                if (m >= RUN_PUSH) *pad |= 0x400;
+                if (m >= RUN_PUSH && !(back && fp)) *pad |= 0x400;   /* (back + run: the quick turn) */
                 pad_move = 1;
             }
         }
@@ -1120,14 +1140,33 @@ unsigned int tps_pad(unsigned int pad)
         if (now & ~was) { recenter = 20; swings++; }
         was = now;
     }
+    {   /* first person: the fire button alone raises the weapon and fires from the hip once it is up (no zoom, the mouse
+           as fast as walking: fp_hip); it stays up FP_HIP ticks after the last press, unless a movement key (without Move
+           While Aiming the weapon comes down to walk) or run is held. The aim button aims as ever. Not the scoped weapons
+           (the aim raises their scope) */
+        static int hip, queued;
+        int ok = fp && tps_cam_active && !menu && plp && plp->mode0 == 1 && !scope && !pc_scoped(plp->wpnr_no);
+        if (!ok || (k & TPS_K_AIM)) hip = 0;
+        else if (k & TPS_K_FIRE) hip = FP_HIP;
+        else if (hip > 0) hip = (k & TPS_K_RUN) || ((k & (TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT)) && !g_tps.aim_walk) ? 0 : hip - 1;
+        fp_hip = hip > 0;
+        if (!fp_hip) queued = 0;
+        else {   /* the press is held back until the weapon is up, then given as a new press (which fires); a click let go
+                    before that fires once it is up */
+            k |= TPS_K_AIM;
+            if (plp->mode1 != 1 || plp->mode2 == 64 || plp->mode2 == 68) queued |= !!(k & TPS_K_FIRE), k &= ~TPS_K_FIRE;
+            else if (queued) k |= TPS_K_FIRE, queued = 0;
+        }
+    }
     move_keys = 0;
     if ((g_tps.free_cam || fp) && tps_cam_active && !menu && plp && plp->mode0 == 1 && plp->mode1 == 0 && !(k & TPS_K_QUICKTURN)) {
         /* camera A: any direction walks forward, tps_player turns the character towards it. Not in a grab or hit
            (mode0 4, 2): there each key is its own direction, so the struggle (bhEne_LeverCheck) counts every new one */
+        int f = !!(k & TPS_K_FWD) - !!(k & TPS_K_BACK);
         move_keys = k & (TPS_K_FWD | TPS_K_BACK | TPS_K_LEFT | TPS_K_RIGHT);
         k &= ~move_keys;
-        if (!!(move_keys & TPS_K_FWD) != !!(move_keys & TPS_K_BACK) || !!(move_keys & TPS_K_LEFT) != !!(move_keys & TPS_K_RIGHT))
-            pad |= 0x1;
+        if (f || !!(move_keys & TPS_K_LEFT) != !!(move_keys & TPS_K_RIGHT))
+            pad |= fp && f < 0 ? 0x2 : 0x1;   /* (first person: back the game's back walk, facing the view; + run: its quick turn) */
     }
     if (!menu && aim_walk_ok()) {   /* "Move While Aiming": the movement keys walk under the aim (tps_player aim_walk), the
                                        game's directions (its turn while aiming, the arrows, Classic's stick) do nothing */
@@ -2255,12 +2294,13 @@ void tps_player(void)
         printf("tps: weapon mode %d/%d motion %d frame %d/%d at (%.1f %.1f) ay %.1f hand y %.1f\n", plp->mode2, plp->mode3, plp->mtn_no, plp->frm_no >> 16,
                plp->mnwP ? plp->mnwP[plp->mtn_no].frm_num : -1, plp->px, plp->pz, (short)plp->ay * (360.0f / 65536.0f), plp->mlwP->owP[9].mtx[13] - plp->py);
     if (plp->mode1 == 1 && !lock_aim()) {
-        float dy = stick_yaw * g_tps.pad_aim_sens / 100.0f;
-        stick_pitch *= g_tps.pad_aim_sens / 100.0f;
+        /* (first person from the hip: the mouse and stick as walking) */
+        float dy = fp_hip ? stick_yaw : stick_yaw * g_tps.pad_aim_sens / 100.0f;
+        if (!fp_hip) stick_pitch *= g_tps.pad_aim_sens / 100.0f;
         if (pad_cam && g_tps.auto_aim) assist(&dy, &stick_pitch);
-        yaw = wrap(yaw - mouse_dx * TURN_PER_PIXEL * g_tps.sens_x / 100.0f * g_tps.aim_sens / 100.0f + dy);
+        yaw = wrap(yaw - (fp_hip ? mouse_dx * TURN_PER_PIXEL * g_tps.sens_x / 100.0f : mouse_dx * TURN_PER_PIXEL * g_tps.sens_x / 100.0f * g_tps.aim_sens / 100.0f) + dy);
         mouse_dx = stick_yaw = 0;
-        look(g_tps.aim_sens / 100.0f, 1.0f);
+        look(fp_hip ? 1.0f : g_tps.aim_sens / 100.0f, 1.0f);
         /* test aid (RECVX_TPS_TRACE=2): follow the enemy the game locked on to (lock, file scope: trace_shot) */
         if (plp->flg & 0x100000)   /* (dual weapons: the nearest enemy of their lock-on, playpch.c SetLockOnDirection) */
             lock = (WpnTab[plp->wpnr_no].flg & 0x800) && plp->exp2 ? (int)(((PP_WORK*)plp->exp2)->LckTbl[0] - ene) : plp->src_no;
@@ -2289,7 +2329,8 @@ void tps_player(void)
         return;
     }
     if (pad_cam && plp->mode1 == 0) {   /* gamepad: towards the left stick's direction from the camera */
-        if (pad_move && plp->mode2 != 12 && !(plp->flg & 0x100000)) plp->ay += (int)modern_turn((short)plp->ay, pad_target);
+        if (pad_move && plp->mode2 != 12 && !(plp->flg & 0x100000))   /* (first person: at once, as the keys) */
+            plp->ay += fp ? (short)(int)wrap(pad_target - (short)plp->ay) : (int)modern_turn((short)plp->ay, pad_target);
         else if (fp && !pad_move && !(plp->flg & 0x100000)) plp->ay += (short)(int)wrap(yaw - (short)plp->ay);   /* first person: facing the view */
         pad_move = 0;
         return;
@@ -2303,9 +2344,13 @@ void tps_player(void)
         if (!aim) {   /* walk towards the keys' direction seen from the camera; not during the game's own turns (quick turn) */
             float f = !!(move_keys & TPS_K_FWD) - !!(move_keys & TPS_K_BACK), r = !!(move_keys & TPS_K_RIGHT) - !!(move_keys & TPS_K_LEFT);
             if ((f != 0 || r != 0) && !(plp->flg & 0x100000)) {
-                d = wrap(yaw - atan2f(r, f) * (32768.0f / 3.14159265f) - (short)plp->ay);
-                plp->ay += (int)(fp && fabsf(d) < DEG(50.0f) ? d : d * 0.3f);   /* 95% in 9 game frames (first person: near the view
-                                                                                  at once, so the walk goes where the view looks) */
+                if (fp)   /* first person: at once (the body is not drawn), so the walk goes where the keys say; back (tps_pad: the
+                             game's back walk) facing away from the way it walks */
+                    plp->ay += (short)(int)wrap(yaw - (f < 0 ? atan2f(-r, -f) : atan2f(r, f)) * (32768.0f / 3.14159265f) - (short)plp->ay);
+                else {
+                    d = wrap(yaw - atan2f(r, f) * (32768.0f / 3.14159265f) - (short)plp->ay);
+                    plp->ay += (int)(d * 0.3f);   /* 95% in 9 game frames */
+                }
             } else if (fp && !(plp->flg & 0x100000))   /* first person, standing: facing the view (what the action button examines) */
                 plp->ay += (short)(int)wrap(yaw - (short)plp->ay);
             return;
@@ -2449,27 +2494,74 @@ void tps_calc_model(void)
     }
 }
 
-/* game.c bhAllDrawModel, around our player's draw (on = 1 before, 0 after): in first person our character's body is
-   not drawn. It is one skinned mesh (Claire: node 1 of 22); the hands and what they hold are separate models linked to
-   the hand nodes and drawn with the effects, so they stay: a raised weapon is seen in the hand that holds it. Hidden by
-   the nodes' hide flag (as bhSetCut hides room parts) for this draw only: the partner, the shadow and the pose are
-   untouched. 1 = not drawn at all ("You appear as" another model: its own nodes) */
-extern int actor_on;
+/* game.c bhAllDrawModel, around our player's draw (on = 1 before, 0 after), in first person. "First Person Body" On: our
+   character drawn without its head (its head node and those below it collapsed onto the head joint for this draw, as a
+   zombie's blown-off head, variant_glue.c; "You appear as" another model: that model's head, actor_glue.c), so looking
+   down shows the body, the arms and what the hands hold. Off: the body is not drawn (the nodes' hide flag, as bhSetCut
+   hides room parts; "You appear as": not drawn at all, 1); the weapon in the hand stays (tps_fp_objects). For this draw
+   only: the partner, the shadow and the pose are untouched */
+extern int actor_on, actor_fp_nohead;
+/* the body is drawn: the setting, and the eye not pulled back behind the head (a weapon held low, aimed: fp_track) */
+static int fp_body(void) { return g_tps.fp_body && fp_back < 0.3f; }
+void pc_head_hide(ML_WORK* m, int node);   /* variant_glue.c */
+void pc_head_show(void);
 int tps_fp_hide(int on)
 {
     static unsigned hid;   /* the nodes hidden here */
+    static int head;       /* our head hidden */
     NJS_CNK_OBJECT* o = plp && plp->mlwP ? plp->mlwP->objP : NULL;
     int i, n = o ? plp->mlwP->obj_num : 0;
     if (!on) {
         for (i = 0; i < n && i < 32; i++) if (hid & (1u << i)) o[i].evalflags &= ~0x8;
+        if (head) pc_head_show();
         hid = 0;
+        head = actor_fp_nohead = 0;
         return 0;
     }
     if (!tps_cam_active || fp_w <= 0.15f || !o) return 0;
+    if (fp_body()) {
+        if (actor_on) actor_fp_nohead = 1;
+        else if (n > 5) pc_head_hide(plp->mlwP, 5), head = 1;
+        return 0;
+    }
     if (actor_on || n > 32) return 1;
     for (i = 0; i < n; i++)
         if (o[i].model && !(o[i].evalflags & 0x8)) { o[i].evalflags |= 0x8; hid |= 1u << i; }
     return 0;
+}
+
+/* game.c bhAllDrawModel, around bhDrawObjItm (on = 1 before, 0 after), in first person: what our head wears (Claire's
+   ponytail, Wesker's sunglasses: sys->obwp[2], linked to head node 5) is not drawn, nor, without the body ("First Person
+   Body" Off), the weapon lowered, which hung at the hip under the view (it and the hand holding it are one model linked
+   to the hand node; up, aiming, from the hip or reloading, it is drawn). The objects linked to a work with id 1210 on (the
+   weapons) are drawn only with the player (objitm.c bhDrawObject: sys->pt_flg 1); a linked object without its link flag
+   (0x80) keeps its own stflg 0x1000000 (not drawn). For this draw only */
+void tps_fp_objects(int on)
+{
+    static int off, part, hands;
+    static unsigned flg, stflg;
+    O_WRK* hp = sys && sys->obwp ? &sys->obwp[2] : NULL;
+    int i;
+    if (!on) {
+        if (off) sys->pt_flg |= 0x1;
+        if (part) hp->flg = flg, hp->stflg = stflg;
+        for (i = 0; i < 2; i++) if (hands & (1 << i)) sys->obwp[i].mlwP->objP[0].evalflags |= 0x8;
+        off = part = hands = 0;
+        return;
+    }
+    if (!tps_cam_active || fp_w <= 0.15f || !plp) return;
+    if (hp && (hp->flg & 0x80) && hp->lkwkp == (unsigned char*)plp && hp->lkono == 5) {
+        flg = hp->flg; stflg = hp->stflg; part = 1;
+        hp->flg &= ~0x80; hp->stflg |= 0x1000000;
+    }
+    if (fp_body()) return;
+    if (plp->mode0 == 1 && plp->mode1 == 0 && !reload_at_rest() && (sys->pt_flg & 0x1))
+        sys->pt_flg &= ~0x1, off = 1;
+    for (i = 0; actor_on && sys->obwp && i < 2; i++) {   /* "You appear as" a model with hands of its own, not drawn: the weapon's own
+                                                         hand piece (actor_glue.c actor_weapon_hands hides it on such a model) */
+        NJS_CNK_OBJECT* w = sys->obwp[i].mlwP && sys->obwp[i].mlwP->objP && sys->obwp[i].mlwP->obj_num > 0 ? &sys->obwp[i].mlwP->objP[0] : NULL;
+        if (w && (w->evalflags & 0x8) && (sys->obwp[i].lkono == 9 || sys->obwp[i].lkono == 13)) w->evalflags &= ~0x8u, hands |= 1 << i;
+    }
 }
 
 /* the pitch our upper body is bent by this tick (radians, 0: none): the co-op pose sends it */

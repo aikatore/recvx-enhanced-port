@@ -538,6 +538,8 @@ const Setting g_settings[] = {
       .help = "The first-person view at 4:3. Aiming zooms in as much as the third-person Aiming Field of View does." },
     { SP_TPS, "First Person HUD", V(g_tps.fp_hud), 0, 2, 1, (const char* const[]){ "On", "Off", "Minimal" },
       .help = "The HUD in first person: On shows it in the HUD Style, Minimal as a health bar with the ammo counts, Off hides it. The crosshair is its own setting." },
+    { SP_TPS, "First Person Body", V(g_tps.fp_body), 0, 1, 1,
+      .help = "Your body, arms and legs in first person, without the head: look down to see them. Off shows only the weapon while it is up." },
     { SP_TPS, "Camera Distance", V(g_tps.dist), 0, 400, 5, .name = tenths },
     { SP_TPS, "Aiming Camera Distance", V(g_tps.aim_dist), 0, 400, 5, .name = tenths },
     { SP_TPS, "Camera Height", V(g_tps.height), 0, 300, 5, .name = tenths },

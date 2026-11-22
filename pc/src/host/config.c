@@ -166,6 +166,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "tps_free_camera", &g_tps.free_cam, 0, 1 },
     { "tps_first_person", &g_tps.fp, 0, 1 },             /* "Camera Mode" First Person (with tps = 1) */
     { "fp_fov", &g_tps.fp_fov, 30, 130 },
+    { "fp_body", &g_tps.fp_body, 0, 1 },                  /* "First Person Body": 1 drawn without its head, 0 not drawn */
     { "fp_hud", &g_tps.fp_hud, 0, 2 },                    /* "First Person HUD": 0 On, 1 Off, 2 Minimal */
     { "tps_key", &g_tps.key, 1, 511 },
     { "tps_pad_controls", &g_tps.pad_modern, 0, 1 },     /* third-person gamepad: 0 classic (tank), 1 modern (twin-stick) */

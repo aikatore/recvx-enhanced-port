@@ -189,8 +189,9 @@ only while you control your character.
 ### Third person
 
 An over-the-shoulder camera with free aim; or the same controls seen through the character's eyes
-(**First Person**: the weapon arm and the raised weapon in view, the crosshair always at the screen
-centre, W/A/S/D walk and strafe where you look). **F5** steps Fixed -> Over Shoulder -> First Person;
+(**First Person**: your body without the head, the arms and the weapon in view, the crosshair always
+at the screen centre, W/A/S/D walk and strafe where you look, S walks back; left mouse alone fires from the hip,
+right mouse aims). **F5** steps Fixed -> Over Shoulder -> First Person;
 also SETTINGS > CAMERA AND HUD "Camera Mode" and the pause menu. Events, doors and menus keep the
 original camera; a grab or a throw shows you over the shoulder until you are free. Details:
 THIRDPERSON.md ("First person").
@@ -441,6 +442,7 @@ Weapon Shortcuts (on, [Weapon shortcuts](#weapon-shortcuts)), then the bindings.
 | Camera Mode | Fixed | Fixed (the original cameras), Over Shoulder or First Person; also F5 and the pause menu |
 | First Person Field of View | 85 degrees | the first-person view at 4:3 (aiming zooms in as Aiming Field of View does) |
 | First Person HUD | On | the HUD in first person: On (in the HUD Style), Off, or Minimal (the health bar with the counts) |
+| First Person Body | On | your body, arms and legs in first person, without the head (look down to see them). Off: only the weapon while it is up |
 | Mouse Camera Style | Behind Character | Behind Character: the mouse turns you. Free Camera: the mouse orbits the camera, W/A/S/D walk relative to it |
 | Lighting and Fog | Smooth | fades when the room's camera cut changes. Original: changes with each camera cut, as the original |
 | HUD | Auto | a small display in a bottom corner: the equipped weapon's picture with the rounds loaded, the spare ammo for it in your inventory beside it, and a health gauge around it in the condition's colour (Fine green, Caution yellow, then orange, Danger red, Poison purple). Auto: with the over-the-shoulder camera only. On: also with the fixed cameras. Hidden in cutscenes, doors, menus and messages |
