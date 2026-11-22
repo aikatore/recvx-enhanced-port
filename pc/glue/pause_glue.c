@@ -366,11 +366,19 @@ static void this_game(float y)
     y += 10;
     {   /* the keyboard's shortcuts to the same places */
         static const struct { int row; const char* what; } keys[] = { { B_TPS_TOGGLE, "Camera" }, { B_SPOILER, "Spoiler Log" }, { B_CHEATS, "Cheats" },
-                                                                        { B_SETTINGS, "Settings Window" }, { B_COOP, "Co-op" }, { B_IMPORT, "Import" } };
+                                                                        { B_SETTINGS, "Settings Window" }, { B_COOP, "Co-op" } };
+        enum { KN = sizeof(keys) / sizeof(keys[0]) };
+        int ord[KN];
         float x = PANEL_X0 + 16;
         text_m(PANEL_X0 + 10, y, "KEYBOARD SHORTCUTS", 0.55f, C_GOLD);
         y += 20;
-        for (int i = 0; i < (int)(sizeof(keys) / sizeof(keys[0])); i++) {
+        for (int i = 0; i < KN; i++) {   /* in key order (F1, F2, ...: their scancodes run in order), as bound */
+            int j = i;
+            for (; j > 0 && bind_get(keys[ord[j - 1]].row, BIND_KB, 0) > bind_get(keys[i].row, BIND_KB, 0); j--) ord[j] = ord[j - 1];
+            ord[j] = i;
+        }
+        for (int o = 0; o < KN; o++) {
+            int i = ord[o];
             char k[32];
             bind_code_name(BIND_KB, bind_get(keys[i].row, BIND_KB, 0), k, sizeof(k));
             if (x + ui_hint_w(k, keys[i].what) > PANEL_X1 - 8) { x = PANEL_X0 + 16; y += 20; }
