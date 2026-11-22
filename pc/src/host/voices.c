@@ -37,7 +37,7 @@ const char* voice_name(int c) { return c >= CAST_CHARACTERS && c < VOICE_CHARACT
 int voice_base(int c) { return c == VOICE_UC_CHRIS ? 1 : c == VOICE_UC_WESKER ? 3 : c; }
 
 /* the imported lines (voice_import_load): published whole, never freed (the scan thread may read the one before) */
-typedef struct { unsigned short vid; signed char chr; unsigned char conf, grunt; } VoiceImp;   /* conf: 0 sure, 1 pair, 2 guess, 3 none */
+typedef struct { unsigned short vid; signed char chr; unsigned char conf, grunt; } VoiceImp;   /* conf: 0 sure, 1 pair, 2 guess (used), 3 weak (only checked), 4 none */
 typedef struct { const VoiceImp* l; int n; unsigned hash; int count[VOICE_CHARACTERS]; } Imports;
 static Imports* imports;
 static const Imports* imp_now(void) { return __atomic_load_n(&imports, __ATOMIC_ACQUIRE); }
@@ -78,10 +78,10 @@ void voice_import_load(const char* text)
         }
         if (k == 7 && *p != '#' && m->n < cap + 1 && f[0][0] >= '0' && f[0][0] <= '9') {
             VoiceImp* v = &l[m->n++];
-            static const char* const conf[] = { "sure", "pair", "guess" };
+            static const char* const conf[] = { "sure", "pair", "guess", "weak" };
             v->vid = (unsigned short)atoi(f[0]);
             v->chr = (signed char)imp_char(f[2], len[2]);
-            for (v->conf = 0; v->conf < 3 && (len[3] != strlen(conf[v->conf]) || strncmp(f[3], conf[v->conf], len[3])); v->conf++);
+            for (v->conf = 0; v->conf < 4 && (len[3] != strlen(conf[v->conf]) || strncmp(f[3], conf[v->conf], len[3])); v->conf++);
             v->grunt = len[5] == 5 && !strncmp(f[5], "grunt", 5);
             if (v->chr >= 0 && v->conf < 3 && (v->grunt || (len[5] == 4 && !strncmp(f[5], "line", 4)))) m->count[v->chr]++;
             else if (!(len[5] == 4 && !strncmp(f[5], "line", 4)) && !v->grunt) v->chr = -1;   /* (radio, the civilians: nobody's) */

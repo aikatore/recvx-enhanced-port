@@ -315,16 +315,29 @@ int main(int argc, char** argv)
         }
         CHECK(err < sig * 0.002);   /* (better than 27 dB) */
         free(a);
-        static UcVoiceLine l[] = { { "VO_0010001", "Billy! Up there!" }, { "VO_0010002", "Right." }, { "VO_0010003", "What now?" },
-            { "VO_0010004", "Are you alright, Rebecca?" }, { "VO_0101001", "Pathetic..." }, { "VO_1010002", "I'm Chris." },
-            { "VO_1020003", "Billy's gone." }, { "VO_1030001", "Chris! Jill! Are you OK!?" }, { "VO_2001001", " " }, { "VO_2311001", "This is war." },
-            { "VO_civman_zombies", "Zombies!" } };
+        static UcVoiceLine l[] = { { "VO_0010001", "Billy! Up there!", .f0 = 250 }, { "VO_0010002", "Right." }, { "VO_0010003", "What now?" },
+            { "VO_0010004", "Are you alright, Rebecca?", .f0 = 120 }, { "VO_0010006", "Let's go." }, { "VO_0020001", "Watch your step, princess!" },
+            { "VO_0020002", "Don't call me princess!" }, { "VO_0030001", "Hm.", .f0 = 130 }, { "VO_0101001", "Pathetic..." }, { "VO_1010002", "I'm Chris." },
+            { "VO_1020003", "Billy's gone." }, { "VO_1030001", "Chris! Jill! Are you OK!?" }, { "VO_1111030", "Sorry Richard. I'm on it!" },
+            { "VO_2001001", " " }, { "VO_2311001", "This is war." }, { "VO_civman_zombies", "Zombies!" } };
         uc_voice_guess(l, (int)(sizeof l / sizeof l[0]));
 #define WHO(i, w, c, k) (!strcmp(l[i].who, w) && !strcmp(l[i].conf, c) && !strcmp(l[i].kind, k))
         CHECK(WHO(0, "Rebecca", "sure", "line") && WHO(1, "Billy", "guess", "line") && WHO(3, "Billy", "sure", "line"));   /* (calls the other; the next one answers) */
-        CHECK(WHO(2, "Rebecca", "guess", "line") && WHO(4, "Wesker", "pair", "line") && WHO(7, "-", "none", "line"));    /* (before a sure line; alone; both named) */
-        CHECK(WHO(5, "Chris", "sure", "line") && WHO(6, "-", "none", "line") && WHO(8, "-", "none", "grunt") && !strcmp(l[8].scen, "20"));
-        CHECK(WHO(9, "-", "none", "radio") && WHO(10, "-", "none", "npc"));
+        CHECK(WHO(2, "Rebecca", "guess", "line") && WHO(8, "Wesker", "pair", "line") && WHO(9, "Chris", "sure", "line"));   /* (before a sure line;
+            alone) */
+        CHECK(WHO(4, "Billy", "weak", "line") && WHO(5, "Billy", "weak", "line") && WHO(6, "Rebecca", "weak", "line"));   /* (two turns on; said to
+            a woman; of the speaker) */
+        CHECK(WHO(7, "Billy", "weak", "line") && WHO(12, "Rebecca", "weak", "line"));   /* (the pitch nearer Billy's; the other's name) */
+        CHECK(WHO(10, "Jill", "weak", "line") && WHO(11, "Jill", "weak", "line") && WHO(13, "Jill", "weak", "grunt") && !strcmp(l[13].scen, "20"));   /* (no
+            cue, both named, a shout: the first speaker) */
+        CHECK(WHO(14, "-", "none", "radio") && WHO(15, "-", "none", "npc"));
+        {   /* the pitch: a 150 Hz tone, silence */
+            static short t[32000];
+            for (int i = 0; i < 32000; i++) t[i] = (short)(8000 * sin(2 * M_PI * 150 * i / 32000.0) + 3000 * sin(2 * M_PI * 300 * i / 32000.0));
+            CHECK(fabsf(uc_voice_f0(t, 32000, 32000) - 150) < 5);
+            memset(t, 0, sizeof t);
+            CHECK(uc_voice_f0(t, 32000, 32000) == 0 && uc_voice_f0(NULL, 0, 32000) == 0);
+        }
 #undef WHO
     }
     printf("import: ok\n");

@@ -608,7 +608,7 @@ int main(void)
                       !strcmp(voice_name(VOICE_UC_CHRIS), "Chris") && voice_base(VOICE_UC_WESKER) == 3 && !strcmp(voice_name(2), "Steve"));
                 voice_import_load("# head\n0 | VO_1 | Jill | sure | 900 | line | 10\n1 | VO_2 | Chris | guess | 800 | line | 10\n2 | VO_3 | - | none | 700 | line | 10\n"
                                   "3 | VO_4 | - | none | 700 | line | 11\n4 | VO_5 | Billy | pair | 500 | grunt | 00\n5 | VO_6 | Wesker | none | 1 | line | 31\n"
-                                  "6 | VO_7 | Ada | pair | 1 | radio | 23\n7 | CV9_Gr_0 | HUNK | sure | 300 | grunt | CV9\n");
+                                  "6 | VO_7 | Ada | pair | 1 | radio | 23\n7 | CV9_Gr_0 | HUNK | sure | 300 | grunt | CV9\n8 | VO_8 | Ada | weak | 1 | line | 22\n");
                 CHECK(voice_import_hash() && voice_cat_hash() != h0 && voice_import_count(VOICE_JILL) == 1 && voice_import_count(VOICE_UC_CHRIS) == 1 &&
                       !voice_import_count(VOICE_UC_WESKER) && !voice_import_count(VOICE_ADA) && voice_import_count(VOICE_HUNK) == 1);
                 voice_curation_use(t3);

@@ -12,7 +12,9 @@
 
    Who says a line is not on the disc. The guess (uc_voice_guess): the scenario's speakers by the id (VO_<story><sub-scenario>
    <chapter><0/1><nnn>), one of them alone ("pair"); of two, a line that calls the other by name or names the speaker ("sure"),
-   else the line right before or after such a line in the same numbered dialogue, the other one ("guess"); else none. */
+   else the line right before or after such a line in the same numbered dialogue, the other one ("guess"); the other lines of
+   two speakers a suggestion for the voice tool ("weak", not used in the game until checked: the turn further along the dialogue,
+   the pitch, weaker words, the first speaker); else none. */
 #include "import.h"
 #include "../host/fileio.h"
 #include "../host/lang.h"
@@ -197,6 +199,30 @@ static int names_self(const char* t, const char* nm)   /* "I'm nm", "I am nm", "
 static int mentions(const char* t, const char* nm) { for (const char* p = t; (p = strstr(p, nm)); p++) if (word_at(t, p, nm)) return 1; return 0; }
 static int has_letter(const char* t) { for (; *t; t++) if (alpha((unsigned char)*t) && *t != '\'') return 1; return 0; }
 
+static int by_float(const void* a, const void* b) { float x = *(const float*)a, y = *(const float*)b; return (x > y) - (x < y); }
+/* the turn of line i in its numbered dialogue (VO_ + 7 digits, the same first four): from the nearest sure line by number, the
+   other speaker an odd number of turns away, the same one an even; *d the turns; NULL none, or two nearest that disagree */
+static const char* chain(const UcVoiceLine* l, int n, int i, int* d)
+{
+    const char *w = NULL, *a, *b;
+    int best = 1 << 30, num = atoi(l[i].id + 7);
+    if (strlen(l[i].id) != 10 || l[i].pair < 0 || !(b = pairs[l[i].pair].b)) return NULL;
+    a = pairs[l[i].pair].a;
+    for (int dir = -1; dir <= 1; dir += 2)
+        for (int j = i + dir; j >= 0 && j < n && strlen(l[j].id) == 10 && !strncmp(l[j].id, l[i].id, 7); j += dir) {
+            int t = abs(atoi(l[j].id + 7) - num);
+            const char* o;
+            if (strcmp(l[j].conf, "sure") || l[j].pair != l[i].pair) continue;
+            o = (t & 1) == !strcmp(l[j].who, a) ? b : a;
+            if (t < best) { best = t; w = o; }
+            else if (t == best && w && strcmp(w, o)) w = NULL;
+            break;
+        }
+    *d = best;
+    return w;
+}
+static void weak(UcVoiceLine* l, int n);
+
 void uc_voice_guess(UcVoiceLine* l, int n)
 {
     for (int i = 0; i < n; i++) {
@@ -224,18 +250,117 @@ void uc_voice_guess(UcVoiceLine* l, int n)
     }
     for (int i = 0; i < n; i++) {   /* turn-taking: next to a sure line of the same numbered dialogue, the other one */
         UcVoiceLine* v = &l[i];
-        const char* w = NULL;
-        int bad = 0;
-        if (strcmp(v->conf, "none") || strcmp(v->kind, "line") || strlen(v->id) != 10 || v->pair < 0 || !pairs[v->pair].b) continue;
-        for (int d = -1; d <= 1; d += 2) {
-            const UcVoiceLine* u = i + d >= 0 && i + d < n ? &l[i + d] : NULL;
-            const char* o;
-            if (!u || strcmp(u->conf, "sure") || strlen(u->id) != 10 || strncmp(u->id, v->id, 7) || atoi(u->id + 7) != atoi(v->id + 7) + d || u->pair != v->pair) continue;
-            o = !strcmp(u->who, pairs[v->pair].a) ? pairs[v->pair].b : pairs[v->pair].a;
-            bad |= w && strcmp(w, o);
-            w = o;
+        const char* w;
+        int d;
+        if (strcmp(v->conf, "none") || strcmp(v->kind, "line") || !(w = chain(l, n, i, &d)) || d != 1) continue;
+        v->who = w; v->conf = "guess";
+    }
+    weak(l, n);
+}
+
+/* ---------------------------------------------------------------- the weak suggestions (not used in the game until checked) */
+static float median(float* f, int n)
+{
+    if (!n) return 0;
+    qsort(f, (size_t)n, sizeof *f, by_float);
+    return n & 1 ? f[n / 2] : (f[n / 2 - 1] + f[n / 2]) / 2;
+}
+/* the median pitch of a line (Hz, 0 unknown): per frame of 32 ms at about 8 kHz, of at least half the line's loudness, the
+   first peak of the normalized autocorrelation within 0.85 of the best (70..500 Hz: the period, not its multiples) if the best
+   is over 0.6 (voiced); the voiced frames' median. ponytail: no YIN, octave errors left to the median */
+float uc_voice_f0(const short* x, int n, int rate)
+{
+    enum { W = 256 };
+    int r = rate >= 16000 ? rate / 8000 : 1, m = x && n > 0 && rate > 0 ? n / r : 0, nf = 0, lo, hi;
+    double sr = (double)rate / r, all = 0;
+    float *d = m ? malloc(sizeof *d * (size_t)m) : NULL, *f = m ? malloc(sizeof *f * (size_t)(m / (W / 2) + 1)) : NULL, res;
+    if (!d || !f) { free(d); free(f); return 0; }
+    lo = (int)(sr / 500); hi = (int)(sr / 70) + 1;
+    for (int i = 0; i < m; i++) {
+        float a = 0;
+        for (int k = 0; k < r; k++) a += x[i * r + k];
+        d[i] = a / r; all += (double)d[i] * d[i];
+    }
+    all /= m;
+    for (int s = 0; hi + 1 < 600 && s + W + hi + 1 <= m; s += W / 2) {
+        double e = 0, c[600], best = 0;
+        int L = 0;
+        for (int i = 0; i < W; i++) e += (double)d[s + i] * d[s + i];
+        if (e <= 0 || e / W < all * 0.25) continue;
+        for (int k = lo - 1; k <= hi + 1; k++) {
+            double xy = 0, yy = 0;
+            for (int i = 0; i < W; i++) { xy += (double)d[s + i] * d[s + i + k]; yy += (double)d[s + i + k] * d[s + i + k]; }
+            c[k] = yy > 0 ? xy / sqrt(e * yy) : 0;
+            if (k >= lo && k <= hi && c[k] > best) best = c[k];
         }
-        if (w && !bad) { v->who = w; v->conf = "guess"; }
+        if (best < 0.6) continue;
+        for (int k = lo; k <= hi && !L; k++) if (c[k] >= best * 0.85 && c[k] >= c[k - 1] && c[k] >= c[k + 1]) L = k;
+        if (L) f[nf++] = (float)(sr / L);
+    }
+    res = nf >= 3 ? median(f, nf) : 0;
+    free(d); free(f);
+    return res;
+}
+
+static int female(const char* nm) { return !strcmp(nm, "Rebecca") || !strcmp(nm, "Jill") || !strcmp(nm, "Ada"); }
+/* weaker words than the calls: the other's name not as a call ("Sorry Richard. I'm on it!"), a title of one ("Colonel": not
+   Sergei), a word for a woman or a man said to the other ("Watch your step, princess!": the man) or of the speaker ("Don't
+   call me princess!", "I'm a ...": the woman) */
+static const char* text_cue(const char* t, const char* a, const char* b)
+{
+    static const struct { const char *word, *name; } titles[] = { { "Colonel", "Sergei" }, { "Captain", "Wesker" } };
+    static const struct { const char* word; int f; } words[] = { { "princess", 1 }, { "girl", 1 }, { "lady", 1 }, { "sweetheart", 1 },
+        { "ma'am", 1 }, { "sir", 0 }, { "pal", 0 }, { "buddy", 0 }, { "man", 0 } };
+    int ma = mentions(t, a) && !names_self(t, a), mb = mentions(t, b) && !names_self(t, b);
+    if (ma != mb) return ma ? b : a;
+    for (int i = 0; i < (int)(sizeof titles / sizeof titles[0]); i++)
+        if (mentions(t, titles[i].word) && (!strcmp(titles[i].name, a) || !strcmp(titles[i].name, b))) return strcmp(titles[i].name, a) ? a : b;
+    if (female(a) == female(b)) return NULL;
+    for (int i = 0; i < (int)(sizeof words / sizeof words[0]); i++) {
+        char me[48], im[48];
+        snprintf(me, sizeof me, "me %s", words[i].word); snprintf(im, sizeof im, "I'm a %s", words[i].word);
+        if (strstr(t, me) || strstr(t, im)) return female(a) == words[i].f ? a : b;
+        if (calls(t, words[i].word)) return female(a) == words[i].f ? b : a;
+    }
+    return NULL;
+}
+
+/* the median pitch of each scenario's speakers: of their sure and scenario lines on this disc */
+static void speaker_f0(const UcVoiceLine* l, int n, float fm[][2])
+{
+    float* buf = malloc(sizeof *buf * (size_t)(n + 1));
+    for (int k = 0; buf && k < (int)(sizeof pairs / sizeof pairs[0]); k++)
+        for (int s = 0; s < 2; s++) {
+            const char* nm = s ? pairs[k].b : pairs[k].a;
+            int c = 0;
+            for (int i = 0; nm && i < n; i++)
+                if (l[i].f0 > 0 && !strcmp(l[i].who, nm) && (!strcmp(l[i].conf, "sure") || !strcmp(l[i].conf, "pair")) && !strcmp(l[i].kind, "line")) buf[c++] = l[i].f0;
+            fm[k][s] = median(buf, c);
+        }
+    free(buf);
+}
+/* the speaker whose median pitch is nearer the line's; none if the two are less than 20 % apart (Jill and Chris: their sure lines
+   are shouted calls, both about 360 Hz) */
+static const char* by_pitch(const UcVoiceLine* v, float fm[][2])
+{
+    const float* f = fm[v->pair];
+    if (v->f0 <= 0 || f[0] <= 0 || f[1] <= 0 || fabsf(logf(f[0] / f[1])) < logf(1.2f)) return NULL;
+    return fabsf(logf(v->f0 / f[0])) <= fabsf(logf(v->f0 / f[1])) ? pairs[v->pair].a : pairs[v->pair].b;
+}
+
+/* lines of two speakers that no rule above took, lines and shouts: their turn further along the numbered dialogue (chain), else
+   the pitch nearer to one speaker's, else text_cue, else the scenario's first speaker; all "weak" (cf. docs) */
+static void weak(UcVoiceLine* l, int n)
+{
+    float fm[sizeof pairs / sizeof pairs[0]][2] = { { 0 } };
+    speaker_f0(l, n, fm);
+    for (int i = 0; i < n; i++) {
+        UcVoiceLine* v = &l[i];
+        const char* w;
+        int d;
+        if (strcmp(v->conf, "none") || (strcmp(v->kind, "line") && strcmp(v->kind, "grunt")) || v->pair < 0 || !pairs[v->pair].b) continue;
+        if (!(w = chain(l, n, i, &d)) && !(w = by_pitch(v, fm)) && !(w = text_cue(v->text, pairs[v->pair].a, pairs[v->pair].b))) w = pairs[v->pair].a;
+        v->who = w; v->conf = "weak";
     }
 }
 
@@ -262,7 +387,7 @@ typedef struct { const UcVoiceLine* l; int n, text; } List;
 static int put_list(FILE* f, void* ud)
 {
     const List* L = ud;
-    if (!L->text) fprintf(f, "# recvx Umbrella Chronicles voice lines 1: n | source id | speaker guess | sure/pair/guess/none | ms | line/grunt/radio/npc | scenario\n");
+    if (!L->text) fprintf(f, "# recvx Umbrella Chronicles voice lines 1: n | source id | speaker guess | sure/pair/guess/weak/none | ms | line/grunt/radio/npc | scenario\n");
     for (int i = 0; i < L->n; i++) {
         const UcVoiceLine* v = &L->l[i];
         if (L->text) fprintf(f, "%s | %s\n", v->id, v->text);
@@ -297,7 +422,7 @@ int uc_voice_extract(RvzDisc* disc, const char* outdir)
     unsigned char *sar = rvz_file(disc, "Data/sound/biosound.brsar", &sn), *mes = rvz_file(disc, "Data/message/mes_us.txtres", &mn);
     Sar s;
     char **ids = NULL, dir[1200], path[1300];
-    int nid = 0, nl = 0, fails = 0, cnt[4] = { 0 };
+    int nid = 0, nl = 0, fails = 0, cnt[5] = { 0 };
     UcVoiceLine* l = NULL;
     if (!sar || sn < 0x20 || memcmp(sar, "RSAR", 4)) { host_log("import: umbrella voices: no Data/sound/biosound.brsar\n"); free(sar); free(mes); return -1; }
     s = (Sar){ sar, sn, be32(sar + 0x10), be32(sar + 0x18) + 8 };
@@ -348,6 +473,7 @@ int uc_voice_extract(RvzDisc* disc, const char* outdir)
                 size_t size;
                 unsigned char* adx;
                 Buf b;
+                v->f0 = pass ? 0 : uc_voice_f0(pcm, n, rate);
                 normalize(pcm, n);
                 adx = uc_adx_encode(pcm, n, rate, &size);
                 free(pcm);
@@ -368,7 +494,7 @@ int uc_voice_extract(RvzDisc* disc, const char* outdir)
     if (l) {
         uc_voice_guess(l, vo);
         for (int i = vo; i < nl; i++) { l[i].who = cv_who[l[i].bank]; l[i].conf = "sure"; l[i].kind = "grunt"; snprintf(l[i].scen, sizeof l[i].scen, "CV%d", l[i].bank); }
-        for (int i = 0; i < nl; i++) cnt[!strcmp(l[i].conf, "sure") ? 0 : !strcmp(l[i].conf, "pair") ? 1 : !strcmp(l[i].conf, "guess") ? 2 : 3]++;
+        for (int i = 0; i < nl; i++) cnt[!strcmp(l[i].conf, "sure") ? 0 : !strcmp(l[i].conf, "pair") ? 1 : !strcmp(l[i].conf, "guess") ? 2 : !strcmp(l[i].conf, "weak") ? 3 : 4]++;
         List L = { l, nl, 0 };
         snprintf(path, sizeof path, "%s/voices.txt", outdir);
         if (pc_save_file(path, "w", put_list, &L)) { host_log("import: cannot write %s\n", path); fails++; }
@@ -376,8 +502,8 @@ int uc_voice_extract(RvzDisc* disc, const char* outdir)
         snprintf(path, sizeof path, "%s/voices_text.txt", outdir);
         if (pc_save_file(path, "w", put_list, &L)) { host_log("import: cannot write %s\n", path); fails++; }
     }
-    host_log("import: umbrella voices: %d files (%d of %d lines the game plays, %d grunts), speakers %d sure, %d by scenario, %d guessed, %d unknown; %d failed\n",
-             nl, vo, nid, nl - vo, cnt[0], cnt[1], cnt[2], cnt[3], fails);
+    host_log("import: umbrella voices: %d files (%d of %d lines the game plays, %d grunts), speakers %d sure, %d by scenario, %d guessed, %d weak, %d unknown; %d failed\n",
+             nl, vo, nid, nl - vo, cnt[0], cnt[1], cnt[2], cnt[3], cnt[4], fails);
     for (int i = 0; i < nid; i++) SDL_free(ids[i]);
     free(ids); free(l); free(sar); free(mes);
     return fails;

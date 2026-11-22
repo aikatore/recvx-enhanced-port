@@ -113,15 +113,17 @@ int u8_find(const unsigned char* d, uint32_t n, const char* name, const unsigned
 
 /* Umbrella Chronicles' voice lines (uc_voice.c; docs/IMPORT_UMBRELLA.md "Voice lines"): <outdir>/voice/<n>.adx, voices.txt,
    voices_text.txt from the open disc; how many failed, -1 none readable. uc_voice_guess: the speaker guesses of n lines (id,
-   text set; sorted by id) */
+   text, f0 set; sorted by id); uc_voice_f0: a line's median pitch */
 int uc_voice_extract(RvzDisc* d, const char* outdir);
 typedef struct UcVoiceLine {
     char id[48], text[600];
-    const char *who, *conf, *kind;   /* a name or "-"; sure, pair, guess, none; line, grunt, radio, npc */
+    const char *who, *conf, *kind;   /* a name or "-"; sure, pair, guess, weak, none; line, grunt, radio, npc */
     char scen[8];                    /* "10", "CV3", "-" */
     int ms, bank, pair;
+    float f0;                        /* the median pitch in Hz (uc_voice_f0), 0 unknown */
 } UcVoiceLine;
 void uc_voice_guess(UcVoiceLine* l, int n);
+float uc_voice_f0(const short* x, int n, int rate);
 unsigned char* uc_adx_encode(const short* x, int n, int rate, size_t* size);   /* mono 16-bit to a standard ADX file (malloc'd, *size bytes) */
 /* the voices.txt of the import (n | id | ...; its path), for the game (host/voices.c voice_import_load) */
 void import_voices_path(char* out, int n);

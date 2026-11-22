@@ -253,7 +253,9 @@ about 30 seconds with the players.
   * source id: `VO_...` as the brsar names it, or `CV<bank>_Gr_<wave>`.
   * speaker guess: Rebecca, Billy, Chris, Jill, Carlos, Wesker, Richard, Ada, HUNK, an extra's name (Sergei), or `-` none.
   * confidence: `sure` (the line names its speaker or calls the other one by name; the grunt banks), `pair` (the scenario
-    has one speaker), `guess` (right before or after a sure line in the same numbered dialogue: the other one), `none`.
+    has one speaker), `guess` (right before or after a sure line in the same numbered dialogue: the other one), `weak` (a
+    suggestion for the voice tool, below; not used in the game until checked), `none` (nothing applies: the radio, the
+    civilians, scenario 21's one sound).
   * ms: the length. kind: `line`, `grunt` (no letters in its subtitle: a shout, a gasp; the banks), `radio` (VO_2311...,
     Raccoon City's radio and TV, the police's calls), `npc` (the civilians, `VO_civ...`).
   * scenario: the id's two digits after `VO_` (`10`), the bank (`CV3`), or `-`.
@@ -265,17 +267,27 @@ about 30 seconds with the players.
 20 Jill / Carlos, 21 none (HUNK speaks only in his grunt bank), 22 Ada, 23 Wesker / another (2311 radio), 30 Jill / Chris,
 31 Wesker / Sergei. One speaker: `pair`. Two: a line that starts with the other's name, has ", <name>" or ends with it
 (only punctuation after it), or names its speaker ("I'm Carlos", "Wesker here"): `sure`; both names in it: no cue. Then a
-line right next to a sure line (number one apart, same dialogue) the other one: `guess`. Pitch was tried and left out: on
-the 40 lines the names make sure, a median-F0 threshold is wrong for 13 (the men shout high); next to a sure line, wrong
-as often as right. The import of the US disc: 1015 files, 115 sure (75 of them the banks), 78 by the scenario, 63
-guessed, 759 none; usable as below: Wesker 58, Ada 41, Chris 38, Jill 32, Rebecca 31, Billy 17, Richard 12, Carlos 12,
-HUNK 11 (grunts counted).
+line right next to a sure line (number one apart, same dialogue) the other one: `guess`. Every other line or shout of a
+two-speaker scenario gets a `weak` suggestion, the first of these that applies: **the turn** further along the numbered
+dialogue (from the nearest sure line by number: the other one an odd number away, the same one an even; none when the two
+nearest disagree); **the pitch** (`uc_voice_f0`: the median F0 of the decoded line, normalized autocorrelation per 32 ms
+at about 8 kHz, voiced frames only) nearer to one speaker's, each speaker's the median of their sure and scenario lines on
+this disc; none when the two are under 20 % apart (Jill's and Chris's sure lines are shouted calls, both about 360 Hz;
+Rebecca 334 / Billy 250 / Richard 222 / Carlos 154 / Wesker 87 Hz); **words** weaker than the calls: the other's name not as
+a call ("Sorry Richard. I'm on it!"), a title (Colonel: Sergei, Captain: Wesker; the other says it), a word for a woman or a
+man said to the other ("Watch your step, princess!": the man) or of the speaker ("Don't call me princess!": the woman);
+else **the scenario's first speaker**. Left out on the 40 lines the names make sure, each rule alone: the turn one step
+away (`guess`) 6 of 6 right, further away 9 of 23 (the banter is call and answer, not a strict alternation), the pitch 12
+of 16 (37 lines, 19 right, without the 20 % rule), the first speaker 21 of 40; the words name the other on these lines, so
+they say nothing there. The import of the US disc: 1015 files, 115 sure (75 of them the banks), 78 by the scenario, 63
+guessed, 723 weak (382 by the turn, 195 by the pitch, 1 by the words, 145 the first speaker), 36 none; usable as below
+(weak not): Wesker 58, Ada 41, Chris 38, Jill 32, Rebecca 31, Billy 17, Richard 12, Carlos 12, HUNK 11 (grunts counted).
 
 **In the game** (`host/voices.c`, `glue/cast_glue.c`, `audio/adx.c`; docs/ACTORS.md "Voice lines"):
 `import_registry_load` reads voices.txt (`voice_import_load`). Its lines whose speaker is sure, from the scenario or
-guessed, and of kind `line` or `grunt` (a grunt for a grunt), join the catalogue after the cast's as disc 3
+guessed (not `weak`), and of kind `line` or `grunt` (a grunt for a grunt), join the catalogue after the cast's as disc 3
 (`VOICE_DISC_UC`, file n), unless the voice tool's table (`voice_curated(3, n)`) says otherwise: a checked speaker
-(`VOICE_CONFIRMED`) whatever the guess, also for a line of confidence `none`; "do not use" none. So until the lines are
+(`VOICE_CONFIRMED`) whatever the guess, also for a line of confidence `weak` or `none`; "do not use" none. So until the lines are
 checked, the guesses count: a wrong one says a line in the wrong voice now and then, which the check fixes. The voice
 characters go past the cast's 7 (`cast.h VOICE_*`: Jill, Rebecca, Billy, Carlos, Richard, Ada, HUNK; ids kept for
 Outbreak's eight survivors, off; then the imported pools of Chris and Wesker): `voice_model_chr` gives an imported
