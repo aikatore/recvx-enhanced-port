@@ -130,9 +130,9 @@ static const char* lang_list(char* t, int n, int* old)
     return t;
 }
 
-/* "Show in Model Lists": a character source with models listed (or hidden); without, the page is as before */
+/* "Show in Model Lists": a character source with models (unchecked at first; the lists' and GAME SETUP > CHARACTERS' check box too); without, the page is as before */
 static int shown_src(void) { return !((g_import_hidden >> im.src) & 1); }
-static int show_row(void) { return langs() < 0 && (((actor_import_sources() | g_import_hidden) >> im.src) & 1); }
+static int show_row(void) { return langs() < 0 && ((actor_import_sources() >> im.src) & 1); }
 static void show_toggle(void)
 {
     g_import_hidden ^= 1u << im.src;

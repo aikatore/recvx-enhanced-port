@@ -100,6 +100,19 @@ int cast_crowd_model(unsigned seed, unsigned scene, int id, int ver, int all, co
 /* identity of the imported models list (names, groups, order): co-op uses them only when both sides
    have the same; 0 with none */
 unsigned cast_import_id(void);
+struct EnemyOpts;
+int cast_imports_now(const struct EnemyOpts* o);   /* cast_glue.c: the imports count the cast's pools take now (0: no game checked, or a co-op
+                                                      partner with other imports or other games checked) */
+/* the imported games' check boxes (cast_list.c; the lists' rows above their entries, the look picker's, GAME SETUP > CHARACTERS'
+   SV_GAME_*, IMPORT's "Show in Model Lists": one setting, actors.h g_import_hidden, ini import_<key>_shown, unchecked at first):
+   the games with models in the lists' order (Umbrella Chronicles, Outbreak File 2, Code: Veronica (Dreamcast); import.h sources
+   into src, at most 3; the count), a game's name (English, tr), checked, check it (saved, logged), its row drawn, the help line */
+int cast_list_games(int* src);
+const char* cast_list_game_name(int s);
+int cast_list_game_on(int s);
+void cast_list_game_set(int s, int on);
+void cast_list_game_draw(float x0, float right, float y, float h, float sc, int s, int sel, int first);
+const char* cast_list_game_help(void);
 /* "Randomize Played as" (BioRand, docs/BIORAND_INGAME.md S5a): the "You appear as" chr of character c (0 Claire,
    1 Chris, 2 Steve in his section of Claire's part) for BioRand seed number seed, from it alone: an entry of the pool
    all ("Model Selection": 0 the cutscene models but Claire's and Chris's, 1 "All models" with Steve's and Wesker's

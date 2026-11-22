@@ -850,7 +850,38 @@ picks; no game state, ctest `cast`), `pc/glue/cast_glue.c` (in the game), the di
 | Randomize Cutscene Cast | `cast_random` | **0 Off**, 1 On (`EnemyOpts.cast`; a file from the first version: 1 Characters and 3 Both read as On, 2 Enemies as Off) |
 | Model Selection (shown while on) | `cast_models` | **0 Cutscene Models**, 1 All Models, 2 Custom (below, "Custom") |
 | Model Assignment (shown while on) | `cast_assign` | **0 Per Character**, 1 Per Cutscene |
-| Include Imported Models (shown while on and imported models exist) | `cast_imports` | **0**/1 |
+| *(retired)* Include Imported Models | `cast_imports` | read, always written 1, no effect: the imported games checked decide (below) |
+
+**Imported games** (since 2026-11-22; one setting shown in several places): a check box per imported game with models
+("Umbrella Chronicles", "Outbreak File 2", "Code: Veronica (Dreamcast)") at the top of the look picker's list, of the
+*Custom* lists (Story Character Looks, Your Random Looks; Monster Looks takes no imports, so it has none), as rows of
+GAME SETUP > CHARACTERS (`setup_glue.c SV_GAME_*`, shown while the game has models) and as IMPORT > CHARACTERS > the
+game's "Show in Model Lists" (F9 too). Code: `cast_list.c cast_list_game_*`, the bit `actors.h g_import_hidden` (ini
+`import_<key>_shown = 0|1`, every character source written). **Default: every game unchecked**, only Code: Veronica's
+own models in the lists and pools. Migration: an ini without the line starts unchecked (before, a game started shown
+and only `= 0` was written, so an explicit hide stays hidden; nobody had an explicit `= 1`); a look already chosen from
+an unchecked game stays in use and listed ("Hidden Source (Still in Use)"). Only a checked game's models are listed and
+in the random pools: the cast's (`cast_glue.c cast_imports_now`: all imports, `cast.c drop_hidden` the unchecked
+games'), the random look's, the *Custom* lists. That replaced **Include Imported Models** (the cast's and the random
+look's, `cast_imports`, `biorand_appear_imports`): checking a game is that choice per game, so the rows are gone (GAME
+SETUP, ENHANCED SETTINGS, the lobby's CUTSCENE CAST page, the BIORAND screen); both ini keys are still read and are
+written as 1, so an older version reading the file takes the checked games' models as well. The Dreamcast Steve
+setting ([IMPORT_DREAMCAST.md](IMPORT_DREAMCAST.md)) is not a list entry and works with its game unchecked.
+
+**Who an import is in the pools** (`cast.c story_import`):
+
+| Import | Swapped (and Random From: Story Characters) | Any Model, Custom |
+|---|---|---|
+| Umbrella Chronicles' playable characters with lines: Jill, Rebecca, Billy, Carlos, Richard, Ada, Wesker, Chris, HUNK (only while its voice lines are imported, `voice_import_hash`; `voice_model_chr` names their voice character) | yes: additional story characters, so Steve can be shown as UC Jill and say Jill's Umbrella Chronicles lines | yes |
+| Kenneth (no lines), Umbrella Chronicles' monsters and others, Outbreak's people | no | yes, as models without lines ("shown as a model without lines": quiet in place of the line) |
+| the Dreamcast Steve's cutscene model (the game's own format: Steve) | yes (never for Steve: his own look) | yes |
+
+Umbrella Chronicles' Wesker and Chris count as Wesker and Chris (`cast.c model_char`: `voice_base` of their voice
+character), so Wesker is never "swapped" to UC Wesker. HUNK has grunts only: he gets a grunt in place of a grunt or a
+short line and is quiet in place of a longer one (`voice_choose`, as any character whose pool has no fitting line; seed
+13's plan: 14 grunts, 45 quiet), close to the "model without lines" rule. Umbrella Chronicles' monsters
+are never in the creatures' and scene zombies' own pool ("Enemy Models": no imports, its bits ride in `EV_EOPTS`), only
+in the characters' *Any Model* / *Custom* pool (and so in "Like Story Characters").
 
 The seed is the enemy options' (`enemy_seed`). In co-op the host's options count (they travel with the
 other enemy options, `EV_EOPTS`, [COOP.md](COOP.md) "Added enemies and options").
@@ -1111,7 +1142,7 @@ still picks from the files too (and its own *Custom* list lists them): it sets t
 
 ### Custom
 
-*Custom* is the *All Models* pool (with Include Imported Models on, the imported models too) cut down to the
+*Custom* is the *All Models* pool (the checked imported games' models too) cut down to the
 entries the player checks in a list: SELECT ALL / DESELECT ALL, then a check box per entry, in the order and
 groups of the lobby's model page (`cast_custom_list`: the "You appear as" list's order, but Claire's, Chris's, Steve's
 and Wesker's cutscene models, that list's last, first; the zombies' one entry where their looks start, the imports
@@ -1144,7 +1175,8 @@ BIORAND screen, as are its other rows.
   only choices are its own looks stays itself, e.g. Steve with only Steve's cutscene model checked).
 * Co-op: the host's list goes to the guest (`EV_CASTOFF`, protocol 31: the bit list in 64-byte chunks, each
   chunk that changed, all to a new partner, before `EV_EOPTS`), so both pick from the host's; the guest's own
-  list stays in its `recvx.ini`. Imported entries count only while both sides have the same imports, as before.
+  list stays in its `recvx.ini`. Imported entries count only while both sides have the same imports and check the same
+  imported games (`cast_import_id`), as before.
 * BioRand's "Randomize Character Model" has a *Custom* list of its own ([BIORAND_INGAME.md](BIORAND_INGAME.md)
   "S10"): `cast_appear_off`, `recvx.ini` lines `appear_custom_off = <key>` (the same keys), the same list code
   (`cast_list_open(1, ...)`, `cast_custom_list(1, ...)`) over its own *All Models* entries (these plus Steve's and
@@ -1278,7 +1310,7 @@ the same in Claire's part and in Chris's.
   (as for the double); expressions keep the model's neutral face, only the eyes and the eyelids follow.
 * Each model is read from its room file during the room load (as the enemy spawner reads one), at most
   six per room.
-* Test aids: `RECVX_CAST=0|1[:all][:random][:imports]` sets the options; `RECVX_CAST_TRACE=1` logs the
+* Test aids: `RECVX_CAST=0|1[:all][:custom][:random]` sets the options (the imports: `import_<key>_shown = 1` in recvx.ini); `RECVX_CAST_TRACE=1` logs the
   game's state (flags, items, the player) at each room load, each change between cutscene and gameplay,
   and every 10 ticks each cast face's lips, muscles and jaw against its record's;
   `RECVX_TEST_EVENT="f:level:ev,..."` starts a room script's event (a cutscene) without walking to its
@@ -1301,7 +1333,9 @@ Imported voice lines (Umbrella Chronicles: [IMPORT_UMBRELLA.md](IMPORT_UMBRELLA.
 the cast's 7 (`cast.h` `VOICE_CHARACTERS`: Jill, Rebecca, Billy, Carlos, Richard, Ada, HUNK, ids kept for Outbreak's
 survivors, and pools of their own for the imported lines of Chris and Wesker) and a third "disc" (`VOICE_DISC_UC`: file n of
 the import's `voice/` folder, partition 30): an imported model of one of them says that character's imported lines, chosen,
-planned, timed and lip-synced as the disc's. The cast itself keeps its 7.
+planned, timed and lip-synced as the disc's. The cast itself keeps its 7; with Umbrella Chronicles checked its playable
+characters join *Swapped* as additional looks (the table under "Cutscene cast"), so a story character drawn as one of
+them speaks that character's imported lines (`plan_make`: `voice_model_chr` of the model; the voice plan's `chr`).
 
 ### Lines and speakers
 
@@ -1498,7 +1532,9 @@ imports as the game counts them.
 -> plan_want`, on the game thread while the room loads: about 1.5 s, once per seed and options; never in a cutscene)
 for the inputs it depends on: the catalogue's key (the room files, the lines checked by hand), the played-length table,
 the seed and the cast options in effect (`plan_key`: Character Models on, Model Selection, Model Assignment, Enemy
-Models and both Custom lists, the imports' count and list). It keeps the lines it chose and caches them in
+Models and both Custom lists, the imports' count and list: `cast_import_id`, which also holds which imported games are
+checked and the imported voice lines' hash, so checking a game or importing its voices makes a new plan; no game
+checked counts as no imports, the same key as without any). It keeps the lines it chose and caches them in
 `<save_dir>/voices.plan` next to `voices.cache` (ids only: room file, VoiceOn offset, line, the character it is said as,
 the line in its place; a few KB; another key is made anew and replaces it). `pc_voice_on` looks a line up by room file
 and the VoiceOn's offset in the script block (`plan_find`) and plays the plan's line, with its fit, cut and fade as
@@ -1513,7 +1549,7 @@ changed in the pause menu: the next room load makes it) stay quiet, as before th
 sounds (`creature_line`) avoid the sound before in the same room visit, which a room load resets.
 
 Co-op: a guest has the host's options and seed (`enemy_opts`, `enemy_cast_off`; imports only while both have the same
-list), so it makes the same plan from the same disc and mods; no protocol change. Checked against the game: headless
+list and check the same imported games, `cast_import_id`: else neither takes any), so it makes the same plan from the same disc and mods; no protocol change. Checked against the game: headless
 scene runs with the cast and the voice lines on (RECVX_TEST_SCENE, `RECVX_CAST_TRACE`'s "voices:" lines) agree line for
 line on the kind, whose voice and the replacement; ctest `voice_plan_game` (needs `RECVX_ISO`, about three minutes) runs
 three scenes in sessions of their own and, in one more session, one, another, then the first again: every play of a

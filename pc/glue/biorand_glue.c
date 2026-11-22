@@ -123,7 +123,7 @@ void pc_biorand_save_accept(void* save)
    S5a; the new menu's GAME SETUP > CHARACTERS > You Look Like = Random)
    A new game with "Randomize Played as" on (g_biorand_appear) is given a "You appear as" look picked from a seed
    (cast_appear_pick: the pool its "Model Selection" chooses, g_biorand_appear_pool, "Custom" its own list cast_appear_off;
-   imports with its "Include Imported Models"; "Custom" with none checked: no pick): one for the whole game (1, "Same for
+   the imports of the games checked in the lists, actors.h g_import_hidden; "Custom" with none checked: no pick): one for the whole game (1, "Same for
    Both"), or (2, "Per Character") one for Claire, another for Chris and a third for Steve's section of Claire's part. The
    seed: in a BioRand game the pack's seed number (as before, so a seed string keeps its look), in any other game (since
    the menu rework, D3; before, BioRand games only) the enemy seed + APPEAR_SALT, so a game is repeatable as its enemies
@@ -149,7 +149,7 @@ unsigned pc_appear_seed(int br_seed) { return br_seed >= 0 ? (unsigned)br_seed :
 
 int pc_appear_pick(unsigned seed, int per, int* chr)
 {
-    int k, imports = g_biorand_appear_imports > 0 ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0;
+    int k, imports = __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE);   /* (the checked games' only: cast.c drop_hidden) */
     for (k = 0; k < (per ? 3 : 1); k++) chr[k] = cast_appear_pick(seed, g_biorand_appear_pool, imports, cast_appear_off, k);   /* (different ones) */
     return chr[0] != 0;
 }
@@ -185,7 +185,7 @@ static int guest_picks(unsigned int* w)
     static unsigned key[4];
     static unsigned int keep[2];
     unsigned seed = 0, ok = game_seed(&seed);
-    unsigned k[4] = { seed, (unsigned)g_biorand_appear, (unsigned)g_biorand_appear_pool, (unsigned)(g_biorand_appear_imports > 0) };
+    unsigned k[4] = { seed, (unsigned)g_biorand_appear, (unsigned)g_biorand_appear_pool, g_import_hidden };
     int chr[3];
     if (!g_biorand_appear || guest_dropped || !ok) return 0;
     for (int i = 0; i < CAST_OFF_BYTES; i++) k[3] = k[3] * 31u + cast_appear_off[i];

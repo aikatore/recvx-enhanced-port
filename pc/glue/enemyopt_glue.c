@@ -62,11 +62,11 @@ __attribute__((constructor)) static void opts_env(void)
     if ((e = getenv("RECVX_ENEMY_VARIETY"))) g_enemy_opts.variety = atoi(e);
     if ((e = getenv("RECVX_ENEMY_EVENTS"))) g_enemy_opts.events = atoi(e);
     if ((e = getenv("RECVX_ENEMY_TYPES"))) g_enemy_opts.types = atoi(e);   /* (RECVX_ENEMY_RATES: enemy_rates_load) */
-    if ((e = getenv("RECVX_CAST"))) g_enemy_opts.cast = atoi(e) != 0;   /* the cutscene cast: 0/1, then ":all" / ":random" / ":imports" */
+    if ((e = getenv("RECVX_CAST"))) g_enemy_opts.cast = atoi(e) != 0;   /* the cutscene cast: 0/1, then ":all" / ":custom" / ":random" (imports: the games
+        checked, recvx.ini import_<key>_shown = 1) */
     if (e && strstr(e, "all")) g_enemy_opts.cast_all = 1;
     if (e && strstr(e, "custom")) g_enemy_opts.cast_all = 2;   /* (the models: recvx.ini cast_custom_off) */
     if (e && strstr(e, "random")) g_enemy_opts.cast_assign = 1;
-    if (e && strstr(e, "imports")) g_enemy_opts.cast_imports = 1;
     if ((e = getenv("RECVX_CAST_ENEMY"))) g_enemy_opts.cast_enemy = atoi(e) & 3;   /* "Enemy Models": 0 Same as Cast, 1 All Enemies, 2 Custom, 3 Off */
     if ((e = getenv("RECVX_VOICES"))) g_enemy_opts.voices = atoi(e) != 0;   /* "Randomize Voice Lines" */
 }
@@ -92,7 +92,7 @@ void enemy_opts_from_host(const EnemyOpts* o)
         host_log("enemies: the host's options: extra %d, placements %d, randomizer %d (%s, types per room %d%s, rates %s), seed %d, cutscene cast %d (%s, %s%s, enemy models %d, "
                  "unchecked %02x%02x%02x), voice lines %d\n",
                  o->extra, o->place, o->rand, variety_name(o->variety), o->types, o->events ? ", event enemies" : "", rates_line(o->rate, rl), o->seed, o->cast,
-                 o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models", o->cast_assign ? "random" : "fixed", o->cast_imports ? ", imported models" : "",
+                 o->cast_all == 2 ? "custom models" : o->cast_all ? "all models" : "cutscene models", o->cast_assign ? "random" : "fixed", "",
                  o->cast_enemy, o->cast_enemy_off[2], o->cast_enemy_off[1], o->cast_enemy_off[0], o->voices);
     }
 }

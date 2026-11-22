@@ -1,6 +1,7 @@
 /* The cutscene cast randomizer's choices (cast.h; docs/ACTORS.md "Cutscene cast"). */
 #include "cast.h"
 #include "actors.h"
+#include "../import/import.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -157,6 +158,16 @@ static int enemy_pool(int enemy, int* out, const unsigned char* eoff)
     return k;
 }
 
+/* an import that counts as a story character ("Swapped", "Random From: Story Characters"): one in the game's own format (the
+   Dreamcast Steve: its type's character), or an Umbrella Chronicles playable character while its voice lines are imported (Jill,
+   Rebecca, Billy, Carlos, Richard, Ada, Wesker, Chris and HUNK: voice_model_chr; HUNK has grunts only). The other imports
+   (Outbreak's people, Umbrella Chronicles' monsters and others) are models without lines: "Any Model" and "Custom" only */
+static int story_import(int k)
+{
+    return actor_imports[k].id || (actor_import_src[k] == IMPORT_UMBRELLA && actor_import_group[k] == IMPORT_GROUP_PLAYERS && voice_import_hash() &&
+                                   voice_model_chr(ACTOR_MODELS + k) >= 0);   /* (not Kenneth: no lines of his) */
+}
+
 int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
 {
     int b[BUILTIN_MAX], n = 0, i, k;
@@ -165,7 +176,7 @@ int cast_pool(int all, int imports, int* out, int max, const unsigned char* off)
     } else
         for (i = 0, k = builtins_of(b, 1); i < k && n < max; i++)   /* ("Custom"'s whole list: Claire's and Chris's looks too, not Claire's second costume */
             if (all == 2 || b[i] != ACTOR_PART + 4) out[n++] = b[i];   /* (its face does not move) but where "Custom" checks it) */
-    for (i = 0; i < imports_n(imports) && n < max; i++) out[n++] = ACTOR_MODELS + i;
+    for (i = 0; i < imports_n(imports) && n < max; i++) if (all || story_import(i)) out[n++] = ACTOR_MODELS + i;   /* ("Swapped": the story characters' only) */
     if (all == 2) {   /* "Custom": the checked ones (the positions are "All models"'s) */
         for (i = k = 0; i < n; i++) if (!cast_off_at(off, i)) out[k++] = out[i];
         n = k;
@@ -187,6 +198,10 @@ static int model_char(int m)
     for (int c = 0; c < CAST_CHARACTERS; c++) if (cine[c] == m) return c;
     if (m >= ACTOR_MODELS && m < ACTOR_MODELS + listed() && actor_imports[m - ACTOR_MODELS].id)   /* (the Dreamcast Steve: Steve) */
         return cast_character(actor_imports[m - ACTOR_MODELS].id, actor_imports[m - ACTOR_MODELS].mdlver);
+    if (m >= ACTOR_MODELS && m < ACTOR_MODELS + listed()) {   /* (Umbrella Chronicles' Wesker and Chris: theirs, so Wesker is not "swapped" for himself) */
+        int v = voice_model_chr(m);
+        return v >= 0 && voice_base(v) < CAST_CHARACTERS ? voice_base(v) : -1;
+    }
     return -1;
 }
 
@@ -275,7 +290,7 @@ static int appear_pool(int all, int imports, int* out, const unsigned char* off)
 {
     int n = all ? builtins_of(out, -1) : cast_pool(0, 0, out, POOL_MAX, NULL), i, k;
     if (!all) { for (i = k = 0; i < n; i++) if (!protagonist(out[i])) out[k++] = out[i]; n = k; }   /* (the played look: not Claire's or Chris's) */
-    for (i = 0; i < imports_n(imports); i++) out[n++] = ACTOR_MODELS + i;
+    for (i = 0; i < imports_n(imports); i++) if (all || story_import(i)) out[n++] = ACTOR_MODELS + i;   /* ("Story Characters": as "Swapped"'s) */
     if (all == 2) {
         for (i = k = 0; i < n; i++) if (!cast_off_at(off, i)) out[k++] = out[i];
         n = k;
@@ -384,7 +399,7 @@ unsigned cast_import_id(void)
 {
     static int last = -1;
     static unsigned id, last_hidden, last_voices;
-    unsigned h = 2166136261u;
+    unsigned h = 2166136261u ^ 2u;   /* (2: who counts as a story character, story_import: plans made before are keyed apart) */
     int n = listed();
     if (n == last && g_import_hidden == last_hidden && voice_import_hash() == last_voices) return id;   /* (append-only: the count names the list) */
     last = n;

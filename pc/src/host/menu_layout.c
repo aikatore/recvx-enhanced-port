@@ -244,8 +244,6 @@ const MenuRow menu_rows[] = {
     { MC_CHARACTERS, NULL, ML_SET, "Chris's Model", .label = "Chris's Look", .help = "Chris's look, also in the cutscenes of Claire's part." },
     { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_RANDOM_FROM, "Random From", N("Story Characters", "Any Model", "Custom"),
       .help = "Story Characters: the cast's talking models. Any Model: also creatures, zombies and player files. Custom: the looks you check." },
-    { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_RANDOM_IMPORTS, "Include Imported Models", N("Off", "On"),
-      .help = "Imported characters can be your random look too." },
     { MC_CHARACTERS, NULL, ML_SET, "Custom Cutscene Model", .label = "In Cutscenes", .names = N("Original Character", "Your Look"),
       .help = "Your Look: cutscenes show your look. Original Character: cutscenes show Claire or Chris as in the original game." },
     { MC_CHARACTERS, NULL, ML_PAGE, NULL, MC_CHAR_ADV, "Advanced", .help = "Match Model Animations and Animated Faces." },
@@ -253,6 +251,12 @@ const MenuRow menu_rows[] = {
     { MC_CHAR_ADV, NULL, ML_SET, "Animated Faces (Experimental)" },
     { MC_CHARACTERS, NULL, ML_IMPORT, NULL, MC_IMPORT_CHARS, "Import Characters",
       .help = "Add characters from Resident Evil Outbreak File 2 and Resident Evil: The Umbrella Chronicles as looks. Shortcut: EXTRA > IMPORT > CHARACTERS." },
+    { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_GAME_UC, "Umbrella Chronicles", N("Off", "On"),
+      .help = "On: its imported characters are in the look lists and random looks, also as story characters in cutscenes, with their voice lines. In co-op, both players need the same games on." },
+    { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_GAME_OB, "Outbreak File 2", N("Off", "On"),
+      .help = "On: its imported characters are in the look lists and random looks, also in cutscenes with Any Model or Custom (no voice lines). In co-op, both players need the same games on." },
+    { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_GAME_DC, "Code: Veronica (Dreamcast)", N("Off", "On"),
+      .help = "On: its Steve models are in the look lists and random looks. The Dreamcast Steve setting (IMPORT) works either way. In co-op, both players need the same games on." },
     { MC_CHARACTERS, "STORY CHARACTERS IN CUTSCENES", ML_VAR, NULL, SV_STORY, "Story Characters", N("Original", "Swapped", "Any Model", "Custom"),
       .help = "Steve, Wesker, Alfred, Alexia and Rodrigo in cutscenes. Swapped: each other's looks, e.g. Alfred as Steve. Any Model: "
               "also creatures, e.g. Rodrigo as a Hunter. Claire and Chris follow YOU." },
@@ -260,7 +264,6 @@ const MenuRow menu_rows[] = {
     { MC_CHARACTERS, NULL, ML_MERGED, "Model Selection" },
     { MC_CHARACTERS, NULL, ML_SET, "Model Assignment", .label = "Keep Their Look", .names = N("Whole Game", "New Each Scene"),
       .help = "Whole Game: Steve keeps one look all game. New Each Scene: a new look in every cutscene." },
-    { MC_CHARACTERS, NULL, ML_SET, "Include Imported Models", .help = "Imported characters can be story characters' looks too. In co-op, both players need the same ones." },
     { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_SHOW_PICKS, "Show This Game's Looks", N("Off", "On"),
       .help = "In game only, a spoiler: the preview names who each story character looks like in this game (with Keep Their Look Whole Game)." },
     { MC_CHARACTERS, "MONSTERS IN CUTSCENES", ML_VAR, NULL, SV_MONSTERS, "Cutscene Monsters", N("Original", "Any Monster", "Like Story Characters", "Custom"),
@@ -371,7 +374,7 @@ const int menu_preset_n = (int)(sizeof(menu_preset) / sizeof(menu_preset[0]));
 const char* const menu_setup_owned[] = {
     "Free Typewriter Saves", "Extra Item Boxes and Herbs", "Headshots & Piercing", "Break Free Pushes Enemies",
     "Extra Enemies", "Rearranged Enemies", "Enemy Randomizer", "Enemy Selection", "Types per Room", "Randomize Event Enemies",
-    "Randomize Cutscene Cast", "Model Selection", "Enemy Models", "Model Assignment", "Include Imported Models", "Randomize Voice Lines",
+    "Randomize Cutscene Cast", "Model Selection", "Enemy Models", "Model Assignment", "Randomize Voice Lines",
 };
 const int menu_setup_owned_n = (int)(sizeof(menu_setup_owned) / sizeof(menu_setup_owned[0]));
 const MenuPreset menu_remix[] = { { "Rearranged Enemies", 1 }, { "Extra Enemies", 2 }, { "Extra Item Boxes and Herbs", 1 } };

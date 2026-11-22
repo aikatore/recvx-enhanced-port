@@ -131,7 +131,9 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "voice_random", &g_enemy_opts.voices, 0, 1 },              /* "Randomize Voice Lines" (cast.h) */
     { "voice_mouths", &g_voice_mouths, 0, 1 },                   /* its "Talking Mouths" (cast.h; each screen's own) */
     { "biorand_appear_models", &g_biorand_appear_pool, 0, 2 },     /* "Randomize Character Model"'s Model Selection (biorand_opts.h; appear_custom_off lines) */
-    { "biorand_appear_imports", &g_biorand_appear_imports, 0, 1 }, /* ... its Include Imported Models (absent: cast_imports', as before) */
+    { "biorand_appear_imports", &g_biorand_appear_imports, 0, 1 }, /* (its old Include Imported Models and cast_imports: no effect since the
+                                                                      imported games' checkboxes, import_<key>_shown; written 1, so an older
+                                                                      version takes the checked games' models too) */
     { "subtitles", &g_subtitles, 0, 1 + LANG_COUNT },     /* cutscene subtitles: 0 off, 1 the game language's, 2 + LANG_* (lang.h) */
     { "translated_pictures", &g_lang_pictures, 0, 1 },    /* the language's pictures with writing: 0 the disc's (lang.h) */
     { "translated_voices", &g_lang_voices, 0, 1 },        /* the language's sounds (the title call): 0 the disc's (lang.h) */
@@ -254,10 +256,13 @@ void config_load(void)
     int combined_seen = 0, server_seen = 0, had_off = 0, migrate, enemy = g_enemy_opts.cast_enemy;
     FILE* f;
     appear_in_use = look_in_use;
+    for (int s = 0; s < IMPORT_SOURCES; s++)   /* the imported games start unchecked (not in the lists or pools): a file's import_<key>_shown = 1
+                                                  checks one (before 2026-11-22 they started shown and only = 0 was written: kept as written) */
+        if (import_sources[s].cat == IMPORT_CAT_CHARACTERS) g_import_hidden |= 1u << s;
     path(p, sizeof(p));
     if (!(f = pc_fopen(p, "r"))) {   /* first start: the defaults (player_id saves them) */
         import_registry_load();
-        g_biorand_appear_imports = g_enemy_opts.cast_imports;   /* (as below: absent, the cast's) */
+        g_biorand_appear_imports = g_enemy_opts.cast_imports = 1;   /* (as below) */
         cast_default(0);
         default_name();
         player_id();
@@ -319,7 +324,7 @@ void config_load(void)
     g_coop.chr = appear_canon(g_coop.chr);   /* an event double no longer listed: its listed twin (actors.c) */
     for (int c = 0; c < 2; c++) if (g_appear_own[c] >= 0) g_appear_own[c] = appear_canon(g_appear_own[c]);
     g_enemy_opts.cast = g_enemy_opts.cast == 1 || g_enemy_opts.cast == 3;   /* the cutscene cast had 1 Characters, 2 Enemies, 3 Both: the characters' on */
-    if (g_biorand_appear_imports < 0) g_biorand_appear_imports = g_enemy_opts.cast_imports;   /* (a file from before it: the cast's, which it used) */
+    g_biorand_appear_imports = g_enemy_opts.cast_imports = 1;   /* (the old Include Imported Models: the games checked decide, g_import_hidden) */
     default_name();
     player_id();
 }
@@ -368,7 +373,8 @@ static int write_ini(FILE* f, void* ud)
     if (ini_hd_dir[0]) fprintf(f, "hd_textures_dir = %s\n", ini_hd_dir);   /* not --hd-textures */
     if (g_import.dir[0]) fprintf(f, "import_dir = %s\n", g_import.dir);
     for (int s = 0; s < IMPORT_SOURCES; s++) if (g_import.iso[s][0]) fprintf(f, "import_%s_iso = %s\n", import_sources[s].key, g_import.iso[s]);
-    for (int s = 0; s < IMPORT_SOURCES; s++) if ((g_import_hidden >> s) & 1) fprintf(f, "import_%s_shown = 0\n", import_sources[s].key);
+    for (int s = 0; s < IMPORT_SOURCES; s++)   /* (every game's, checked or not: absent means unchecked) */
+        if (import_sources[s].cat == IMPORT_CAT_CHARACTERS) fprintf(f, "import_%s_shown = %d\n", import_sources[s].key, !((g_import_hidden >> s) & 1));
     if (g_import.dc_steve) fprintf(f, "import_%s_steve = %d\n", import_sources[IMPORT_DREAMCAST].key, g_import.dc_steve);
     if (g_lang) fprintf(f, "language = %s\n", lang_codes[g_lang]);
     if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);

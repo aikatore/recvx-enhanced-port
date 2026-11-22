@@ -21,11 +21,13 @@ image, START IMPORT (well under a second). Three models come out:
   chosen: Character Model, Claire's and Chris's Model; worn on the player's own skeleton as the player files are (the
   "Steve" look's way: his motions, the weapon's hands, the character played's motions with gender-matched animations).
   Not in the cutscene cast's pools (as the player files there are the cutscene models).
-* **Steve (Dreamcast Hair, Cutscene)**: his cutscene model, listed as the imports are (looks, the cast's pools with
-  Include Imported Models, *Custom*'s lists).
+* **Steve (Dreamcast Hair, Cutscene)**: his cutscene model, listed as the imports are (looks, the cast's pools, also
+  Swapped's as a Steve look, *Custom*'s lists) while the game is checked.
 * his event model (type 43): in no list; it stands in for his type-43 records (below).
 
-"Show in Model Lists" hides the first two as any import.
+Both are listed only while the game is checked ("Code: Veronica (Dreamcast)": the look picker's and the "Custom" lists'
+check box, GAME SETUP > CHARACTERS, "Show in Model Lists"; unchecked at first, [ACTORS.md](ACTORS.md) "Imported games").
+The Dreamcast Steve setting below does not need it: it replaces Steve, it is not a list entry.
 
 **Dreamcast Steve** (that page, ini `import_dreamcast_steve`, default 0):
 

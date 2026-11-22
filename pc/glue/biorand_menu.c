@@ -88,7 +88,7 @@ enum { PG_SEED, PG_DOORS, PG_ITEMS, PG_ENEMIES, PG_PORT, PG_N };
 static const char* const page_names[PG_N] = { "SEED", "DOORS", "ITEMS", "ENEMIES", "EXTRA OPTIONS" };
 /* row kinds: K_OPT a biorand_opt[] row, K_SET a settings table row (the cutscene cast, the enemy options) */
 enum { K_PAGE, K_OPT, K_RANDOM, K_COPY, K_PASTE, K_GEN, K_START, K_CHECK, K_APPEAR, K_SET, K_CUSTOM, K_RANDPG, K_RSEED, K_HEAD, K_BACK, K_RATES };   /* K_APPEAR: "Randomize
-    Character Model" (idx 0), its Model Selection (1), its Include Imported Models (2); K_CUSTOM: the cast's "Custom" list (idx 0), the
+    Character Model" (idx 0), its Model Selection (1); K_CUSTOM: the cast's "Custom" list (idx 0), the
     character model's (1); K_RANDPG: the RANDOMIZER sub-page; K_RSEED: its RANDOM SEED; K_HEAD: a heading (heads[idx]), never selected;
     K_RATES: the enemy randomizer's "Custom" rates (rate_list.c, bm.list 2) */
 static const char* const heads[] = { "ENEMIES", "CUTSCENE CAST", "PLAYER MODEL", "APPEARANCE", "ITEMS" };
@@ -412,13 +412,11 @@ static void build_rows(void)
         add_set(&g_enemy_opts.cast_enemy);
         if (g_enemy_opts.cast && g_enemy_opts.cast_enemy == CAST_ENEMY_CUSTOM) add(K_CUSTOM, 2);   /* (its list: cast_list.c list 2) */
         add_set(&g_enemy_opts.cast_assign);
-        add_set(&g_enemy_opts.cast_imports);
         add(K_HEAD, H_RANDCHAR);
         add(K_APPEAR, 0);
         if (g_biorand_appear) {   /* (as the cast's rows: while it is on) */
             add(K_APPEAR, 1);
             if (g_biorand_appear_pool == 2) add(K_CUSTOM, 1);
-            if (__atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0) add(K_APPEAR, 2);
         }
         add_set(&g_enemy_opts.voices);   /* (for the cast and for the character model: their lines) */
         if (g_enemy_opts.voices) add_set(&g_voice_mouths);
@@ -545,10 +543,10 @@ static void change(const Row* r, int dir)
     if (why) { refuse(why); return; }
     if (model_row(r)) { activate(r); return; }   /* (not locked: activate opens the page) */
     if (r->kind == K_APPEAR) {
-        int* v = r->idx == 1 ? &g_biorand_appear_pool : r->idx == 2 ? &g_biorand_appear_imports : &g_biorand_appear;
-        *v = r->idx == 2 ? !*v : (*v + dir + 3) % 3;   /* Off, Same for Both, Per Character; Cutscene Models, All Models, Custom */
+        int* v = r->idx == 1 ? &g_biorand_appear_pool : &g_biorand_appear;
+        *v = (*v + dir + 3) % 3;   /* Off, Same for Both, Per Character; Cutscene Models, All Models, Custom */
         settings_save_later();
-        host_log("biorand menu: randomize played as: %s = %d\n", r->idx == 1 ? "models" : r->idx == 2 ? "imports" : "mode", *v);
+        host_log("biorand menu: randomize played as: %s = %d\n", r->idx == 1 ? "models" : "mode", *v);
     } else if (r->kind == K_SET) settings_step(&g_settings[r->idx], dir);
     else {
         const BioOpt* d = &biorand_opt[r->idx];
@@ -961,15 +959,15 @@ static void draw_row(int i)
         return;
     }
     case K_APPEAR: {
-        static const char* const label[] = { "Randomize Character Model", "Model Selection", "Include Imported Models" };
+        static const char* const label[] = { "Randomize Character Model", "Model Selection" };
         static const char* const mode[] = { "Off", "Same for Both", "Per Character" }, *pool[] = { "Cutscene Models", "All Models", "Custom" };
-        snprintf(v, sizeof(v), "%s", r->idx == 1 ? pool[g_biorand_appear_pool] : r->idx == 2 ? (g_biorand_appear_imports > 0 ? "On" : "Off") : mode[g_biorand_appear]);
+        snprintf(v, sizeof(v), "%s", r->idx == 1 ? pool[g_biorand_appear_pool] : mode[g_biorand_appear]);
         text_fit(ROW_X, y, label[r->idx], ROW_SC, VAL_X - 16 - ROW_X, col);
         value(i, y, v, col, live);
         return;
     }
     case K_CUSTOM: {   /* how many are checked; confirm opens the list */
-        int imp = r->idx != 2 && (r->idx ? g_biorand_appear_imports > 0 : g_enemy_opts.cast_imports) ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0;
+        int imp = r->idx != 2 ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0;   /* (the checked games' models: cast_custom_count) */
         text_fit(ROW_X, y, r->idx == 2 ? "Choose Enemies" : names[r->kind], ROW_SC, VAL_X - 16 - ROW_X, col);
         text_fit(VAL_X + 12, y, cast_list_summary(r->idx, r->idx == 2 ? g_enemy_opts.cast_enemy_off : r->idx ? cast_appear_off : cast_off, imp, v, sizeof(v)), ROW_SC, 196, col);
         return;
@@ -1089,9 +1087,8 @@ static void help_text(char* t, int n, unsigned int* col)
         if (why) *col = 0xFFFFC060;
         return;
     case K_CHECK: snprintf(t, n, tr("Check GitHub for the latest BioRand generator and offer to download it.")); return;
-    case K_APPEAR:   /* (its Model Selection and Include Imported Models: as the cast's) */
+    case K_APPEAR:   /* (its Model Selection: as the cast's) */
         snprintf(t, n, "%s", r->idx == 1 ? tr("Cutscene Models have animated faces. All Models includes creatures and others with still faces. Custom uses only the models you check.")
-                 : r->idx == 2 ? tr("Include imported characters. In co-op, both players need the same models.")
                  : tr("Choose a character model for each generated seed: the same one for Claire and Chris, or one for each character. Saved separately from the seed string."));
         return;
     case K_CUSTOM: snprintf(t, n, "%s", r->idx == 2 ? "Choose the enemies the monsters can appear as." : "Choose the models the characters can appear as."); return;

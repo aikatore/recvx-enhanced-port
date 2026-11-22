@@ -32,6 +32,7 @@
 #include "../src/net/biorand_dl.h"
 #include "../src/net/coop_proto.h"
 #include "../src/net/net.h"
+#include "../src/import/import.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,7 +82,8 @@ static int lobby(void) { return ctx() >= SC_LOBBY_HOST; }
 static const Setting* row(const char* label) { int k = menu_setting(label); return k >= 0 ? &g_settings[k] : NULL; }
 static int get_of(const char* label) { const Setting* s = row(label); return s ? settings_get(s) : 0; }
 static void set_of(const char* label, int v) { const Setting* s = row(label); if (s && !settings_locked(s)) settings_set(s, v); }
-static int imports_n(void) { return __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE); }
+/* SV_GAME_*'s imported game (import.h; cast_list.c cast_list_game_*: the same checkbox as the lists' rows and IMPORT's "Show in Model Lists") */
+static int game_of(int arg) { return arg == SV_GAME_UC ? IMPORT_UMBRELLA : arg == SV_GAME_OB ? IMPORT_OUTBREAK2 : IMPORT_DREAMCAST; }
 static const EnemyOpts* eo(void) { return guest() ? enemy_opts() : &g_enemy_opts; }   /* (a guest's: the host's, EV_EOPTS) */
 
 /* ---------------------------------------------------------------- a guest's values: the host's (proposal §4.5; the wire
@@ -265,7 +267,7 @@ int setup_row_shown(const MenuRow* m, int shown)
     if (m->kind == ML_VAR)
         switch (m->arg) {
         case SV_RANDOM_FROM: return look == 2;
-        case SV_RANDOM_IMPORTS: return look == 2 && imports_n() > 0;
+        case SV_GAME_UC: case SV_GAME_OB: case SV_GAME_DC: return (actor_import_sources() >> game_of(m->arg)) & 1;   /* (while it has models) */
         case SV_DIFFICULTY: return ctx() != SC_LOBBY_GUEST;   /* (the guest: in Start From, the host's words) */
         case SV_START_FROM: return lobby();
         case SV_SHOW_PICKS: return ctx() == SC_INGAME && story_now();
@@ -280,7 +282,7 @@ int setup_row_shown(const MenuRow* m, int shown)
 /* a player's own row in GAME SETUP: YOU (and its Advanced page), Extra Mouth Movement, Show Randomized Item Models */
 static int yours(const MenuRow* m)
 {
-    return m->cat == MC_CHAR_ADV || (m->cat == MC_CHARACTERS && m->kind == ML_VAR && m->arg <= SV_RANDOM_IMPORTS)
+    return m->cat == MC_CHAR_ADV || (m->cat == MC_CHARACTERS && m->kind == ML_VAR && m->arg <= SV_GAME_DC)
            || (m->ref && (!strcmp(m->ref, "Character Model") || !strcmp(m->ref, "Claire's Model") || !strcmp(m->ref, "Chris's Model")
                           || !strcmp(m->ref, "Custom Cutscene Model") || !strcmp(m->ref, "Talking Mouths")
                           || !strcmp(m->ref, "Show Randomized Item Models")));   /* (what this player sees) */
@@ -350,7 +352,7 @@ int setup_choice(const MenuRow* m, int* n)
         return *n > 0;
     }
     switch (m->arg) {
-    case SV_GAME_TYPE: case SV_LOOK_MODE: case SV_RANDOM_IMPORTS: case SV_SHOW_PICKS: *n = 2; return 1;
+    case SV_GAME_TYPE: case SV_LOOK_MODE: case SV_GAME_UC: case SV_GAME_OB: case SV_GAME_DC: case SV_SHOW_PICKS: *n = 2; return 1;
     case SV_DIFFICULTY: case SV_LOOK: case SV_RANDOM_FROM: *n = 3; return 1;
     case SV_PRESET: case SV_STORY: *n = 4; return 1;
     case SV_MONSTERS: *n = mon_ids(eo()->cast, ids); return 1;
@@ -379,7 +381,7 @@ int setup_get(const MenuRow* m)
     case SV_LOOK: return look_now();
     case SV_LOOK_MODE: return look_mode();
     case SV_RANDOM_FROM: return g_biorand_appear_pool;
-    case SV_RANDOM_IMPORTS: return g_biorand_appear_imports > 0;
+    case SV_GAME_UC: case SV_GAME_OB: case SV_GAME_DC: return cast_list_game_on(game_of(m->arg));
     case SV_STORY: return story_now();
     case SV_MONSTERS: return mon_pos(mon_id(eo()->cast, eo()->cast_enemy, enemy_cast_alone(eo())));
     case SV_SHOW_PICKS: return gs.show_picks;
@@ -407,7 +409,7 @@ void setup_set(const MenuRow* m, int v)
     case SV_LOOK: look_set(v); break;
     case SV_LOOK_MODE: look_mode_set(v); break;
     case SV_RANDOM_FROM: g_biorand_appear_pool = v; settings_save_later(); break;
-    case SV_RANDOM_IMPORTS: g_biorand_appear_imports = v; settings_save_later(); break;
+    case SV_GAME_UC: case SV_GAME_OB: case SV_GAME_DC: cast_list_game_set(game_of(m->arg), v); break;
     case SV_STORY: story_set(v); break;
     case SV_MONSTERS: mon_set(v); break;
     case SV_SHOW_PICKS: gs.show_picks = v != 0; break;
@@ -459,7 +461,7 @@ int setup_default(const MenuRow* m, int* d)
     int i = bio_at(m), v;
     if (i >= 0) { *d = biorand_opt[i].def; return strcmp(m->ref, "Seed") != 0; }   /* (the seed has none) */
     switch (m->arg) {
-    case SV_GAME_TYPE: case SV_DIFFICULTY: case SV_PRESET: case SV_LOOK_MODE: case SV_RANDOM_IMPORTS: case SV_SHOW_PICKS: *d = 0; return 1;
+    case SV_GAME_TYPE: case SV_DIFFICULTY: case SV_PRESET: case SV_LOOK_MODE: case SV_GAME_UC: case SV_GAME_OB: case SV_GAME_DC: case SV_SHOW_PICKS: *d = 0; return 1;
     case SV_RANDOM_FROM: *d = 1; return 1;   /* (biorand_opts.c: All Models, as before) */
     case SV_STORY: { int c = 0, a = 0; menu_default(menu_setting("Randomize Cutscene Cast"), &c); menu_default(menu_setting("Model Selection"), &a); *d = c ? 1 + a : 0; return 1; }
     case SV_MONSTERS: if (!menu_default(menu_setting("Enemy Models"), &v)) return 0; *d = mon_pos(mon_id(eo()->cast, v, 0)); return 1;
@@ -657,7 +659,7 @@ static void who_is_who(float x, float y, float w)
     pc_ui_text(x, y, tr(picks ? "THIS GAME'S LOOKS" : "IN CUTSCENES THIS GAME"), 0.46f, C_GOLD);
     y += 16;
     if (picks) {   /* the story characters' picks, two a line, in place of Claire's and Chris's lines (they follow YOU) */
-        int n = __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE), imports = o->cast_imports && n && (!coop_on || coop_partner_import_id() == cast_import_id()) ? n : 0;
+        int imports = cast_imports_now(o);
         t[0] = 0;
         for (int c = 2; c < CAST_CHARACTERS; c++) {
             char* p;

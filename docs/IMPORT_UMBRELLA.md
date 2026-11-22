@@ -212,11 +212,16 @@ Wounded); women move with Claire's motions. The others: Zombie (1..35, the file 
 (T-002 / T-103, 2, 3), Lisa Trevor, Eliminator, Ivy, Office Worker; Lisa and the office worker move with Claire's
 motions, the others with a man's.
 
-How they are used: as every import, "Character Model" (the player's look, the partner's), the cutscene cast's "Any
-Model" / "Custom" pools with imports (`cast_pool`), and so the cutscene monsters while "Cutscene Monsters" is "Like
-Story Characters" (`cast_model`: with "Enemy Models" the same as the cast, the creatures pick from the cast's pool). The
-enemies' own list (cutscene monsters "Any Monster" / "Custom") takes no imports at all (`cast.c imps`), as for
-Outbreak. "Show in Model Lists" hides all of them with the players.
+How they are used: only while the game is checked (its check box in the look picker and the "Custom" lists, GAME
+SETUP > CHARACTERS > Umbrella Chronicles, or "Show in Model Lists" here; unchecked at first: [ACTORS.md](ACTORS.md)
+"Imported games"). Then, as every import, "Character Model" (the player's look, the partner's), the cutscene cast's
+"Any Model" / "Custom" pools (`cast_pool`), and so the cutscene monsters while "Cutscene Monsters" is "Like Story
+Characters" (`cast_model`: with "Enemy Models" the same as the cast, the creatures pick from the cast's pool). With the
+voice lines imported, the playable characters with lines (Jill, Rebecca, Billy, Carlos, Richard, Ada, Wesker, Chris,
+HUNK; not Kenneth) are also in **Swapped** (the story characters swap among characters, `cast.c story_import`), so Steve
+or Alfred can be drawn as UC Jill and say her lines below; Wesker is never swapped to UC Wesker (he counts as Wesker).
+The monsters and others stay in "Any Model" / "Custom". The enemies' own list (cutscene monsters "Any Monster" /
+"Custom") takes no imports at all (`cast.c imps`), as for Outbreak.
 
 ## Voice lines
 

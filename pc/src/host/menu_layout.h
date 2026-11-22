@@ -51,8 +51,9 @@ enum {
     ML_IMPORT,     /* opens the IMPORT screen in place on category arg (MC_IMPORT_*): Import Languages, Import Characters */
     ML_GIVE,       /* PAUSE > CHEATS AND TOOLS: Give Item's list of items with icons (give_list.c) */
 };
-enum { SV_GAME_TYPE, SV_DIFFICULTY, SV_PRESET, SV_LOOK, SV_LOOK_MODE, SV_RANDOM_FROM, SV_RANDOM_IMPORTS, SV_STORY, SV_MONSTERS,
-       SV_START_FROM, SV_SHOW_PICKS };   /* (SV_START_FROM: the co-op lobby's, g_coop.start; SV_SHOW_PICKS: D17, in game) */
+enum { SV_GAME_TYPE, SV_DIFFICULTY, SV_PRESET, SV_LOOK, SV_LOOK_MODE, SV_RANDOM_FROM, SV_GAME_UC, SV_GAME_OB, SV_GAME_DC, SV_STORY, SV_MONSTERS,
+       SV_START_FROM, SV_SHOW_PICKS };   /* (SV_START_FROM: the co-op lobby's, g_coop.start; SV_SHOW_PICKS: D17, in game; SV_GAME_*: an imported
+                                        game checked in the lists, actors.h g_import_hidden, shown while it has models) */
 enum { SA_START, SA_ENEMY_SEED, SA_BIO_RANDOM, SA_BIO_COPY, SA_BIO_PASTE, SA_BIO_CHECK };
 enum { SI_MODIFIERS, SI_BIO_ENEMIES };
 enum {

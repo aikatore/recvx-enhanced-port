@@ -671,7 +671,7 @@ static void draw_row(int i, int sel)
         text_m(X_LABEL, y, r->kind == K_RATES ? "Enemy Rates" : r->idx ? "Choose Enemies" : "Choose Models", SC_ROW, col);
         if (r->kind == K_RATES) rate_list_summary(g_enemy_opts.rate, val, sizeof(val));
         else if (r->idx) cast_list_summary(2, g_enemy_opts.cast_enemy_off, 0, val, sizeof(val));
-        else cast_list_summary(0, cast_off, g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, sizeof(val));
+        else cast_list_summary(0, cast_off, __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE), val, sizeof(val));
         text_m(X_VALUE + 6, y, val, SC_ROW, col);
         pc_ui_arrow(mx(X_VALUE + 6 + pc_ui_text_w(val, SC_ROW) + 16, 0), y + 9, rtl ? -1 : 1, col);
         return;

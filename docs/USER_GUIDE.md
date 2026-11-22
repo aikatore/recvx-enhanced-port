@@ -341,7 +341,6 @@ until the right square on the white strip is.
 | Enemy Models | All Enemies | what the monsters seen only in cutscenes become: All Enemies, Custom (your own list, Choose Enemies), Same as Cast (the Model Selection) or Off (below) |
 | Choose Enemies | | with Enemy Models Custom, right under it: opens the list of enemies to check |
 | Model Assignment | Per Character | Per Character: the same model in every cutscene. Per Cutscene: each cutscene room picks again |
-| Include Imported Models | Off | shown once you have imported models: they can be picked too. In co-op both players need the same ones |
 | Randomize Voice Lines | Off | a character shown as another story character says that character's lines; shown as an enemy, it makes that enemy's sounds (below) |
 | Talking Mouths | On | with Randomize Voice Lines: the mouth also moves for new lines in place of lines without mouth movement, when it is clear who speaks (below) |
 
