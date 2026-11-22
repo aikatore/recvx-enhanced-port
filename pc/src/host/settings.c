@@ -389,7 +389,6 @@ static const char* const cast_enemies[] = { "Same as Cast", "All Enemies", "Cust
 static const char* const model_modes[] = { "Same for Both", "Per Character" };
 static int cast_on(void) { return g_enemy_opts.cast != 0; }
 static int voices_on(void) { return g_enemy_opts.voices != 0; }
-static int cast_imports_shown(void) { return cast_on() && __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0; }
 
 #define V(x) ((int*)&(x))
 const Setting g_settings[] = {
@@ -489,8 +488,6 @@ const Setting g_settings[] = {
       .help = "What monsters seen only in cutscenes become. All Enemies and Custom use only enemies, Same as Cast uses the Model Selection, Off keeps them as they are." },
     { SP_GAMEPLAY, "Model Assignment", V(g_enemy_opts.cast_assign), 0, 1, 1, cast_assigns, .shown = cast_on,
       .help = "Keep one model for each character, or choose again for each cutscene room. The seed fixes the choices." },
-    { SP_GAMEPLAY, "Include Imported Models", V(g_enemy_opts.cast_imports), 0, 1, 1, .shown = cast_imports_shown,
-      .help = "Include imported characters. In co-op, both players need the same models." },
     { SP_GAMEPLAY, "Randomize Voice Lines", V(g_enemy_opts.voices), 0, 1, 1,   /* (cast.h; also for "Character Model" with the cast off) */
       .help = "Characters shown as another story character say random lines of that character, with matching mouth movements. In co-op, the host decides." },
     { SP_GAMEPLAY, "Talking Mouths", V(g_voice_mouths), 0, 1, 1, .shown = voices_on,   /* (cast.h; each screen's own: only the faces) */

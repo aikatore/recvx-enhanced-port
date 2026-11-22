@@ -351,26 +351,27 @@ int main(void)
             memset(cast_off, 0, sizeof(cast_off));
         }
     }
-    /* imported models: only when asked for, then in both pools; the list's identity */
+    /* imported models: only when asked for, then in "Any Model"'s pool (models without lines: not "Swapped"'s, story_import); the
+       list's identity */
     CHECK(cast_import_id() == 0);
     actor_imports[0] = (ActorModel){ .name = "Kevin", .anim = ANIM_MALE };
     actor_imports[1] = (ActorModel){ .name = "Cindy", .anim = ANIM_FEMALE };
     actor_import_n = 2;
     {
         unsigned id = cast_import_id();
-        int p[16], n = cast_pool(0, 2, p, 16, NULL), seen = 0;
-        CHECK(id != 0 && n == nc + 2 && p[n - 1] == ACTOR_MODELS + 1);
+        int p[128], n = cast_pool(1, 2, p, 128, NULL), seen = 0;
+        CHECK(id != 0 && n == na + 2 && p[n - 1] == ACTOR_MODELS + 1 && cast_pool(0, 2, p, 128, NULL) == nc);
         for (s = 0; s < 40; s++)
-            for (c = 0; c < CAST_CHARACTERS; c++) seen |= cast_model((unsigned)s, 0, c, 0, 2, NULL, CAST_ENEMY_SAME, NULL) >= ACTOR_MODELS;
+            for (c = 0; c < CAST_CHARACTERS; c++) seen |= cast_model((unsigned)s, 0, c, 1, 2, NULL, CAST_ENEMY_SAME, NULL) >= ACTOR_MODELS;
         CHECK(seen);
         for (s = 0; s < 40; s++)
             for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 0, NULL, CAST_ENEMY_SAME, NULL) < ACTOR_MODELS);
         /* a hidden source (actors.h g_import_hidden): out of every pool and "Custom" list, the pool's identity changes */
         actor_import_src[1] = 1;
         g_import_hidden = 2;
-        CHECK(cast_import_id() != id && cast_pool(0, 2, p, 16, NULL) == nc + 1 && p[nc] == ACTOR_MODELS);
+        CHECK(cast_import_id() != id && cast_pool(1, 2, p, 128, NULL) == na + 1 && p[na] == ACTOR_MODELS);
         for (s = 0; s < 40; s++) {
-            for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 0, 2, NULL, CAST_ENEMY_SAME, NULL) != ACTOR_MODELS + 1);
+            for (c = 0; c < CAST_CHARACTERS; c++) CHECK(cast_model((unsigned)s, 0, c, 1, 2, NULL, CAST_ENEMY_SAME, NULL) != ACTOR_MODELS + 1);
             for (c = 0; c < 3; c++) CHECK(cast_appear_pick((unsigned)s, 1, 2, NULL, c) != COOP_CHR_IMPORT + 1);
         }
         {
@@ -622,6 +623,25 @@ int main(void)
                 actor_import_n = 2; actor_import_file[0] = "m/import/umbrella/PJL1/PJL1.cvxm"; actor_import_file[1] = "m/import/umbrella/PCR2/PCR2.cvxm";
                 actor_import_src[0] = actor_import_src[1] = IMPORT_UMBRELLA;
                 CHECK(voice_model_chr(ACTOR_MODELS) == VOICE_JILL && voice_model_chr(ACTOR_MODELS + 1) == VOICE_UC_CHRIS && voice_model_chr(ACTOR_MODELS + 2) == -1);
+                {   /* "Swapped" with Umbrella Chronicles' playable characters (their lines imported): story characters too, Wesker
+                       never as Umbrella Chronicles' Wesker; its monsters and the models without lines in "Any Model" only */
+                    int p[128], n, sj = 0, i;
+                    actor_import_n = 4; actor_import_file[2] = "m/import/umbrella/PWS1/PWS1.cvxm"; actor_import_file[3] = "m/import/umbrella/EZ00/EZ00.cvxm";
+                    actor_import_src[2] = actor_import_src[3] = IMPORT_UMBRELLA; actor_import_group[3] = IMPORT_GROUP_ENEMIES;
+                    n = cast_pool(0, 4, p, 128, NULL);
+                    CHECK(n == nc + 3 && in(p, n, ACTOR_MODELS) && in(p, n, ACTOR_MODELS + 1) && in(p, n, ACTOR_MODELS + 2) && !in(p, n, ACTOR_MODELS + 3));
+                    n = cast_pool(1, 4, p, 128, NULL);
+                    CHECK(n == na + 4 && in(p, n, ACTOR_MODELS + 3));
+                    for (s = 0; s < 300; s++) {
+                        CHECK(cast_model((unsigned)s, 0, 3, 0, 4, NULL, CAST_ENEMY_SAME, NULL) != ACTOR_MODELS + 2);   /* (UC Wesker counts as Wesker) */
+                        for (c = 2; c < CAST_CHARACTERS; c++) { i = cast_model((unsigned)s, 0, c, 0, 4, NULL, CAST_ENEMY_SAME, NULL); sj += i == ACTOR_MODELS; CHECK(i != ACTOR_MODELS + 3); }
+                    }
+                    CHECK(sj > 0 && voice_model_chr(ACTOR_MODELS + 2) == 3);   /* (UC Wesker without lines of his: Wesker's own) */
+                    g_import_hidden = 1u << IMPORT_UMBRELLA;   /* the game unchecked: none of them */
+                    CHECK(cast_pool(0, 4, p, 128, NULL) == nc && cast_pool(1, 4, p, 128, NULL) == na);
+                    g_import_hidden = 0;
+                    actor_import_n = 2; actor_import_file[2] = actor_import_file[3] = NULL; actor_import_src[2] = actor_import_src[3] = 0; actor_import_group[3] = 0;
+                }
                 voice_curation_use(none);
                 voice_import_load(NULL);
                 CHECK(!voice_import_hash() && voice_cat_hash() == h0 && voice_model_chr(ACTOR_MODELS) == -1 && voice_model_chr(ACTOR_MODELS + 1) == 1);   /* (no

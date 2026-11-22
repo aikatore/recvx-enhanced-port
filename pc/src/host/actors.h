@@ -42,9 +42,11 @@ extern int actor_import_n;
 /* the Dreamcast Steve's player part file is imported (import.c import_registry_load; pc/src/import/dc.c): its source + 1
    (import.h IMPORT_DREAMCAST), 0 none. The look COOP_CHR_DC is listed while it is (and its source is not hidden). */
 extern int actor_dc_part;
-/* "Show in Model Lists" (IMPORT > CHARACTERS > a game; ini import_<key>_shown = 0): bit 1 << source hidden. A hidden
-   source's models leave every model list (appear_*, the cast's "Custom" lists) and every random pool (cast.c); no file
-   is deleted. A look already chosen stays in use and listed (appear_in_use) until it is changed. */
+/* An imported game checked (its check box above the look picker's and the "Custom" lists' entries, GAME SETUP > CHARACTERS,
+   IMPORT > CHARACTERS > a game's "Show in Model Lists"; ini import_<key>_shown = 0|1, absent: unchecked, config.c): bit
+   1 << source set while it is not. An unchecked game's models leave every model list (appear_*, the cast's "Custom" lists)
+   and every random pool (cast.c; the cast takes the checked games' models, cast_glue.c cast_imports_now); no file is
+   deleted. A look already chosen stays in use and listed (appear_in_use) until it is changed. 0 here (tests): all checked */
 extern unsigned g_import_hidden;
 int actor_import_shown(int k);        /* import k's source is not hidden */
 unsigned actor_import_sources(void);  /* bit 1 << source of every source with a listed model */

@@ -145,7 +145,7 @@ static bool cast_custom_imgui(int list)
     static short pos[CAST_CUSTOM_MAX];
     static int mdl[CAST_CUSTOM_MAX];
     unsigned char* off = list ? g_enemy_opts.cast_enemy_off : cast_off;
-    int n = cast_custom_list(list, !list && g_enemy_opts.cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, pos, mdl, CAST_CUSTOM_MAX), on = 0, set = -1;
+    int n = cast_custom_list(list, list != 2 ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, pos, mdl, CAST_CUSTOM_MAX), on = 0, set = -1;
     bool changed = false;
     char head[96];
     for (int k = 0; k < n; k++) on += !cast_off_at(off, pos[k]);
@@ -1125,7 +1125,7 @@ static void import_window(void)
         if (ImGui::Button(tr("Import Characters"))) import_start(s, what[s]);
         ImGui::EndDisabled();
         ImGui::EndDisabled();
-        if (((actor_import_sources() | g_import_hidden) >> s) & 1) {   /* (actors.h; IMPORT > CHARACTERS has it too) */
+        if ((actor_import_sources() >> s) & 1) {   /* (actors.h; IMPORT > CHARACTERS, the lists and GAME SETUP > CHARACTERS have it too) */
             bool shown = !((g_import_hidden >> s) & 1);
             if (ImGui::Checkbox(tr("Show in Model Lists"), &shown)) { g_import_hidden ^= 1u << s; settings_save_later(); }
             static const char* const steve[] = { "Off", "Cutscenes", "Cutscenes and Gameplay" };   /* (the Dreamcast release: import.h DC_STEVE_*) */

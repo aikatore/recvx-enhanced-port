@@ -1228,8 +1228,8 @@ static void draw_row(int i, int sel)
     if (r->kind == R_RATES || r->kind == R_CUSTOM) {
         if (r->kind == R_RATES) rate_list_summary(enemy_opts()->rate, val, sizeof(val));
         else if (r->idx == 2) cast_list_summary(2, enemy_opts()->cast_enemy_off, 0, val, sizeof(val));
-        else if (r->idx) cast_list_summary(1, cast_appear_off, g_biorand_appear_imports > 0 ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, sizeof(val));
-        else cast_list_summary(0, enemy_cast_off(), enemy_opts()->cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, sizeof(val));
+        else if (r->idx) cast_list_summary(1, cast_appear_off, __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE), val, sizeof(val));
+        else cast_list_summary(0, enemy_cast_off(), __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE), val, sizeof(val));
         text_fit(X_VALUE, y, val, SC_ROW, VALUE_W, col);
         pc_ui_arrow(mx(ROWS_X1 - 6, 0), y + 9, rtl ? -1 : 1, col);
         return;

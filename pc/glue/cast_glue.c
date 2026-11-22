@@ -65,14 +65,18 @@ static const struct { unsigned short room; unsigned char rec; const char* why; }
     { 7030, 1, "Alexia asleep in her ice capsule" },
 };
 
-/* the imported models count for the pool: ours, and in co-op only while the partner has the same list */
-static int import_count(const EnemyOpts* o)
+/* the imported models count for the pool: ours while a game of them is checked (actors.h g_import_hidden: the checked games'
+   models only, cast.c drop_hidden; the old "Include Imported Models", EnemyOpts.cast_imports, no longer counts), and in co-op
+   only while the partner has the same list and checks the same games (cast_import_id) */
+int cast_imports_now(const EnemyOpts* o)
 {
     int n = __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE);
-    if (!o->cast_imports || !n) return 0;
+    (void)o;
+    if (!n || !(actor_import_sources() & ~g_import_hidden)) return 0;   /* (none checked: as without imports, the plan's key too) */
     if (coop_on && coop_partner_import_id() != cast_import_id()) return 0;
     return n;
 }
+#define import_count cast_imports_now
 
 static int shown(int slot) { return slot >= 0 && slot < CSLOTS && slot_model[slot] >= 0 && actor_shown(ACTOR_CAST + slot); }
 

@@ -974,7 +974,7 @@ enum { R_MODE, R_HOSTSTEP, R_JOINSTEP,
        R_NAME, R_CHARMODE, R_CHAR, R_CHAR2,
        R_START, R_ITEMS, R_FOLLOW, R_RULES,
        R_BIORAND, R_LOOT, R_IMP, R_TFREEZE, R_SKIPS, R_RIBBON, R_GOVER, R_HEADSHOT, R_ENEMYCTL, R_ENEMYPG, R_EVENTPG,
-       R_RAND, R_VARIETY, R_RATES, R_TYPES, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTENEMY, R_CASTECUSTOM, R_CASTASSIGN, R_CASTIMP,
+       R_RAND, R_VARIETY, R_RATES, R_TYPES, R_EVENTS, R_SEED, R_RSEED, R_EXTRA, R_PLACE, R_CASTPG, R_CAST, R_CASTPOOL, R_CASTCUSTOM, R_CASTENEMY, R_CASTECUSTOM, R_CASTASSIGN,
        R_VOICES, R_MOUTHS, R_QUICK, R_DETECTOR, R_EXTRAOBJ,
        R_HOST, R_GO, R_COPY, R_RCOPY, R_KICK, R_STOP, R_JOIN,
        R_BACK, R_N };
@@ -1027,10 +1027,10 @@ static int row_visible(int r)
     if (lb.step == 3) return r == R_GOVER || r == R_HEADSHOT || r == R_ENEMYCTL || r == R_ENEMYPG || r == R_EVENTPG || ((r == R_LOOT || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON) && host) ||
                              (r == R_IMP && host && !g_coop.loot);   /* only shared loot has it */
     if (lb.step == 4) return (r >= R_RAND && r <= R_PLACE && (r != R_RSEED || host)) || r == R_CASTPG;
-    if (lb.step == 7)   /* the cutscene cast: its model and assignment rows while it is on; the imported models' while we have some */
+    if (lb.step == 7)   /* the cutscene cast: its model and assignment rows while it is on (no imported models' row: the games checked in the lists decide) */
         return r == R_CAST || r == R_VOICES || (r == R_MOUTHS && shown_eo()->voices) ||
-               ((r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTIMP || r == R_CASTCUSTOM || r == R_CASTENEMY || r == R_CASTECUSTOM) && shown_eo()->cast &&
-                (r != R_CASTIMP || __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) > 0) && (r != R_CASTCUSTOM || shown_eo()->cast_all == 2) &&
+               ((r == R_CASTPOOL || r == R_CASTASSIGN || r == R_CASTCUSTOM || r == R_CASTENEMY || r == R_CASTECUSTOM) && shown_eo()->cast &&
+                (r != R_CASTCUSTOM || shown_eo()->cast_all == 2) &&
                 (r != R_CASTECUSTOM || shown_eo()->cast_enemy == CAST_ENEMY_CUSTOM));
     if (lb.step == 5) return (r == R_QUICK && !biorand_next()) || r == R_DETECTOR || r == R_EXTRAOBJ;   /* BioRand has its own start inventory */
     switch (r) {
@@ -1059,7 +1059,7 @@ static int row_locked(int r)
     case R_HOSTSTEP: return joining();
     case R_JOINSTEP: return hosting();
     case R_GOVER: case R_HEADSHOT: case R_QUICK: case R_DETECTOR: case R_EXTRAOBJ: case R_EXTRA: case R_PLACE: case R_RAND: case R_VARIETY: case R_TYPES: case R_EVENTS: case R_SEED: case R_BIORAND:
-    case R_CAST: case R_CASTPOOL: case R_CASTCUSTOM: case R_CASTENEMY: case R_CASTECUSTOM: case R_CASTASSIGN: case R_CASTIMP: case R_VOICES: return lb.role != 0;   /* the host's choice */
+    case R_CAST: case R_CASTPOOL: case R_CASTCUSTOM: case R_CASTENEMY: case R_CASTECUSTOM: case R_CASTASSIGN: case R_VOICES: return lb.role != 0;   /* the host's choice */
     case R_RCOPY: return !g_coop.room[0];
     default: return 0;
     }
@@ -1215,7 +1215,6 @@ static void change(int r, int dir)
     case R_CASTPOOL: settings_step(eset(&g_enemy_opts.cast_all), dir); break;
     case R_CASTENEMY: settings_step(eset(&g_enemy_opts.cast_enemy), dir); break;
     case R_CASTASSIGN: settings_step(eset(&g_enemy_opts.cast_assign), dir); break;
-    case R_CASTIMP: settings_step(eset(&g_enemy_opts.cast_imports), dir); break;
     case R_VOICES: settings_step(eset(&g_enemy_opts.voices), dir); break;
     case R_MOUTHS: settings_step(eset(&g_voice_mouths), dir); break;   /* (each screen's own: not locked for a guest) */
     default: return;
@@ -1227,7 +1226,7 @@ static void change(int r, int dir)
 static int has_value(int r)
 {
     return r == R_MODE || r == R_RELAY || r == R_BIORAND || r == R_LOOT || r == R_IMP || r == R_TFREEZE || r == R_SKIPS || r == R_RIBBON || r == R_GOVER || r == R_HEADSHOT || r == R_ENEMYCTL || r == R_QUICK || r == R_DETECTOR || r == R_EXTRAOBJ || r == R_START || r == R_ITEMS || r == R_FOLLOW || r == R_CHARMODE ||
-           r == R_EXTRA || r == R_PLACE || r == R_RAND || r == R_VARIETY || r == R_TYPES || r == R_EVENTS || r == R_CAST || r == R_CASTPOOL || r == R_CASTENEMY || r == R_CASTASSIGN || r == R_CASTIMP ||
+           r == R_EXTRA || r == R_PLACE || r == R_RAND || r == R_VARIETY || r == R_TYPES || r == R_EVENTS || r == R_CAST || r == R_CASTPOOL || r == R_CASTENEMY || r == R_CASTASSIGN ||
            r == R_VOICES || r == R_MOUTHS;
 }
 
@@ -1511,12 +1510,11 @@ static void row_text(int r, char* label, char* val, int n)
     case R_CASTPOOL: strcpy(label, "MODELS"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_all)->names[(unsigned)eo->cast_all <= 2 ? eo->cast_all : 0]); break;
     case R_CASTCUSTOM:   /* a page: how many are checked (joining: the host's, of our list) */
         strcpy(label, "CHOOSE MODELS");
-        cast_list_summary(0, lb.role ? enemy_cast_off() : cast_off, eo->cast_imports ? __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) : 0, val, n);
+        cast_list_summary(0, lb.role ? enemy_cast_off() : cast_off, __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE), val, n);
         break;
     case R_CASTENEMY: strcpy(label, "ENEMY MODELS"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_enemy)->names[eo->cast_enemy & 3]); break;
     case R_CASTECUSTOM: strcpy(label, "CHOOSE ENEMIES"); cast_list_summary(2, eo->cast_enemy_off, 0, val, n); break;   /* a page (joining: the host's) */
     case R_CASTASSIGN: strcpy(label, "ASSIGN"); snprintf(val, n, "%s", eset(&g_enemy_opts.cast_assign)->names[eo->cast_assign & 1]); break;
-    case R_CASTIMP: strcpy(label, "IMPORTED MODELS"); snprintf(val, n, "%s", eo->cast_imports ? "On" : "Off"); break;
     case R_VOICES: strcpy(label, "RANDOMIZE VOICES"); snprintf(val, n, "%s", eo->voices ? "On" : "Off"); break;
     case R_MOUTHS: strcpy(label, "TALKING MOUTHS"); snprintf(val, n, "%s", g_voice_mouths ? "On" : "Off"); break;
     case R_SEED: strcpy(label, "SEED"); if (lb.edit == F_SEED) snprintf(val, n, "%s", lb.buf); else snprintf(val, n, "%d", eo->seed); break;
@@ -1549,6 +1547,7 @@ static const char* row_help(int r)
     /* fall through */
     case R_CHAR:
         if (lb.step == 6 && lb.pick >= appear_count()) return mp_set ? "Back without changing the model." : "Return to the lobby without changing your model.";
+        if (lb.step == 6 && lb.pick < 0) return cast_list_game_help();
         if (lb.step != 6 && g_appear_per) return lset("Claire's Model")->help;
         return lb.step == 6 ? "Scroll with up/down, L1/R1, Page Up/Down or the wheel. Confirm: use model; BACK: cancel."
                             : "Choose your appearance. You and your partner both see it.";
@@ -1589,7 +1588,6 @@ static const char* row_help(int r)
     case R_CASTENEMY: return eset(&g_enemy_opts.cast_enemy)->help;
     case R_CASTECUSTOM: return host ? "Choose the enemies the monsters can appear as." : "The enemies the host chose. Only the host can change them.";
     case R_CASTASSIGN: return eset(&g_enemy_opts.cast_assign)->help;
-    case R_CASTIMP: return eset(&g_enemy_opts.cast_imports)->help;
     case R_VOICES: return eset(&g_enemy_opts.voices)->help;
     case R_MOUTHS: return eset(&g_voice_mouths)->help;
     case R_SEED: return eset(&g_enemy_opts.seed)->help;
@@ -1612,7 +1610,9 @@ static const char* row_help(int r)
 /* ---------------------------------------------------------------- the model page (step 6)
    "You appear as" as a list (docs/COOP.md "Lobby"): the menus' entries (actors.c appear_at, any
    count) PICK_ROWS at a time, then BACK (position appear_count()). The preview shows the entry under
-   the cursor; confirm takes it into g_coop.chr (ini coop_char, sent to the partner as before). */
+   the cursor; confirm takes it into g_coop.chr (ini coop_char, sent to the partner as before). Above the
+   entries, positions -g .. -1: a check box per imported game with models (cast_list.c cast_list_games; actors.h
+   g_import_hidden, unchecked at first): only a checked game's looks are listed (and in the random pools). */
 enum { BTN_L1 = 0x4, BTN_R1 = 0x8 };   /* Pad[] bits */
 #define PICK_H 22.0f
 #define PICK_ROWS 11
@@ -1625,7 +1625,10 @@ static float pick_x(void) { return pick_nl() ? 232.0f : ROW_X; }
 #define PICK_BACK_Y (pick_y0() + pick_rows() * PICK_H + GAP)
 #define PICK_BAR_X 627.0f               /* the scroll bar, right of the names */
 
-static int pick_max_top(void) { int n = appear_count(); return n > pick_rows() ? n - pick_rows() : 0; }
+static int pick_src[3];
+static int pick_g(void) { return cast_list_games(pick_src); }   /* the games' rows (positions -g .. -1) */
+#define PICK_NONE (-9999)               /* pick_at: no row */
+static int pick_max_top(void) { int n = appear_count(); return n + pick_g() > pick_rows() ? n - pick_rows() : -pick_g(); }
 /* the current model's position (the BioRand screen's: its row's) */
 static int pick_cur(void) { return mp_set ? settings_get(mp_set) : appear_pos(appear_choice(g_coop.chr, lb.pick_c)); }
 
@@ -1635,7 +1638,7 @@ static void pick_scroll(int d)
     int n = appear_count(), was = lb.pick;
     lb.top += d;
     if (lb.top > pick_max_top()) lb.top = pick_max_top();
-    if (lb.top < 0) lb.top = 0;
+    if (lb.top < -pick_g()) lb.top = -pick_g();
     if (lb.pick < n) lb.pick = lb.pick < lb.top ? lb.top : lb.pick >= lb.top + pick_rows() ? lb.top + pick_rows() - 1 : lb.pick;
     if (lb.pick != was) CallSystemSe(0, 2);
 }
@@ -1643,9 +1646,9 @@ static void pick_scroll(int d)
 /* the cursor to position i (clamped to the list, or wrapping through BACK); the page follows it */
 static void pick_to(int i, int wrap)
 {
-    int n = appear_count();
-    if (wrap) i = (i + n + !pick_nl()) % (n + !pick_nl());   /* (through BACK; the new look has none) */
-    else i = i < 0 ? 0 : i >= n ? n - 1 : i;
+    int n = appear_count(), g = pick_g();
+    if (wrap) i = (i + g + n + g + !pick_nl()) % (n + g + !pick_nl()) - g;   /* (through BACK; the new look has none) */
+    else i = i < -g ? -g : i >= n ? n - 1 : i;
     if (i != lb.pick) CallSystemSe(0, 2);
     lb.pick = i;
     if (i < n && i < lb.top) lb.top = i;
@@ -1684,6 +1687,14 @@ static void pick_open(int c)
 /* confirm: the entry under the cursor (or BACK) */
 static void pick_take(void)
 {
+    if (lb.pick < 0) {   /* a game's check box: its looks into the list or out (the cursor stays on it) */
+        int s = pick_g() + lb.pick >= 0 ? pick_src[pick_g() + lb.pick] : -1;
+        if (s >= 0) cast_list_game_set(s, !cast_list_game_on(s));
+        CallSystemSe(0, 3);
+        pick_scroll(0);
+        host_log("lobby: model page: %s %s (%d models)\n", cast_list_game_name(s), cast_list_game_on(s) ? "checked" : "unchecked", appear_count());
+        return;
+    }
     if (lb.pick >= appear_count()) { back(); return; }
     if (mp_set) {   /* the BioRand screen's row: set as ENHANCED SETTINGS does */
         settings_set(mp_set, lb.pick);
@@ -1709,21 +1720,21 @@ static void pick_sources(void)
     appear_sources_toggle();
     settings_save_later();
     CallSystemSe(0, 3);
-    lb.pick = chr >= 0 ? appear_pos(chr) : appear_count();
+    lb.pick = chr >= 0 ? appear_pos(chr) : lb.pick < 0 ? lb.pick : appear_count();
     lb.top = lb.pick - pick_rows() / 2;
     pick_scroll(0);
     host_log("lobby: model page: imported models %s (%d models)\n", pick_hides() ? "shown" : "hidden", appear_count());
 }
 
-/* the position under the pointer (appear_count(): BACK), -1 none */
+/* the position under the pointer (appear_count(): BACK; < 0 a game's check box), PICK_NONE none */
 static int pick_at(float x, float y)
 {
     int n = appear_count(), i;
-    if (x < pick_x() - 8 || x > 636) return -1;
+    if (x < pick_x() - 8 || x > 636) return PICK_NONE;
     if (!pick_nl() && y >= PICK_BACK_Y - 3 && y < PICK_BACK_Y + PICK_H - 3) return n;
-    if (y < pick_y0() - 3) return -1;
+    if (y < pick_y0() - 3) return PICK_NONE;
     i = (int)((y - pick_y0() + 3) / PICK_H);
-    return i < pick_rows() && lb.top + i < n ? lb.top + i : -1;
+    return i < pick_rows() && lb.top + i < n ? lb.top + i : PICK_NONE;
 }
 
 static void pick_input(unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel)
@@ -1734,18 +1745,18 @@ static void pick_input(unsigned int press, unsigned int rept, unsigned int ok, u
         g_lobby_io.tail++;
         if (k == LK_PGUP) pick_to(lb.pick - page, 0);
         else if (k == LK_PGDN) pick_to(lb.pick + page, 0);
-        else if (k == LK_HOME) pick_to(0, 0);
+        else if (k == LK_HOME) pick_to(-pick_g(), 0);
         else if (k == LK_END) pick_to(n - 1, 0);
     }
     if (mt.wheel) pick_scroll(-3 * mt.wheel);   /* > 0: away from the player, up the list */
-    if (mt.left && n > pick_rows() && mt.x >= PICK_BAR_X - 4 && mt.x <= PICK_BAR_X + 9 && mt.y >= pick_y0() - 2 && mt.y < pick_y0() + pick_rows() * PICK_H) {
+    if (mt.left && n + pick_g() > pick_rows() && mt.x >= PICK_BAR_X - 4 && mt.x <= PICK_BAR_X + 9 && mt.y >= pick_y0() - 2 && mt.y < pick_y0() + pick_rows() * PICK_H) {
         /* a click on the scroll bar: that part of the list (a long list: 300 and more with imports) */
-        pick_scroll((int)((mt.y - pick_y0()) / (pick_rows() * PICK_H) * (pick_max_top() + 1)) - lb.top);
+        pick_scroll((int)((mt.y - pick_y0()) / (pick_rows() * PICK_H) * (pick_max_top() + pick_g() + 1)) - pick_g() - lb.top);
         return;
     }
     hit = pick_at(mt.x, mt.y);
-    if (hit >= 0 && (mt.moved || mt.left || mt.wheel) && hit != lb.pick) { lb.pick = hit; CallSystemSe(0, 2); }
-    if (mt.left && hit >= 0) { pick_take(); return; }
+    if (hit != PICK_NONE && (mt.moved || mt.left || mt.wheel) && hit != lb.pick) { lb.pick = hit; CallSystemSe(0, 2); }
+    if (mt.left && hit != PICK_NONE) { pick_take(); return; }
     if (mt.right) { back(); return; }
     if ((press & 0x10) && actor_import_sources()) { pick_sources(); return; }   /* (Triangle) */
     if (rept & BTN_UP) pick_to(lb.pick - 1, 1);
@@ -1758,18 +1769,19 @@ static void pick_input(unsigned int press, unsigned int rept, unsigned int ok, u
 
 static void draw_models(void)
 {
-    int n = appear_count(), cur = pick_cur(), i;
-    float right = n > pick_rows() ? PICK_BAR_X - 6 : 634;   /* the names stop before the scroll bar */
+    int n = appear_count(), cur = pick_cur(), i, g = pick_g();
+    float right = n + g > pick_rows() ? PICK_BAR_X - 6 : 634;   /* the names stop before the scroll bar */
     char pos[24];
     if (!pick_nl()) text(pick_x() - 4, HEAD_Y, heading(), 0.5f, 0xFFFFE080);
-    snprintf(pos, sizeof(pos), "%d / %d", (lb.pick < n ? lb.pick : cur) + 1, n);
+    snprintf(pos, sizeof(pos), "%d / %d", (lb.pick >= 0 && lb.pick < n ? lb.pick : cur) + 1, n);
     text(634 - text_w(pos, 0.45f), HEAD_Y + 2, pos, 0.45f, 0xFFA0A0A0);
-    for (i = lb.top; i < n && i < lb.top + pick_rows(); i++) {
+    for (i = lb.top < -g ? -g : lb.top; i < n && i < lb.top + pick_rows(); i++) {
         float y = pick_y0() + (i - lb.top) * PICK_H, w, sc, lim = right;
+        if (i < 0) { cast_list_game_draw(pick_x(), right, y, PICK_H, ROW_SC, pick_src[g + i], i == lb.pick, i == lb.top || i == -g); continue; }
         const char* nm = appear_name(appear_at(i));
         const char* grp = appear_group(appear_at(i));
         unsigned int col = i == cur ? 0xFFFFE080 : i == lb.pick ? 0xFFFFFFFF : 0xFFB0B0B0;   /* the current one: gold, with an arrow */
-        if (i == lb.top || strcmp(grp, appear_group(appear_at(i - 1)))) {   /* a group's first row (and the page's): its name on the right */
+        if (i == lb.top || i == 0 || strcmp(grp, appear_group(appear_at(i - 1)))) {   /* a group's first row (and the page's): its name on the right */
             float gw = text_w(grp, 0.35f);
             if (i > lb.top) rect(pick_x() - 8, y - 3, right, y - 2, 0x60FFE080, Z_FRONT);
             text(right - gw - 2, y + 4, grp, 0.35f, 0xFFC8A860);
@@ -1781,10 +1793,10 @@ static void draw_models(void)
         sc = w > lim - pick_x() - 18 ? ROW_SC * (lim - pick_x() - 18) / w : ROW_SC;   /* a long name: narrower */
         text(pick_x() + 12, y + (ROW_SC - sc) * 14, nm, sc, col);
     }
-    if (n > pick_rows()) {   /* the scroll bar: the page's share of the list, where it is */
-        float y0 = pick_y0() - 2, h = pick_rows() * PICK_H - 1, th = h * pick_rows() / n, ty;
+    if (n + g > pick_rows()) {   /* the scroll bar: the page's share of the list, where it is */
+        float y0 = pick_y0() - 2, h = pick_rows() * PICK_H - 1, th = h * pick_rows() / (n + g), ty;
         if (th < 12) th = 12;
-        ty = y0 + (h - th) * lb.top / pick_max_top();
+        ty = y0 + (h - th) * (lb.top + g) / (pick_max_top() + g);
         rect(PICK_BAR_X, y0, PICK_BAR_X + 5, y0 + h, 0x40FFFFFF, Z_FRONT);
         rect(PICK_BAR_X, ty, PICK_BAR_X + 5, ty + th, 0xC0FFFFFF, Z_FRONT + 0.001f);
     }
@@ -1916,7 +1928,7 @@ static void draw_previews(void)
        few frames (scrolling through the list) */
     int chr;
     if (g_appear_per && (lb.step == 6 || lb.row == R_CHAR || lb.row == R_CHAR2)) played = lb.step == 6 ? lb.pick_c : lb.row == R_CHAR2;   /* Claire's or Chris's being chosen: as that one */
-    chr = lb.step == 6 && lb.pick < appear_count() ? appear_at(lb.pick) : appear_choice(g_coop.chr, played);
+    chr = lb.step == 6 && lb.pick >= 0 && lb.pick < appear_count() ? appear_at(lb.pick) : appear_choice(g_coop.chr, played);   /* (a game's row: the look in use) */
     if (lb.step != 6 && !mp_set && joining() && pc_biorand_appear(played) >= 0) chr = pc_biorand_appear(played);   /* a guest's random look (D19): the host's seed + its slot */
     if (chr != lb.want_chr || played != lb.want_ply) { lb.want_chr = chr; lb.want_ply = played; lb.chr_stable = 0; }
     if (++lb.chr_stable >= 8 || pv[0].chr < 0) pv_set(0, appear_played(lb.want_chr, lb.want_ply), lb.want_ply);   /* ("As played (cutscene)": that character's cutscene model) */
@@ -2072,7 +2084,7 @@ static void look_preview(int chr, float x, float y)
 static void mp_frame_new(void)
 {
     const char* head = !g_appear_per ? "YOUR LOOK" : lb.pick_c ? "CHRIS'S LOOK" : "CLAIRE'S LOOK";
-    int n = appear_count(), chr = lb.pick < n ? appear_at(lb.pick) : -1;
+    int n = appear_count(), chr = lb.pick >= 0 && lb.pick < n ? appear_at(lb.pick) : -1;
     char g[40];
     float x;
     if (gs_screen) pc_title_word_newgame(320.0f, 6.0f, 0xFFFFFFFF, 192);
@@ -2097,7 +2109,7 @@ static void mp_frame_new(void)
         text(20, 390, appear_name(chr), w > 380 ? 0.55f * 380 / w : 0.55f, 0xFFFFFFFF);
         look_preview(chr, 412, 390);
     }
-    text_wrap(20, 408, 380, "Your look in play and in cutscenes; your partner sees it too. Confirm: use this look. Cancel: keep the one you have.",
+    text_wrap(20, 408, 380, lb.pick < 0 ? cast_list_game_help() : "Your look in play and in cutscenes; your partner sees it too. Confirm: use this look. Cancel: keep the one you have.",
               0.42f, 0xFFC8C8C2, 3);
     rect(20, 452, 620, 453, 0x80FFFFFF, Z_FRONT);
     x = ui_hint(20, 458, ui_glyph(UG_OK, g, sizeof(g)), "Use This Look", 0);
@@ -2127,7 +2139,7 @@ static void mp_frame(void)
     draw_models();
     rect(0, 384, 640, 480, 0x60000000, Z_FRONT);
     text_wrap(24, 390, gs_screen || g_new_menu ? 400 : 584, row_help(lb.row), 0.5f, 0xFFA0D0FF, 3);
-    if ((gs_screen || g_new_menu) && lb.pick < appear_count()) look_preview(appear_at(lb.pick), 440, 388);   /* (the voice and animations) */
+    if ((gs_screen || g_new_menu) && lb.pick >= 0 && lb.pick < appear_count()) look_preview(appear_at(lb.pick), 440, 388);   /* (the voice and animations) */
     AdvEasySetTextureList(0);
 }
 

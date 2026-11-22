@@ -590,12 +590,16 @@ one page back, from the first to EXTRA.
   any unreadable file (`actor_set` remembers the failure). Importing again brings the files back under the same
   entries. A restart lists only what is there.
 - Both use the same thread, one extraction at a time.
-- **Show in Model Lists** (heading MODEL LISTS on the game's page; F9 has the same checkbox; ini
-  `import_<key>_shown = 0`, written only while hidden, any character source of `import_sources[]`): Off takes the
-  game's models out of every model list (the look picker, Your Look / Claire's / Chris's, F3, the cast's and the
-  random look's "Custom" lists) and out of every random pool (the random look, the cutscene cast with Include
-  Imported Models), without deleting a file. The row shows only when the game has models listed (or is hidden), so a
-  page without imports is as before. The look picker and the "Custom" lists have a quick toggle on Triangle ("Hide
+- **Show in Model Lists** (heading MODEL LISTS on the game's page; F9 has the same checkbox; the same setting as the
+  imported games' check boxes at the top of the look picker and of the "Custom" lists and GAME SETUP > CHARACTERS' rows,
+  [ACTORS.md](ACTORS.md) "Imported games"; ini `import_<key>_shown = 0|1`, every character source of `import_sources[]`
+  written, **absent: Off**, since 2026-11-22 the default): Off keeps the game's models out of every model list (the look
+  picker, Your Look / Claire's / Chris's, F3, the cast's and the random look's "Custom" lists) and out of every random
+  pool (the random look, the cutscene cast), without deleting a file. On puts them in both (Include Imported Models,
+  which used to gate the pools, is retired). An ini from before, which wrote only `= 0`, keeps its hidden games hidden
+  and starts the others Off too. The row shows only when the game has models, so a page without imports is as before.
+  Outbreak's people have no voice lines (Outbreak's voices are not imported): in the cast they are in *Any Model* and
+  *Custom* only, drawn quiet where they speak. The look picker and the "Custom" lists have a quick toggle on Triangle ("Hide
   Imported Models" / "Show Imported Models" in the new look picker's button bar): every source with models hidden,
   then the ones shown before back. Decided: a look already chosen from a hidden game (Your Look, Claire's, Chris's,
   this game's random looks: `actors.h appear_in_use`) stays in use and listed, under the group "Hidden Source (Still
