@@ -42,6 +42,7 @@ void njRotateXYZ(NJS_MATRIX* m, Angle angx, Angle angy, Angle angz);
 #include "../src/host/tps.h"
 #include "../src/host/placer.h"
 #include "../src/import/impmodel.h"
+#include "../src/import/import.h"
 #include "../include/pc_parse.h"
 #include <math.h>
 #include <stdio.h>
@@ -794,10 +795,33 @@ static int free_entries(void)
 static int heap_free(void) { return (char*)Ps2_free_last - (char*)Ps2_now_free; }
 
 /* ---------------------------------------------------------------- player part files (actors.h) */
+/* The Dreamcast Steve's player part file (pc/src/import/dc.c; docs/IMPORT_DREAMCAST.md), adx.c ADXF_OpenAfs: read for
+   SYSTEM.AFS/16 (Steve's unused costume 1: the look "Steve (Dreamcast Hair)", a co-op partner's Dreamcast Steve), and for
+   SYSTEM.AFS/12 when the game itself loads Steve with "Dreamcast Steve" at Cutscenes and Gameplay (afs_read, which reads
+   the part files for co-op, the looks and the previews, asks for 16 by name). path: n bytes; NULL none (not imported). */
+static int afs_named;                   /* afs_read is opening: the file asked for, not the setting's */
+static int own_dc;                      /* the game's own last open of SYSTEM.AFS/12 gave the Dreamcast Steve's */
+int actor_part_dc(void) { return own_dc; }
+const char* pc_part_file(int ptid, int flid, char* path, int n)
+{
+    int game = flid == 12 && !afs_named;
+    const char* r;
+    if (!sys || ptid != sys->sys_partid || (flid != 10 + ACTOR_DC_PART && !game)) return NULL;
+    r = (!game || g_import.dc_steve == DC_STEVE_GAMEPLAY) && __atomic_load_n(&actor_dc_part, __ATOMIC_ACQUIRE) && dc_part_path(path, n) ? path : NULL;
+    if (game) own_dc = r != NULL;
+    return r;
+}
+
 int afs_read(int part, int file, void* buf, int cap)
 {
-    void* h = ADXF_OpenAfs(part, file);
+    void* h;
     int ok;
+    char p[1200];
+    if (sys && part == sys->sys_partid && file == 10 + ACTOR_DC_PART && !pc_part_file(part, file, p, sizeof p)) file = 12;   /* (not imported: the
+        PS2's Steve, as a partner without the import sees the Dreamcast Steve) */
+    afs_named = 1;
+    h = ADXF_OpenAfs(part, file);
+    afs_named = 0;
     if (!h) return 0;
     ok = ADXF_GetFsizeByte(h) > 4096 && ADXF_GetFsizeSct(h) * 2048 <= cap;   /* unused costumes are 11-byte placeholders */
     if (ok) {
@@ -2373,7 +2397,10 @@ int actor_double_model(int idx, int pid, int* kept)
     static const signed char twin[5] = { 0, 1, 3, 5, -1 };   /* the player files' cutscene models (a face mask): Claire, Chris, Steve, Wesker */
     if (!g_appear_cutscene) idx = -1;
     if (g_appear_face && idx >= ACTOR_PART && idx < ACTOR_PART + 5 && twin[idx - ACTOR_PART] >= 0) idx = twin[idx - ACTOR_PART];
+    if (g_appear_face && idx == ACTOR_PART + ACTOR_DC_PART && cast_dc_steve(93, 1) >= 0) idx = cast_dc_steve(93, 1);   /* (the Dreamcast Steve's cutscene model) */
     *kept = idx >= 0 && idx < ACTOR_MODELS && actor_models[idx].id == doubles[pid & 3][0];
+    if ((idx < 0 || *kept) && (pid & 3) == 2 && cast_dc_steve(93, 0) >= 0) { *kept = 0; return cast_dc_steve(93, 0); }   /* "Dreamcast Steve": his doubles
+        as the game's own Steve, also while he is played (docs/IMPORT_DREAMCAST.md) */
     return *kept ? -1 : idx;
 }
 
@@ -2469,7 +2496,7 @@ void actor_cast_hands(int who)
     for (side = 0; side < 2; side++) need |= (n = d->rig.map[side ? 13 : 9]) >= 0 && !node_has_mesh(&d->w, n);
     if (!need) return;   /* (hands of its own: a zombie, a creature) */
     n = d->model - ACTOR_PART;
-    c = d->model >= ACTOR_PART ? (n <= 3 ? n : appear_part_anim(n) == ANIM_FEMALE ? 0 : 1) : appear_voice(COOP_CHR_ACTOR + d->model);
+    c = d->model >= ACTOR_PART ? n & 3 : appear_voice(COOP_CHR_ACTOR + d->model);   /* (part file 14: Claire's, 16: the Dreamcast Steve's) */
     if (c < 0 || c > 3 || !read_file(sys->sys_partid, c * 30 + 20)) { host_log("actor: slot %d: no hands (character %d)\n", who, c); return; }
     for (side = 0; side < 2; side++) {   /* (the file as bhReadWeaponData reads it: per hand its model, then its texture block) */
         O_WRK* op = &ch[who].obj[side];

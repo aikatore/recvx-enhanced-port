@@ -626,12 +626,23 @@ uint8_t* gd_file(GdDisc* d, const char* path, uint32_t* size)
             const char* nm = (const char*)dir + o + 33;
             size_t nl = dir[o + 32];
             while (nl && (nm[nl - 1] == '.' || nm[nl - 1] == ';' || isdigit((unsigned char)nm[nl - 1])) && memchr(nm, ';', nl)) nl--;   /* (";1") */
-            if (nl == pl && !strncasecmp(nm, p, pl)) { ext = pc_rd32(dir + o + 2); len = pc_rd32(dir + o + 10); found = 1; break; }
+            if (nl == pl && !strncasecmp(nm, p, pl)) { ext = pc_rd32(dir + o + 2); len = pc_rd32(dir + o + 10); found = 1 + !(dir[o + 25] & 2); break; }
             o += rl;
         }
         free(dir);
         if (!found) return NULL;
         p = e ? e + 1 : p + pl;
+        if (found == 2 && e) {   /* a file with more path: an entry of the AFS archive it is ("SYSTEM.AFS/12") */
+            uint32_t k = (uint32_t)strtoul(p, NULL, 10), at = 8 + 8 * k, off;
+            uint8_t* toc = len >= 8 && k < 4096 && at + 8 <= len ? gd_bytes(d, ext, at + 8) : NULL;
+            int ok = toc && !memcmp(toc, "AFS", 3) && k < pc_rd32(toc + 4);
+            off = ok ? pc_rd32(toc + at) : 0;
+            ok = ok && !(off % 2048) && off < len && pc_rd32(toc + at + 4) <= len - off;
+            if (ok) { ext += off / 2048; len = pc_rd32(toc + at + 4); }
+            free(toc);
+            if (!ok) return NULL;
+            break;
+        }
     }
     if (len > (64u << 20)) return NULL;
     *size = len;

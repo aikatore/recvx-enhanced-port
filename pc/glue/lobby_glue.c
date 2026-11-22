@@ -618,7 +618,7 @@ static void pv_hands(Preview* p, int k, int c)
 static void pv_set(int k, int chr, int played)
 {
     Preview* p = &pv[k];
-    int file = chr == 0 ? played : chr <= 4 ? chr - 1 : chr == 5 ? 4 : played & 3, i, ok = 1;
+    int file = chr == 0 ? played : appear_file(chr) >= 0 ? appear_file(chr) : played & 3, i, ok = 1;
     if (chr == p->chr && (chr < 0 || file == p->file)) return;   /* (the same entry as another character: its file) */
     if (chr < 0) { pv_release(p, k); return; }
     if (chr == p->fail_chr && net_ms() - p->fail_at < (1000u << (p->fails < 5 ? p->fails : 5))) return;   /* 2, 4 .. 32 s */
@@ -643,10 +643,10 @@ static void pv_set(int k, int chr, int played)
     p->chr = chr;
     p->fail_chr = -1;
     p->fails = 0;
-    if (actor_set(k, chr >= COOP_CHR_ACTOR ? chr - COOP_CHR_ACTOR : -1)) p->obj[2].flg = 0;   /* no hair on another model */
+    if (actor_set(k, appear_actor(chr))) p->obj[2].flg = 0;   /* no hair on another model */
     else player_hair(p->obj, &p->w, file & 3, pvb[k].hair0, pvb[k].hair3);   /* Claire's hair simulates in work of its own */
     pv_hands(p, k, appear_voice(chr) >= 0 ? appear_voice(chr) : file & 3);
-    host_log("lobby: preview %d shows %s\n", k, chr >= COOP_CHR_ACTOR ? appear_name(chr) : "a player model");
+    host_log("lobby: preview %d shows %s\n", k, appear_actor(chr) >= 0 ? appear_name(chr) : "a player model");
 }
 
 static void pv_pose(int k, float x, int ay)
@@ -2058,7 +2058,7 @@ static void look_preview(int chr, float x, float y)
     int v = appear_voice(chr), a;
     char t[96];
     if (chr >= COOP_CHR_ACTOR && chr <= COOP_CHR_MAX) a = actor_models[chr - COOP_CHR_ACTOR].anim;
-    else if (chr >= 1 && chr < COOP_CHR_ACTOR) a = appear_part_anim(chr - 1);
+    else if (appear_file(chr) >= 0) a = appear_part_anim(appear_file(chr));
     else if (chr > COOP_CHR_MAX && chr - COOP_CHR_IMPORT < ACTOR_IMPORT_MAX && chr != COOP_CHR_CINE) a = actor_imports[chr - COOP_CHR_IMPORT].anim;
     else a = ANIM_PLAYED;
     text(x, y, tr("VOICE"), 0.5f, 0xFFD6B668);

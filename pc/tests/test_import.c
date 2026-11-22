@@ -379,6 +379,11 @@ int main(int argc, char** argv)
             s[68] = 33 + 13 + 1; s[68 + 2] = (unsigned char)(45020 & 255); s[68 + 3] = (unsigned char)(45020 >> 8); s[68 + 10] = 5; s[68 + 32] = 13;
             memcpy(s + 68 + 33, "R0_0040.RDX;1", 13);
             memcpy(trk + 20 * size + u, "hello", 5);
+            s[115] = 33 + 10 + 1; s[115 + 2] = (unsigned char)(45019 & 255); s[115 + 3] = (unsigned char)(45019 >> 8); s[115 + 11] = 16; s[115 + 32] = 10;   /* SYSTEM.AFS at 45019 (4096 bytes):
+                entry 1 is the 5 bytes at 2048 (the sector above) */
+            memcpy(s + 115 + 33, "SYSTEM.AFS", 10);
+            s = trk + 19 * size + u;
+            memcpy(s, "AFS", 4); s[4] = 2; s[12] = 8; s[17] = 8; s[20] = 5;   /* (entry 0: 0, 8 bytes; entry 1: 2048, 5) */
             snprintf(p, sizeof p, "%s/dc_track03.bin", dir);
             FILE* f = fopen(p, "wb");
             CHECK(f && fwrite(trk, (size_t)size, 21, f) == 21);
@@ -403,6 +408,10 @@ int main(int argc, char** argv)
             CHECK(fd && n == 5 && !memcmp(fd, "hello", 5));
             free(fd);
             CHECK(!gd_file(d, "R0_0041.RDX", &n));
+            fd = gd_file(d, "SYSTEM.AFS/1", &n);   /* an AFS entry by number */
+            CHECK(fd && n == 5 && !memcmp(fd, "hello", 5));
+            free(fd);
+            CHECK(!gd_file(d, "SYSTEM.AFS/2", &n) && !gd_file(d, "R0_0040.RDX/0", &n));
             gd_close(d);
         }
 

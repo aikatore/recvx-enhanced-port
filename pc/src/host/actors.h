@@ -37,6 +37,11 @@ extern unsigned char actor_import_group[ACTOR_IMPORT_MAX];   /* IMPORT_GROUP_* (
 extern unsigned char actor_import_src[ACTOR_IMPORT_MAX];     /* the source it came from (import.h IMPORT_*, import_sources[]) */
 extern const char* actor_import_heading[ACTOR_IMPORT_MAX];   /* its group's heading in the lists (ImportSource.groups; NULL: Outbreak's) */
 extern int actor_import_n;
+#define ACTOR_GROUP_UNLISTED 4   /* actor_import_group: an import that only stands in for its type's records (the Dreamcast Steve's
+                                    event model, cast_glue.c own_look): in no model list or random pool */
+/* the Dreamcast Steve's player part file is imported (import.c import_registry_load; pc/src/import/dc.c): its source + 1
+   (import.h IMPORT_DREAMCAST), 0 none. The look COOP_CHR_DC is listed while it is (and its source is not hidden). */
+extern int actor_dc_part;
 /* "Show in Model Lists" (IMPORT > CHARACTERS > a game; ini import_<key>_shown = 0): bit 1 << source hidden. A hidden
    source's models leave every model list (appear_*, the cast's "Custom" lists) and every random pool (cast.c); no file
    is deleted. A look already chosen stays in use and listed (appear_in_use) until it is changed. */
@@ -80,6 +85,13 @@ int appear_grab_motion(int id, int mtn, int from, int to);
    (stored in recvx.ini); never sent to the partner: appear_played resolves it first. */
 #define COOP_CHR_CINE 4095
 int appear_played(int chr, int ply_id);   /* chr; for COOP_CHR_CINE the cutscene model of ply_id (0..3; else 0, as played) */
+/* "Steve (Dreamcast Hair)": the Dreamcast Steve's player model (actor_dc_part), worn as a player file: part file 16, Steve's
+   unused costume 1 (actor_glue.c pc_part_file reads the imported file for it). Listed after the imports; stored in recvx.ini;
+   sent to the partner as Steve in costume 1 (coop_glue.c). */
+#define COOP_CHR_DC 4094
+#define ACTOR_DC_PART 6   /* its part file - 10 (ACTOR_PART + 6 the display actor; & 3: Steve) */
+int appear_file(int chr);   /* the part file (10 + n) look chr wears on the player's own skeleton: n 0..4, ACTOR_DC_PART; -1 none */
+int appear_actor(int chr);  /* the display actor (catalogue entry or import) look chr is drawn as, -1 none (a part file, as played) */
 /* "Character Models" (ini appear_per_char, default 0): 0 "Same for Both", "Character Model" (g_coop.chr, ini coop_char)
    for whoever is played; 1 "Per Character": "Claire's Model" and "Chris's Model" (g_appear_own[0], [1], ini
    appear_claire, appear_chris; -1: not chosen yet, "Character Model"'s), Steve and Wesker as themselves */
@@ -121,6 +133,7 @@ int  actor_head(int who, float* out);   /* world position of its head node (else
 int  actor_head_node(int who);          /* its head node (the rig's head role), -1: none found or none shown */
 void actor_doubles(int idx);            /* at the hand-off: the appearance for the cutscene doubles */
 int  actor_double_model(int idx, int pid, int* kept);   /* the model character pid's doubles show for that appearance, -1 the game's */
+int  cast_dc_steve(int id, int always);   /* cast_glue.c: the Dreamcast Steve's model for Steve's records of type id with "Dreamcast Steve" on (always: also off), -1 none */
 void actor_double_tick(void);           /* every tick before the objects follow their links: the double's pose, hands, face */
 int  actor_double_acting(void);         /* a cutscene double of the character played is shown (a cutscene) */
 int  actor_double_kept(void);           /* the doubles stay the game's for the chosen model: the played character's own cutscene model */
@@ -164,6 +177,7 @@ const unsigned char* actor_fx_tex(int room, int fx);   /* room file `room`'s tex
    releases), models into wr/wl (32 KB each), motions into wmt (64 KB) and who->mnwP[100..]. */
 struct O_WRK;
 int  afs_read(int part, int file, void* buf, int cap);
+int  actor_part_dc(void);   /* the game's own last load of Steve's part file (SYSTEM.AFS/12) was the Dreamcast Steve's (actor_glue.c pc_part_file) */
 void player_model_read(struct BH_PWORK* who, unsigned char* file, unsigned char* mdl, unsigned char* bmt, unsigned char* mth, unsigned char* zmt);
 void player_weapon_read(struct BH_PWORK* who, struct O_WRK* objs, int wpn, unsigned char* file, unsigned char* wr, unsigned char* wl, unsigned char* wmt);
 void player_hair(struct O_WRK* objs, struct BH_PWORK* who, int chr, unsigned char* exp0, unsigned char* exp3);

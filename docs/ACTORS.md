@@ -906,9 +906,13 @@ but is not drawn as it then. Steve and Wesker not played are ordinary cast. Ever
 character is one of the types above (checked over all room files: Claire 91; Chris 92, 42; Steve 93, 43; Wesker
 97, 49, 47), so no scene stands the player in with another type.
 
-**Dreamcast Steve in Cutscenes** ([IMPORT_DREAMCAST.md](IMPORT_DREAMCAST.md)): Steve's records the cast leaves as
-himself (cast off, or no pick) get the imported Dreamcast model as their model (`cast_glue.c own_look`); an import in
-the game's own format counts as its type's character (`cast.c model_char`), so the cast never "swaps" Steve for it.
+**Dreamcast Steve** ([IMPORT_DREAMCAST.md](IMPORT_DREAMCAST.md)), Cutscenes or Cutscenes and Gameplay: Steve's records
+the cast leaves as himself (cast off, or no pick) get the imported Dreamcast model of their type as their model (type 43
+his event model, 93 his cutscene model: `cast_glue.c own_look`, `cast_dc_steve`); while he is played his doubles that
+would be the game's own show the cutscene model (`actor_double_model`). An import in the game's own format counts as its
+type's character (`cast.c model_char`), so the cast never "swaps" Steve for it. The event model's import is in no list
+(`ACTOR_GROUP_UNLISTED`); the Dreamcast Steve's player model is the look **Steve (Dreamcast Hair)** (`COOP_CHR_DC`),
+worn as a player file (part file 16, `appear_file`), as "Steve" is.
 
 ### Creatures
 

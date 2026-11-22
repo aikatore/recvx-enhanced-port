@@ -7,8 +7,11 @@
    - textures: PVR (twiddled, VQ and small VQ; ARGB1555, RGB565, ARGB4444) where the PS2 has TIM2: each decoded and
      written as an 8-bit TIM2 chunk (impmodel.c imp_tex_chunk), in the list's order (texture k fills texlist[k]);
    - the skin (SKIN) and the face mask (MASK: muscles, face table, mouth shapes) are taken as they are.
-   Written as a small PS2-format room file (expanded) holding the one enemy record, which actor_glue.c loads as it
-   loads a catalogue model from the disc's room file (load_room_model). */
+   A record is written as a small PS2-format room file (expanded) holding the one enemy record, which actor_glue.c loads
+   as it loads a catalogue model from the disc's room file (load_room_model). Steve's player part file (SYSTEM.AFS/12,
+   the same layout as the PS2's: dread.c bhReadPlayerData) is written as a PS2 part file: its model block's lists as
+   above, the motions and z translations as they are (byte for byte the PS2's), its texture blocks as TIM2 (actor_glue.c
+   pc_part_file reads it in place of SYSTEM.AFS/12, or as "part file 16"). */
 #include "import.h"
 #include "impmodel.h"
 #include "../host/lang.h"
@@ -21,7 +24,9 @@
 
 /* the models offered: the room file and record that carry each on the disc (docs/IMPORT_DREAMCAST.md) */
 static const struct DcModel { const char *id, *name, *variant, *room; int rec, type, ver; } models[] = {
-    { "STEVE_CINE", "Steve", "Dreamcast Hair", "R0_0040.RDX", 0, 93, 0 },
+    { DC_PART_ID, "Steve", "Dreamcast Hair", "SYSTEM.AFS/12", 0, 0, 0 },   /* (type 0: the player part file) */
+    { "STEVE_CINE", "Steve", "Dreamcast Hair, Cutscene", "R0_0040.RDX", 0, 93, 0 },
+    { "STEVE_EVENT", "Steve", "Dreamcast Hair, Event", "R0_1130.RDX", 0, 43, 0 },   /* (his records of type 43: not listed, dc_model 2) */
 };
 #define NMODELS (int)(sizeof(models) / sizeof(models[0]))
 #define ROOM_MAX (12u << 20)    /* the game's room arena */
@@ -29,7 +34,7 @@ static const struct DcModel { const char *id, *name, *variant, *room; int rec, t
 int dc_model(const char* id, unsigned char* type, unsigned char* ver)
 {
     for (int i = 0; i < NMODELS; i++)
-        if (!strcmp(models[i].id, id)) { *type = (unsigned char)models[i].type; *ver = (unsigned char)models[i].ver; return 1; }
+        if (models[i].type && !strcmp(models[i].id, id)) { *type = (unsigned char)models[i].type; *ver = (unsigned char)models[i].ver; return 1 + (models[i].type == 43); }
     return 0;
 }
 
@@ -117,6 +122,7 @@ static int put_mlb(Out* b, const unsigned char* p, uint32_t n, int* lists)
 {
     if (n < 16) return 0;
     uint32_t hs = pc_rd16(p + 4), nobj = pc_rd16(p + 6), obj = pc_rd32(p + 12);
+    if (!nobj && obj == 0xFFFFFFFFu && hs >= 16 && hs <= n) { put(b, p, n); return !b->bad; }   /* (a texture list only: the player's eye blink lists) */
     if (hs < 16 || hs > n || obj == 0xFFFFFFFFu || !pc_range_ok((uint64_t)hs + obj, (uint64_t)nobj * 0x34, n)) return 0;
     size_t at = put(b, p, n), base = at + hs;
     for (uint32_t i = 0; i < nobj && !b->bad; i++) {
@@ -127,7 +133,7 @@ static int put_mlb(Out* b, const unsigned char* p, uint32_t n, int* lists)
         if (vl == 0xFFFFFFFFu) continue;
         if (!pc_range_ok((uint64_t)hs + vl, 8, n)) return 0;
         const unsigned char* v = p + hs + vl;
-        if (v[0] == 51) continue;
+        if (v[0] == 51 || v[0] == 34) continue;   /* (34: the player's untextured hit model, as the PS2's) */
         if (v[0] != 41) return 0;   /* (Code: Veronica's models: 41 only) */
         uint32_t cnt = pc_rd16(v + 6);
         if ((60 + 32 * cnt) / 4 > 0xFFFF || !pc_range_ok((uint64_t)hs + vl + 8, (uint64_t)cnt * 24, n) || pc_rd16(v + 4)) return 0;   /* (an index offset: none in the game) */
@@ -180,6 +186,35 @@ static int owner(const unsigned char* e, uint32_t n, uint32_t enep, int ene, uin
         }
     }
     return want;
+}
+
+/* a texture chunk list (TPVR chunks: 32-byte headers, GBIX and PVRT; PLI none) at e, n bytes, as the game's TIM2 chunks
+   (impmodel.c imp_tex_chunk) in its order, ended as the game's (-1 and 28 bytes); 0 with why */
+static int put_textures(Out* b, const unsigned char* e, uint32_t n, const char* where, int* ntex, char* why, int wn)
+{
+    uint32_t p;
+    for (p = 0; p + 32 <= n && pc_rd32(e + p) != 0xFFFFFFFFu;) {
+        uint32_t sz = pc_rd32(e + p + 4);
+        if (sz > n - p - 32) { snprintf(why, wn, "a damaged texture list in %s", where); return 0; }
+        const unsigned char* c = e + p + 32;
+        if (!memcmp(e + p, "TPVR", 4)) {
+            uint32_t g = sz >= 16 && !memcmp(c, "GBIX", 4) ? pc_rd32(c + 8) : (uint32_t)*ntex, skip = sz >= 16 && !memcmp(c, "GBIX", 4) ? 8 + pc_rd32(c + 4) : 0;
+            int w, h, len;
+            unsigned char *rgba = skip < sz ? dc_pvr_rgba(c + skip, sz - skip, &w, &h, why, wn) : NULL, *t;
+            if (!rgba) { if (!why[0]) snprintf(why, wn, "a texture of %s is not read", where); return 0; }
+            t = imp_tex_chunk(rgba, w, h, 0x00D00000u | (g & 0xFFFFF), &len);   /* (Gindex: apart from the PS2's and the other imports';
+                the low bits kept, which the game's clamp list reads; the same GBIX is the same picture on the disc: the cutscene
+                model's 0x2C1 is the player's) */
+            free(rgba);
+            if (!t) { snprintf(why, wn, "out of memory"); return 0; }
+            put(b, t, (size_t)len);
+            free(t);
+            (*ntex)++;
+        } else if (memcmp(e + p, "PLI", 4)) { snprintf(why, wn, "a texture chunk of %s is not read", where); return 0; }   /* (no palettes in these lists) */
+        p += 32 + sz;
+    }
+    put32(b, 0xFFFFFFFFu); put(b, NULL, 28);
+    return 1;
 }
 
 /* model k of the expanded room e (n bytes) as a PS2-format room file into b; 0 with why */
@@ -247,26 +282,60 @@ static int convert(const struct DcModel* md, const unsigned char* e, uint32_t n,
     set32(b, t4 + 4, (uint32_t)b->n);
     put32(b, 0xFFFFFFFFu); put(b, NULL, 28);
     set32(b, t4 + 8, (uint32_t)b->n);
-    for (p = tl; p + 32 <= n && pc_rd32(e + p) != 0xFFFFFFFFu;) {
-        uint32_t sz = pc_rd32(e + p + 4);
-        if (sz > n - p - 32) { snprintf(why, wn, "a damaged texture list in %s", md->room); return 0; }
-        const unsigned char* c = e + p + 32;
-        if (!memcmp(e + p, "TPVR", 4)) {
-            uint32_t g = sz >= 16 && !memcmp(c, "GBIX", 4) ? pc_rd32(c + 8) : (uint32_t)*ntex, skip = sz >= 16 && !memcmp(c, "GBIX", 4) ? 8 + pc_rd32(c + 4) : 0;
-            int w, h, len;
-            unsigned char *rgba = skip < sz ? dc_pvr_rgba(c + skip, sz - skip, &w, &h, why, wn) : NULL, *t;
-            if (!rgba) { if (!why[0]) snprintf(why, wn, "a texture of %s is not read", md->room); return 0; }
-            t = imp_tex_chunk(rgba, w, h, 0x00D00000u | (g & 0xFFFFF), &len);   /* (Gindex: apart from the PS2's and the other imports';
-                the low bits kept, which the game's clamp list reads) */
-            free(rgba);
-            if (!t) { snprintf(why, wn, "out of memory"); return 0; }
-            put(b, t, (size_t)len);
-            free(t);
-            (*ntex)++;
-        } else if (memcmp(e + p, "PLI", 4)) { snprintf(why, wn, "a texture chunk of %s is not read", md->room); return 0; }   /* (no palettes in this list) */
-        p += 32 + sz;
+    if (!put_textures(b, e + tl, n - tl, md->room, ntex, why, wn)) return 0;
+    if (b->bad) { snprintf(why, wn, "out of memory"); return 0; }
+    return 1;
+}
+
+/* Steve's player part file (f, n bytes: dread.c bhReadPlayerData's layout) as the PS2's into b */
+static int convert_part(const struct DcModel* md, const unsigned char* f, uint32_t n, Out* b, int* lists, int* ntex, char* why, int wn)
+{
+    Out m = { 0 };   /* the model block, as sys->plmdlp holds it (the 51 lists 64-aligned there, as the PS2's) */
+    uint32_t sz = n >= 4 ? pc_rd32(f) : 0, p = 4, at;
+    size_t prev = 0;   /* the size word of the chunk before (grown by the padding after it) */
+    int32_t dt;
+    int textured = 0, ok = 1, first = 1;
+    if (sz < 8 || sz > n - 4) { snprintf(why, wn, "%s is damaged", md->room); return 0; }
+    while (ok && p + 4 <= 4 + sz && (dt = (int32_t)pc_rd32(f + p)) != -1) {
+        int mlb;
+        p += 4;
+        if (dt < 0 || (uint32_t)dt > 4 + sz - p) { ok = 0; break; }
+        mlb = dt >= 16 && memcmp(f + p, "SKIN", 4);
+        if (dt && !first) {   /* each chunk's data where the disc's has it, mod 64 (the MLBs' own alignments kept) */
+            while ((m.n + 4) % 64 != (p - 4) % 64) put(&m, NULL, 1);
+            if (!m.bad && prev) { uint32_t w = (uint32_t)(m.n - prev - 4); memcpy(m.p + prev, &w, 4); }
+        }
+        first = 0;
+        prev = dt ? m.n : 0;
+        put32(&m, (uint32_t)dt);
+        if (mlb) { ok = put_mlb(&m, f + p, (uint32_t)dt, lists); textured += pc_rd32(f + p + 8) != 0xFFFFFFFFu; }
+        else put(&m, f + p, (size_t)dt);
+        p += (uint32_t)dt;
     }
-    put32(b, 0xFFFFFFFFu); put(b, NULL, 28);
+    if (!ok || m.bad) { free(m.p); snprintf(why, wn, "a model of %s is not read", md->room); return 0; }
+    put32(&m, 0xFFFFFFFFu);
+    put32(b, (uint32_t)m.n);
+    put(b, m.p, m.n);
+    free(m.p);
+    p = 4 + sz;
+    for (int i = 0; i < 2; i++) {   /* the motions, the z translations: as they are */
+        if (p + 4 > n || pc_rd32(f + p) > n - p - 4) { snprintf(why, wn, "%s is damaged", md->room); return 0; }
+        put(b, f + p, 4 + pc_rd32(f + p));
+        p += 4 + pc_rd32(f + p);
+    }
+    for (int i = 0; i < textured; i++) {   /* a texture block per textured sub-model (bit 31: 32-byte aligned) */
+        uint32_t t = p + 4 <= n ? pc_rd32(f + p) : 0, len = t & 0x7FFFFFFFu;
+        size_t w;
+        p += 4;
+        if (t & 0x80000000u) p = (p + 31) & ~31u;
+        if (!t || p > n || len > n - p) { snprintf(why, wn, "a texture block of %s is damaged", md->room); return 0; }
+        w = put(b, NULL, 4);
+        pad_to(b, 32, 0);
+        at = (uint32_t)b->n;
+        if (!put_textures(b, f + p, len, md->room, ntex, why, wn)) return 0;
+        set32(b, w, (uint32_t)(b->n - at) | 0x80000000u);
+        p += len;
+    }
     if (b->bad) { snprintf(why, wn, "out of memory"); return 0; }
     return 1;
 }
@@ -313,12 +382,13 @@ int dc_extract(const char* image, const char* outdir, int what, ImportItem* item
         snprintf(pg->phase, sizeof(pg->phase), "%s (%s) (%s)", it->name, it->variant, md->room);
         unsigned char* f = gd_file(d, md->room, &size);
         if (!f) snprintf(err, sizeof(err), "Cannot read %s from the disc (disc 1 has it).", md->room);
-        else if (!room || (len = pc_prs_decode(f, size, room, ROOM_MAX)) < 0) snprintf(err, sizeof(err), "%s cannot be expanded.", md->room);
-        else if (convert(md, room, (uint32_t)len, &b, &lists, &ntex, err, sizeof(err))) {
+        else if (!md->type ? convert_part(md, f, size, &b, &lists, &ntex, err, sizeof(err))
+                 : !room || (len = pc_prs_decode(f, size, room, ROOM_MAX)) < 0 ? (snprintf(err, sizeof(err), "%s cannot be expanded.", md->room), 0)
+                 : convert(md, room, (uint32_t)len, &b, &lists, &ntex, err, sizeof(err))) {
             Blob bl = { b.p, b.n };
             snprintf(dir, sizeof(dir), "%s/%s", outdir, md->id);
             SDL_CreateDirectory(dir);
-            snprintf(path, sizeof(path), "%s/%s.rdx", dir, md->id);
+            snprintf(path, sizeof(path), "%s/%s.%s", dir, md->id, md->type ? "rdx" : "part");
             if (pc_save_file(path, "wb", put_blob, &bl)) snprintf(err, sizeof(err), "Cannot write %s.", path);
             else {
                 it->ok = 1;

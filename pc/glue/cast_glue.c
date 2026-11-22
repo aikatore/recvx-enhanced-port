@@ -102,15 +102,21 @@ void cast_release(void)
 /* the model record k (type id, model version ver) of room file room is given (cast_room; the --voice-plan export reads the
    records from the room file): -1 none (drawn as itself); *c its character or creature (-1 none); *why set where kept[]
    keeps it */
-/* "Steve in Cutscenes: Dreamcast" (IMPORT > CHARACTERS > the Dreamcast release; import.h g_import.dc_steve): the model that
-   stands in for character c's records, -1 none (docs/IMPORT_DREAMCAST.md "Steve in cutscenes") */
-static int own_look(int c)
+/* "Dreamcast Steve" (IMPORT > CHARACTERS > the Dreamcast release; import.h g_import.dc_steve, any but Off; always: whatever
+   it is): the imported model that stands in for Steve's records of type id (43 his event model, else his cutscene model; an
+   import from before the event model: the cutscene model for both), -1 none (docs/IMPORT_DREAMCAST.md "Steve in cutscenes") */
+int cast_dc_steve(int id, int always)
 {
-    if (!g_import.dc_steve || c != 2) return -1;
+    int any = -1;
+    if (!g_import.dc_steve && !always) return -1;
     for (int k = 0, n = __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE); k < n; k++)
-        if (actor_import_src[k] == IMPORT_DREAMCAST && actor_imports[k].id && cast_character(actor_imports[k].id, actor_imports[k].mdlver) == c) return ACTOR_MODELS + k;
-    return -1;
+        if (actor_import_src[k] == IMPORT_DREAMCAST && actor_imports[k].id && cast_character(actor_imports[k].id, actor_imports[k].mdlver) == 2) {
+            if (actor_imports[k].id == id) return ACTOR_MODELS + k;
+            if (actor_imports[k].id != 43) any = ACTOR_MODELS + k;
+        }
+    return any;
 }
+static int own_look(int c, int id) { return c == 2 ? cast_dc_steve(id, 0) : -1; }
 
 static int cast_want(const EnemyOpts* o, int room, int k, int id, int ver, int imports, int* c, const char** why)
 {
@@ -119,12 +125,12 @@ static int cast_want(const EnemyOpts* o, int room, int k, int id, int ver, int i
     if ((*c = cast_character(id, ver)) < 0) *c = cast_creature(room, k, id);   /* (a creature only a cutscene shows) */
     if (*c < 0 && cast_scene_zombie(room, k, id)) *c = CAST_CROWD;   /* (a zombie only a cutscene shows) */
     if (*c < 0 || (*c >= CAST_CHARACTERS && !enemy_cast_creatures(o))) return -1;
-    if (*c >= 2 && *c < CAST_CHARACTERS && !o->cast) return own_look(*c);   /* (the cast off: the character's own look) */
+    if (*c >= 2 && *c < CAST_CHARACTERS && !o->cast) return own_look(*c, id);   /* (the cast off: the character's own look) */
     for (j = 0; j < (int)(sizeof(kept) / sizeof(kept[0])); j++)
         if (kept[j].room == room && kept[j].rec == k) { *why = kept[j].why; return -1; }
     m = *c < 2 ? coop_look_model(*c) : *c == CAST_CROWD ? cast_crowd_model((unsigned)o->seed, scene, id, ver, o->cast_all, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off)
         : cast_model((unsigned)o->seed, scene, *c, o->cast_all, imports, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off);   /* (Claire's, Chris's: never cast) */
-    return m >= 0 || *c < 2 || *c >= CAST_CHARACTERS ? m : own_look(*c);   /* (a character the cast leaves as itself: its own look) */
+    return m >= 0 || *c < 2 || *c >= CAST_CHARACTERS ? m : own_look(*c, id);   /* (a character the cast leaves as itself: its own look) */
 }
 
 /* enemyopt_glue.c, the end of the room load */
@@ -143,7 +149,7 @@ void cast_room(const EnemyOpts* o)
     voice_room();   /* (the sounds said: this room's from now) */
     if (o && o->voices && voices_want()) plan_want(o);   /* "Randomize Voice Lines": the lines for the room files now (read at the start
         already, else now), the plan for them */
-    if (!o || !rom || (!o->cast && !pc_appear_separate() && !enemy_cast_creatures(o) && own_look(2) < 0)) { cast_release(); return; }   /* (separate looks: Claire's and
+    if (!o || !rom || (!o->cast && !pc_appear_separate() && !enemy_cast_creatures(o) && own_look(2, 93) < 0)) { cast_release(); return; }   /* (separate looks: Claire's and
         Chris's without the cast; "Cutscene Monsters" alone: the creatures') */
     imports = import_count(o);
     for (k = 0; k < rom->ene_n && k < RECS; k++) {

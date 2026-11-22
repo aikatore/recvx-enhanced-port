@@ -286,13 +286,19 @@ void* pc_mod_open(const char* name)
 }
 
 void ADXF_Close(void* h);
+const char* pc_part_file(int ptid, int flid, char* path, int n);   /* actor_glue.c: an imported player part file for this entry, NULL none */
 void* ADXF_OpenAfs(int ptid, int flid)
 {
     uint32_t lsn, size, n;
     AdxfFile* f;
     FILE* hf;
-    char name[64], path[512];
+    char name[64], path[1200];
     int src;
+    if (pc_part_file(ptid, flid, path, sizeof path) && (hf = pc_fopen(path, "rb"))) {   /* (the Dreamcast Steve: docs/IMPORT_DREAMCAST.md) */
+        long len = fseek(hf, 0, SEEK_END) ? -1 : ftell(hf);
+        if (len > 4096 && len < (16L << 20)) { host_log("adxf: %s for %d/%d (%ld bytes)\n", path, ptid, flid, len); return open_host(hf, (uint32_t)len); }
+        fclose(hf);
+    }
     if (ptid >= 0 && ptid < MAX_PT && pt[ptid].name[0]) {
         snprintf(name, sizeof(name), "%s/%d", pt[ptid].name, flid);
         if ((hf = mod_open_path(name, &size, path, sizeof path, &src))) {

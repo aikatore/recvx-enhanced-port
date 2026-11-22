@@ -92,6 +92,23 @@ int main(void)
     CHECK(g_import_hidden == 2);
     g_import_hidden = 0;
     CHECK(appear_count() == n + 2);
+    /* the Dreamcast Steve's player model (actor_dc_part: its source + 1): listed after the imports, worn as part file 16 */
+    CHECK(appear_canon(COOP_CHR_DC) == 0 && appear_file(COOP_CHR_DC) == ACTOR_DC_PART && appear_file(3) == 2 && appear_file(5) == 4 && appear_file(0) < 0);
+    CHECK(appear_actor(COOP_CHR_DC) < 0 && appear_actor(3) < 0 && appear_actor(COOP_CHR_ACTOR + 8) == 8);
+    actor_dc_part = 11;
+    CHECK(appear_count() == n + 3 && appear_at(n + 2) == COOP_CHR_DC && appear_pos(COOP_CHR_DC) == n + 2 && appear_canon(COOP_CHR_DC) == COOP_CHR_DC);
+    CHECK(appear_step(COOP_CHR_IMPORT + 1, 1) == COOP_CHR_DC && appear_step(COOP_CHR_DC, 1) == 0 && appear_voice(COOP_CHR_DC) == 2);
+    CHECK(!strcmp(appear_name(COOP_CHR_DC), "Steve (Dreamcast Hair)") && !strcmp(appear_group(COOP_CHR_DC), "Dreamcast Models"));
+    g_import_hidden = 1u << 10;   /* its source hidden: not listed */
+    CHECK(appear_count() == n + 2 && appear_canon(COOP_CHR_DC) == COOP_CHR_DC);
+    g_import_hidden = 0;
+    actor_dc_part = 0;
+    actor_import_n = 1; appear_count();   /* an import that only stands in for records: in no list (registered so: the lists look again when there are more) */
+    actor_import_group[1] = ACTOR_GROUP_UNLISTED;
+    actor_import_n = 2;
+    CHECK(appear_count() == n + 1 && !actor_import_shown(1) && appear_at(n) == COOP_CHR_IMPORT && appear_at(n + 1) == 0);
+    actor_import_group[1] = 0;
+    actor_dc_part = 0;
     actor_import_src[1] = 0;
     actor_import_n = 0;
     printf("appear: ok, %d of %d listed\n", n, COOP_CHR_MAX + 1);
