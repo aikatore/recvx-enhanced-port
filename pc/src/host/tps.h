@@ -42,6 +42,7 @@ typedef struct TpsConfig {
     int fp;                   /* "Camera Mode" First Person (with on): the camera at the eyes (tps_glue.c, docs/THIRDPERSON.md "First person") */
     int fp_fov;               /* "First Person Field of View", degrees as fov */
     int fp_hud;               /* "First Person HUD": 0 On (the HUD Style), 1 Off, 2 Minimal */
+    int fp_body;              /* "First Person Body": 1 our body drawn without its head, 0 not drawn (tps_glue.c tps_fp_hide) */
     /* published by the game thread */
     volatile int cam_active;  /* the third-person camera drew the last frame */
     volatile int aiming;      /* weapon raised (crosshair) */

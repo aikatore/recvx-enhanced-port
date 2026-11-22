@@ -398,6 +398,7 @@ void  tps_player_mode(void);   /* before the player's mode handler: the straight
 void  tps_player(void);
 void  tps_calc_model(void);
 int   tps_fp_hide(int on);   /* first person, around our player's draw: 1 = not drawn (on = 1 before, 0 after; tps_glue.c) */
+void  tps_fp_objects(int on); /* first person, around the objects' draw: what our head wears (and our lowered weapon without the body) not drawn */
 struct BH_PWORK;
 void  tps_bend(struct BH_PWORK* p, float pitch);   /* the free-aim bend by pitch (radians) on a display copy (actor_glue.c), the partner */
 float tps_aim_pitch(void);   /* the pitch of our free-aim bend this tick (radians, 0: none) */

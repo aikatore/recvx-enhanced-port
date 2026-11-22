@@ -88,6 +88,7 @@ const MenuRow menu_rows[] = {
       .help = "How far to the side the camera sits, over the shoulder." },
     { MC_CAMERA, "FIRST-PERSON CAMERA", ML_SET, "First Person Field of View", .label = "Field of View" },
     { MC_CAMERA, NULL, ML_SET, "First Person HUD", .label = "HUD" },
+    { MC_CAMERA, NULL, ML_SET, "First Person Body", .label = "Body" },
     { MC_CAMERA, "HUD", ML_SET, "HUD" },
     { MC_CAMERA, NULL, ML_SET, "HUD Position" },
     { MC_CAMERA, NULL, ML_SET, "HUD Style" },

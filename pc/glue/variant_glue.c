@@ -376,6 +376,10 @@ static void head_show(void)
     head_n = 0;
 }
 
+/* first person (tps_glue.c tps_fp_hide, actor_glue.c): our own head hidden the same way for our draw */
+void pc_head_hide(ML_WORK* m, int node) { head_hide(m, node); }
+void pc_head_show(void) { head_show(); }
+
 /* r (a zombie's body) has lost its head, and it is not the head flying off (en01b.c: the head part, exp0 + 0x10, in its mode 3) */
 static int headless(BH_PWORK* r)
 {

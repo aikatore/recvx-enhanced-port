@@ -405,7 +405,7 @@ static void settings_window(void)
         SDL_snprintf(key, sizeof key, tr(tps_key_wait ? "Press a key (Esc cancels)" : "Camera Key: %s"), SDL_GetScancodeName((SDL_Scancode)g_tps.key));
         if (ImGui::Button(key)) tps_key_wait = true;
         ImGui::TextDisabled("%s", tr(g_tps.fp
-                            ? "First person: move in the direction you look; use the mouse to look.\n"
+                            ? "First person: move where you look and look with the mouse; left mouse fires from the hip, right mouse aims.\n"
                               "Change action buttons under Controls; F1 releases the mouse."
                             : g_tps.free_cam
                             ? "Move in the direction shown on screen; use the mouse to turn the camera.\n"

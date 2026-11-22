@@ -187,21 +187,42 @@ character differ. Off it is not used at all (`fp` is 0: every first-person branc
   of the body sideways (the head leans into aims and kicks back with the recoil by several units). From there 1.3 to the
   left, 0.6 up and 0.2 ahead along the view (`FP_SIDE`, `FP_RISE`, `FP_FWD`), so a raised weapon shows in the lower
   right instead of under the crosshair. Kept 0.3 units off the room model; near plane 0.25 (1 over the shoulder).
-  Pitch +-80 degrees. "First Person Field of View" (default 85); aiming narrows it by the shoulder camera's ratio
-  (Aiming Field of View / Field Of View, 65/75: 74 degrees).
-* **Aim down**: with the weapon raised the eye comes down to 4 units above the weapon hand when that is lower
-  (`fp_hand`, `FP_ADS`): the shotgun and the rifles are held at the hip, under the view; a handgun at the eyes leaves it.
-* **Our character**: its body is not drawn (`tps_fp_hide`: the nodes' hide flag, `evalflags 0x8`, as `bhSetCut`
-  hides room parts, for that draw only; Claire's body is one skinned mesh on node 1). The hands and what they hold are
-  separate models linked to the hand nodes and drawn with the effects, so they stay: the raised weapon is seen in the
-  hand, aimed as the body holds it (walking, the hand at the hip shows only when looking down). The shadow, the pose
-  and the co-op partner's view of us are unchanged. "You appear as" another model: not drawn at all (its own nodes).
-* **Moving**: as camera A ([Mouse/keyboard camera](#mousekeyboard-camera-ab)): the mouse turns the view, W/A/S/D walk
-  towards that direction seen from the view (S back, A/D strafe: the game has no sideways walk, so the hidden body
-  turns to the way it walks); a direction within 50 degrees of the facing is taken at once (forward goes exactly where
-  the view looks), others turn the body 0.3 of the way a frame. Standing, the body faces the view (what the action
-  button examines). The gamepad (Modern): the left stick the same way, the right stick looks; standing, the body faces
-  the view. Shift runs, the quick turn turns the view with the character.
+  Pitch +-80 degrees; the eye turns about the neck, 2.5 below it (`FP_NECK`): looking down it comes forward over the
+  chest (80 degrees down: 2.5 ahead, 2.1 lower), so the body below is seen from the front. "First Person Field of View"
+  (default 85, horizontal at 4:3: 101 at 16:9, 117 at 21:9: hor+, as Field Of View); aiming with the aim button narrows
+  it by the shoulder camera's ratio (Aiming Field of View / Field Of View, 65/75: 74 degrees), from the hip it stays.
+  The walk's bob at the eye is 0.15 units (17.00 to 17.15, walking and running alike): no head-bob setting.
+* **Aim down**: with the weapon raised or reloading the eye comes down to 3 units above the weapon hand when that is
+  lower (`fp_hand`, `FP_ADS`) and back by up to 3 (`FP_BACK`, `fp_back`: 1.5 per unit of the drop): the shotgun, the
+  rifles and the launchers are held at the hip, under the view, and show in the lower right as a handgun held at the
+  eyes does (before: 4 above, not back, a sliver in the corner). A reload's hands go down: the hand's height as the
+  weapon was last aimed (or shot) is kept through it (mode 70 and the reload of a lowered weapon, `reload_at_rest`).
+* **Our character** ("First Person Body", ini `fp_body`, default On): drawn without its head (`tps_fp_hide`: head node 5
+  and the nodes below it collapsed onto the head joint for our draw, `variant_glue.c pc_head_hide`, as a zombie's
+  blown-off head; "You appear as" another model, native, a part file or an import: that model's head role,
+  `actor_glue.c actor_fp_nohead`, and its head part is not drawn). What the head wears (Claire's ponytail, Wesker's
+  glasses: `sys->obwp[2]` on node 5) is not drawn (`tps_fp_objects`, a hook around `bhDrawObjItm` in `game.c
+  bhAllDrawModel`). Looking down shows the legs, the arms and the weapon in the hand. While the eye is pulled back behind
+  the head (a low weapon aimed, `fp_back` > 0.3) the body would fill the view from inside: then, and with the setting
+  Off, the body is not drawn (the nodes' hide flag, `evalflags 0x8`; "You appear as": not drawn) and the weapon model
+  (its hand piece holding it, object 0, and the weapon) stays; a model with hands of its own shows the weapon's hand
+  piece then (`actor_weapon_hands` hides it otherwise). Without the body the lowered weapon is not drawn either (it hung
+  at the hip under the view: `sys->pt_flg` 1 off around `bhDrawObjItm`, which draws the objects linked to a work with id
+  1210 on, the weapons, only with the player). For our draw only: the shadow, the pose and the co-op partner's view of
+  us are unchanged.
+* **Moving**: the mouse turns the view, W/A/S/D walk towards that direction seen from the view, the body turned to it
+  at once (`tps_player`; the game has no sideways walk: A/D turn the body 90 degrees and walk; before, beyond 50 degrees
+  0.3 of the way a frame, which curved a strafe and turned before walking back). Back (S, also with A/D) is the game's
+  back walk (`pad` down, mode2 9: about 70% of the walk's speed) facing away from the way it goes; S + Shift is the
+  game's quick turn, which turns the view with the character. Standing, the body faces the view (what the action button
+  examines). The gamepad (Modern): the left stick the same way (pulled back: the back walk, after the quick-turn
+  gesture's 3 frames), the right stick looks.
+* **Firing from the hip**: the fire button (left mouse, the gamepad's fire) alone raises the weapon and fires once it
+  is up (`tps_pad`, `fp_hip`: the press is held back until mode2 65, then given as a new press; a click let go before
+  that fires once it is up); the weapon stays up a second (`FP_HIP`, 30 ticks) after the last press, a movement key
+  (without Move While Aiming) or run lowers it at once. From the hip there is no zoom and the mouse and stick turn as
+  fast as walking; the aim button aims as before (zoomed, Aiming Sensitivity). Not for the scoped weapons (their aim
+  raises the scope; with "Aim Scoped Weapons Normally" they are not scoped). The action button stays E.
 * **Aiming**: always free aim through the screen centre (Aim Assist's lock-on is not used with the mouse; the gamepad's
   gentle assist is, as set); the crosshair's ray starts at the eye, so Precise Shots, the impact at the crosshair
   (`pc_shot_ray`, `pc_shot_wall`) and the aim height work as over the shoulder. The free-aim pose bends the upper body
@@ -215,8 +236,10 @@ character differ. Off it is not used at all (`fp` is 0: every first-person branc
 * **HUD**: "First Person HUD": On (the HUD Style), Off, Minimal (Minimal's bar and counts whatever the HUD Style), on
   the right; it replaces "HUD" while the first-person view is shown (`hud_glue.c`, `g_hud.style`). "Crosshair" adds a
   small light dot at the centre while the weapon is down (`g_tps.fp_view`, `overlay.cpp`).
-* **Smoother Motion**: the in-between images interpolate our camera as over the shoulder (the mouse is read once a
-  game frame).
+* **Smoother Motion**: the in-between images interpolate our camera as over the shoulder. The mouse is read once a
+  game frame (30 a second), so a turn reaches the screen up to a game frame later, and with Smoother Motion one more
+  frame (the in-between images run behind the newest frame). Turning the view per display refresh from the mouse would
+  need the replay (`stream.c`) to turn every vertex of an image, and the GS-path effects (particles, 2D) cannot be.
 * Test aid: `RECVX_FP_EYE="side:up:forward"` replaces the eye's offsets above (side > 0: right).
 
 ### Settings
@@ -229,6 +252,7 @@ unit (the character is about 17 units tall).
 | Camera Mode (0 Fixed; 1 with `tps_first_person` 0: Over Shoulder, 1: First Person) | `tps`, `tps_first_person` | 0, 0 |
 | First Person Field of View | `fp_fov` | 85 |
 | First Person HUD (0 = On, 1 = Off, 2 = Minimal) | `fp_hud` | 0 |
+| First Person Body (1 = drawn without its head, 0 = not drawn) | `fp_body` | 1 |
 | Field Of View (horizontal over the 4:3 picture; widescreen adds to the sides) | `tps_fov` | 75 |
 | Aiming Field of View | `tps_aim_fov` | 65 |
 | Camera Distance | `tps_distance` | 140 |

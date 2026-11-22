@@ -182,6 +182,10 @@ int actor_retarget = 1;
    pieces kept everywhere, moved to the model's hands without its turn) */
 int cast_hands = 1;
 int cast_parts = 1;                     /* cast_glue.c parts_hide; test aid RECVX_CAST_PARTS=0: the head parts kept */
+int actor_fp_nohead;   /* tps_glue.c tps_fp_hide: first person, our model drawn without its head (nor what it wears there) */
+void pc_head_hide(ML_WORK* m, int node);   /* variant_glue.c */
+void pc_head_show(void);
+int actor_head_node(int who);
 static int cast_reach = 1;              /* cutscene records' hands where the record has them (retarget); test aid RECVX_CAST_REACH=0: as before */
 
 /* the player's chains: the node whose position gives a node's bone direction (-1: a chain end) */
@@ -1761,7 +1765,9 @@ int actor_put_body(int who, BH_PWORK* src)
         memcpy(keep[i], ow[i].mtx, sizeof(keep[i])); memcpy(ow[i].mtx, s->ow[i].mtx, sizeof(keep[i]));
         memcpy(ang[i], o[i].ang, sizeof(ang[i])); memcpy(o[i].ang, s->obj[i].ang, sizeof(ang[i]));
     }
+    if (actor_fp_nohead && src == plp) pc_head_hide(src->mlwP, 5);   /* (first person: its head node) */
     bhPutModel(src);
+    if (actor_fp_nohead && src == plp) pc_head_show();
     for (i = 0; i < 22; i++) { memcpy(ow[i].mtx, keep[i], sizeof(keep[i])); memcpy(o[i].ang, ang[i], sizeof(ang[i])); }
     return 1;
 }
@@ -2083,8 +2089,10 @@ int actor_put_player(void)
         actor_pose(0, plp);
         redraw = 0;
     }
+    if (actor_fp_nohead) pc_head_hide(dg[0].w.mlwP, actor_head_node(0));
     bhPutModel(&dg[0].w);
-    head_draw(&dg[0]);
+    if (actor_fp_nohead) pc_head_show();
+    else head_draw(&dg[0]);
     return 1;
 }
 
