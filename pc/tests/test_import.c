@@ -204,7 +204,7 @@ int main(int argc, char** argv)
     CHECK(rd(d) == 0x46546C67 && rd(d + 4) == 2 && rd(d + 8) == n && rd(d + 16) == 0x4E4F534A);
     CHECK(strstr((char*)d + 20, "\"skins\"") && strstr((char*)d + 20, "\"inverseBindMatrices\""));
 
-    {   /* Umbrella Chronicles (uc.c): a vertex per corner welded (the UVs move to the strip), the blink morph, clamped UVs */
+    {   /* Umbrella Chronicles (uc.c): a vertex per corner welded (the UVs move to the strip), the blink morph, clamped UVs outside 0..1 moved into the tile (the round 9 rule) */
         float (*pos)[3] = realloc(m.pos, 8 * 12), (*nrm)[3] = realloc(m.nrm, 8 * 12), (*uv)[2] = realloc(m.uv, 8 * 8), (*wg)[4] = realloc(m.wgt, 8 * 16);
         unsigned char (*jn)[4] = realloc(m.jnt, 8 * 4);
         int* ix = realloc(m.idx, 8 * sizeof(int));
@@ -234,10 +234,22 @@ int main(int argc, char** argv)
         CHECK(pc_cvxm_check(d, (uint32_t)n, &cv, why, sizeof(why)) && cv.nv == 4 && cv.nmorph == 1 && rd(d + 4) == 5);
         const CvxmMorph* mo = (const CvxmMorph*)(d + cv.morph);
         CHECK(mo->v == (uint32_t)m.idx[1] && mo->d[1] < -0.39f && mo->d[1] > -0.41f && mo->d[0] == 0);
-        const uint16_t want[6] = { (uint16_t)m.idx[0], 2302, 2015, (uint16_t)m.idx[1], 2813, 2015 };   /* (clamped: u 2.25, not moved by tiles) */
+        const uint16_t want[6] = { (uint16_t)m.idx[0], 256, 0, (uint16_t)m.idx[1], 767, 0 };   /* (clamped and outside 0..1: moved by whole tiles
+                                                                                              as Outbreak's, u 2.25 -> 0.25, v 1.97..2.09 into tile 2) */
         int found = 0;
         for (size_t q = 64; q + sizeof(want) <= n && !found; q += 2) found = !memcmp(d + q, want, sizeof(want));
         CHECK(found);
+        /* the hand poses: version 6 with a byte per vertex (Outbreak's files, without them, stay version 5: above) */
+        CHECK((m.hand = calloc((size_t)m.nv, 1)));
+        m.hand[m.nv - 1] = IMP_HAND_R_GRIP;
+        CHECK(imp_write_cvxm(&m, p, 1.0f, 0xE00000, NULL, err, sizeof(err)) || (printf("%s\n", err), 0));
+        f = fopen(p, "rb");
+        CHECK(f);
+        n = fread(d, 1, sizeof(d), f);
+        fclose(f);
+        CHECK(pc_cvxm_check(d, (uint32_t)n, &cv, why, sizeof(why)) && rd(d + 4) == 6 && cv.hand && d[cv.hand + m.nv - 1] == IMP_HAND_R_GRIP && !d[cv.hand]);
+        d[cv.hand] = 9;   /* (a pose that is none: refused) */
+        CHECK(!pc_cvxm_check(d, (uint32_t)n, &cv, why, sizeof(why)));
         /* a picture as an 8-bit TIM2: up to 256 colours exactly */
         unsigned char rgba[16 * 16 * 4], *back;
         for (int i = 0; i < 256; i++) { rgba[4 * i] = (unsigned char)i; rgba[4 * i + 1] = (unsigned char)(255 - i); rgba[4 * i + 2] = 7; rgba[4 * i + 3] = i < 16 ? 0 : 255; }

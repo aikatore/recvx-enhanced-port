@@ -164,7 +164,7 @@ int pc_cvxm_check(const uint8_t* f, uint32_t n, PcCvxm* out, char* why, int wn)
     memset(out, 0, sizeof(*out));
     if (n < 64 || pc_rd32(f) != CVXM_MAGIC) return no(why, wn, "not a .cvxm file");
     ver = pc_rd32(f + 4);
-    if (ver < 1 || ver > 5 || pc_rd32(f + 8) != 60) return no(why, wn, "version %u is not known", ver);
+    if (ver < 1 || ver > 6 || pc_rd32(f + 8) != 60) return no(why, wn, "version %u is not known", ver);
     toff = pc_rd32(f + 12); soff = pc_rd32(f + 16); nv = pc_rd32(f + 20);
     /* the chunk list: one MLB, then the end */
     csz = pc_rd32(f + 60);
@@ -242,6 +242,12 @@ int pc_cvxm_check(const uint8_t* f, uint32_t n, PcCvxm* out, char* why, int wn)
         for (uint32_t i = 0; i < mn; i++)
             if (pc_rd32(f + mo + 16 * i) >= nv || (i && pc_rd32(f + mo + 16 * i) <= pc_rd32(f + mo + 16 * i - 16))) return no(why, wn, "bad morph block");
         out->morph = mo; out->nmorph = mn;
+    }
+    if (ver >= 6 && pc_rd32(f + 56)) {   /* the hand poses: a byte per vertex */
+        uint32_t ho = pc_rd32(f + 56);
+        if (!pc_range_ok(ho, nv, n)) return no(why, wn, "bad hand poses");
+        for (uint32_t i = 0; i < nv; i++) if (f[ho + i] > 4) return no(why, wn, "bad hand poses");
+        out->hand = ho;
     }
     out->vtx = vtx; out->skin = soff; out->nv = nv; out->end = q + 8;
     return 1;

@@ -140,60 +140,95 @@ static unsigned char* pow2(unsigned char* p, int* w, int* h)
 
 /* ---------------------------------------------------------------- skeletons
    The roles of the converted skeleton (impmodel.c writes them in pre-order: root, pelvis, the spine to the
-   head and the jaw, the arms, the legs), and per skeleton family the bone that takes each (docs "Skeletons"):
-   A  _00.._23 under N_ALL (Chris, Jill, Rebecca, Richard, Kenneth; the zombies, Hunter, Lisa, Ivy)
+   head and the face, the arms, the legs), and per skeleton family the bone that takes each (docs "Skeletons";
+   "a|b": either name; a name also matches with "0" or "_root_<n>" after it: "R_te0", "kao_root_2"):
+   A  _00.._23 under N_ALL (Chris, Jill, Rebecca, Richard, Kenneth; the zombies, Lisa, Ivy; the zombies' jaw _24)
    B  _NN_Sxx (Ada, Carlos, HUNK, Wesker): the same order with a skeleton id; "_06_D05_07_50": driven halfway
-   C1 Japanese names (Billy; the Eliminator): kosi, hara, mune, kubi, atama, kata / jowan / kawan / te, momo / sune / asikub
-   C2 Japanese names with L_ / R_ (Licker, Nemesis, T-103, Talos, OSIT1): phase 3 (not yet converted) */
+   H  numbered as A, the arms and legs further on (the Hunter; its jaw _05)
+   C1 Japanese names (Billy; the Tyrant ETY0, its lids mabu_l / mabu_r): kosi, hara, mune, kubi, atama,
+      kata / jowan / kawan / te, momo / sune / asikub; C1E the Eliminator's: its legs hang from hara, its spine is koshi
+   C2 Japanese names with L_ / R_ (the Licker, Nemesis, the T-103s, the office worker OSIT1): locator2, koshi, hara,
+      mune, kubi, kao, sako / kata / hiji / te, momo / hiza / ashi; the jaw ago (OSIT1's mouth: kuchi)
+   A family is taken only if its bones hang from each other as the roles do (the arm from the chest, the forearm from
+   the upper arm ...): the Hunter's _05 is its jaw, not a clavicle, so family A does not fit it. */
 enum { R_ROOT, R_PELVIS, R_SPINE, R_CHEST, R_NECK, R_HEAD, R_RCLAV, R_RSH, R_REL, R_RWR, R_LCLAV, R_LSH, R_LEL, R_LWR,
-       R_RTHIGH, R_RKNEE, R_RANKLE, R_LTHIGH, R_LKNEE, R_LANKLE, R_JAW, ROLES };
-static const signed char role_parent[ROLES] = { -1, 0, 1, 2, 3, 4, 3, 6, 7, 8, 3, 10, 11, 12, 1, 14, 15, 1, 17, 18, 5 };
-enum { FAM_NONE, FAM_A, FAM_B, FAM_C1 };
-static const char* const fam_names[4][R_JAW] = {
+       R_RTHIGH, R_RKNEE, R_RANKLE, R_LTHIGH, R_LKNEE, R_LANKLE, R_JAW, R_LIDL, R_LIDR, ROLES };
+#define R_BODY R_JAW   /* (the roles every family has; the face's after them) */
+static const signed char role_parent[ROLES] = { -1, 0, 1, 2, 3, 4, 3, 6, 7, 8, 3, 10, 11, 12, 1, 14, 15, 1, 17, 18, 5, 5, 5 };
+enum { FAM_NONE, FAM_A, FAM_B, FAM_H, FAM_C1, FAM_C1E, FAM_C2, FAMS };
+static const char* const fam_names[FAMS][ROLES] = {
     { 0 },
-    { "N_ALL", "_00", "_01", "_02", "_03", "_04", "_05", "_07", "_08", "_09", "_10", "_12", "_13", "_14", "_16", "_17", "_18", "_20", "_21", "_22" },
+    { "N_ALL", "_00", "_01", "_02", "_03", "_04", "_05", "_07", "_08", "_09", "_10", "_12", "_13", "_14", "_16", "_17", "_18", "_20", "_21", "_22", "_24" },
     { "N_ALL", "_00", "_01", "_02", "_03", "_04", "_05_", "_07_", "_08_", "_10_", "_11_", "_13_", "_14_", "_16_", "_18_", "_19_", "_20_", "_22_", "_23_", "_24_" },
-    { "trans", "kosi", "hara", "mune", "kubi", "atama", "kata_r", "jowan_r", "kawan_r", "te_r", "kata_l", "jowan_l", "kawan_l", "te_l",
-      "momo_r", "sune_r", "asikub_r", "momo_l", "sune_l", "asikub_l" },
+    { "N_ALL", "_00", "_01", "_02", "_03", "_04", "_07", "_09", "_10", "_11", "_14", "_16", "_17", "_18", "_22", "_23", "_24", "_26", "_27", "_28", "_05" },
+    { "trans|N_ALL", "kosi", "hara|kara", "mune", "kubi", "atama", "kata_r", "jowan_r|jyowan_r", "kawan_r|hiji_r", "te_r", "kata_l", "jowan_l|jyowan_l",
+      "kawan_l|hiji_l", "te_l", "momo_r", "sune_r|hiza_r", "asikub_r|asi_r", "momo_l", "sune_l|hiza_l", "asikub_l|asi_l", "ago", "mabu_l", "mabu_r" },
+    { "trans", "hara", "koshi", "mune", "kubi", "kao", "kata_r", "jouwan_r", "kawan_r", "tekubi_r", "kata_l", "jouwan_l", "kawan_l", "tekubi_l",
+      "momo_r", "sune_r", "asikubi_r", "momo_l", "sune_l", "asikubi_l", "ago" },
+    { "locator2", "koshi", "hara", "mune", "kubi", "kao", "R_sako", "R_kata", "R_hiji", "R_te", "L_sako", "L_kata", "L_hiji", "L_te",
+      "R_momo", "R_hiza", "R_ashi", "L_momo", "L_hiza", "L_ashi", "ago|kuchi" },
 };
-/* "_05_" (family B) matches "_05_S11" and "_05_s11", not "_06_D05_07_50" */
-static int name_is(const char* n, const char* pat)
+/* a bone's name against one name of a table (its first l characters): "_05_" (family B) matches "_05_S11" and "_05_s11",
+   not "_06_D05_07_50"; loose: also with "0" or "_root_<n>" after it */
+static int name_is(const char* n, const char* pat, size_t l, int loose)
 {
-    size_t l = strlen(pat);
-    if (pat[l - 1] != '_') return !SDL_strcasecmp(n, pat);
-    return !SDL_strncasecmp(n, pat, l) && (n[l] == 'S' || n[l] == 's');
+    if (pat[l - 1] == '_') return !SDL_strncasecmp(n, pat, l) && (n[l] == 'S' || n[l] == 's');
+    if (SDL_strncasecmp(n, pat, l)) return 0;
+    return !n[l] || (loose && ((n[l] == '0' && !n[l + 1]) || !SDL_strncasecmp(n + l, "_root_", 6)));
 }
 
 typedef struct UBone { const char* name; int parent, index; float W[12]; } UBone;   /* W: world rest, 3x4 rows */
 typedef struct Uc {
     int nb; UBone bone[UC_BONES];
     int family;                  /* FAM_* */
-    int core[R_JAW];             /* role -> bone */
+    int core[ROLES];             /* role -> bone (the face's: -1 where the model has none) */
     int nradv; struct { int a, b; float f; } radv[32];   /* expression.exp: bone a takes f of bone b's rotation */
     unsigned char* face;         /* per vertex: on a face texture or in the blink morph (the jaw's region) */
     int nface;
+    unsigned char* swrap;        /* per strip its texture's wrap where it is not clamped: 1 u repeats, 2 u mirrors, 4 v repeats, 8 v mirrors */
+    int nswrap;
     char tname[IMP_TEX][32];     /* the textures' names */
-    int held;                    /* meshes left out: held in a hand (the weapons) */
+    int held, outside;           /* meshes left out: held in a hand (the weapons); reaching far out of the body (the Licker's tongue) */
     FILE* dump;                  /* test aid (RECVX_IMPORT_MESHES): per object what became of it */
 } Uc;
 
+static int find_bone(const Uc* u, const char* pat)   /* the first bone of the names "a|b|..." (exact names first) */
+{
+    for (int loose = 0; loose < 2; loose++)
+        for (const char* a = pat; *a;) {
+            size_t l = strcspn(a, "|");
+            for (int i = 0; i < u->nb; i++) if (name_is(u->bone[i].name, a, l, loose)) return i;
+            a += l + (a[l] == '|');
+        }
+    return -1;
+}
+static int is_above(const Uc* u, int a, int b)   /* bone a is an ancestor of bone b */
+{
+    for (int i = u->bone[b].parent, n = 0; i >= 0 && n < UC_BONES; i = u->bone[i].parent, n++) if (i == a) return 1;
+    return 0;
+}
+
 static int family(Uc* u)
 {
-    static const int order[3] = { FAM_B, FAM_A, FAM_C1 };
-    for (int f = 0; f < 3; f++) {
+    static const int order[] = { FAM_B, FAM_A, FAM_H, FAM_C1, FAM_C1E, FAM_C2 };
+    for (size_t f = 0; f < sizeof(order) / sizeof(order[0]); f++) {
         int fam = order[f], ok = 1;
-        for (int r = 0; r < R_JAW && ok; r++) {
-            u->core[r] = -1;
-            for (int i = 0; i < u->nb && u->core[r] < 0; i++) if (name_is(u->bone[i].name, fam_names[fam][r])) u->core[r] = i;
-            ok = u->core[r] >= 0;
-        }
-        if (!ok) continue;
+        for (int r = 0; r < ROLES; r++) u->core[r] = fam_names[fam][r] ? find_bone(u, fam_names[fam][r]) : -1;
+        for (int r = 0; r < R_BODY && ok; r++) ok = u->core[r] >= 0;
+        for (int r = R_RCLAV; r < R_BODY && ok; r++) ok = is_above(u, u->core[role_parent[r]], u->core[r]);   /* (the limbs as the roles hang) */
+        if (!ok || !is_above(u, u->core[R_NECK], u->core[R_HEAD])) continue;
+        for (int r = R_JAW; r < ROLES; r++)   /* the face's bones: on the head */
+            if (u->core[r] >= 0 && !is_above(u, u->core[R_HEAD], u->core[r])) u->core[r] = -1;
         for (int r = R_RCLAV; r <= R_LANKLE; r++) {   /* the character's right at -x: names the other way round are swapped */
             int o = r <= R_RWR ? r + 4 : r >= R_RTHIGH && r <= R_RANKLE ? r + 3 : -1;
             if (o >= 0 && u->bone[u->core[r]].W[3] > u->bone[u->core[o]].W[3]) { int t = u->core[r]; u->core[r] = u->core[o]; u->core[o] = t; }
         }
+        if (u->core[R_LIDL] >= 0 && u->core[R_LIDR] >= 0 && u->bone[u->core[R_LIDL]].W[3] < u->bone[u->core[R_LIDR]].W[3]) {
+            int t = u->core[R_LIDL]; u->core[R_LIDL] = u->core[R_LIDR]; u->core[R_LIDR] = t;
+        }
         return u->family = fam;
     }
+    for (int r = 0; r < ROLES; r++) u->core[r] = -1;
     return u->family = FAM_NONE;
 }
 
@@ -251,7 +286,7 @@ static int numbered(const Uc* u, int num)   /* family B: the bone "_<num>" or "_
 static Dist dist_of(const Uc* u, int i, int depth)
 {
     Dist d = { 0 }, a, b;
-    for (int r = 0; r < R_JAW; r++) if (u->core[r] == i) { d.n = 1; d.t[0] = r; d.f[0] = 1; return d; }
+    for (int r = 0; r < ROLES; r++) if (i >= 0 && u->core[r] == i) { d.n = 1; d.t[0] = r; d.f[0] = 1; return d; }
     if (i < 0 || depth > 64) { d.n = 1; d.t[0] = R_PELVIS; d.f[0] = 1; return d; }   /* (outside the skeleton: the pelvis) */
     int par = u->bone[i].parent, x, y, pct;
     for (int k = 0; k < u->nradv; k++)   /* a helper bone turning by a part of another's rotation: its weight split so */
@@ -266,16 +301,10 @@ static Dist dist_of(const Uc* u, int i, int depth)
         dist_add(&d, &a, pct / 100.0f); dist_add(&d, &b, 1 - pct / 100.0f);
         return d;
     }
-    if (u->family == FAM_C1 && !strncmp(n, "kenko_", 6)) {   /* the upper arm's twist beside jowan (the shoulder): half way */
-        char j[16];
-        int s = -1;
-        snprintf(j, sizeof(j), "jowan_%s", n + 6);
-        for (int k = 0; k < u->nb && s < 0; k++) if (!strcmp(u->bone[k].name, j)) s = k;
-        if (s >= 0) {
-            a = dist_of(u, s, depth + 1); b = dist_of(u, par, depth + 1);
-            dist_add(&d, &a, 0.5f); dist_add(&d, &b, 0.5f);
-            return d;
-        }
+    if (u->family == FAM_C1 && !SDL_strncasecmp(n, "kenko_", 6)) {   /* the upper arm's twist beside jowan (the shoulder): half way */
+        a = dist_of(u, u->core[u->bone[i].W[3] < 0 ? R_RSH : R_LSH], depth + 1); b = dist_of(u, par, depth + 1);
+        dist_add(&d, &a, 0.5f); dist_add(&d, &b, 0.5f);
+        return d;
     }
     return par < 0 ? dist_of(u, -1, depth + 1) : dist_of(u, par, depth + 1);   /* the nearest kept bone above (toes, fingers, the hips' pivot) */
 }
@@ -345,9 +374,16 @@ static int not_diffuse(const char* t)
 static int variant(const char* v)
 {
     static const char* const pre[] = { "knife", "samurai", "edge", "gun", "k_knife", "weapon", "wpn" };
-    if (!SDL_strncasecmp(v, "hand_", 5)) { const char* p = v + 5; if (*p == 'l' || *p == 'r' || *p == 'L' || *p == 'R') p++; return *p >= '1' && *p <= '9'; }
+    if (!SDL_strncasecmp(v, "hand_", 5)) { const char* p = v + 5; if (*p == 'l' || *p == 'r' || *p == 'L' || *p == 'R') p++; return *p >= '2' && *p <= '9';   /* (1, the gun grip, is kept: hand_pose) */ }
     for (size_t i = 0; i < sizeof(pre) / sizeof(pre[0]); i++) if (!SDL_strncasecmp(v, pre[i], strlen(pre[i]))) return 1;
     return 0;
+}
+/* the hands' relaxed (0) and gun-grip (1) poses are both kept: IMP_HAND_* of a visibility bone hand_r0 / r1 / l0 / l1 */
+static int hand_pose(const char* v)
+{
+    if (SDL_strncasecmp(v, "hand_", 5) || (v[6] != '0' && v[6] != '1') || v[7]) return IMP_HAND_NONE;
+    int r = v[5] == 'r' || v[5] == 'R', l = v[5] == 'l' || v[5] == 'L';
+    return r ? (v[6] == '0' ? IMP_HAND_R_OPEN : IMP_HAND_R_GRIP) : l ? (v[6] == '0' ? IMP_HAND_L_OPEN : IMP_HAND_L_GRIP) : IMP_HAND_NONE;
 }
 
 static void xform(const float* W, const float* p, float* o, int dir)   /* o = W p (dir: the rotation only) */
@@ -592,15 +628,44 @@ static int read_mdl0(B* b, uint32_t mo, const Ent* tex, int ntexe, Uc* u, ImpMod
                 continue;
             }
         }
+        static const char* const loose[] = { "Tongue", "syo_", "cube1", "it_root" };
+        int lp = 0;
+        for (size_t k = 0; k < sizeof(loose) / sizeof(loose[0]); k++) lp |= !SDL_strncasecmp(e[oi].name, loose[k], strlen(loose[k])) || !SDL_strncasecmp(vis, loose[k], strlen(loose[k]));
+        if (lp && m->nv > nv0 && u->family != FAM_NONE) {   /* loose parts reaching far out of the body (5 units past its joints'
+            box): the Licker's tongue stretched out 2.5 m, Lisa Trevor's chains, Nemesis's rocket launcher; they would hang in
+            the air off the player. (By name: the Tyrant ETY0's claw and Ivy's leaves reach as far and are the body.) */
+            float lo[3] = { 1e9f, 1e9f, 1e9f }, hi[3] = { -1e9f, -1e9f, -1e9f }, far = 0;
+            for (int r = 1; r < R_BODY; r++)
+                for (int c = 0; c < 3; c++) { lo[c] = fminf(lo[c], u->bone[u->core[r]].W[4 * c + 3]); hi[c] = fmaxf(hi[c], u->bone[u->core[r]].W[4 * c + 3]); }
+            for (int v = nv0; v < m->nv; v++)
+                for (int c = 0; c < 3; c++) far = fmaxf(far, fmaxf(lo[c] - m->pos[v][c], m->pos[v][c] - hi[c]));
+            if (far > 5.0f) {
+                if (u->dump) fprintf(u->dump, "%s %s %s %d outside %.1f\n", e[oi].name, vis, tslot >= 0 ? u->tname[tslot] : "-", m->nv - nv0, far);
+                m->nv = nv0; m->ns = ns0; m->nidx = ni0; u->outside++;
+                continue;
+            }
+        }
+        if (m->ns > u->nswrap) {   /* the strips' wrap (cut_tiles) */
+            unsigned char* q = realloc(u->swrap, (size_t)m->ns + 1024);
+            if (!q) goto out;
+            u->swrap = q;
+            u->nswrap = m->ns + 1024;
+        }
+        for (int s = ns0; s < m->ns; s++) {
+            int ws = L >= 0 ? mat->l[L].ws : 0, wt = L >= 0 ? mat->l[L].wt : 0;
+            u->swrap[s] = (unsigned char)((ws == 1 ? 1 : ws == 2 ? 3 : 0) | (wt == 1 ? 4 : wt == 2 ? 12 : 0));
+        }
         m->nmesh++;
         if (u->dump) fprintf(u->dump, "%s %s %s %d body %d%s\n", e[oi].name, vis, tslot >= 0 ? u->tname[tslot] : "-", m->nv - nv0,
                              MT ? 1 : 0, L >= 0 && !mat->l[L].ws && !mat->l[L].wt ? "" : " repeat");
-        if ((face || MT) && m->nv > nv0) {   /* the jaw's region: the face's own texture or the blink's meshes */
+        int hp = hand_pose(vis);
+        if ((face || MT || hp) && m->nv > nv0) {   /* bit 0: the jaw's region (the face's own texture or the blink's meshes);
+                                                     bits 1..3: the hand pose (IMP_HAND_*) */
             unsigned char* q = realloc(u->face, (size_t)m->nv);
             if (!q) goto out;
             u->face = q;
             if (u->nface < nv0) memset(u->face + u->nface, 0, (size_t)(nv0 - u->nface));
-            memset(u->face + nv0, 1, (size_t)(m->nv - nv0));
+            memset(u->face + nv0, (face || MT) | hp << 1, (size_t)(m->nv - nv0));
             u->nface = m->nv;
         }
     }
@@ -617,6 +682,152 @@ out:
 #undef SEC
     free(e); free(pa); free(na); free(ua); free(mats); free(mtx_node); free(envn); free(env);
     return ok;
+}
+
+/* ---------------------------------------------------------------- textures that repeat
+   The monsters repeat (and mirror) their textures: one strip of a zombie's coat runs over u -18..+9. Code: Veronica's
+   textures clamp, so a strip is drawn within one tile: a strip inside one tile (per repeating axis) is moved into it
+   (mirrored for an odd tile of a mirroring axis); one over several is cut, each triangle clipped at the tile edges
+   into pieces that each lie in one tile (new vertices on the cut, their weights, normals and blink offsets
+   interpolated). Never clamped: no smeared edge texels. */
+typedef struct Cut { ImpModel* m; Uc* u; int cv, ci, cs; } Cut;
+static int cut_room(Cut* k, int nv, int nidx, int ns)
+{
+    if (!grow(k->m, nv, nidx, ns, &k->cv, &k->ci, &k->cs)) return 0;
+    if (nv > k->u->nface) {
+        unsigned char* q = realloc(k->u->face, (size_t)k->cv);
+        if (!q) return 0;
+        memset(q + k->u->nface, 0, (size_t)(k->cv - k->u->nface));
+        k->u->face = q;
+        k->u->nface = k->cv;
+    }
+    return 1;
+}
+static int cut_vertex(Cut* k, int a, int b, float t)   /* a new vertex between a and b (t of the way to b); -1 out of memory */
+{
+    ImpModel* m = k->m;
+    int x = m->nv;
+    if (!cut_room(k, x + 1, m->nidx, m->ns)) return -1;
+    m->nv++;
+    float w[8] = { 0 }, n = 0;
+    int j[8], nj = 0;
+    for (int s = 0; s < 2; s++)
+        for (int q = 0; q < 4; q++) {
+            int v = s ? b : a, i = 0;
+            float f = m->wgt[v][q] * (s ? t : 1 - t);
+            if (f <= 0) continue;
+            while (i < nj && j[i] != m->jnt[v][q]) i++;
+            if (i == nj) j[nj++] = m->jnt[v][q];
+            w[i] += f;
+        }
+    memset(m->jnt[x], 0, 4); memset(m->wgt[x], 0, 16);
+    for (int q = 0; q < 4; q++) {   /* (the 4 largest) */
+        int best = -1;
+        for (int i = 0; i < nj; i++) if (w[i] > 0 && (best < 0 || w[i] > w[best])) best = i;
+        if (best < 0) break;
+        m->jnt[x][q] = (unsigned char)j[best]; m->wgt[x][q] = w[best]; n += w[best]; w[best] = 0;
+    }
+    for (int q = 0; q < 4; q++) m->wgt[x][q] = n > 0 ? m->wgt[x][q] / n : q == 0;
+    float l = 0;
+    for (int c = 0; c < 3; c++) {
+        m->pos[x][c] = m->pos[a][c] + (m->pos[b][c] - m->pos[a][c]) * t;
+        m->nrm[x][c] = m->nrm[a][c] + (m->nrm[b][c] - m->nrm[a][c]) * t;
+        m->morph[x][c] = m->morph[a][c] + (m->morph[b][c] - m->morph[a][c]) * t;
+        l += m->nrm[x][c] * m->nrm[x][c];
+    }
+    for (int c = 0; c < 3; c++) m->nrm[x][c] = l > 0 ? m->nrm[x][c] / sqrtf(l) : c == 1;
+    for (int c = 0; c < 2; c++) m->uv[x][c] = m->uv[a][c] + (m->uv[b][c] - m->uv[a][c]) * t;
+    k->u->face[x] = k->u->face[a];
+    return x;
+}
+/* the polygon p (n corners) clipped to lo <= uv[ax] <= hi (Sutherland-Hodgman, both edges); its corners in o, their count */
+static int cut_clip(Cut* k, const int* p, int n, int ax, float lo, float hi, int* o)
+{
+    int t[16], nt = 0, no = 0;
+    for (int e = 0; e < 2; e++) {
+        const int* in = e ? t : p;
+        int nin = e ? nt : n, *out = e ? o : t, c = 0;
+        float lim = e ? hi : lo, sg = e ? -1.0f : 1.0f;   /* inside: sg * (u - lim) >= 0 */
+        for (int i = 0; i < nin && c < 14; i++) {
+            int a = in[i], b = in[(i + 1) % nin];
+            float da = sg * (k->m->uv[a][ax] - lim), db = sg * (k->m->uv[b][ax] - lim);
+            if (da >= 0) out[c++] = a;
+            if ((da >= 0) != (db >= 0)) {
+                int x = cut_vertex(k, a, b, da / (da - db));
+                if (x < 0) return -1;
+                out[c++] = x;
+            }
+        }
+        if (e) no = c; else nt = c;
+    }
+    return no;
+}
+static float tile_local(float v, float t, int mirror)   /* within tile t, 0..1 */
+{
+    float l = v - t;
+    l = l < 0 ? 0 : l > 1 ? 1 : l;
+    return mirror && ((int)t & 1) ? 1 - l : l;
+}
+static int cut_tiles(Uc* u, ImpModel* m)
+{
+    Cut k = { m, u, m->nv, m->nidx, m->ns };
+    int ns = m->ns, cut = 0;
+    for (int s = 0; s < ns; s++) {
+        int w = s < u->nswrap ? u->swrap[s] : 0, first = m->strip[s].first, n = m->strip[s].n, tex = m->strip[s].tex;
+        float lo[2] = { 1e30f, 1e30f }, hi[2] = { -1e30f, -1e30f }, t0[2];
+        if (m->strip[s].clamp || !(w & 5) || n < 3) continue;
+        for (int i = 0; i < n; i++)
+            for (int c = 0; c < 2; c++) { lo[c] = fminf(lo[c], m->uv[m->idx[first + i]][c]); hi[c] = fmaxf(hi[c], m->uv[m->idx[first + i]][c]); }
+        int one = 1;
+        for (int c = 0; c < 2; c++) {
+            t0[c] = floorf(lo[c] + 1e-4f);
+            if ((w & (c ? 4 : 1)) && ceilf(hi[c] - 1e-4f) - 1 > t0[c]) one = 0;
+        }
+        if (one) {   /* in one tile: moved into it (the strip's vertices are its own: before welding) */
+            for (int i = 0; i < n; i++) {
+                float* t = m->uv[m->idx[first + i]];
+                for (int c = 0; c < 2; c++) if (w & (c ? 4 : 1)) t[c] = tile_local(t[c], t0[c], w & (c ? 8 : 2));
+            }
+            m->strip[s].clamp = 1;
+            continue;
+        }
+        m->strip[s].n = 0;   /* replaced by its pieces */
+        cut++;
+        for (int i = 0; i + 2 < n; i++) {
+            int tri[3] = { m->idx[first + i], m->idx[first + i + 1], m->idx[first + i + 2] }, a[16], b[16];
+            if (tri[0] == tri[1] || tri[1] == tri[2] || tri[0] == tri[2]) continue;
+            float tl[2], th[2];
+            for (int c = 0; c < 2; c++) {
+                tl[c] = th[c] = 0;
+                if (!(w & (c ? 4 : 1))) continue;
+                float l0 = fminf(m->uv[tri[0]][c], fminf(m->uv[tri[1]][c], m->uv[tri[2]][c])), h0 = fmaxf(m->uv[tri[0]][c], fmaxf(m->uv[tri[1]][c], m->uv[tri[2]][c]));
+                tl[c] = floorf(l0 + 1e-4f); th[c] = fmaxf(tl[c], ceilf(h0 - 1e-4f) - 1);
+            }
+            for (float tu = tl[0]; tu <= th[0]; tu++) {
+                int na = (w & 1) ? cut_clip(&k, tri, 3, 0, tu, tu + 1, a) : (memcpy(a, tri, sizeof(tri)), 3);
+                if (na < 0) return -1;
+                for (float tv = tl[1]; tv <= th[1] && na >= 3; tv++) {
+                    int nb = (w & 4) ? cut_clip(&k, a, na, 1, tv, tv + 1, b) : (memcpy(b, a, sizeof(int) * (size_t)na), na);
+                    if (nb < 0) return -1;
+                    if (nb < 3) continue;
+                    /* the piece as a strip of its own corners (their UVs in the tile): 0, 1, n-1, 2, n-2, ... (convex) */
+                    if (!cut_room(&k, m->nv + nb, m->nidx + nb, m->ns + 1)) return -1;
+                    ImpStrip* st = &m->strip[m->ns++];
+                    st->first = m->nidx; st->n = nb; st->tex = tex; st->clamp = 1;
+                    for (int q = 0, lo_ = 1, hi_ = nb - 1; q < nb; q++) {
+                        int src = q == 0 ? b[0] : (q & 1) ? b[lo_++] : b[hi_--], x = m->nv++;
+                        memcpy(m->pos[x], m->pos[src], 12); memcpy(m->nrm[x], m->nrm[src], 12); memcpy(m->morph[x], m->morph[src], 12);
+                        memcpy(m->jnt[x], m->jnt[src], 4); memcpy(m->wgt[x], m->wgt[src], 16);
+                        m->uv[x][0] = (w & 1) ? tile_local(m->uv[src][0], tu, w & 2) : m->uv[src][0];
+                        m->uv[x][1] = (w & 4) ? tile_local(m->uv[src][1], tv, w & 8) : m->uv[src][1];
+                        u->face[x] = u->face[src];
+                        m->idx[m->nidx++] = x;
+                    }
+                }
+            }
+        }
+    }
+    return cut;
 }
 
 /* rotation (3x3 rows) to a quaternion (x, y, z, w) */
@@ -670,7 +881,7 @@ static int make_jaw(ImpModel* r, const unsigned char* face, float rest[ROLES][3]
         for (int k = 0; k < 4; k++) if (r->jnt[v][k] == R_HEAD) h += r->wgt[v][k];
         if (h < 0.5f) continue;
         top = fmaxf(top, r->pos[v][1]);
-        if (!face[v]) continue;
+        if (!(face[v] & 1)) continue;
         if (fabsf(r->pos[v][0]) < 0.3f) { yc = fminf(yc, r->pos[v][1]); zf = fmaxf(zf, r->pos[v][2]); }
         if (r->morph && fabsf(r->morph[v][0]) + fabsf(r->morph[v][1]) + fabsf(r->morph[v][2]) > 1e-3f) { ye += r->pos[v][1]; n++; }
     }
@@ -681,7 +892,7 @@ static int make_jaw(ImpModel* r, const unsigned char* face, float rest[ROLES][3]
     rest[R_JAW][0] = 0; rest[R_JAW][1] = yc + 0.75f * L; rest[R_JAW][2] = zp;
     int moved = 0;
     for (int v = 0; v < r->nv; v++) {
-        if (!face[v]) continue;
+        if (!(face[v] & 1)) continue;
         const float* p = r->pos[v];
         float j = smooth(ym + 0.03f * L, ym - 0.08f * L, p[1]) * smooth(zp + 0.1f * L, zp + 0.5f * L, p[2]);
         if (j <= 0) continue;
@@ -705,6 +916,9 @@ static int make_jaw(ImpModel* r, const unsigned char* face, float rest[ROLES][3]
    same). UC's sit at the game's height already (Chris: 0.52 below the neck, CVX's Chris 0.56): not lowered. */
 static const struct { const char* id; float in, down; } fits[] = {
     { "", 0.8f, 0.0f },
+    /* the monsters keep their build (moved in, the Hunter's arms ran through its chest; Nemesis's, the Tyrants' shoulders are
+       their shape); the zombies, Lisa and the office worker are people */
+    { "EHT", 0, 0 }, { "ELK", 0, 0 }, { "ENS", 0, 0 }, { "ETY", 0, 0 }, { "EEL", 0, 0 }, { "EIV", 0, 0 },
 };
 
 static void uc_fit(const char* id, float rest[ROLES][3], ImpFit* fit)
@@ -716,6 +930,9 @@ static void uc_fit(const char* id, float rest[ROLES][3], ImpFit* fit)
         if (!strncmp(id, fits[i].id, strlen(fits[i].id)) && strlen(fits[i].id) >= best) { best = strlen(fits[i].id); in = fits[i].in; down = fits[i].down; }
     float half = (fabsf(rest[R_RSH][0]) + fabsf(rest[R_LSH][0])) * 0.5f, target = rest[R_HEAD][1] * 1.4f / 15.05f;
     float dx = half > target ? in * (half - target) : 0;
+    dx = fminf(dx, fminf(fabsf(rest[R_RCLAV][0] - rest[R_CHEST][0]), fabsf(rest[R_LCLAV][0] - rest[R_CHEST][0])) - 0.2f);   /* (the clavicles stay
+        0.2 out: the rig takes a sideways child of the chest for an arm only from 0.15) */
+    if (dx < 0) dx = 0;
     for (int s = 0; s < 2; s++) {   /* (game space: x turned) */
         int clav = s ? R_LCLAV : R_RCLAV;
         fit->move[s].node = clav;
@@ -725,15 +942,117 @@ static void uc_fit(const char* id, float rest[ROLES][3], ImpFit* fit)
     fit->n = 2;
 }
 
+/* v = M u (M 3x3 rows): the rotation turning direction u onto v (the shortest: no twist about either) */
+static void rot_from_to(const float* u, const float* v, float* M)
+{
+    float a[3], b[3], la = sqrtf(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]), lb = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    for (int c = 0; c < 9; c++) M[c] = c % 4 == 0;
+    if (la < 1e-6f || lb < 1e-6f) return;
+    for (int c = 0; c < 3; c++) { a[c] = u[c] / la; b[c] = v[c] / lb; }
+    float x[3] = { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] }, cs = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    if (cs < -0.9999f) return;   /* (opposite: not a limb of a T-pose) */
+    float k = 1.0f / (1.0f + cs);   /* Rodrigues: I + [x] + [x]^2 / (1 + cos) */
+    M[0] = cs + x[0] * x[0] * k;  M[1] = x[0] * x[1] * k - x[2]; M[2] = x[0] * x[2] * k + x[1];
+    M[3] = x[1] * x[0] * k + x[2]; M[4] = cs + x[1] * x[1] * k;  M[5] = x[1] * x[2] * k - x[0];
+    M[6] = x[2] * x[0] * k - x[1]; M[7] = x[2] * x[1] * k + x[0]; M[8] = cs + x[2] * x[2] * k;
+}
+static void mv3(const float* M, const float* p, float* o) { for (int r = 0; r < 3; r++) o[r] = M[3 * r] * p[0] + M[3 * r + 1] * p[1] + M[3 * r + 2] * p[2]; }
+
+/* The limbs turned to Code: Veronica's rest pose. Imported models take the player's world rotations unchanged (they are
+   skinned to their own rest pose, actor_glue.c retarget), so a limb that lies otherwise at rest lies otherwise in every
+   pose: UC's are straight (arms level, legs plumb), the game's upper arms hang 4 degrees, its thighs lean 4 degrees in
+   and 5 back and its shins 6 back. Measured in game on the pose dumps (Chris, Jill: every limb 4..6.5 degrees off, the
+   feet 0.5 wider apart and 0.8 ahead of the player's). So the mesh is posed: upper arm, forearm and hand, thigh and shin
+   turned onto the game's bone directions (the shortest turn: no twist), the feet moved along without turning (flat on the
+   floor as before), by the vertices' weights. Monsters whose arms are not level at rest come out in the same pose. */
+static const float cvx_limb[4][3] = {   /* Claire's rest skeleton (RECVX_RIG_DUMP; the hidden copy moving a man has her
+                                           offsets too), right side, in UC's frame (the character's right at -x, +z forward) */
+    { -2.35f, -0.17f, -0.04f },   /* shoulder to elbow */
+    { -2.27f, 0.04f, 0.15f },     /* elbow to wrist */
+    { 0.30f, -4.25f, -0.38f },    /* hip to knee */
+    { 0.08f, -4.17f, -0.47f },    /* knee to ankle */
+};
+static void repose(ImpModel* r, float rest[ROLES][3])
+{
+    static const int chain[4][4] = { { R_RSH, R_REL, R_RWR, 0 }, { R_LSH, R_LEL, R_LWR, 0 }, { R_RTHIGH, R_RKNEE, R_RANKLE, 2 }, { R_LTHIGH, R_LKNEE, R_LANKLE, 2 } };
+    float R[ROLES][9], to[ROLES][3];
+    for (int k = 0; k < ROLES; k++) { for (int c = 0; c < 9; c++) R[k][c] = c % 4 == 0; memcpy(to[k], rest[k], 12); }
+    for (int i = 0; i < 4; i++) {
+        const int *ch = chain[i], left = i & 1;
+        float d1[3], d2[3], u1[3], u2[3], w[3], A[9], B[9];
+        for (int c = 0; c < 3; c++) {
+            d1[c] = cvx_limb[ch[3]][c] * (left && !c ? -1 : 1); d2[c] = cvx_limb[ch[3] + 1][c] * (left && !c ? -1 : 1);
+            u1[c] = rest[ch[1]][c] - rest[ch[0]][c]; u2[c] = rest[ch[2]][c] - rest[ch[1]][c];
+        }
+        rot_from_to(u1, d1, R[ch[0]]);
+        mv3(R[ch[0]], u1, w);
+        for (int c = 0; c < 3; c++) to[ch[1]][c] = to[ch[0]][c] + w[c];
+        mv3(R[ch[0]], u2, w);
+        rot_from_to(w, d2, A);
+        for (int a = 0; a < 3; a++) for (int b = 0; b < 3; b++) B[3 * a + b] = A[3 * a] * R[ch[0]][b] + A[3 * a + 1] * R[ch[0]][3 + b] + A[3 * a + 2] * R[ch[0]][6 + b];
+        memcpy(R[ch[1]], B, sizeof(B));
+        mv3(B, u2, w);
+        for (int c = 0; c < 3; c++) to[ch[2]][c] = to[ch[1]][c] + w[c];
+        if (!ch[3]) memcpy(R[ch[2]], B, sizeof(B));   /* (the hand along the forearm; the foot keeps its turn) */
+    }
+    for (int v = 0; v < r->nv; v++) {
+        float p[3] = { 0 }, n[3] = { 0 }, mo[3] = { 0 }, q[3], o[3];
+        for (int j = 0; j < 4; j++) {
+            float wt = r->wgt[v][j];
+            int k = r->jnt[v][j];
+            if (wt <= 0 || k >= ROLES) continue;
+            for (int c = 0; c < 3; c++) q[c] = r->pos[v][c] - rest[k][c];
+            mv3(R[k], q, o);
+            for (int c = 0; c < 3; c++) p[c] += wt * (o[c] + to[k][c]);
+            mv3(R[k], r->nrm[v], o);
+            for (int c = 0; c < 3; c++) n[c] += wt * o[c];
+            if (r->morph) { mv3(R[k], r->morph[v], o); for (int c = 0; c < 3; c++) mo[c] += wt * o[c]; }
+        }
+        float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+        for (int c = 0; c < 3; c++) { r->pos[v][c] = p[c]; r->nrm[v][c] = l > 0 ? n[c] / l : c == 1; if (r->morph) r->morph[v][c] = mo[c]; }
+    }
+    memcpy(rest, to, sizeof(to));
+}
+
+/* Coat tails and skirts on bones of their own that hang from the hips (Wesker's coat in PWS2: 12 pairs; the office worker's
+   skirt) were merged into the pelvis: rigid, the thighs ran through them. A vertex's share on them goes to the thigh on its
+   side as far down as it hangs: none at the hips, 0.6 from the knees down, between the legs half on each (as Outbreak's
+   flaps_to_thighs, softened: a coat's front swings with the thigh, its middle with both) */
+static int tail_bone(const Uc* u, const Dist* d, int i)
+{
+    if (d[i].n != 1 || d[i].t[0] != R_PELVIS) return 0;
+    for (int r = 0; r < ROLES; r++) if (u->core[r] >= 0 && (u->core[r] == i || is_above(u, i, u->core[r]))) return 0;
+    return 1;
+}
+
 /* the model on the converted skeleton (ROLES nodes): weights summed per role (twist bones split), the face */
 static int reduce(Uc* u, const ImpModel* m, ImpModel* r, char* err, int en)
 {
     float rest[ROLES][3];
     Dist d[UC_BONES];
+    unsigned char tail[UC_BONES];
     memset(r, 0, sizeof(*r));
-    for (int i = 0; i < u->nb; i++) d[i] = dist_of(u, i, 0);
-    for (int k = 0; k < R_JAW; k++) for (int c = 0; c < 3; c++) rest[k][c] = u->bone[u->core[k]].W[4 * c + 3];
+    for (int i = 0; i < u->nb; i++) {
+        d[i] = dist_of(u, i, 0);
+        if (d[i].n == 1 && d[i].t[0] == R_ROOT && i != u->core[R_ROOT]) {   /* hung from the root beside the body (the Licker's
+            tongue): the nearest joint's */
+            float bd = 1e30f;
+            for (int k = 1; k < ROLES; k++) {
+                float e = 0;
+                if (u->core[k] < 0) continue;
+                for (int c = 0; c < 3; c++) { float q = u->bone[i].W[4 * c + 3] - u->bone[u->core[k]].W[4 * c + 3]; e += q * q; }
+                if (e < bd) { bd = e; d[i].t[0] = k; }
+            }
+        }
+    }
+    for (int i = 0; i < u->nb; i++) tail[i] = (unsigned char)tail_bone(u, d, i);
+    for (int k = 0; k < ROLES; k++) for (int c = 0; c < 3; c++) rest[k][c] = u->bone[u->core[k >= R_BODY && u->core[k] < 0 ? R_HEAD : k]].W[4 * c + 3];
     rest[R_ROOT][0] = rest[R_ROOT][1] = rest[R_ROOT][2] = 0;
+    {   /* a pelvis bone left at the floor (the zombies EZ33, EZ38: _00 at 0, its hips pivot _15 at 11.4): the pivot the thighs
+           hang from takes its place (the rig found no arms on a spine rising from the floor: they stayed in their T-pose) */
+        int hp = u->bone[u->core[R_RTHIGH]].parent;
+        if (hp >= 0 && u->bone[hp].W[7] - rest[R_PELVIS][1] > 2.0f) for (int c = 0; c < 3; c++) rest[R_PELVIS][c] = u->bone[hp].W[4 * c + 3];
+    }
     for (int s = 0; s < 2; s++) {   /* the clavicles at least 0.2 out from the chest (family B's start 0.11 out: the rig takes a
         sideways child of the chest for an arm only from 0.15) */
         int c = s ? R_LCLAV : R_RCLAV;
@@ -751,12 +1070,19 @@ static int reduce(Uc* u, const ImpModel* m, ImpModel* r, char* err, int en)
     memcpy(r->morph, m->morph, 12 * (size_t)m->nv);
     memcpy(r->idx, m->idx, sizeof(int) * (size_t)m->nidx); memcpy(r->strip, m->strip, sizeof(ImpStrip) * (size_t)m->ns);
     r->nidx = m->nidx; r->ns = m->ns; r->nmesh = m->nmesh;
+    float hip_y = (rest[R_RTHIGH][1] + rest[R_LTHIGH][1]) / 2, knee_y = (rest[R_RKNEE][1] + rest[R_LKNEE][1]) / 2;
+    float hip_x = fmaxf(0.2f, (fabsf(rest[R_RTHIGH][0]) + fabsf(rest[R_LTHIGH][0])) / 2);
     for (int v = 0; v < m->nv; v++) {
-        float acc[ROLES] = { 0 }, s = 0;
+        float acc[ROLES] = { 0 }, s = 0, tw = 0;
         for (int k = 0; k < 4; k++) {
             if (m->wgt[v][k] <= 0 || m->jnt[v][k] >= u->nb) continue;
             const Dist* x = &d[m->jnt[v][k]];
             for (int j = 0; j < x->n; j++) acc[x->t[j]] += m->wgt[v][k] * x->f[j];
+            if (tail[m->jnt[v][k]]) tw += m->wgt[v][k];
+        }
+        if (tw > 0) {   /* (coat tails, skirts: tail_bone) */
+            float mv = fminf(acc[R_PELVIS], tw * 0.6f * smooth(hip_y, knee_y, m->pos[v][1])), sr = smooth(0.5f * hip_x, -0.5f * hip_x, m->pos[v][0]);
+            acc[R_PELVIS] -= mv; acc[R_RTHIGH] += mv * sr; acc[R_LTHIGH] += mv * (1 - sr);
         }
         for (int k = 0; k < 4; k++) {
             int best = -1;
@@ -767,13 +1093,37 @@ static int reduce(Uc* u, const ImpModel* m, ImpModel* r, char* err, int en)
         if (s <= 0) { r->jnt[v][0] = R_PELVIS; r->wgt[v][0] = s = 1; }
         for (int k = 0; k < 4; k++) r->wgt[v][k] /= s;
     }
-    int jaw = make_jaw(r, u->face, rest);
-    r->jaw_gain = 0.6f;   /* (closed lips stretch: Outbreak's angles, made for a mouth that opens, tear them at 14 degrees) */
-    r->nn = jaw ? ROLES : R_JAW;
+    {   /* the hand poses: a side with both its open and its gun-grip hand (hand_pose) */
+        int have = 0;
+        for (int v = 0; v < r->nv; v++) have |= 1 << (u->face[v] >> 1);
+        for (int s = 0; s < 2; s++)
+            if ((have >> (IMP_HAND_R_OPEN + 2 * s) & 3) == 3 && !r->hand && !(r->hand = calloc((size_t)r->nv, 1))) { snprintf(err, en, "Out of memory."); return 0; }
+        for (int v = 0; r->hand && v < r->nv; v++) {
+            int t = u->face[v] >> 1, s = t >= IMP_HAND_L_OPEN;
+            r->hand[v] = (unsigned char)(t && (have >> (IMP_HAND_R_OPEN + 2 * s) & 3) == 3 ? t : 0);
+        }
+    }
+    /* the face: a jaw bone of the model's own (the monsters', the office worker's mouth) turns as the game's angle; the players
+       get one made (make_jaw) */
+    int jaw = u->core[R_JAW] >= 0 || make_jaw(r, u->face, rest), lids = 0;
+    /* (closed lips stretch: Outbreak's angles, made for a mouth that opens, tear them at 14 degrees. A monster's own jaw opens wide
+       mouths: at the game's angles the Licker gaped through every line of a cutscene; half of them) */
+    r->jaw_gain = u->core[R_JAW] >= 0 ? 0.5f : 0.6f;
+    for (int e = 0; e < 2; e++) {   /* lid bones (the Tyrant ETY0's mabu_l / mabu_r): down by 2.5 times the height of what is on them (a thin flap
+        over the eye: 0.06 high on ETY0; UC turns it, here it slides) */
+        float y0 = 1e9f, y1 = -1e9f;
+        if (u->core[R_LIDL + e] < 0) continue;
+        for (int v = 0; v < r->nv; v++)
+            for (int k = 0; k < 4; k++) if (r->jnt[v][k] == R_LIDL + e && r->wgt[v][k] >= 0.5f) { y0 = fminf(y0, r->pos[v][1]); y1 = fmaxf(y1, r->pos[v][1]); }
+        if (y1 > y0) { r->lid_travel[e] = fminf(0.29f, 2.5f * (y1 - y0)); lids = 1; }   /* (left, right: the character's left at +x, as Outbreak's) */
+    }
+    repose(r, rest);
+    r->nn = lids ? ROLES : jaw ? R_JAW + 1 : R_JAW;
     for (int k = 0; k < r->nn; k++) {
         ImpNode* n = &r->node[k];
         int p = role_parent[k];
-        n->parent = p; n->keep = 1; n->face = k == R_JAW ? IMP_FACE_JAW : 0;
+        n->parent = p; n->keep = 1;
+        n->face = k == R_JAW && jaw ? IMP_FACE_JAW : k == R_LIDL && lids ? IMP_FACE_LID_L : k == R_LIDR && lids ? IMP_FACE_LID_R : 0;
         for (int c = 0; c < 3; c++) n->t[c] = rest[k][c] - (p >= 0 ? rest[p][c] : 0);
         n->q[3] = 1;
     }
@@ -788,10 +1138,25 @@ static const struct { const char* key; const char* name; const char* variant; in
     { "PBI1", "Billy Coen", "", 0 }, { "PCA1", "Carlos Oliveira", "", 0 }, { "PAD1", "Ada Wong", "Costume 1", 1 }, { "PAD2", "Ada Wong", "Costume 2", 1 },
     { "PHK1", "HUNK", "", 0 }, { "PWS1", "Albert Wesker", "S.T.A.R.S.", 0 }, { "PWS2", "Albert Wesker", "Umbrella's End", 0 },
     { "PWS3", "Albert Wesker", "S.T.A.R.S., Wounded", 0 },
+    /* the monsters and others (IMPORT_GROUP_NPCS: "Monsters and Others"): humanoid, on a known skeleton. Left out: the
+       dogs, crows, spiders, plants and other shapes (no player motion fits them), ENS2..5 (Nemesis's later forms: 28000
+       vertices), placeholders */
+    { "EZ00", "Zombie", "1", 0 }, { "EZ01", "Zombie", "2", 0 }, { "EZ02", "Zombie", "3", 0 }, { "EZ03", "Zombie", "4", 0 },
+    { "EZ04", "Zombie", "5", 0 }, { "EZ05", "Zombie", "6", 0 }, { "EZ06", "Zombie", "7", 0 }, { "EZ07", "Zombie", "8", 0 },
+    { "EZ08", "Zombie", "9", 0 }, { "EZ09", "Zombie", "10", 0 }, { "EZ10", "Zombie", "11", 0 }, { "EZ11", "Zombie", "12", 0 },
+    { "EZ12", "Zombie", "13", 0 }, { "EZ13", "Zombie", "14", 0 }, { "EZ14", "Zombie", "15", 0 }, { "EZ15", "Zombie", "16", 0 },
+    { "EZ16", "Zombie", "17", 0 }, { "EZ17", "Zombie", "18", 0 }, { "EZ18", "Zombie", "19", 0 }, { "EZ19", "Zombie", "20", 0 },
+    { "EZ20", "Zombie", "21", 0 }, { "EZ21", "Zombie", "22", 0 }, { "EZ26", "Zombie", "23", 0 }, { "EZ27", "Zombie", "24", 0 },
+    { "EZ28", "Zombie", "25", 0 }, { "EZ29", "Zombie", "26", 0 }, { "EZ30", "Zombie", "27", 0 }, { "EZ31", "Zombie", "28", 0 },
+    { "EZ32", "Zombie", "29", 0 }, { "EZ33", "Zombie", "30", 0 }, { "EZ34", "Zombie", "31", 0 }, { "EZ35", "Zombie", "32", 0 },
+    { "EZ36", "Zombie", "33", 0 }, { "EZ37", "Zombie", "34", 0 }, { "EZ38", "Zombie", "35", 0 },
+    { "EHT1", "Hunter", "", 0 }, { "ELK1", "Licker", "", 0 }, { "ENS1", "Nemesis", "", 0 },
+    { "ETY0", "Tyrant", "T-002", 0 }, { "ETY5", "Tyrant", "T-103", 0 }, { "ETY6", "Tyrant", "T-103, 2", 0 }, { "ETY7", "Tyrant", "T-103, 3", 0 },
+    { "ELT1", "Lisa Trevor", "", 1 }, { "EEL0", "Eliminator", "", 0 }, { "EIV1", "Ivy", "", 0 }, { "OSIT1", "Office Worker", "", 1 },
 };
 #define NPLAYERS (int)(sizeof(players) / sizeof(players[0]))
 
-int uc_group(const char* id) { return id[0] == 'P' ? IMPORT_GROUP_PLAYERS : -1; }   /* (phase 3: E* enemies, O* NPCs) */
+int uc_group(const char* id) { return id[0] == 'P' ? IMPORT_GROUP_PLAYERS : id[0] == 'E' || id[0] == 'O' ? IMPORT_GROUP_NPCS : -1; }
 
 /* one model: <KEY>.arc's <KEY>.brres (+ expression.exp) into dir: the glTF of the whole skeleton, its textures as PNG,
    the .cvxm */
@@ -850,11 +1215,36 @@ static int convert(const unsigned char* arc, uint32_t an, const char* key, const
     it->ok = 1;
     it->verts = m.nv;
     if (u->family == FAM_NONE) { snprintf(err, en, "Exported only: skeleton not known (%d bones).", u->nb); goto out; }
+    if (cut_tiles(u, &m) < 0) { snprintf(err, en, "Out of memory."); goto out; }
     if (!reduce(u, &m, &r, err, en)) goto out;
     imp_weld(&r);
     it->verts = r.nv;
     for (int k = 0; k < m.ntex; k++) { r.tim2[k] = m.tim2[k]; r.tim2_len[k] = m.tim2_len[k]; m.tim2[k] = NULL; }
     r.ntex = m.ntex; m.ntex = 0;
+    for (;;) {   /* what the game reads must fit the model buffer (actor_glue.c KEEP_SIZE, 1.5 MB; the cast's three of them in 3 MB):
+        the textures at most 1 MB (Nemesis has six of 512x512), the largest halved until they are (the glTF keeps them whole) */
+        int big = -1, w, h, len;
+        long total = 0, most = 0;
+        unsigned char *px, *q;
+        for (int k = 0; k < r.ntex; k++) {
+            if (!imp_tim2_rgba(r.tim2[k], r.tim2_len[k], &w, &h, &px)) continue;
+            free(px);
+            total += (long)w * h;
+            if ((long)w * h > most && w > 64 && h > 64) { most = (long)w * h; big = k; }
+        }
+        if (total <= 1L << 20 || big < 0 || !imp_tim2_rgba(r.tim2[big], r.tim2_len[big], &w, &h, &px)) break;
+        if (!(q = malloc((size_t)w * h))) { free(px); break; }   /* (w / 2 x h / 2 x 4 bytes) */
+        for (int y = 0; y < h / 2; y++)   /* (a 2x2 box) */
+            for (int x = 0; x < w / 2; x++)
+                for (int c = 0; c < 4; c++)
+                    q[4 * (y * (w / 2) + x) + c] = (unsigned char)((px[4 * ((2 * y) * w + 2 * x) + c] + px[4 * ((2 * y) * w + 2 * x + 1) + c] +
+                                                                    px[4 * ((2 * y + 1) * w + 2 * x) + c] + px[4 * ((2 * y + 1) * w + 2 * x + 1) + c] + 2) / 4);
+        free(px);
+        unsigned char* t = imp_tim2_from_rgba(q, w / 2, h / 2, &len);
+        free(q);
+        if (!t) break;
+        free(r.tim2[big]); r.tim2[big] = t; r.tim2_len[big] = len;
+    }
     {
         float rest[ROLES][3];
         float (*W)[16] = calloc(r.nn, sizeof(*W));
@@ -869,12 +1259,13 @@ static int convert(const unsigned char* arc, uint32_t an, const char* key, const
         if (imp_write_cvxm(&r, path, 1.0f, gindex, &fit, e2, sizeof(e2))) it->player = 1;
         else snprintf(err, en, "Not playable: %s", e2);
         if (it->player && u->held) snprintf(err, en, "Weapons held in the hands left out (%d).", u->held);
-        if (it->player && r.nn < ROLES && !err[0]) snprintf(err, en, "No face found for the jaw.");
+        if (it->player && u->outside && !err[0]) snprintf(err, en, "Parts reaching far out of the body left out (%d).", u->outside);
+        if (it->player && r.nn <= R_JAW && !err[0]) snprintf(err, en, "No face found for the jaw.");
     }
     ok = 1;
 out:
     imp_free(&m); imp_free(&r);
-    if (u) free(u->face);
+    if (u) free(u->face), free(u->swrap);
     free(u);
     return ok;
 }
@@ -892,8 +1283,10 @@ int uc_extract(const char* iso, const char* outdir, int what, ImportItem* items,
         rvz_close(d);
         return -1;
     }
-    pg->total = (what & IMPORT_PLAYERS) ? NPLAYERS : 0;
-    for (int i = 0; i < pg->total && *count < max; i++) {
+    pg->total = 0;
+    for (int i = 0; i < NPLAYERS; i++) pg->total += (what >> uc_group(players[i].key)) & 1;
+    for (int i = 0; i < NPLAYERS && *count < max; i++) {
+        if (!((what >> uc_group(players[i].key)) & 1)) continue;
         ImportItem* it = &items[(*count)++];
         char path[1200], dir[1200], err[160] = "";
         uint32_t n;
@@ -902,7 +1295,7 @@ int uc_extract(const char* iso, const char* outdir, int what, ImportItem* items,
         snprintf(it->name, sizeof(it->name), "%s", players[i].name);
         snprintf(it->variant, sizeof(it->variant), "%s", players[i].variant);
         it->female = players[i].female;
-        it->group = IMPORT_GROUP_PLAYERS;
+        it->group = uc_group(players[i].key);
         snprintf(pg->phase, sizeof(pg->phase), "%s%s%s%s (%s)", it->name, it->variant[0] ? " (" : "", it->variant, it->variant[0] ? ")" : "", it->id);
         snprintf(path, sizeof(path), "Data/chara/%s.arc", players[i].key);
         unsigned char* arc = rvz_file(d, path, &n);
@@ -916,7 +1309,7 @@ int uc_extract(const char* iso, const char* outdir, int what, ImportItem* items,
         snprintf(it->note, sizeof(it->note), "%s", err);
         fails += !it->ok;
         pg->failed = fails;
-        pg->done = i + 1;
+        pg->done++;
     }
     rvz_close(d);
     return fails;

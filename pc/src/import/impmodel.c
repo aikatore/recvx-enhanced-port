@@ -63,7 +63,7 @@ static int save(const char* path, const void* d, size_t n)
 
 void imp_free(ImpModel* m)
 {
-    free(m->pos); free(m->nrm); free(m->uv); free(m->jnt); free(m->wgt); free(m->strip); free(m->idx); free(m->iuv); free(m->morph);
+    free(m->pos); free(m->nrm); free(m->uv); free(m->jnt); free(m->wgt); free(m->strip); free(m->idx); free(m->iuv); free(m->morph); free(m->hand);
     for (int i = 0; i < m->ntex; i++) free(m->tim2[i]);
     memset(m, 0, sizeof(*m));
 }
@@ -277,7 +277,7 @@ unsigned char* imp_tim2_from_rgba(const unsigned char* rgba, int w, int h, int* 
 }
 
 /* ---------------------------------------------------------------- welding */
-typedef struct WKey { int32_t k[17]; int v; } WKey;
+typedef struct WKey { int32_t k[18]; int v; } WKey;
 static int wkey_cmp(const void* a, const void* b)
 {
     const WKey *x = a, *y = b;
@@ -292,11 +292,12 @@ int imp_weld(ImpModel* m)
     int* to = malloc(sizeof(int) * (size_t)nv);
     float (*pos)[3] = malloc(12 * (size_t)nv), (*nrm)[3] = malloc(12 * (size_t)nv), (*uv)[2] = malloc(8 * (size_t)nv), (*wgt)[4] = malloc(16 * (size_t)nv);
     float (*mo)[3] = m->morph ? malloc(12 * (size_t)nv) : NULL;
+    unsigned char* hd = m->hand ? malloc((size_t)nv) : NULL;
     unsigned char (*jnt)[4] = malloc(4 * (size_t)nv);
     if (!m->iuv && (m->iuv = malloc(sizeof(*m->iuv) * (size_t)(m->nidx ? m->nidx : 1))))
         for (int i = 0; i < m->nidx; i++) memcpy(m->iuv[i], m->uv[m->idx[i]], 8);
-    if (!w || !to || !pos || !nrm || !uv || !wgt || !jnt || (m->morph && !mo) || !m->iuv) {
-        free(w); free(to); free(pos); free(nrm); free(uv); free(wgt); free(jnt); free(mo);
+    if (!w || !to || !pos || !nrm || !uv || !wgt || !jnt || (m->morph && !mo) || (m->hand && !hd) || !m->iuv) {
+        free(w); free(to); free(pos); free(nrm); free(uv); free(wgt); free(jnt); free(mo); free(hd);
         return m->nv;
     }
     for (int v = 0; v < m->nv; v++) {
@@ -304,6 +305,7 @@ int imp_weld(ImpModel* m)
         for (int c = 0; c < 3; c++) { k[c] = (int32_t)lroundf(m->pos[v][c] * 1e4f); k[3 + c] = (int32_t)lroundf(m->nrm[v][c] * 1e3f); }
         for (int j = 0; j < 4; j++) { k[6 + j] = m->wgt[v][j] > 0 ? m->jnt[v][j] : -1; k[10 + j] = (int32_t)lroundf(m->wgt[v][j] * 1e3f); }
         for (int c = 0; c < 3; c++) k[14 + c] = m->morph ? (int32_t)lroundf(m->morph[v][c] * 1e4f) : 0;
+        k[17] = m->hand ? m->hand[v] : 0;   /* (the open and the gripping hand share the wrist's seam: kept apart) */
         w[v].v = v;
     }
     qsort(w, (size_t)m->nv, sizeof(WKey), wkey_cmp);
@@ -314,12 +316,13 @@ int imp_weld(ImpModel* m)
         memcpy(pos[n], m->pos[v], 12); memcpy(nrm[n], m->nrm[v], 12); memcpy(uv[n], m->uv[v], 8);
         memcpy(jnt[n], m->jnt[v], 4); memcpy(wgt[n], m->wgt[v], 16);
         if (mo) memcpy(mo[n], m->morph[v], 12);
+        if (hd) hd[n] = m->hand[v];
         n++;
     }
     for (int i = 0; i < m->nidx; i++) m->idx[i] = to[m->idx[i]];
     free(w); free(to);
-    free(m->pos); free(m->nrm); free(m->uv); free(m->jnt); free(m->wgt); free(m->morph);
-    m->pos = pos; m->nrm = nrm; m->uv = uv; m->jnt = jnt; m->wgt = wgt; m->morph = mo;
+    free(m->pos); free(m->nrm); free(m->uv); free(m->jnt); free(m->wgt); free(m->morph); free(m->hand);
+    m->pos = pos; m->nrm = nrm; m->uv = uv; m->jnt = jnt; m->wgt = wgt; m->morph = mo; m->hand = hd;
     m->nv = n;
     return n;
 }
@@ -716,9 +719,10 @@ int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gi
                 }
                 /* the strip moved by whole tiles (the textures repeat in Outbreak, the game clamps): into the tile
                    of its lowest UV, or of its highest when less of it sticks out that way (Yoko's jeans: v 1.99..2.14,
-                   the seat drawn from the skin at the texture's bottom edge) */
-                if (st->clamp) fu = fv = 0;   /* (a clamped texture (Wii): the game clamps too, the UVs as they are) */
-                else { fu = tile(fu, u1); fv = tile(fv, v1); }
+                   the seat drawn from the skin at the texture's bottom edge). The same for a clamped (Wii) texture: a strip
+                   inside 0..1 stays, one mostly outside moves in (the zombie EZ33's shirt at v 1..2), its overhang clamped
+                   as the Wii shows it; Umbrella Chronicles' repeating textures come cut into tiles (uc.c cut_tiles) */
+                fu = tile(fu, u1); fv = tile(fv, v1);
                 put16(&plist, (uint16_t)st->n);
                 for (int i = 0; i < st->n; i++) {
                     int x = m->idx[st->first + i];
@@ -812,6 +816,14 @@ int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gi
             n++;
         }
         if (n) { set32(&f, 44, at); set32(&f, 48, n); }
+    }
+    int hands = 0;
+    for (int v = 0; m->hand && v < m->nv; v++) hands |= m->hand[v];
+    if (hands) {   /* the hand poses (version 6; Outbreak's files stay version 5, byte for byte) */
+        set32(&f, 56, (uint32_t)f.n);
+        put(&f, m->hand, (size_t)m->nv);
+        align(&f, 4, 0);
+        set32(&f, 4, 6);
     }
     PcCvxm cv;
     char why[96];

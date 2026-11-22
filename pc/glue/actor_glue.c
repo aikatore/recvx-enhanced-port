@@ -101,6 +101,8 @@ typedef struct Disguise {
     int nmorph;
     float shut;                         /* the lids: 0 open .. 1 closed (imp_face, for imp_skin's blink morph) */
     float jaw_gain;                     /* version 5: the jaw's angle times this (1; Umbrella Chronicles' made jaw less) */
+    const unsigned char* hand;          /* version 6: per vertex its hand pose (impmodel.h IMP_HAND_*; in file), NULL none */
+    int grip;                           /* the gun-grip hands shown: 1 right, 2 left (actor_pose; else the open ones) */
     float talk;                         /* the jaw (degrees) from the player's voice, imp_face */
     unsigned int seed;                  /* (its own random numbers: the game's rand() stays the game's) */
     struct {   /* the player characters' cutscene models: the head part the scripts link to them (Claire's
@@ -1268,6 +1270,8 @@ static int load_import_model(Disguise* d, int k)
     d->nv = (int)cv.nv;
     d->morph = cv.nmorph ? (const CvxmMorph*)(d->file + cv.morph) : NULL;   /* (Umbrella Chronicles' blink) */
     d->nmorph = (int)cv.nmorph;
+    d->hand = cv.hand ? d->file + cv.hand : NULL;   /* (Umbrella Chronicles' open and gun-grip hands) */
+    d->grip = 0;
     d->shut = 0;
     d->jaw_gain = 1;
     if (rd32(d->keep + 4) >= 5) {
@@ -1368,6 +1372,17 @@ static void imp_skin(Disguise* d)
     for (i = 0; i < d->nv; i++) {
         const CvxmSkin* s = &d->skin[i];
         float p[3] = { 0 }, q[3] = { 0 }, l[3], b[3], *o = d->vtx + 8 * i;
+        int t = d->hand ? d->hand[i] : 0;
+        if (t && (t <= IMP_HAND_R_GRIP ? (t == IMP_HAND_R_OPEN) == ((d->grip & 1) != 0) : (t == IMP_HAND_L_OPEN) == ((d->grip & 2) != 0))) {
+            /* the other pose of this hand: shrunk to its wrist (no triangle left to draw) */
+            int w = d->rig.map[t <= IMP_HAND_R_GRIP ? 9 : 13];
+            const float* m = ow[w >= 0 ? w : 1].mtx;
+            for (c = 0; c < 3; c++) l[c] = m[12 + c] - m1[12 + c];
+            for (c = 0; c < 3; c++) { o[c] = l[0] * m1[c * 4] + l[1] * m1[c * 4 + 1] + l[2] * m1[c * 4 + 2]; o[4 + c] = 0; }
+            o[5] = 1;
+            if (mi < d->nmorph && d->morph[mi].v == (uint32_t)i) mi++;
+            continue;
+        }
         for (c = 0; c < 3; c++) b[c] = s->pos[c];
         if (mi < d->nmorph && d->morph[mi].v == (uint32_t)i) {   /* the blink morph: the bind position towards the closed lids */
             for (c = 0; c < 3; c++) b[c] += d->shut * d->morph[mi].d[c];
@@ -1958,6 +1973,14 @@ void actor_pose(int who, BH_PWORK* src)
             d->src_head[1] = sr.map[5];
             head_pose(d, who == ACTOR_DOUBLE || who >= ACTOR_CAST ? dbl_tick == 1 : !redraw);   /* (one head part, one swing per tick) */
             if (d->skin) imp_face(d, src, who == ACTOR_DOUBLE || who >= ACTOR_CAST ? dbl_tick == 1 : !redraw);
+            if (d->hand) {   /* the gun-grip hands: the right one while the player holds a weapon, the left one too while it holds it
+                with both (the model's wrists under 2.5 apart: a long gun's fore-end, a two-handed handgun aim) */
+                const float *r = d->rig.map[9] >= 0 ? m->owP[(int)d->rig.map[9]].mtx + 12 : NULL, *l = d->rig.map[13] >= 0 ? m->owP[(int)d->rig.map[13]].mtx + 12 : NULL;
+                float e = 1e9f;
+                if (r && l) e = (r[0] - l[0]) * (r[0] - l[0]) + (r[1] - l[1]) * (r[1] - l[1]) + (r[2] - l[2]) * (r[2] - l[2]);
+                d->grip = who < 2 && src->wpnr_no > 0 ? 1 | (e < 2.5f * 2.5f ? 2 : 0) : 0;
+                if (getenv("RECVX_IMPORT_GRIP")) d->grip = atoi(getenv("RECVX_IMPORT_GRIP"));   /* test aid: 0 open, 1 right, 3 both */
+            }
             imp_skin(d);
             return;
         }

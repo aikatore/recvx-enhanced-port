@@ -42,9 +42,9 @@ const ImportSource import_sources[IMPORT_SOURCES] = {
       "Italian fan translation by KimeraVX, with cutscene subtitles. Import it from your own disc image of the European release (SLES-50306) with the Italian patch.",
       "Needs the European disc image with the Italian fan translation by KimeraVX: %s." },
     { "umbrella", "Resident Evil: The Umbrella Chronicles", "RBUE08", IMPORT_CAT_CHARACTERS,
-      "Chris, Jill, Rebecca, Richard, Kenneth, Billy, Carlos, Ada, HUNK and Wesker, in their costumes. Import them from your own disc image of the US Wii release (RBUE08) in Dolphin's RVZ format.",
-      "Needs a clean US disc image of Resident Evil: The Umbrella Chronicles in Dolphin's RVZ format: %s.", IMPORT_PLAYERS, "rvz",
-      { "Umbrella Chronicles Characters", "Umbrella Chronicles Cutscenes", "Umbrella Chronicles Supporting Cast", "Umbrella Chronicles Enemies" } },
+      "Chris, Jill, Rebecca, Richard, Kenneth, Billy, Carlos, Ada, HUNK and Wesker in their costumes, and the game's monsters. Import them from your own disc image of the US Wii release (RBUE08) in Dolphin's RVZ format.",
+      "Needs a clean US disc image of Resident Evil: The Umbrella Chronicles in Dolphin's RVZ format: %s.", IMPORT_PLAYERS | IMPORT_NPCS, "rvz",
+      { "Umbrella Chronicles Characters", "Umbrella Chronicles Cutscenes", "Umbrella Chronicles Monsters and Others", "Umbrella Chronicles Enemies" } },
 };
 
 #define ITEMS_MAX 1024
