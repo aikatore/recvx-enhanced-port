@@ -6,8 +6,10 @@
 
 - **Move While Aiming (Fixed Cameras)**: an option to walk while aiming, firing and reloading with the fixed cameras.
 - **What's New**: a button on the title screen shows the changes of the installed version.
-- **Imported models**: each import source (such as Outbreak File 2) can be hidden from the model lists and random picks
-  without deleting it, under IMPORT > CHARACTERS or with a quick toggle in the lists.
+- **Imported models**: each imported game (Umbrella Chronicles, Outbreak File 2, the Dreamcast disc) has its own
+  checkbox in the model lists and under GAME SETUP > CHARACTERS; only checked games show up in the lists and random
+  picks, and all start unchecked. With Umbrella Chronicles checked and its voices imported, its characters also join
+  the cutscene randomizer and speak their own lines.
 - **BioRand**: items on the floor now show the item you will actually get instead of the original one (Show Randomized
   Item Models, on by default).
 - **Umbrella Chronicles import**: the player characters, monsters and other characters of Resident Evil: The Umbrella
