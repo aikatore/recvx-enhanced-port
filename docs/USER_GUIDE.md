@@ -334,7 +334,7 @@ until the right square on the white strip is.
 | Types per Room | No Limit | Wild and Custom aim for that many different kinds of enemies in a room (1..8) as far as its enemies allow; Mild stays under it |
 | Randomize Event Enemies | On | event enemies change too |
 | Enemy Seed | 0 | the same seed gives the same enemies (and the same cutscene cast) |
-| Break Free Pushes Enemies | Auto | breaking free from a grab knocks back every enemy close by (zombies, anatomists, Cerberus, Hunters and Sweepers, Bandersnatches, Black Widows on the floor; not bosses) with its own hit reaction, without damage, and for 1.8 s no enemy can grab you (other attacks still hit). Auto: on while the Enemy Randomizer or Extra Enemies is on. Off: as the original, where only a shaken-off zombie knocks down the zombies it flies into. In co-op the host's |
+| Break Free Pushes Enemies | Off | breaking free from a grab pushes back every enemy close by as you shake the grabber off (zombies, anatomists, Cerberus, Hunters and Sweepers, Bandersnatches, Black Widows on the floor; not bosses), without damage: most stagger back on their feet, only one pressed right against you goes down; and for 2.5 s after you stand up no enemy can grab you (other attacks still hit). Auto: on while the Enemy Randomizer or Extra Enemies is on. Off: as the original, where only a shaken-off zombie knocks down the zombies it flies into. In co-op the host's |
 | Randomize Cutscene Cast | Off | see [Cutscene cast](#cutscene-cast): the story characters as other models in cutscenes |
 | Model Selection | Cutscene Models | where the characters' new looks come from |
 | Choose Models | | with Custom, right under Model Selection: opens the list of models to check (below) |
