@@ -22,11 +22,9 @@
  *   Black Widow (3): its reel (en03 DG01, a hit of 30 to 50); close: its heavy hit (DG03); on the floor only
  * Bosses, enemy variants, the other types, the records the room's scripts act on (enemy_rec_scripted), the dead,
  * the hidden, linked parts and enemies in any other mode (attacking, grabbing, in an event) are left alone.
- * For SHOVE_IMMUNE frames after the player stands again no enemy can start a grab on that player (pc_grab_immune,
- * checked where the types above decide to grab); their other attacks still hit.
+ * There is no grab immunity afterwards (pc_grab_immune answers no): the push and stagger alone give the player room.
  * Co-op: each game watches its own player. An enemy the partner's game runs gets the push as EV_ENE_HIT with
- * COOP_HIT_SHOVE (forwarded, deferred like a shot), and its runner applies it; receiving one starts the partner's
- * immunity in our game (the grabs our game decides on the partner's stand-in).
+ * COOP_HIT_SHOVE (forwarded, deferred like a shot), and its runner applies it.
  */
 #include "../../decomp/include/ps2/veronica/prog/types.h"
 #include "../../decomp/include/ps2/veronica/prog/main.h"
@@ -73,15 +71,7 @@ static int trace = -1, trace_until;
 int pc_shove_on(void) { return coop_shove_rule(); }
 
 /* enemy code (en01, en03, en04, en09, en26), with plp the player it goes for: no new grab on it now */
-int pc_grab_immune(void)
-{
-    int p, r;
-    if (!plp || !pc_shove_on()) return 0;
-    p = coop_on && coop_plp_partner();
-    r = frame < (p ? partner : mine);
-    if (r && trace > 0) printf("test: shove frame %d: enemy %d's grab check on %s refused (immune)\n", frame, (int)sys->enow, p ? "the partner" : "us");
-    return r;
-}
+int pc_grab_immune(void) { return 0; }   /* (no grab immunity after a push: the stagger alone is the window) */
 
 void pc_shove_partner(void) { partner = frame + SHOVE_LETGO + SHOVE_IMMUNE; }   /* coop_glue.c: the partner was let go (it stands again later) */
 
@@ -202,7 +192,7 @@ static void break_free(void)
         host_log("breakfree: enemy %d (id %d type %d) dist %.1f mode %d -> %d/%d%s\n", i, ep->id, ep->type, d, m, ep->mode0, ep->mode2, ok ? "" : " (left alone)");
     }
     if (best >= 0) coop_shove(best, cx, cz, 1);   /* (co-op: the partner learns of our immunity) */
-    host_log("breakfree: room %d/%d at %.0f %.0f: %d enemies pushed, %d sent; no grab for %d frames\n", sys->stg_no, sys->rom_no, cx, cz, n, sent, SHOVE_IMMUNE);
+    host_log("breakfree: room %d/%d at %.0f %.0f: %d enemies pushed, %d sent\n", sys->stg_no, sys->rom_no, cx, cz, n, sent);
 }
 
 /* the grab code of en01, en01b, en03, en04, en09, en26, the frame the grabber lets go of plp alive: the push goes out

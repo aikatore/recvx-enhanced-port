@@ -344,19 +344,12 @@ An enemy attacking or reeling then (mode0 2 or 3: the grabber letting go) is pus
 frames of the push (60 to 78 after the player stands). Left alone: bosses and the other types, enemy variants, the
 records the room's scripts act on (`enemy_rec_scripted`), a Cerberus of another type or lying (exp0 `0x10` bit
 `0x100000`: one thrown off a grab), a Hunter in the air, a Bandersnatch holding a player, the dead, the hidden,
-linked parts. Then for **75 game frames (2.5 s) from standing again** no enemy can start a grab on that player
-(`pc_grab_immune` where the types decide to grab: `en01.c` `bhEne01_ActionModeCheck` (the player counts as busy: the
-zombie waits beside it, as during a partner's grab) and `bhEne01_EatCheck`, `en26.c` the same two, `en04.c`
-`bhEne04_PlyDamageCheck` (the leap's grab below 12 HP misses), `en09.c bhEne09_PlyNageCheck`, `en03.c` the leap's two
-grab tests); every other attack still hits. 2.5 s (1.8 s while everyone fell): with the lighter push the enemies are
-back on their feet before the player stands, and with 54 frames the next grab came 58 to 68 frames after standing
-(with the falls: 87 and more); with 75 it comes 76 frames and later, time to turn and run.
+linked parts. There is **no grab immunity** afterwards (`pc_grab_immune` answers no; the user found the 2.5 s window
+too long, 2026-11-22): the push and the stagger alone give the player room.
 
 **Co-op**: each game watches its own player. Our game sees only its own player's release (the grab code runs where the grabbing enemy runs), so a hold the partner's game ran pushes as our player stands. Enemies our game runs are pushed at once; one the partner's game runs gets
 an `EV_ENE_HIT` with `COOP_HIT_SHOVE` (no joints, damage or hit bits; `dp`: where the player broke free) and its runner
-pushes it (`hit_apply` -> `pc_shove_apply`), passed on or kept for a hand-over like a shot (protocol 59). Receiving one
-starts the partner's immunity in our game, 54 + 75 frames (it comes with the push, before the partner stands; 54, `SHOVE_LETGO`: the longest let-go), for the grabs our game decides on the partner's stand-in, `plp == &ply2`;
-with no enemy of the partner's game near, one `COOP_HIT_MARK` event carries only that.
+pushes it (`hit_apply` -> `pc_shove_apply`), passed on or kept for a hand-over like a shot (protocol 59).
 
 **Measured** (headless, `RECVX_SHOVE_TRACE=1`: grabs, break frees, a trace of the enemies around every 5 frames for 150
 frames; cross pressed every 4 frames, the player standing still; old = rule Off, new = On):

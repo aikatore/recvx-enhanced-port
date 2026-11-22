@@ -480,7 +480,7 @@ const Setting g_settings[] = {
       .help = "Change event enemies too; those needed for scenes only change appearance. Applies next room." },
     { SP_GAMEPLAY, "Enemy Seed", V(g_enemy_opts.seed), 0, 99999, 1, .fmt = "%d", .help = "Use the same seed for repeatable enemy and cast choices. In co-op, both players use the host's seed." },
     { SP_GAMEPLAY, "Break Free Pushes Enemies", V(g_config.break_free), 0, 2, 1, (const char* const[]){ "Off", "Auto", "On" },
-      .help = "Breaking free from a grab knocks back every enemy close by, and none can grab you for a moment. Auto: only with the Enemy Randomizer or Extra Enemies on. In co-op, the host decides." },
+      .help = "Breaking free from a grab pushes back every enemy close by. Auto: only with the Enemy Randomizer or Extra Enemies on. In co-op, the host decides." },
     { SP_GAMEPLAY, "Randomize Cutscene Cast", V(g_enemy_opts.cast), 0, 1, 1, .group = "CUTSCENE CAST",
       .help = "Change story characters' appearance in cutscenes using the enemy seed. Applies next room." },
     { SP_GAMEPLAY, "Model Selection", V(g_enemy_opts.cast_all), 0, 2, 1, cast_pools, .shown = cast_on,

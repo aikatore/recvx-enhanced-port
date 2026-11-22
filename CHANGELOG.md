@@ -15,8 +15,7 @@
   models, with blinking, lip movement and hands that grip held weapons. Their voice lines can be imported too, so
   Randomize Voice Lines lets imported characters speak with their own voices.
 - **Break Free Pushes Enemies**: a new option (off by default) so that breaking free from any grab pushes every enemy
-  close by back, and for a moment none can grab you again, so several enemy types can no longer pass you from grab to
-  grab.
+  close by back, so several enemy types can no longer pass you from grab to grab.
 - **Dreamcast import**: Steve with his Dreamcast hairstyle can be imported from your own Dreamcast disc 1 (CUE/BIN, GDI
   or CHD): his cutscene, event and in-game models, used in cutscenes, when you play him, as a cast model or as your
   look, talking and blinking like the original.
