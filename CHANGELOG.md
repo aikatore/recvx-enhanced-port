@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+> [!NOTE]
+> Sorry for the delay for this update, but GTA6 is a time hog :D  This version adds new imports and updates the
+> Outbreak Models, so you need to reimport those for the changes to apply. Please note that the voicelines for the
+> Umbrella Chronicles characters are not manually sorted yet, so expect there to be broke/wrongly assigned ones!
+
 ### Changes
 
 - **Move While Aiming (Fixed Cameras)**: an option to walk while aiming, firing and reloading with the fixed cameras.
