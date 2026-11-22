@@ -61,6 +61,9 @@ void imp_tim2_alpha_255(unsigned char* t, int len);
 /* an RGBA8 picture (w, h: powers of two up to 1024) as an 8-bit TIM2 with a 32-bit CLUT (256 colours by median cut,
    then refined; alpha moved to the PS2 range, 0x80 opaque), malloc'd (*len bytes); NULL: out of memory */
 unsigned char* imp_tim2_from_rgba(const unsigned char* rgba, int w, int h, int* len);
+/* the same as the game's texture chunk (bhSetMemPvpTexture: 32-byte chunk header, Code: Veronica's TIM2 header with
+   Gindex gindex, loaded without a palette list), malloc'd (*len bytes); NULL: out of memory */
+unsigned char* imp_tex_chunk(const unsigned char* rgba, int w, int h, unsigned gindex, int* len);
 /* merges vertices of the same position, normal, weights and morph (the strips' UVs move into iuv): Wii models
    give a vertex per triangle corner. Returns the vertices left. */
 int  imp_weld(ImpModel* m);

@@ -45,7 +45,9 @@ enum { IS_MENU, IS_ASK, IS_WORK, IS_RESULT };
 #define OFFERED (import_sources[im.src].offered)   /* the groups the game offers (ImportSource.offered) */
 #define UC_SRC (im.src == IMPORT_UMBRELLA)   /* Umbrella Chronicles: its second group is its monsters and an office worker */
 #define NPCS_NAME (UC_SRC ? "Monsters and Others" : "NPCs")
-enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK, K_CARD, K_HEAD, K_SHOW, K_VOICES };   /* K_SHOW: "Show in Model Lists" (actors.h
+#define DC_SRC (im.src == IMPORT_DREAMCAST)   /* the Dreamcast release: one model (no groups to choose), Steve in cutscenes */
+enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK, K_CARD, K_HEAD, K_SHOW, K_VOICES, K_STEVE };   /* K_STEVE: the Dreamcast
+    release's "Dreamcast Steve in Cutscenes" (import.h g_import.dc_steve); K_SHOW: "Show in Model Lists" (actors.h
     g_import_hidden); K_VOICES: Umbrella Chronicles' "Voice Lines" (IMPORT_VOICES, uc_voice.c) */
 #define TOGGLES(k) ((k) == K_PLAYERS || (k) == K_NPCS || (k) == K_VOICES)   /* (the On / Off rows of what to import) */
 #define TOGGLE_BIT(k) ((k) == K_PLAYERS ? IMPORT_PLAYERS : (k) == K_NPCS ? IMPORT_NPCS : IMPORT_VOICES)
@@ -139,6 +141,18 @@ static void show_toggle(void)
     host_log("import menu: %s models %s in the model lists\n", import_sources[im.src].key, shown_src() ? "shown" : "hidden");
 }
 
+/* "Dreamcast Steve in Cutscenes" (cast_glue.c own_look): from the next room on */
+static void steve_toggle(void)
+{
+    g_import.dc_steve ^= 1;
+    settings_save_later();
+    CallSystemSe(0, 2);
+    host_log("import menu: Dreamcast Steve in cutscenes %s\n", g_import.dc_steve ? "on" : "off");
+}
+static int is_switch(int k) { return k == K_SHOW || k == K_STEVE; }   /* (an On / Off row of settings) */
+static void switch_toggle(int k) { if (k == K_SHOW) show_toggle(); else steve_toggle(); }
+static int switch_on(int k) { return k == K_SHOW ? shown_src() : g_import.dc_steve; }
+
 static void build_rows(void)
 {
     nrows = 0;
@@ -148,15 +162,15 @@ static void build_rows(void)
             add(K_HEAD, im.cat);
             for (int i = 0; i < IMPORT_SOURCES; i++) if (import_sources[i].cat == im.cat) add(K_GAME, i);
         } else {
-            if (langs() < 0) add(K_HEAD, 2);
-            if (langs() < 0 && (OFFERED & IMPORT_PLAYERS)) add(K_PLAYERS, 0);
+            if (langs() < 0 && !DC_SRC) add(K_HEAD, 2);   /* (the Dreamcast release: nothing to choose) */
+            if (langs() < 0 && (OFFERED & IMPORT_PLAYERS) && !DC_SRC) add(K_PLAYERS, 0);
             if (langs() < 0 && (OFFERED & IMPORT_NPCS)) add(K_NPCS, 0);
             if (langs() < 0 && (OFFERED & IMPORT_VOICES)) add(K_VOICES, 0);
             add(K_HEAD, 4);
             add(K_DISC, 0);
             add(K_START, 0);
             add(K_DELETE, 0);
-            if (show_row()) { add(K_HEAD, 5); add(K_SHOW, 0); }
+            if (show_row()) { add(K_HEAD, 5); add(K_SHOW, 0); if (DC_SRC) add(K_STEVE, 0); }
         }
         if (im.row >= nrows) im.row = nrows - 1;
         while (im.row < nrows - 1 && rows[im.row].kind == K_HEAD) im.row++;
@@ -165,13 +179,13 @@ static void build_rows(void)
     if (im.page == P_CATS) for (int i = 0; i < N_CATS; i++) add(K_CAT, i);
     else if (im.page == P_GAMES) { for (int i = 0; i < IMPORT_SOURCES; i++) if (import_sources[i].cat == im.cat) add(K_GAME, i); }
     else {
-        if (langs() < 0 && (OFFERED & IMPORT_PLAYERS)) add(K_PLAYERS, 0);
+        if (langs() < 0 && (OFFERED & IMPORT_PLAYERS) && !DC_SRC) add(K_PLAYERS, 0);
         if (langs() < 0 && (OFFERED & IMPORT_NPCS)) add(K_NPCS, 0);
         if (langs() < 0 && (OFFERED & IMPORT_VOICES)) add(K_VOICES, 0);
         add(K_DISC, 0);
         add(K_START, 0);
         add(K_DELETE, 0);
-        if (show_row()) add(K_SHOW, 0);
+        if (show_row()) { add(K_SHOW, 0); if (DC_SRC) add(K_STEVE, 0); }
     }
     add(K_BACK, 0);
     if (im.row >= nrows) im.row = nrows - 1;
@@ -192,6 +206,7 @@ static void look(void)
 
 static const char* counts(char* t, int n)
 {
+    if (DC_SRC) { snprintf(t, n, "%s", tr(im.players ? "Steve (Dreamcast Hair) can be played." : "No models can be played.")); return t; }
     if (im.players && im.npcs) snprintf(t, n, tr(UC_SRC ? "%d playable characters and %d monsters and others can be played." : "%d playable characters and %d NPCs can be played."), im.players, im.npcs);
     else if (im.players || im.npcs) snprintf(t, n, tr("%d %s can be played."), im.players + im.npcs, tr(im.players ? "playable characters" : UC_SRC ? "monsters and others" : "NPCs"));
     else snprintf(t, n, tr("No models can be played."));
@@ -323,11 +338,11 @@ static int activate(const Row* r)
     case K_CAT: CallSystemSe(0, 3); im.cat = r->idx; set_page(P_GAMES); return 0;   /* (cats[] in IMPORT_CAT_* order) */
     case K_GAME: CallSystemSe(0, 3); im.src = r->idx; set_page(P_OPTS); return 0;
     case K_PLAYERS: case K_NPCS: case K_VOICES: toggle(r); return 0;
-    case K_SHOW: show_toggle(); return 0;
+    case K_SHOW: case K_STEVE: switch_toggle(r->kind); return 0;
     case K_DISC:
         if (why) { refuse(why); return 0; }
         snprintf(g_lobby_io.file, sizeof(g_lobby_io.file), "%s", g_import.iso[im.src]);
-        g_lobby_io.file_rvz = import_sources[im.src].ext != NULL;   /* (the dialog's filter: Wii RVZ images) */
+        g_lobby_io.file_src = im.src;   /* (the dialog's filter: that game's disc images) */
         __atomic_store_n(&g_lobby_io.file_req, 1, __ATOMIC_RELEASE);   /* the main thread opens the dialog */
         im.picking = 1;
         CallSystemSe(0, 3);
@@ -396,7 +411,7 @@ static int input(void)
         r = &rows[im.row];
         if (m->left && hit >= 0) {
             if (TOGGLES(r->kind) && m->x >= VAL_X - 10) { toggle(r); return 0; }
-            if (r->kind == K_SHOW) { show_toggle(); return 0; }
+            if (is_switch(r->kind)) { switch_toggle(r->kind); return 0; }
             return activate(r);
         }
         if (m->right || (press & cancel)) {
@@ -407,7 +422,7 @@ static int input(void)
         if (rept & BTN_UP) { im.row = (im.row + nrows - 1) % nrows; im.say_t = 0; CallSystemSe(0, 2); }
         else if (rept & BTN_DOWN) { im.row = (im.row + 1) % nrows; im.say_t = 0; CallSystemSe(0, 2); }
         else if ((rept & (BTN_LEFT | BTN_RIGHT)) && TOGGLES(r->kind)) toggle(r);
-        else if ((rept & (BTN_LEFT | BTN_RIGHT)) && r->kind == K_SHOW) show_toggle();
+        else if ((rept & (BTN_LEFT | BTN_RIGHT)) && is_switch(r->kind)) switch_toggle(r->kind);
         else if (press & ok) return activate(r);
         return 0;
     }
@@ -438,11 +453,13 @@ static const char* row_help(const Row* r)
     case K_PLAYERS: return "The playable characters and their costumes.";
     case K_VOICES: return "The characters' lines and shouts, for Randomize Voice Lines: the imported models say them. Who says each line is guessed.";
     case K_NPCS: return UC_SRC ? "The zombies, the Hunter, the Licker, Nemesis, the Tyrants, Lisa Trevor, the Eliminator, Ivy and an office worker." : "The other people of the game. Some have no names; they are listed by their file.";
-    case K_DISC: return import_sources[im.src].ext ? "Choose your disc image (.rvz, Dolphin's format) in a file dialog." : "Choose your disc image (.iso) in a file dialog.";
+    case K_DISC: return DC_SRC ? "Choose your disc image (.cue, .gdi or .chd) in a file dialog."
+                        : import_sources[im.src].ext ? "Choose your disc image (.rvz, Dolphin's format) in a file dialog." : "Choose your disc image (.iso) in a file dialog.";
     case K_START: return langs() >= 0 ? "Import every language of the disc image. This takes a few seconds."
                                        : "Import the chosen groups from the disc image. This takes a few seconds to a minute.";
     case K_DELETE: return langs() >= 0 ? "Delete the imported languages from the mods folder." : "Delete the imported models of this game from the mods folder.";
     case K_SHOW: return "Off: this game's models leave every model list and random pool, without deleting them. A look you already use stays until you change it.";
+    case K_STEVE: return "On: Steve is shown as his Dreamcast model in the cutscenes, his mouth and eyes moving as before, wherever the cutscene cast leaves him as himself. While you play Steve, choose it as Character Model.";
     default: return im.page == P_CATS ? "Back to the title menu (also cancel or a right click)." : "Back (also cancel or a right click).";
     }
 }
@@ -465,6 +482,7 @@ static void draw_row(int i)
     case K_VOICES: v = (im.what & IMPORT_VOICES) ? "On" : "Off"; label = "Voice Lines"; break;
     case K_DISC: v = disc_name(); break;
     case K_SHOW: v = shown_src() ? "On" : "Off"; label = "Show in Model Lists"; break;
+    case K_STEVE: v = g_import.dc_steve ? "On" : "Off"; label = "Dreamcast Steve in Cutscenes"; break;
     }
     pc_ui_text(ROW_X, y, tr(label), ROW_SC, col);
     if (r->kind == K_DISC) {   /* the file's name, its end cut when it is long */
@@ -672,7 +690,7 @@ static int nm_input(int port)
     if (m->left && hit >= 0) {
         const Row* r = &rows[hit];
         if (TOGGLES(r->kind) && mx >= N_VALUE - 16) { toggle(r); return 0; }
-        if (r->kind == K_SHOW) { show_toggle(); return 0; }
+        if (is_switch(r->kind)) { switch_toggle(r->kind); return 0; }
         return r->kind == K_CARD ? (CallSystemSe(0, 3), card(), 0) : activate(r);
     }
     if (m->right || esc_edge || (press & cancel)) return nm_back();
@@ -680,7 +698,7 @@ static int nm_input(int port)
     if (rept & BTN_UP) nm_move(-1);
     else if (rept & BTN_DOWN) nm_move(1);
     else if ((rept & (BTN_LEFT | BTN_RIGHT)) && TOGGLES(rows[im.row].kind)) toggle(&rows[im.row]);
-    else if ((rept & (BTN_LEFT | BTN_RIGHT)) && rows[im.row].kind == K_SHOW) show_toggle();
+    else if ((rept & (BTN_LEFT | BTN_RIGHT)) && is_switch(rows[im.row].kind)) switch_toggle(rows[im.row].kind);
     else if (press & ok) {
         if (rows[im.row].kind == K_CARD) { CallSystemSe(0, 3); card(); return 0; }
         return activate(&rows[im.row]);
@@ -710,11 +728,11 @@ static void nm_row(int i)
         if (import_present(r->idx)) nm_text(N_VALUE, y, tr("Imported"), 0.55f, 104, col);
         nm_arrow(N_X1 - 6, y + 9, 1, col);
         return;
-    case K_PLAYERS: case K_NPCS: case K_VOICES: case K_SHOW: {
-        int on = r->kind == K_SHOW ? shown_src() : im.what & TOGGLE_BIT(r->kind);
+    case K_PLAYERS: case K_NPCS: case K_VOICES: case K_SHOW: case K_STEVE: {
+        int on = is_switch(r->kind) ? switch_on(r->kind) : im.what & TOGGLE_BIT(r->kind);
         const char* s = tr(on ? "On" : "Off");
         float w = pc_ui_text_w(s, 0.55f);
-        nm_text(N_LABEL, y, tr(r->kind == K_SHOW ? "Show in Model Lists" : r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_VOICES ? "Voice Lines" : NPCS_NAME), 0.55f, N_VALUE - N_LABEL - 16, col);
+        nm_text(N_LABEL, y, tr(r->kind == K_STEVE ? "Dreamcast Steve in Cutscenes" : r->kind == K_SHOW ? "Show in Model Lists" : r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_VOICES ? "Voice Lines" : NPCS_NAME), 0.55f, N_VALUE - N_LABEL - 16, col);
         if (live) { nm_arrow(N_VALUE - 12, y + 9, -1, col); nm_arrow(N_VALUE + w + 13, y + 9, 1, col); }
         nm_t(N_VALUE, y, s, 0.55f, col);
         return;
@@ -812,8 +830,8 @@ static void nm_draw(void)
         switch (r->kind) {
         case K_GAME: nm_text(20, N_HELP - 2, title_of(r->idx), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_CARD: nm_text(20, N_HELP - 2, tr("Import Memory Card Saves"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
-        case K_PLAYERS: case K_NPCS: case K_DISC: case K_SHOW:
-            nm_text(20, N_HELP - 2, tr(r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_NPCS ? NPCS_NAME : r->kind == K_SHOW ? "Show in Model Lists" : "Disc Image"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
+        case K_PLAYERS: case K_NPCS: case K_DISC: case K_SHOW: case K_STEVE:
+            nm_text(20, N_HELP - 2, tr(r->kind == K_STEVE ? "Dreamcast Steve in Cutscenes" : r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_NPCS ? NPCS_NAME : r->kind == K_SHOW ? "Show in Model Lists" : "Disc Image"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_START: nm_text(20, N_HELP - 2, tr("START IMPORT"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_DELETE: nm_text(20, N_HELP - 2, tr(langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : "DELETE IMPORTED MODELS"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         }

@@ -170,7 +170,12 @@ int appear_voice(int chr)
 {
     static const signed char files[COOP_CHR_ACTOR] = { -1, 0, 1, 2, 3, 0 };
     int m = chr - COOP_CHR_ACTOR;
-    if (import_of(chr) >= 0) return actor_imports[import_of(chr)].anim == ANIM_FEMALE ? 0 : 1;
+    if (import_of(chr) >= 0) {
+        const ActorModel* a = &actor_imports[import_of(chr)];
+        for (int i = 0; a->id && i < ACTOR_MODELS; i++) if (actor_models[i].id == a->id) return appear_voice(COOP_CHR_ACTOR + i);   /* (one in the game's
+            own format: as the catalogue's model of its type, the Dreamcast Steve as Steve) */
+        return a->anim == ANIM_FEMALE ? 0 : 1;
+    }
     if (chr < 0 || chr > COOP_CHR_MAX) return -1;
     if (m < 0) return files[chr];
     if (m >= 3 && m <= 4) return 2;   /* Steve's doubles */

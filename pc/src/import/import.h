@@ -1,7 +1,8 @@
 /* Importing assets from other games' discs (F9 window; docs/IMPORT_OUTBREAK.md) and other releases of this
    game (languages; docs/LANGUAGES.md). The user's own disc image is read in place; what is extracted goes to
    <dir>/<source>/ (default mods/import), never into the repository. Sources: Resident Evil Outbreak File #2
-   (SLUS-20984, characters); languages from Resident Evil Code: Veronica X European (SLES-50306), the US disc with
+   (SLUS-20984, characters), Resident Evil: The Umbrella Chronicles (RBUE08, characters), Code: Veronica's Dreamcast release
+   (T-1204N, Steve's cutscene model; docs/IMPORT_DREAMCAST.md); languages from Resident Evil Code: Veronica X European (SLES-50306), the US disc with
    the Russian fan translation by Brosko (SLUS-20184), Biohazard Code: Veronica Kanzenban (SLPM-65022), the European
    disc with the Turkish fan translation by Patriots Çeviri (SLES-50306), the US disc with the Brazilian Portuguese
    fan translation by gledson999 (SLUS-20184), the European disc with the Arabic fan translation by Abdulaziz Al-Amri
@@ -15,7 +16,7 @@ extern "C" {
 #endif
 
 enum { IMPORT_OUTBREAK2, IMPORT_SLES50306, IMPORT_SLUS20184RU, IMPORT_SLPM65022, IMPORT_SLES50306TR, IMPORT_SLUS20184PT, IMPORT_SLES50306AR,
-       IMPORT_SLPM65022KO, IMPORT_SLES50306IT, IMPORT_UMBRELLA, IMPORT_SOURCES };   /* (new ones at the end: g_import_hidden's bits) */
+       IMPORT_SLPM65022KO, IMPORT_SLES50306IT, IMPORT_UMBRELLA, IMPORT_DREAMCAST, IMPORT_SOURCES };   /* (new ones at the end: g_import_hidden's bits) */
 enum { IMPORT_CAT_CHARACTERS, IMPORT_CAT_LANGUAGES };   /* what a source gives (the IMPORT screen's categories) */
 
 /* the groups of models (F9 lists them by group), and what to extract: bits 1 << group (F9 checkboxes,
@@ -31,6 +32,8 @@ enum { IMPORT_PLAYERS = 1, IMPORT_CUTSCENE = 2, IMPORT_NPCS = 4, IMPORT_ENEMIES 
 typedef struct ImportSettings {
     char dir[1024];                     /* ini import_dir; empty: <mods>/import (RECVX_MODS, default ./mods) */
     char iso[IMPORT_SOURCES][1024];     /* ini import_<key>_iso */
+    int dc_steve;                       /* ini import_dreamcast_steve: Steve's records in cutscenes drawn as the Dreamcast model
+                                           (cast_glue.c; docs/IMPORT_DREAMCAST.md "Steve in cutscenes") */
 } ImportSettings;
 extern ImportSettings g_import;
 
@@ -41,7 +44,8 @@ typedef struct ImportItem {
     char variant[32];     /* e.g. Costume 1 */
     int ok;               /* glTF written */
     int nodes, meshes, verts, tris, textures;
-    int player;           /* 1: converted for "You appear as" (<id>.cvxm), 2: male, female in `female` */
+    int player;           /* 1: converted for "You appear as" (<id>.cvxm), 2: male, female in `female`; 3: in the game's own
+                             format, a room file holding it (<id>.rdx, dc.c) */
     int female;
     int group;            /* IMPORT_GROUP_* (from the id) */
     char note[160];       /* failure reason, or what was left out */
@@ -55,7 +59,7 @@ typedef struct ImportSource {
     const char* help;     /* the IMPORT screen's line for it (NULL: the category's) */
     const char* need;     /* its DISC line, a format with the serial (NULL: the category's) */
     int offered;          /* a character source: the groups offered (IMPORT_* bits: its checkboxes, what is extracted and listed) */
-    const char* ext;      /* the disc image's file type for the file dialogs (NULL: iso) */
+    const char* ext;      /* the disc image's file types for the file dialogs: "rvz", "cue;gdi;chd;cd1" (NULL: iso) */
     const char* groups[IMPORT_GROUPS];   /* its groups' headings in the model lists (actors.c appear_group) */
 } ImportSource;
 extern const ImportSource import_sources[IMPORT_SOURCES];
@@ -67,6 +71,10 @@ typedef struct ImportProgress {
     char phase[160];      /* what is being done (always 0-terminated); after a run its summary or why the disc is unusable */
 } ImportProgress;
 extern ImportProgress g_import_progress;
+
+/* the file dialogs' filter for src's disc images (SDL_DialogFileFilter): its name, its pattern */
+const char* import_filter_name(int src);
+const char* import_filter_pattern(int src);
 
 /* where `src`'s files go; whether that folder is there */
 void import_source_dir(int src, char* out, int n);
@@ -91,6 +99,20 @@ int ob2_group(const char* id);   /* IMPORT_GROUP_* of a disc file name, -1: not 
 int uc_group(const char* id);
 int uc_extract(const char* rvz, const char* outdir, int what, ImportItem* items, int max, int* n);
 int ob2_extract(const char* iso, const char* outdir, int what, ImportItem* items, int max, int* n);
+int dc_extract(const char* image, const char* outdir, int what, ImportItem* items, int max, int* n);
+int dc_model(const char* id, unsigned char* type, unsigned char* ver);   /* the record type and model version of a Dreamcast model; 0 none */
+/* Dreamcast GD-ROM images (gdrom.c): a CUE or GDI sheet or a CHD (v5) image; a sector's 2048 bytes of user data by its
+   address (the high-density area from 45000); a file of the ISO 9660 file system of the high-density area by path
+   (malloc'd). gd_open: NULL with why in err */
+typedef struct GdDisc GdDisc;
+GdDisc* gd_open(const char* path, char* err, int en);
+int gd_read(GdDisc* d, uint32_t lba, unsigned char* out);
+unsigned char* gd_file(GdDisc* d, const char* path, uint32_t* size);
+void gd_close(GdDisc* d);
+/* (the CHD codecs' decoders and the PVR decoder, for the tests: 1 if exactly outn bytes came out; RGBA8, malloc'd) */
+int gd_lzma(const unsigned char* in, size_t inn, unsigned char* out, size_t outn);       /* raw LZMA, lc 3 lp 0 pb 2 */
+int gd_inflate(const unsigned char* in, size_t inn, unsigned char* out, size_t outn);    /* raw deflate */
+unsigned char* dc_pvr_rgba(const unsigned char* pvrt, uint32_t n, int* w, int* h, char* why, int wn);
 int lang_extract(int src, const char* iso, const char* outdir);   /* languages: how many failed, -1 the disc is unusable */
 /* lang.c: a language's SYSMES.ALD (l, *n bytes) in the US order (us, nus bytes; fstbl / fsheader the US file tables), malloc'd
    (*n bytes); its file tables fl, hl moved to its pages appended after the US messages in hl_out; NULL: an unknown layout */

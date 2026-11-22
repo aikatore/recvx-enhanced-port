@@ -950,13 +950,38 @@ static int room_ok(uint32_t n)
     return 1;
 }
 
+static int loaded = -1;                 /* the room file in `room` (-1 none) */
+static const char* loaded_path;         /* ... read from this file (an imported model's, import.h ImportItem.player 3), NULL the disc's */
+
+/* an imported model's room file (pc/src/import/dc.c: the game's layout, expanded or packed) into `room` */
+static int load_rdx_file(const char* path)
+{
+    FILE* f;
+    long n = 0;
+    int len;
+    if (loaded_path == path && loaded >= 0) return 1;
+    loaded = -1;
+    if (!(f = pc_fopen(path, "rb"))) { host_log("actor: %s cannot be read\n", path); return 0; }
+    if (fseek(f, 0, SEEK_END) || (n = ftell(f)) < 4 || n > (long)sizeof(room) || fseek(f, 0, SEEK_SET) || fread(room, 1, (size_t)n, f) != (size_t)n) n = -1;
+    fclose(f);
+    if (n > 0 && rd32(room) != 0x41200000u) {   /* (not 10.0: packed) */
+        if (n > (long)sizeof(pack)) n = -1;
+        else { memcpy(pack, room, (size_t)n); n = pc_prs_decode(pack, (uint32_t)n, room, sizeof(room)); }
+    }
+    if ((len = (int)n) <= 0 || !room_ok((uint32_t)len)) { host_log("actor: %s is damaged\n", path); return 0; }
+    end = room + len;
+    loaded = 0;
+    loaded_path = path;
+    return 1;
+}
+
 static int load_rdx(int rm)
 {
-    static int loaded = -1;
     char name[16];
     int f, len;
-    if (loaded == rm) return 1;
+    if (loaded == rm && !loaded_path) return 1;
     loaded = -1;
+    loaded_path = NULL;
     snprintf(name, sizeof(name), "RM_%04d.RDX", rm);
     for (f = 0; f < rdx_image_data_max && strcmp(rdx_files[f], name); f++);
     if (f == rdx_image_data_max || !read_file(17, f)) return 0;
@@ -1007,7 +1032,8 @@ int pc_room_from_disc(const char* name, unsigned char* memp, unsigned char* endp
     return ok ? pc_prs_decode(p, (uint32_t)(endp - p), memp, (uint32_t)(endp - memp)) : err;
 }
 
-int actor_find(const ActorModel* am, ActorData* out)
+/* (path: the room file of an imported model in the game's own format, else am->room's of the disc) */
+static int find_in(const ActorModel* am, const char* path, ActorData* out)
 {
     RDT_WORK* hdr = (RDT_WORK*)room;
     const ROM_WORK* rw;
@@ -1019,7 +1045,7 @@ int actor_find(const ActorModel* am, ActorData* out)
 
     memset(out, 0, sizeof(*out));
     snprintf(name, sizeof(name), "RM_%04d.RDX", am->room);
-    if (!load_rdx(am->room)) return 0;
+    if (path ? !load_rdx_file(path) : !load_rdx(am->room)) return 0;
     rw = (const ROM_WORK*)(room + hdr->hed00);
     recs = (const ETTY_WORK*)(room + (unsigned int)rw->enep);
     n = rw->ene_n;
@@ -1047,6 +1073,7 @@ int actor_find(const ActorModel* am, ActorData* out)
         }
     return 1;
 }
+int actor_find(const ActorModel* am, ActorData* out) { return find_in(am, NULL, out); }
 
 /* The texture data room file `rm` has for room effect `fx` (ids 30..99 and 400+; NULL: none).
    room.c bhSetRoom uploads one texture table entry per such id, in effect record order, after the
@@ -1073,16 +1100,16 @@ const unsigned char* actor_fx_tex(int rm, int fx)
     return k < 0 || cnt <= m ? NULL : room + rd32(texdat + 4 + 4 * (cnt - m + k));
 }
 
-/* catalogue model idx from its room file */
-static int load_room_model(Disguise* d, int idx)
+/* a catalogue model from its room file; an imported model in the game's own format from the room file it was written as
+   (path; import.h ImportItem.player 3) */
+static int load_room_model(Disguise* d, const ActorModel* am, const char* path)
 {
-    const ActorModel* am = &actor_models[idx];
     ActorData a;
     unsigned char* p;
     int i, mofs, nofs = 0, t = -1, texn, dt;
     unsigned char own[16] = { 0 };
 
-    if (!actor_find(am, &a)) return 0;
+    if (!find_in(am, path, &a)) return 0;
     mofs = (int)((unsigned int)a.mdl & 63);   /* keep the data's alignment */
     if (d >= &dg[ACTOR_CAST]) a.mtn = NULL, a.nlen = 0;   /* (posed from its source only) */
     if (a.mtn) nofs = ((mofs + a.mlen + 63) & ~63) + (int)((unsigned int)a.mtn & 63);
@@ -1431,7 +1458,10 @@ static int load(Disguise* d, int idx)
     int heap = heap_free(), anim;
     const char* name = idx >= ACTOR_PART ? "part file" : actor_model(idx)->name;
     memset(d->mth, 0, sizeof(d->mth));
-    if (!(idx >= ACTOR_PART ? load_part_model(d, idx - ACTOR_PART + 10) : idx >= ACTOR_MODELS ? load_import_model(d, idx - ACTOR_MODELS) : load_room_model(d, idx))) {
+    if (!(idx >= ACTOR_PART ? load_part_model(d, idx - ACTOR_PART + 10)
+          : idx >= ACTOR_MODELS ? (actor_imports[idx - ACTOR_MODELS].id ? load_room_model(d, &actor_imports[idx - ACTOR_MODELS], actor_import_file[idx - ACTOR_MODELS])
+                                                                        : load_import_model(d, idx - ACTOR_MODELS))
+          : load_room_model(d, &actor_models[idx], NULL))) {
         unload(d);
         return 0;
     }

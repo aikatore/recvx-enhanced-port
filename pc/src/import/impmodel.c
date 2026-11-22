@@ -555,6 +555,18 @@ static int cv_tex(Buf* b, const unsigned char* t, int len, unsigned gindex, int*
     return !b->bad;
 }
 
+unsigned char* imp_tex_chunk(const unsigned char* rgba, int w, int h, unsigned gindex, int* len)
+{
+    int tl, alpha;
+    unsigned char* t = imp_tim2_from_rgba(rgba, w, h, &tl);
+    Buf b = { 0 };
+    if (!t) return NULL;
+    if (!cv_tex(&b, t, tl, gindex, &alpha)) { free(b.p); b.p = NULL; }
+    free(t);
+    *len = (int)b.n;
+    return b.p;
+}
+
 /* the whole tile a strip spanning lo..hi is moved by: lo's, or hi's when less of the strip lies outside that one */
 static float tile(float lo, float hi)
 {

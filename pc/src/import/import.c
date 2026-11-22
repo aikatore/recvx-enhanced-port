@@ -46,7 +46,22 @@ const ImportSource import_sources[IMPORT_SOURCES] = {
       "Chris, Jill, Rebecca, Richard, Kenneth, Billy, Carlos, Ada, HUNK and Wesker in their costumes, and the game's monsters. Import them from your own disc image of the US Wii release (RBUE08) in Dolphin's RVZ format.",
       "Needs a clean US disc image of Resident Evil: The Umbrella Chronicles in Dolphin's RVZ format: %s.", IMPORT_PLAYERS | IMPORT_NPCS | IMPORT_VOICES, "rvz",
       { "Umbrella Chronicles Characters", "Umbrella Chronicles Cutscenes", "Umbrella Chronicles Monsters and Others", "Umbrella Chronicles Enemies" } },
+    { "dreamcast", "Resident Evil Code: Veronica (Dreamcast)", "T-1204N", IMPORT_CAT_CHARACTERS,
+      "Steve's cutscene model with his Dreamcast hairstyle, face and mouth moving as the game's own. Import it from your own disc image of the US Dreamcast release (disc 1) as a CUE, GDI or CHD image.",
+      "Needs the US Dreamcast disc 1 of Resident Evil Code: Veronica as a CUE, GDI or CHD image: %s.", IMPORT_PLAYERS, "cue;gdi;chd;cd1",
+      { "Dreamcast Models", "Dreamcast Models", "Dreamcast Models", "Dreamcast Models" } },
 };
+
+const char* import_filter_name(int src)
+{
+    const char* e = src >= 0 && src < IMPORT_SOURCES ? import_sources[src].ext : NULL;
+    return !e ? "PS2 disc image (*.iso)" : !strcmp(e, "rvz") ? "Wii disc image, Dolphin RVZ (*.rvz)" : "Dreamcast disc image (*.cue, *.gdi, *.chd, *.cd1)";
+}
+const char* import_filter_pattern(int src)
+{
+    const char* e = src >= 0 && src < IMPORT_SOURCES ? import_sources[src].ext : NULL;
+    return e ? e : "iso";
+}
 
 #define ITEMS_MAX 1024
 
@@ -117,7 +132,7 @@ int import_results(int src, ImportItem* out, int max, char* when, int wn)
         x->ok = atoi(fld[3]); x->nodes = atoi(fld[4]); x->meshes = atoi(fld[5]); x->verts = atoi(fld[6]);
         x->tris = atoi(fld[7]); x->textures = atoi(fld[8]); x->player = atoi(fld[9]); x->female = atoi(fld[10]);
         snprintf(x->note, sizeof(x->note), "%s", fld[11] ? fld[11] : "");
-        x->group = src == IMPORT_UMBRELLA ? uc_group(x->id) : ob2_group(x->id);
+        x->group = src == IMPORT_UMBRELLA ? uc_group(x->id) : src == IMPORT_DREAMCAST ? IMPORT_GROUP_PLAYERS : ob2_group(x->id);
     }
     fclose(f);
     return n;
@@ -139,14 +154,16 @@ int import_run(int src, int what)
         return r;
     }
     what &= import_sources[src].offered;
-    r = src == IMPORT_UMBRELLA ? uc_extract(g_import.iso[src], dir, what, items, ITEMS_MAX, &n) : ob2_extract(g_import.iso[src], dir, what, items, ITEMS_MAX, &n);
+    r = src == IMPORT_UMBRELLA ? uc_extract(g_import.iso[src], dir, what, items, ITEMS_MAX, &n)
+        : src == IMPORT_DREAMCAST ? dc_extract(g_import.iso[src], dir, what, items, ITEMS_MAX, &n)
+        : ob2_extract(g_import.iso[src], dir, what, items, ITEMS_MAX, &n);
     if (r < 0) { host_log("import: %s: %s\n", import_sources[src].key, pg->phase); return -1; }
     Save s = { src, n, items, g_import.iso[src] };
     snprintf(p, sizeof(p), "%s/manifest.txt", dir);
     if (pc_save_file(p, "w", write_manifest, &s)) host_log("import: cannot write %s\n", p);
     int players = 0;
     for (int i = 0; i < n; i++) {
-        players += items[i].player;
+        players += items[i].player != 0;
         if (!items[i].ok || items[i].note[0]) host_log("import: %s %s: %s\n", items[i].id, items[i].ok ? "written" : "FAILED", items[i].note);
     }
     snprintf(pg->phase, sizeof(pg->phase), tr("Imported %d of %d models; %d playable models."), n - r, n, players);
@@ -188,7 +205,9 @@ void import_registry_load(void)
             char file[1200], name[96];
             int j;
             if (!items[i].player || (items[i].group > 0 ? items[i].group : 0) != g || !(import_sources[src].offered & (1 << g))) continue;
-            SDL_snprintf(file, sizeof(file), "%s/%s/%s.cvxm", dir, items[i].id, items[i].id);
+            unsigned char type = 0, ver = 0;   /* (a model in the game's own format: its record's type, as a catalogue entry) */
+            if (items[i].player == 3 && !(src == IMPORT_DREAMCAST && dc_model(items[i].id, &type, &ver))) continue;
+            SDL_snprintf(file, sizeof(file), "%s/%s/%s.%s", dir, items[i].id, items[i].id, items[i].player == 3 ? "rdx" : "cvxm");
             for (j = 0; j < k && strcmp(actor_import_file[j], file); j++) {}
             if (j < k) continue;   /* listed already: it keeps its place (a later extraction appends) */
             if (k == ACTOR_IMPORT_MAX) { full++; continue; }
@@ -200,7 +219,7 @@ void import_registry_load(void)
             actor_import_group[k] = (unsigned char)(items[i].group >= 0 ? items[i].group : 0);
             actor_import_src[k] = (unsigned char)src;
             actor_import_heading[k] = import_sources[src].groups[actor_import_group[k] & 3];
-            actor_imports[k] = (ActorModel){ .name = nm, .anim = items[i].female ? ANIM_FEMALE : ANIM_MALE };
+            actor_imports[k] = (ActorModel){ .name = nm, .anim = items[i].female ? ANIM_FEMALE : ANIM_MALE, .id = type, .mdlver = ver };
             k++;
         }
     }

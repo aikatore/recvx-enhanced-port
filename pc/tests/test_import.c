@@ -340,6 +340,94 @@ int main(int argc, char** argv)
         }
 #undef WHO
     }
+
+    {   /* Dreamcast (gdrom.c, dc.c): the CHD codecs' LZMA and deflate (streams made with Python's lzma and zlib), a GD-ROM's
+           ISO 9660 through a GDI and a CUE sheet (a synthetic high-density track: IP.BIN, the volume descriptor, the root, a
+           file), PVR twiddled and VQ textures */
+        static const unsigned char lz[] = { 0x00, 0x21, 0x9b, 0xc8, 0x86, 0x6d, 0x7d, 0xf4, 0xc8, 0xf2, 0xeb, 0xf9, 0xea, 0xc2, 0x56, 0x38, 0x35, 0xdd,
+            0xf3, 0x78, 0x69, 0x27, 0xd3, 0x84, 0x46, 0x28, 0x3d, 0x26, 0x42, 0xbf, 0x90, 0xb5, 0xfb, 0x99, 0x5a, 0x6e, 0x2d, 0x0b, 0x27, 0x47, 0x97,
+            0xff, 0xfe, 0x92, 0x4c, 0x00 };
+        static const unsigned char fx[] = { 0x73, 0xce, 0x4f, 0x49, 0xb5, 0x52, 0x08, 0x4b, 0x2d, 0xca, 0xcf, 0xcb, 0x4c, 0x4e, 0x54, 0xc8, 0xcf, 0x53,
+            0x28, 0xc9, 0x48, 0x55, 0x70, 0x29, 0x4a, 0x4d, 0xcc, 0x4d, 0x4e, 0x2c, 0x2e, 0xd1, 0x53, 0x70, 0x1e, 0xdc, 0x0a, 0x00 };
+        static const unsigned char dy[] = { 0xdd, 0xce, 0x81, 0x01, 0x44, 0x11, 0x08, 0x00, 0xd0, 0xd9, 0x0a, 0x11, 0x11, 0xfd, 0x62, 0xff, 0x4d, 0x6e,
+            0x8f, 0x7b, 0x13, 0x3c, 0x68, 0x64, 0xa1, 0xef, 0xce, 0x23, 0x11, 0x72, 0x26, 0xe0, 0x79, 0xde, 0x7a, 0x1a, 0x1c, 0x60, 0x09, 0xd5, 0x15,
+            0x40, 0x7d, 0xa7, 0xe2, 0xe9, 0x8d, 0x49, 0x53, 0x20, 0x07, 0x15, 0xbb, 0x96, 0xb3, 0xbd, 0x8f, 0xea, 0xa3, 0xb4, 0x36, 0xef, 0x95, 0x2b,
+            0x70, 0x0b, 0xf4, 0x5a, 0x23, 0x5d, 0xee, 0xc8, 0x74, 0x3e, 0xf9, 0x0e, 0xf5, 0x2c, 0x03, 0xca, 0xe3, 0x0e, 0x84, 0x32, 0xcb, 0x60, 0xbf,
+            0x7a, 0x9d, 0xa5, 0xea, 0xca, 0x2d, 0x89, 0x64, 0x2e, 0xba, 0xdb, 0x1a, 0x0f, 0x0d, 0x9f, 0x28, 0xdb, 0xa9, 0x83, 0x54, 0x49, 0x9a, 0x7d,
+            0xe3, 0x2c, 0x2c, 0x51, 0x92, 0x9a, 0xb8, 0xf7, 0xc5, 0x66, 0xbc, 0x46, 0xdc, 0xe5, 0xa7, 0x54, 0xf8, 0xd3, 0xf7, 0x0f };
+        unsigned char text[192], o[400], want[400];
+        for (int i = 0; i < 192; i++) text[i] = (unsigned char)"Code: Veronica on the Dreamcast. "[i % 33];
+        for (int i = 0; i < 400; i++) want[i] = (unsigned char)((i * i * 7 + (i >> 3)) % 23 + 65);
+        CHECK(gd_lzma(lz, sizeof lz, o, 192) && !memcmp(o, text, 192));
+        CHECK(!gd_lzma(lz, sizeof lz - 8, o, 192));   /* (cut short: refused) */
+        CHECK(gd_inflate(fx, sizeof fx, o, 192) && !memcmp(o, text, 192));
+        CHECK(gd_inflate(dy, sizeof dy, o, 400) && !memcmp(o, want, 400));
+        CHECK(!gd_inflate(dy, sizeof dy, o, 399));   /* (no room: refused, not overrun) */
+
+        static unsigned char trk[21 * 2352];
+        for (int ss = 0; ss < 2; ss++) {   /* 2048-byte sectors (GDI), then raw 2352-byte ones (CUE) */
+            int size = ss ? 2352 : 2048, u = ss ? 16 : 0;
+            unsigned char* s;
+            memset(trk, 0, sizeof trk);
+            s = trk + u;                                       /* IP.BIN */
+            memcpy(s, "SEGA SEGAKATANA SEGA ENTERPRISES", 32); memcpy(s + 0x30, "U       ", 8); memcpy(s + 0x40, "T1204N    ", 10);
+            s = trk + 16 * size + u;                           /* the volume descriptor: the root at 45018 */
+            s[0] = 1; memcpy(s + 1, "CD001", 5);
+            s[156] = 34; s[156 + 2] = (unsigned char)(45018 & 255); s[156 + 3] = (unsigned char)(45018 >> 8); s[156 + 10] = 0; s[156 + 11] = 8;
+            s = trk + 18 * size + u;                           /* the root: ".", "..", R0_0040.RDX;1 at 45020 (5 bytes) */
+            s[0] = 34; s[33] = 0; s[34] = 34; s[34 + 33] = 1;
+            s[68] = 33 + 13 + 1; s[68 + 2] = (unsigned char)(45020 & 255); s[68 + 3] = (unsigned char)(45020 >> 8); s[68 + 10] = 5; s[68 + 32] = 13;
+            memcpy(s + 68 + 33, "R0_0040.RDX;1", 13);
+            memcpy(trk + 20 * size + u, "hello", 5);
+            snprintf(p, sizeof p, "%s/dc_track03.bin", dir);
+            FILE* f = fopen(p, "wb");
+            CHECK(f && fwrite(trk, (size_t)size, 21, f) == 21);
+            fclose(f);
+            if (!ss) {
+                snprintf(p, sizeof p, "%s/dc_test.gdi", dir);
+                f = fopen(p, "w");
+                fprintf(f, "1\n3 45000 4 2048 dc_track03.bin 0\n");
+            } else {
+                snprintf(p, sizeof p, "%s/dc_test.cue", dir);
+                f = fopen(p, "w");
+                fprintf(f, "REM HIGH-DENSITY AREA\nFILE \"dc_track03.bin\" BINARY\n  TRACK 03 MODE1/2352\n    INDEX 01 00:00:00\n");
+            }
+            fclose(f);
+            char err[160];
+            GdDisc* d = gd_open(p, err, sizeof err);
+            unsigned char sec[2048];
+            uint32_t n = 0;
+            CHECK(d || (printf("%s\n", err), 0));
+            CHECK(gd_read(d, 45000, sec) && !memcmp(sec + 0x40, "T1204N", 6) && !gd_read(d, 45021, sec) && !gd_read(d, 44999, sec));
+            unsigned char* fd = gd_file(d, "r0_0040.rdx", &n);
+            CHECK(fd && n == 5 && !memcmp(fd, "hello", 5));
+            free(fd);
+            CHECK(!gd_file(d, "R0_0041.RDX", &n));
+            gd_close(d);
+        }
+
+        {   /* PVR: RGB565 twiddled 8x8 (texel (x, y) at the twiddled index, y in the even bits), ARGB4444 VQ 8x8 */
+            unsigned char t[16 + 8 * 8 * 2] = { 0 }, *px;
+            int w, h;
+            char why[96];
+            memcpy(t, "PVRT", 4); t[4] = 8 + 128; t[8] = 1; t[9] = 1; t[12] = 8; t[14] = 8;
+            for (int i = 0; i < 64; i++) { t[16 + 2 * i] = (unsigned char)i; t[16 + 2 * i + 1] = 0; }   /* (blue = the index) */
+            CHECK((px = dc_pvr_rgba(t, sizeof t, &w, &h, why, sizeof why)) && w == 8 && h == 8);
+            CHECK(px[4 * (0 * 8 + 1) + 2] == 2 * 255 / 31 && px[4 * (1 * 8 + 0) + 2] == 1 * 255 / 31 && px[4 * (7 * 8 + 7) + 2] == 255 && px[4 * (7 * 8 + 7) + 1] == 255 / 63 && px[3] == 255);
+            free(px);
+            static unsigned char v[16 + 2048 + 16];
+            memset(v, 0, sizeof v);
+            memcpy(v, "PVRT", 4); v[4] = (unsigned char)((8 + 2048 + 16) & 255); v[5] = (unsigned char)((8 + 2048 + 16) >> 8); v[8] = 2; v[9] = 3; v[12] = 8; v[14] = 8;
+            v[16 + 8 * 1 + 2 * 3] = 0x00; v[16 + 8 * 1 + 2 * 3 + 1] = 0xF0;   /* codebook entry 1, texel 3 (x 1, y 1): opaque black */
+            v[16 + 8 * 1 + 0] = 0x0F; v[16 + 8 * 1 + 1] = 0x00;                 /* its texel 0: transparent blue */
+            v[16 + 2048 + 0] = 1;                                              /* block (0, 0) uses entry 1 */
+            CHECK((px = dc_pvr_rgba(v, sizeof v, &w, &h, why, sizeof why)) && w == 8 && h == 8);
+            CHECK(px[4 * 9 + 3] == 255 && px[4 * 9 + 2] == 0 && px[3] == 0 && px[2] == 255 && px[4 * 2 + 3] == 0);
+            free(px);
+            t[8] = 5;   /* (palettized: not read) */
+            CHECK(!dc_pvr_rgba(t, sizeof t, &w, &h, why, sizeof why));
+        }
+    }
     printf("import: ok\n");
     return 0;
 }

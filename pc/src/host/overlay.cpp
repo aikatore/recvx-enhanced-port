@@ -1084,9 +1084,10 @@ static void import_window(void)
         wrapped(tr("Disc image: %s"), g_import.iso[s][0] ? g_import.iso[s] : tr("(none chosen)"));
         ImGui::BeginDisabled(running != 0);
         if (ImGui::Button(tr("Choose Disc Image..."))) {
-            static const SDL_DialogFileFilter filters[] = { { "PS2 disc image (*.iso)", "iso" }, { "All files", "*" } },
-                                              rvz[] = { { "Wii disc image, Dolphin RVZ (*.rvz)", "rvz" }, { "All files", "*" } };
-            SDL_ShowOpenFileDialog(import_picked, (void*)(intptr_t)s, win, src->ext ? rvz : filters, 2, g_import.iso[s][0] ? g_import.iso[s] : NULL, false);
+            static SDL_DialogFileFilter filters[2] = { { NULL, NULL }, { "All files", "*" } };
+            filters[0].name = import_filter_name(s);
+            filters[0].pattern = import_filter_pattern(s);
+            SDL_ShowOpenFileDialog(import_picked, (void*)(intptr_t)s, win, filters, 2, g_import.iso[s][0] ? g_import.iso[s] : NULL, false);
         }
         import_source_dir(s, dir, sizeof(dir));
         ImGui::TextDisabled(tr("Output: %s"), dir);
@@ -1127,6 +1128,8 @@ static void import_window(void)
         if (((actor_import_sources() | g_import_hidden) >> s) & 1) {   /* (actors.h; IMPORT > CHARACTERS has it too) */
             bool shown = !((g_import_hidden >> s) & 1);
             if (ImGui::Checkbox(tr("Show in Model Lists"), &shown)) { g_import_hidden ^= 1u << s; settings_save_later(); }
+            bool steve = g_import.dc_steve != 0;   /* (the Dreamcast release: cast_glue.c own_look) */
+            if (s == IMPORT_DREAMCAST && ImGui::Checkbox(tr("Dreamcast Steve in Cutscenes"), &steve)) { g_import.dc_steve = steve; settings_save_later(); }
         }
         if (running || pg->total) {
             char ov[64];
@@ -1138,7 +1141,7 @@ static void import_window(void)
         for (int i = 0; i < n[s]; i++) {
             const ImportItem* x = &items[s][i];
             if (x->group < 0 || !(src->offered & (1 << x->group))) continue;
-            ok += x->ok; players += x->player; failed += !x->ok;
+            ok += x->ok; players += x->player != 0; failed += !x->ok;
         }
         if (!n[s]) ImGui::TextDisabled(tr("Nothing extracted yet."));
         else {
@@ -1175,7 +1178,7 @@ static void import_window(void)
                         if (!x->ok) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), tr("failed"));
                         else if (x->player) ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), tr("yes"));
                         else ImGui::TextDisabled("%s", tr(x->female < 0 ? "glTF only" : "no"));
-                        ImGui::TableNextColumn(); ImGui::TextUnformatted(x->note[0] ? x->note : x->ok ? "glTF + PNG" : "");
+                        ImGui::TableNextColumn(); ImGui::TextUnformatted(x->note[0] ? x->note : x->ok ? (x->player == 3 ? "RDX" : "glTF + PNG") : "");
                         if (x->note[0] && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", x->note);
                     }
                     ImGui::EndTable();

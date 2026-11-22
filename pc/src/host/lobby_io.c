@@ -7,6 +7,7 @@
 #include "savestore.h"
 #include "coop.h"
 #include "net/net.h"
+#include "import/import.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -113,12 +114,13 @@ void lobby_io_frame(void* window)
         __atomic_store_n(&g_lobby_io.paste_req, 2, __ATOMIC_RELEASE);
     }
     if (__atomic_load_n(&g_lobby_io.file_req, __ATOMIC_ACQUIRE) == 1) {   /* a disc image (the IMPORT screen) */
-        static const SDL_DialogFileFilter filters[] = { { "PS2 disc image (*.iso)", "iso" }, { "All files", "*" } },
-                                          rvz[] = { { "Wii disc image, Dolphin RVZ (*.rvz)", "rvz" }, { "All files", "*" } };
+        static SDL_DialogFileFilter filters[2] = { { NULL, NULL }, { "All files", "*" } };
         const char* test = SDL_getenv("RECVX_FILE_DIALOG_TEST");   /* test aid: this file is chosen, no dialog */
         g_lobby_io.file_req = 2;
+        filters[0].name = import_filter_name(g_lobby_io.file_src);
+        filters[0].pattern = import_filter_pattern(g_lobby_io.file_src);
         if (test) { const char* f[2] = { test, NULL }; file_picked(NULL, test[0] ? f : NULL, 0); }
-        else SDL_ShowOpenFileDialog(file_picked, NULL, (SDL_Window*)window, g_lobby_io.file_rvz ? rvz : filters, 2, g_lobby_io.file[0] ? g_lobby_io.file : NULL, false);
+        else SDL_ShowOpenFileDialog(file_picked, NULL, (SDL_Window*)window, filters, 2, g_lobby_io.file[0] ? g_lobby_io.file : NULL, false);
     }
     scripted();
 }

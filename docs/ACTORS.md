@@ -906,6 +906,10 @@ but is not drawn as it then. Steve and Wesker not played are ordinary cast. Ever
 character is one of the types above (checked over all room files: Claire 91; Chris 92, 42; Steve 93, 43; Wesker
 97, 49, 47), so no scene stands the player in with another type.
 
+**Dreamcast Steve in Cutscenes** ([IMPORT_DREAMCAST.md](IMPORT_DREAMCAST.md)): Steve's records the cast leaves as
+himself (cast off, or no pick) get the imported Dreamcast model as their model (`cast_glue.c own_look`); an import in
+the game's own format counts as its type's character (`cast.c model_char`), so the cast never "swaps" Steve for it.
+
 ### Creatures
 
 A few creatures appear in cutscenes as records that no fight uses: a scripted actor without AI, or an

@@ -185,6 +185,8 @@ static int model_char(int m)
     case CAST_ZOMBIES: return 10;   /* Steve's father: no other zombie */
     }
     for (int c = 0; c < CAST_CHARACTERS; c++) if (cine[c] == m) return c;
+    if (m >= ACTOR_MODELS && m < ACTOR_MODELS + listed() && actor_imports[m - ACTOR_MODELS].id)   /* (the Dreamcast Steve: Steve) */
+        return cast_character(actor_imports[m - ACTOR_MODELS].id, actor_imports[m - ACTOR_MODELS].mdlver);
     return -1;
 }
 
