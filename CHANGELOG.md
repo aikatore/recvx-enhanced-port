@@ -28,6 +28,9 @@
   look, talking and blinking like the original.
 - **Enemy Models**: zombies (as one group), anatomists, Hunters, Sweepers, Bandersnatches and the Tyrant can be drawn
   as other models while you fight them: a single model, or random picks from Code: Veronica or an imported game.
+- **First Person**: a third camera mode next to Fixed and Over Shoulder, with free mouse look, the precise hit
+  detection of the over-the-shoulder camera, hip fire with the left mouse button, your own body (without the head) in
+  view, also as another model, and its own field of view and HUD settings (On, Off, Minimal).
 - **Aim Scoped Weapons Normally**: an option to aim and fire the sniper rifle and the linear launcher like other
   weapons, with auto-aim, instead of through the scope.
 
