@@ -10,9 +10,9 @@
   without deleting it, under IMPORT > CHARACTERS or with a quick toggle in the lists.
 - **BioRand**: a new extra option, Show Randomized Item Models, shows the item you will actually get on the floor
   instead of the original one.
-- **Umbrella Chronicles import**: the player characters of Resident Evil: The Umbrella Chronicles (Wii, from your own
-  .rvz disc image) can be imported under IMPORT > CHARACTERS and used as character models, with blinking and lip
-  movement.
+- **Umbrella Chronicles import**: the player characters, monsters and other characters of Resident Evil: The Umbrella
+  Chronicles (Wii, from your own .rvz disc image) can be imported under IMPORT > CHARACTERS and used as character
+  models, with blinking, lip movement and hands that grip held weapons.
 - **Break Free Pushes Enemies**: breaking free from any grab knocks back every enemy close by, and for a moment none
   can grab you again. On by default only with the Enemy Randomizer or Extra Enemies, so several enemy types can no
   longer pass you from grab to grab.
