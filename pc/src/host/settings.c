@@ -369,6 +369,15 @@ static const char* const detectors[] = { "Original", "Skipped" };
 static const char* const conns[] = { "Automatic", "Direct", "Server Relay" };
 static const char* const atmos_names[] = { "Original", "Smooth" };
 static const char* const free_cam_names[] = { "Behind Character", "Free Camera" };
+static const char* const camera_modes[] = { "Fixed", "Over Shoulder", "First Person" };
+/* "Camera Mode" (tps.h): third person on or off (ini tps), and which of its cameras (ini tps_first_person); Fixed keeps
+   the last one for F5 and the pause menu's next step */
+int tps_camera_mode(void) { return g_tps.on ? 1 + !!g_tps.fp : 0; }
+void tps_set_camera_mode(int m)
+{
+    if (m > 0) g_tps.fp = m == 2;
+    g_tps.on = m > 0;
+}
 static const char* const fixed_cam_names[] = { "Classic", "Modern", "Combined" };
 static const char* const tps_pad_names[] = { "Classic", "Modern" };
 static const char* const noclips[] = { "Off", "Walls", "Walls and Flight" };
@@ -519,11 +528,16 @@ const Setting g_settings[] = {
     { SP_CONTROLS, "Weapon Shortcuts", V(g_config.weapon_shortcuts), 0, 1, 1,
       .help = "Equip weapons with 1-8, or hold Weapon Shortcuts and press the D-pad. Assign them in the inventory." },
 
-    { SP_TPS, "Over-the-shoulder Camera", V(g_tps.on), 0, 1, 1, .help = "Play with a controllable camera and free aim. Events, doors and menus keep their original cameras.", .group = "CAMERA" },
+    { SP_TPS, "Camera Mode", V(g_tps.on), 0, 2, 1, camera_modes, .get = tps_camera_mode, .set = tps_set_camera_mode, .group = "CAMERA",
+      .help = "Fixed keeps the original cameras. Over Shoulder and First Person give a controllable camera and free aim; events, doors and menus keep their original cameras. Also F5 and the pause menu." },
     { SP_TPS, "Mouse Camera Style", V(g_tps.free_cam), 0, 1, 1, free_cam_names,
       .help = "Behind Character turns you with the mouse. Free Camera lets the camera turn independently." },
     { SP_TPS, "Field Of View", V(g_tps.fov), 40, 120, 5, .fmt = "%d degrees", .help = "Set the horizontal view at 4:3. Widescreen shows more at the sides." },
     { SP_TPS, "Aiming Field of View", V(g_tps.aim_fov), 30, 120, 5, .fmt = "%d degrees" },
+    { SP_TPS, "First Person Field of View", V(g_tps.fp_fov), 60, 120, 5, .fmt = "%d degrees",
+      .help = "The first-person view at 4:3. Aiming zooms in as much as the third-person Aiming Field of View does." },
+    { SP_TPS, "First Person HUD", V(g_tps.fp_hud), 0, 2, 1, (const char* const[]){ "On", "Off", "Minimal" },
+      .help = "The HUD in first person: On shows it in the HUD Style, Minimal as a health bar with the ammo counts, Off hides it. The crosshair is its own setting." },
     { SP_TPS, "Camera Distance", V(g_tps.dist), 0, 400, 5, .name = tenths },
     { SP_TPS, "Aiming Camera Distance", V(g_tps.aim_dist), 0, 400, 5, .name = tenths },
     { SP_TPS, "Camera Height", V(g_tps.height), 0, 300, 5, .name = tenths },

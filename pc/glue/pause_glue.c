@@ -3,7 +3,7 @@
  * DisplayOptionPlateLevel0, DisplayOptionBg, the sub-screens' way back) and options_glue.c (level 4, closing).
  * With Menu Style Legacy (or --legacy-menu) none of this runs: pc_new_menu_on() is 0 and the old OPTION screen is unchanged.
  *
- * PAUSE: RESUME, Camera (Fixed / Over Shoulder, the F5 setting), SETTINGS, GAME SETUP (this game's rules: the same row
+ * PAUSE: RESUME, Camera (Fixed / Over Shoulder / First Person, the F5 setting), SETTINGS, GAME SETUP (this game's rules: the same row
  * screen), CO-OP (in a session: the F3 window), SPOILER LOG (the F8 screen, a BioRand game outside co-op), CHEATS AND
  * TOOLS (the same row screen; Advanced Tools opens the F2 window), RETURN TO TITLE (the old question). Select / View
  * (Backspace) opens it as it opened OPTION; with the Modern third-person controller layout its options button (Start)
@@ -179,11 +179,12 @@ static float item_y(int i)
     for (int j = 0; j < i; j++) k += item_shown(j);
     return PY0 + k * PDY + (i == I_TITLE ? 14 : 0);
 }
-static int camera_row(void) { return menu_setting("Over-the-shoulder Camera"); }
+static int camera_row(void) { return menu_setting("Camera Mode"); }
 static const char* item_text(int i, char* buf, int n)
 {
     if (i != I_CAMERA) return items[i];
-    snprintf(buf, n, tr("Camera: %s"), tr(g_tps.on ? "Over Shoulder" : "Fixed"));
+    static const char* const modes[] = { "Fixed", "Over Shoulder", "First Person" };
+    snprintf(buf, n, tr("Camera: %s"), tr(modes[tps_camera_mode()]));
     return buf;
 }
 
@@ -192,9 +193,9 @@ static void camera_toggle(void)
     int k = camera_row();
     const Setting* s = k >= 0 ? &g_settings[k] : NULL;
     if (!s || settings_locked(s)) { CallSystemSe(0, 1); return; }
-    settings_set(s, !settings_get(s));
+    settings_set(s, (settings_get(s) + 1) % 3);   /* Fixed, Over Shoulder, First Person */
     CallSystemSe(0, 2);
-    host_log("menu: camera %s\n", g_tps.on ? "third person" : "fixed");
+    host_log("menu: camera %s\n", g_tps.on ? g_tps.fp ? "first person" : "third person" : "fixed");
 }
 
 static void move(int dir)

@@ -117,7 +117,8 @@ void hud_frame(void)
     const unsigned int* iv;
     unsigned int w;
     int id, kind, r, wpn, i, tex, u, v, cells, any = 0, spare = 0, inf;
-    int on = g_tps.hud != 2 && pc_in_game() && plp && (g_tps.hud == 1 || (g_tps.on && tps_cam_active)) && in_play();
+    int fpv = g_tps.fp_view && tps_cam_active;   /* first person: its own HUD setting ("First Person HUD") */
+    int on = (fpv ? g_tps.fp_hud != 1 : g_tps.hud != 2 && (g_tps.hud == 1 || (g_tps.on && tps_cam_active))) && pc_in_game() && plp && in_play();
     static int trace = -1, was;
     if (trace < 0) trace = getenv("RECVX_HUD_TRACE") != NULL;   /* test aid: when it shows or hides, and what it shows */
     if (trace && !on && was) printf("hud: hidden at frame %u\n", (unsigned)gs_frame_count());
@@ -128,7 +129,8 @@ void hud_frame(void)
     w = iv[0] && iv[0] < 12 ? iv[iv[0]] : 0;
     id = (w >> 16) & 0xFF;
     kind = (w >> 16) & 0xFF00;
-    g_hud.left = g_tps.hud_side == 1 || (g_tps.hud_side == 0 && g_tps.left && tps_cam_active);
+    g_hud.left = g_tps.hud_side == 1 || (g_tps.hud_side == 0 && g_tps.left && tps_cam_active && !fpv);
+    g_hud.style = fpv && g_tps.fp_hud == 2 ? 1 : g_tps.hud_style;
     g_hud.fade = sys->fade_an <= 0 ? 0.0f : sys->fade_an >= 255 ? 1.0f : sys->fade_an / 255.0f;
     g_hud.hp = plp->hp;
     g_hud.hp_max = sys->gm_mode == 2 ? 320 : 160;   /* a full heal (sub1.c, system.c) */

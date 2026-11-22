@@ -187,7 +187,7 @@ void host_pump_events(void)
             if (bind_hotkey(&ev, B_SPOILER)) spoiler_key(1);   /* the spoiler log screen (pc/glue/spoiler_menu.c) */
             else if (ev.key.scancode == SDL_SCANCODE_ESCAPE && !ev.key.repeat) spoiler_key(2);   /* (it closes; else nothing) */
             if (bind_hotkey(&ev, B_TPS_TOGGLE) && !g_lobby_io.text_on) {
-                g_tps.on = !g_tps.on;
+                tps_set_camera_mode((tps_camera_mode() + 1) % 3);   /* Fixed, Over Shoulder, First Person */
                 settings_save_later();
             }
             break;
@@ -228,7 +228,8 @@ static void usage(void)
         "                     skip_doors in recvx.ini: 0 played, 1 instant, 2 played until a key is pressed)\n"
         "  --skip-intro       boot straight into the title menu (default on)\n"
         "  --hd-textures DIR  PCSX2 HD texture pack folder (default mods/textures)\n"
-        "  --third-person     over-the-shoulder camera, mouse/keyboard controls (toggle: F5)\n"
+        "  --third-person     over-the-shoulder camera, mouse/keyboard controls (F5: the next camera)\n"
+        "  --first-person     first-person camera, mouse/keyboard controls\n"
         "  --coop-host PORT   online co-op: wait for a partner on this UDP port (F3: co-op window)\n"
         "  --coop-join HOST:PORT#CODE | ROOM  online co-op: join a host, or a room through the co-op server\n"
         "  --coop-server ADDR   co-op server (host or host:port, UDP 7141)  --coop-conn auto|direct|server  --coop-pw PASSWORD\n"
@@ -295,7 +296,8 @@ static void parse_args(int argc, char** argv)
         else if (!strcmp(argv[i], "--skip-intro")) g_config.skip_intro = 1;
         else if (!strcmp(argv[i], "--spoof-version") && i + 1 < argc) SDL_setenv_unsafe("RECVX_UPDATE_FAKE_VERSION", argv[++i], 1);   /* the updater's test (update.c update_installed) */
         else if (!strcmp(argv[i], "--hd-textures") && i + 1 < argc) { SDL_strlcpy(g_config.hd_textures_dir, argv[++i], sizeof(g_config.hd_textures_dir)); }
-        else if (!strcmp(argv[i], "--third-person")) g_tps.on = 1;
+        else if (!strcmp(argv[i], "--third-person")) g_tps.on = 1, g_tps.fp = 0;
+        else if (!strcmp(argv[i], "--first-person")) g_tps.on = g_tps.fp = 1;
         else if (!strcmp(argv[i], "--dev")) g_dev_tools = 1;     /* developer tools (the F2 object placer); BioRand and the importers are shown without it */
         else if (!strcmp(argv[i], "--new-menu")) g_menu_cli = 1;   /* this run: the new menus (the default) even with Menu Style Legacy (menu_layout.h) */
         else if (!strcmp(argv[i], "--legacy-menu")) g_menu_cli = 0;   /* this run: the old menus (menu_layout.h, docs/MENUS.md) */

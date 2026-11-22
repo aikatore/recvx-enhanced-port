@@ -397,6 +397,7 @@ int   pc_input_active(void);   /* any PC-side input this frame (bhSysCallScreenS
 void  tps_player_mode(void);   /* before the player's mode handler: the straight aim height back (free aim) */
 void  tps_player(void);
 void  tps_calc_model(void);
+int   tps_fp_hide(int on);   /* first person, around our player's draw: 1 = not drawn (on = 1 before, 0 after; tps_glue.c) */
 struct BH_PWORK;
 void  tps_bend(struct BH_PWORK* p, float pitch);   /* the free-aim bend by pitch (radians) on a display copy (actor_glue.c), the partner */
 float tps_aim_pitch(void);   /* the pitch of our free-aim bend this tick (radians, 0: none) */

@@ -188,8 +188,12 @@ only while you control your character.
 
 ### Third person
 
-An over-the-shoulder camera with free aim, toggled with **F5**. Events, doors and menus keep the
-original camera. Details: THIRDPERSON.md.
+An over-the-shoulder camera with free aim; or the same controls seen through the character's eyes
+(**First Person**: the weapon arm and the raised weapon in view, the crosshair always at the screen
+centre, W/A/S/D walk and strafe where you look). **F5** steps Fixed -> Over Shoulder -> First Person;
+also SETTINGS > CAMERA AND HUD "Camera Mode" and the pause menu. Events, doors and menus keep the
+original camera; a grab or a throw shows you over the shoulder until you are free. Details:
+THIRDPERSON.md ("First person").
 
 | Action | Keyboard and mouse | Gamepad, Modern (default) |
 |---|---|---|
@@ -252,7 +256,7 @@ pad only to the focused window: turn Steam Input off for the game.
 | F1 | settings overlay |
 | F2 | cheats and tools |
 | F3 | co-op window |
-| F5 | third person on / off |
+| F5 | the next camera: Fixed, Over Shoulder, First Person |
 | F11 | windowed / fullscreen |
 | Page Up; F or Page Down | fly up / down (noclip cheat) |
 | none until you set one | Save Anywhere, Item Box Anywhere, Load Anywhere (the F2 cheats Save Now, Open Item Box, Load Game) |
@@ -427,7 +431,9 @@ Weapon Shortcuts (on, [Weapon shortcuts](#weapon-shortcuts)), then the bindings.
 
 | Setting | Default | What it does |
 |---|---|---|
-| Over-the-shoulder Camera | Off | also F5 |
+| Camera Mode | Fixed | Fixed (the original cameras), Over Shoulder or First Person; also F5 and the pause menu |
+| First Person Field of View | 85 degrees | the first-person view at 4:3 (aiming zooms in as Aiming Field of View does) |
+| First Person HUD | On | the HUD in first person: On (in the HUD Style), Off, or Minimal (the health bar with the counts) |
 | Mouse Camera Style | Behind Character | Behind Character: the mouse turns you. Free Camera: the mouse orbits the camera, W/A/S/D walk relative to it |
 | Lighting and Fog | Smooth | fades when the room's camera cut changes. Original: changes with each camera cut, as the original |
 | HUD | Auto | a small display in a bottom corner: the equipped weapon's picture with the rounds loaded, the spare ammo for it in your inventory beside it, and a health gauge around it in the condition's colour (Fine green, Caution yellow, then orange, Danger red, Poison purple). Auto: with the over-the-shoulder camera only. On: also with the fixed cameras. Hidden in cutscenes, doors, menus and messages |

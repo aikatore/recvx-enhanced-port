@@ -70,14 +70,13 @@ const MenuRow menu_rows[] = {
     { MC_GAMEPLAY, NULL, ML_RETIRED, "Difficulty Select" },   /* D4: Difficulty is a GAME SETUP row (P2); the old menu keeps it */
 
     /* ---------------------------------------------------------------- SETTINGS > CAMERA AND HUD */
-    { MC_CAMERA, "THIRD-PERSON CAMERA", ML_SET, "Over-the-shoulder Camera", .label = "Third-person Camera",
-      .help = "Play with a controllable camera and free aim. Events, doors and menus keep their original cameras. Also F5 and the pause menu." },
-    { MC_CAMERA, NULL, ML_SET, "Field Of View", .label = "Field of View" },
+    { MC_CAMERA, "CAMERA", ML_SET, "Camera Mode" },
+    { MC_CAMERA, NULL, ML_SET, "Lighting and Fog", .label = "Camera Lighting and Fog" },
+    { MC_CAMERA, "THIRD-PERSON CAMERA", ML_SET, "Field Of View", .label = "Field of View" },
     { MC_CAMERA, NULL, ML_SET, "Aiming Field of View",
       .help = "The view while aiming, at 4:3. Smaller zooms in." },
     { MC_CAMERA, NULL, ML_SET, "Left Shoulder", .label = "Shoulder", .names = N("Right", "Left"),
       .help = "Which shoulder the camera looks over." },
-    { MC_CAMERA, NULL, ML_SET, "Lighting and Fog", .label = "Camera Lighting and Fog" },
     { MC_CAMERA, NULL, ML_PAGE, NULL, MC_CAMERA_ADV, "Advanced", .help = "Camera distances, height and shoulder offset." },
     { MC_CAMERA_ADV, NULL, ML_SET, "Camera Distance",
       .help = "How far behind your character the camera follows." },
@@ -87,11 +86,13 @@ const MenuRow menu_rows[] = {
       .help = "How high above your character's feet the camera looks from." },
     { MC_CAMERA_ADV, NULL, ML_SET, "Shoulder Offset",
       .help = "How far to the side the camera sits, over the shoulder." },
+    { MC_CAMERA, "FIRST-PERSON CAMERA", ML_SET, "First Person Field of View", .label = "Field of View" },
+    { MC_CAMERA, NULL, ML_SET, "First Person HUD", .label = "HUD" },
     { MC_CAMERA, "HUD", ML_SET, "HUD" },
     { MC_CAMERA, NULL, ML_SET, "HUD Position" },
     { MC_CAMERA, NULL, ML_SET, "HUD Style" },
     { MC_CAMERA, NULL, ML_SET, "Crosshair",
-      .help = "A crosshair at the screen centre while aiming in third person." },
+      .help = "A crosshair at the screen centre while aiming; in first person also a small dot when not aiming." },
 
     /* ---------------------------------------------------------------- SETTINGS > CONTROLS */
     { MC_CONTROLS, "INPUT", ML_SET, "Fixed Camera Controls", .label = "Fixed-camera Movement" },

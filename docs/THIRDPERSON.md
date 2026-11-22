@@ -7,7 +7,8 @@ thread), `pc/src/host/tps.h`, `pc/src/input/tps_input.c` and the F1 overlay (set
 
 ## Usage
 
-Toggle with **F5**, the `--third-person` command-line flag, or `tps = 1` in
+Toggle with **F5** (it steps Fixed -> Over Shoulder -> [First Person](#first-person) -> Fixed), the
+`--third-person` / `--first-person` command-line flags, or `tps = 1` (with `tps_first_person = 1`: first person) in
 `<save dir>/recvx.ini`. It can be switched at any time; it only takes over in normal play.
 While it is on the mouse is captured whenever you have control (F1/F2/F3, a menu, a question or
 a puzzle with mouse support free it until you are back in control).
@@ -166,6 +167,58 @@ the virtual bits; the quick-turn gesture into `tps_input_keys`), `tps_camera` (o
 while aiming freely `pad_sticks` turns the right stick (and the left stick and d-pad, both schemes)
 into `stick_yaw` / `stick_pitch`.
 
+### First person
+
+"Camera Mode" First Person (ini `tps = 1` with `tps_first_person = 1`) is this mode with the camera at the character's
+eyes: everything above (keys, mouse, gamepad, free aim, Precise Shots, the crosshair's wall impacts, Move While Aiming,
+reload, quick knife, quick turn, the HUD, light and fog, events) is shared; only the camera and the drawing of our own
+character differ. Off it is not used at all (`fp` is 0: every first-person branch is skipped). Code: `tps_glue.c`
+(`fp`, `fp_w`, `fp_track`, `fp_mix`, `tps_fp_hide`), `game.c bhAllDrawModel` (one hook around our player's draw).
+
+* **Not the Battle Game's first person.** The game has its own (`gm_flg 0x40`, forced on by the Battle Game's
+  `bhSyukanModeSet` with `gm_flg 0x1000000`; `cut.c bhInitPlEyeCamera` / `bhSetPlEyeCamera`: the eye at
+  `owP[5]` + (0, 1.5, -1), its own flat lighting `gm_flg 0x80`, analogue turning `player.c bhCPM1_act_bas`). It is
+  untouched: `camera_allowed` excludes `gm_flg 0x40`, so in that view our camera stays off as for the scope, and the
+  Battle Game's controller play is the game's.
+* **Camera**: the eye is the head node's point 1.5 above it (as the game's eye camera, `owP[5]`) taken from the pose
+  before the free-aim bend (`tps_calc_model`, so the view does not swing with the bend it aims), relative to the point
+  the camera follows (`follow`: the position, or the drawn root on stairs, ledges and pushing), eased (0.2 a frame in
+  height, 0.3 sideways: the walk's bob and sway damped, a crouch to pick something up followed) and kept within 1 unit
+  of the body sideways (the head leans into aims and kicks back with the recoil by several units). From there 1.3 to the
+  left, 0.6 up and 0.2 ahead along the view (`FP_SIDE`, `FP_RISE`, `FP_FWD`), so a raised weapon shows in the lower
+  right instead of under the crosshair. Kept 0.3 units off the room model; near plane 0.25 (1 over the shoulder).
+  Pitch +-80 degrees. "First Person Field of View" (default 85); aiming narrows it by the shoulder camera's ratio
+  (Aiming Field of View / Field Of View, 65/75: 74 degrees).
+* **Aim down**: with the weapon raised the eye comes down to 4 units above the weapon hand when that is lower
+  (`fp_hand`, `FP_ADS`): the shotgun and the rifles are held at the hip, under the view; a handgun at the eyes leaves it.
+* **Our character**: its body is not drawn (`tps_fp_hide`: the nodes' hide flag, `evalflags 0x8`, as `bhSetCut`
+  hides room parts, for that draw only; Claire's body is one skinned mesh on node 1). The hands and what they hold are
+  separate models linked to the hand nodes and drawn with the effects, so they stay: the raised weapon is seen in the
+  hand, aimed as the body holds it (walking, the hand at the hip shows only when looking down). The shadow, the pose
+  and the co-op partner's view of us are unchanged. "You appear as" another model: not drawn at all (its own nodes).
+* **Moving**: as camera A ([Mouse/keyboard camera](#mousekeyboard-camera-ab)): the mouse turns the view, W/A/S/D walk
+  towards that direction seen from the view (S back, A/D strafe: the game has no sideways walk, so the hidden body
+  turns to the way it walks); a direction within 50 degrees of the facing is taken at once (forward goes exactly where
+  the view looks), others turn the body 0.3 of the way a frame. Standing, the body faces the view (what the action
+  button examines). The gamepad (Modern): the left stick the same way, the right stick looks; standing, the body faces
+  the view. Shift runs, the quick turn turns the view with the character.
+* **Aiming**: always free aim through the screen centre (Aim Assist's lock-on is not used with the mouse; the gamepad's
+  gentle assist is, as set); the crosshair's ray starts at the eye, so Precise Shots, the impact at the crosshair
+  (`pc_shot_ray`, `pc_shot_wall`) and the aim height work as over the shoulder. The free-aim pose bends the upper body
+  as always (the partner sees it).
+* **Grabs and throws** (`mode0` 4 / 5): the view eases out to the shoulder camera (`fp_w`, 0.25 a frame; the pitch
+  eases to the shoulder camera's), which shows the struggle, and back in once in control. Hits (`mode0` 2) stay at the
+  eyes. Events, doors, cutscenes, the scope and messages: as for the shoulder camera (the cut camera, then a new view
+  facing the way the character faces).
+* **The player put elsewhere by code** (a warp, a teleport to the partner, a script) in a frame: the view faces as the
+  character was put (`tps_player`).
+* **HUD**: "First Person HUD": On (the HUD Style), Off, Minimal (Minimal's bar and counts whatever the HUD Style), on
+  the right; it replaces "HUD" while the first-person view is shown (`hud_glue.c`, `g_hud.style`). "Crosshair" adds a
+  small light dot at the centre while the weapon is down (`g_tps.fp_view`, `overlay.cpp`).
+* **Smoother Motion**: the in-between images interpolate our camera as over the shoulder (the mouse is read once a
+  game frame).
+* Test aid: `RECVX_FP_EYE="side:up:forward"` replaces the eye's offsets above (side > 0: right).
+
 ### Settings
 
 All on the THIRD PERSON page (F1 or OPTION -> ENHANCED SETTINGS). Lengths are in tenths of a game
@@ -173,7 +226,9 @@ unit (the character is about 17 units tall).
 
 | Setting | ini key | Default |
 |---|---|---|
-| Over-the-shoulder Camera | `tps` | 0 |
+| Camera Mode (0 Fixed; 1 with `tps_first_person` 0: Over Shoulder, 1: First Person) | `tps`, `tps_first_person` | 0, 0 |
+| First Person Field of View | `fp_fov` | 85 |
+| First Person HUD (0 = On, 1 = Off, 2 = Minimal) | `fp_hud` | 0 |
 | Field Of View (horizontal over the 4:3 picture; widescreen adds to the sides) | `tps_fov` | 75 |
 | Aiming Field of View | `tps_aim_fov` | 65 |
 | Camera Distance | `tps_distance` | 140 |
