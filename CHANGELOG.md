@@ -8,8 +8,8 @@
 - **What's New**: a button on the title screen shows the changes of the installed version.
 - **Imported models**: each import source (such as Outbreak File 2) can be hidden from the model lists and random picks
   without deleting it, under IMPORT > CHARACTERS or with a quick toggle in the lists.
-- **BioRand**: a new extra option, Show Randomized Item Models, shows the item you will actually get on the floor
-  instead of the original one.
+- **BioRand**: items on the floor now show the item you will actually get instead of the original one (Show Randomized
+  Item Models, on by default).
 - **Umbrella Chronicles import**: the player characters, monsters and other characters of Resident Evil: The Umbrella
   Chronicles (Wii, from your own .rvz disc image) can be imported under IMPORT > CHARACTERS and used as character
   models, with blinking, lip movement and hands that grip held weapons. Their voice lines can be imported too, so

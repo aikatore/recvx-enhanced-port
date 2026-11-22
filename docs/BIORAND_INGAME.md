@@ -1352,7 +1352,7 @@ retail.
 
 ### Item models (2026-11-21)
 
-**Show Randomized Item Models** (GAMEPLAY setting, ini `biorand_item_models`, default 0; also GAME SETUP > BIORAND under
+**Show Randomized Item Models** (GAMEPLAY setting, ini `biorand_item_models`, default 1 (on: it only acts in a BioRand game whose items are randomized, and reads its catalogue only then); also GAME SETUP > BIORAND under
 ITEMS and the BIORAND screen's EXTRA OPTIONS; each player's own, as it only changes what is drawn): in a BioRand game an
 item spot whose pickup BioRand changed (the record's `type`, [ROOM_FORMAT.md](modding/ROOM_FORMAT.md) "Generated
 pickups") shows the new item instead of the old one. Picking it up is unchanged (the record keeps id, type and amount).

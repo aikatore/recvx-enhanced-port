@@ -305,7 +305,7 @@ int biorand_item_models_want(void)
 {
     uint32_t lsn, size;
     int s = __atomic_load_n(&istate, __ATOMIC_ACQUIRE);
-    if (s || !g_config.item_models) return s == 2;
+    if (s || !g_config.item_models || !biorand_active()) return s == 2;   /* (read only once a BioRand game plays) */
     if (!g_config.iso_path[0] || !adx_afs_locate(17, 204, &lsn, &size)) return 0;   /* (the disc's room archive not open yet) */
     __atomic_store_n(&istate, 1, __ATOMIC_RELEASE);
     SDL_Thread* t = SDL_CreateThread(item_scan, "itemmodels", NULL);
