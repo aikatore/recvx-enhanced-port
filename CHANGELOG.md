@@ -17,6 +17,9 @@
 - **Break Free Pushes Enemies**: breaking free from any grab knocks back every enemy close by, and for a moment none
   can grab you again. On by default only with the Enemy Randomizer or Extra Enemies, so several enemy types can no
   longer pass you from grab to grab.
+- **Dreamcast import**: Steve's cutscene model with his Dreamcast hairstyle can be imported from your own Dreamcast
+  disc 1 (CUE/BIN, GDI or CHD) and used in cutscenes, as a cast model or as your look, talking and blinking like the
+  original.
 - **Aim Scoped Weapons Normally**: an option to aim and fire the sniper rifle and the linear launcher like other
   weapons, with auto-aim, instead of through the scope.
 
