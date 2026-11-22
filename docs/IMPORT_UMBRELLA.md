@@ -268,19 +268,20 @@ about 30 seconds with the players.
 31 Wesker / Sergei. One speaker: `pair`. Two: a line that starts with the other's name, has ", <name>" or ends with it
 (only punctuation after it), or names its speaker ("I'm Carlos", "Wesker here"): `sure`; both names in it: no cue. Then a
 line right next to a sure line (number one apart, same dialogue) the other one: `guess`. Every other line or shout of a
-two-speaker scenario gets a `weak` suggestion, the first of these that applies: **the turn** further along the numbered
-dialogue (from the nearest sure line by number: the other one an odd number away, the same one an even; none when the two
-nearest disagree); **the pitch** (`uc_voice_f0`: the median F0 of the decoded line, normalized autocorrelation per 32 ms
-at about 8 kHz, voiced frames only) nearer to one speaker's, each speaker's the median of their sure and scenario lines on
-this disc; none when the two are under 20 % apart (Jill's and Chris's sure lines are shouted calls, both about 360 Hz;
-Rebecca 334 / Billy 250 / Richard 222 / Carlos 154 / Wesker 87 Hz); **words** weaker than the calls: the other's name not as
+two-speaker scenario gets a `weak` suggestion, the first of these that applies: **the pitch** (`uc_voice_f0`: the median F0
+of the decoded line, normalized autocorrelation per 32 ms at about 8 kHz, voiced frames only) nearer to one speaker's, each
+speaker's the median of their sure and scenario lines on this disc; none when the two are under 20 % apart (Jill's and
+Chris's sure lines are shouted calls, both about 360 Hz; Rebecca 334 / Billy 250 / Richard 222 / Carlos 154 / Wesker 87
+Hz); **the turn** further along the numbered dialogue (from the nearest sure line by number: the other one an odd number
+away, the same one an even; none when the two nearest disagree); **words** weaker than the calls: the other's name not as
 a call ("Sorry Richard. I'm on it!"), a title (Colonel: Sergei, Captain: Wesker; the other says it), a word for a woman or a
 man said to the other ("Watch your step, princess!": the man) or of the speaker ("Don't call me princess!": the woman);
 else **the scenario's first speaker**. Left out on the 40 lines the names make sure, each rule alone: the turn one step
 away (`guess`) 6 of 6 right, further away 9 of 23 (the banter is call and answer, not a strict alternation), the pitch 12
 of 16 (37 lines, 19 right, without the 20 % rule), the first speaker 21 of 40; the words name the other on these lines, so
-they say nothing there. The import of the US disc: 1015 files, 115 sure (75 of them the banks), 78 by the scenario, 63
-guessed, 723 weak (382 by the turn, 195 by the pitch, 1 by the words, 145 the first speaker), 36 none; usable as below
+they say nothing there. The pitch before the turn: 26 of 40 combined (the turn first: 23). The import of the US disc: 1015 files, 115 sure (75 of them the banks), 78 by the scenario, 63
+guessed, 723 weak (counted with the turn first: 382 by the turn, 195 by the pitch, 1 by the words, 145 the first speaker; with the
+pitch first more go by the pitch), 36 none; usable as below
 (weak not): Wesker 58, Ada 41, Chris 38, Jill 32, Rebecca 31, Billy 17, Richard 12, Carlos 12, HUNK 11 (grunts counted).
 
 **In the game** (`host/voices.c`, `glue/cast_glue.c`, `audio/adx.c`; docs/ACTORS.md "Voice lines"):

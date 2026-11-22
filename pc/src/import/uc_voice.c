@@ -348,8 +348,9 @@ static const char* by_pitch(const UcVoiceLine* v, float fm[][2])
     return fabsf(logf(v->f0 / f[0])) <= fabsf(logf(v->f0 / f[1])) ? pairs[v->pair].a : pairs[v->pair].b;
 }
 
-/* lines of two speakers that no rule above took, lines and shouts: their turn further along the numbered dialogue (chain), else
-   the pitch nearer to one speaker's, else text_cue, else the scenario's first speaker; all "weak" (cf. docs) */
+/* lines of two speakers that no rule above took, lines and shouts: the pitch nearer to one speaker's, else their turn further
+   along the numbered dialogue (chain), else text_cue, else the scenario's first speaker; all "weak" (cf. docs). Pitch first:
+   on the name-anchored lines (leave-one-out) pitch then turn got 26 of 40, turn then pitch 23 */
 static void weak(UcVoiceLine* l, int n)
 {
     float fm[sizeof pairs / sizeof pairs[0]][2] = { { 0 } };
@@ -359,7 +360,7 @@ static void weak(UcVoiceLine* l, int n)
         const char* w;
         int d;
         if (strcmp(v->conf, "none") || (strcmp(v->kind, "line") && strcmp(v->kind, "grunt")) || v->pair < 0 || !pairs[v->pair].b) continue;
-        if (!(w = chain(l, n, i, &d)) && !(w = by_pitch(v, fm)) && !(w = text_cue(v->text, pairs[v->pair].a, pairs[v->pair].b))) w = pairs[v->pair].a;
+        if (!(w = by_pitch(v, fm)) && !(w = chain(l, n, i, &d)) && !(w = text_cue(v->text, pairs[v->pair].a, pairs[v->pair].b))) w = pairs[v->pair].a;
         v->who = w; v->conf = "weak";
     }
 }
