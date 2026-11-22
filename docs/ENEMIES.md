@@ -636,6 +636,112 @@ every sound a variant requests with its motion and frame.
 * Sound programs are per type: `sound_map` must name programs of the bank it uses; nothing checks
   that they fit.
 
+## Enemy models
+
+"Enemy Models" (GAME SETUP > CHARACTERS > MONSTERS YOU FIGHT, also in the pause menu's GAME SETUP; the old ENHANCED
+SETTINGS GAMEPLAY page under Enemy Seed; recvx.ini `enemy_model_<category>`): the enemies you fight drawn as other
+models, chosen per enemy type. **Display only**: the enemy keeps its type, AI, motions, hit capsules (shots, the knife,
+Precise Shots and headshots are judged on its own skeleton), damage reactions, grabs (the player still plays the
+enemy's grab motions), sounds, effects and blood (linked to its own nodes), kill flag and corpse. A display actor of the
+appearance system is posed from the enemy's skeleton every time it is drawn, as an enemy variant's model ("Enemy
+variants"): the humanoid node maps of both (`actor_glue.c rig_build`, docs/ACTORS.md "Retargeting"), the model's own
+bone lengths, its feet on the enemy's floor. Code: `pc/src/host/enemymdl.c` (categories, choices, picks, ini keys; no
+game state, ctest `emodel`), `pc/glue/enemymdl_glue.c` (in the game), `pc/glue/enemymdl_list.c` (the page),
+`variant_glue.c variant_put` (the drawing).
+
+### Which enemies
+
+The model is posed by mapping the enemy's skeleton onto a person's (pelvis, spine, chest, neck, head, arms, legs), so
+only enemies shaped like a person can stand in, and only models shaped like one can be drawn (the catalogue's
+humanoids, every imported `.cvxm`).
+
+| Enemy (type) | Row | Notes |
+|---|---|---|
+| Zombie (1, every model version) | **Zombies**, one row for all 24 looks | checked: walking, attacking, grabbing and biting the player, shot, falling, dying, the corpse, a burst head (below), the chewing motion (its mouth morph is not drawn: the model is) |
+| Anatomist Zombie (26) | Anatomist Zombie | checked (as the Licker, which then walks upright: every import is posed on a person's skeleton): walking, attacking, shot, dying |
+| Hunter (5, model 0) / Sweeper (5, model 1) | Hunter, Sweeper | checked (Hunter as Umbrella Chronicles' Hunter): crouching, attacking, dying; the Sweeper loaded and posed (as Jill), not in view in the runs |
+| Bandersnatch (9) | Bandersnatch | maps (one arm, no head node); its stretching arm cannot be shown (a model's bones keep their length): the grab reaches from where the arm would be. Loaded and posed (as the T-002), not in view in the runs: not checked by eye |
+| Tyrant (19) | Tyrant | checked (as Wesker's cutscene model, with Wesker's hands): walking; its claw arm is the model's arm |
+| Cerberus, Black Widow, Giant Black Widow, bats, moths, ants, albinoids, fish, the Spotter, the Gulp Worm, tentacles, Alexia's second and third forms | none | not shaped like a person: nothing to pose a person's model from. A model *of the same kind* would need the same skeleton: Code: Veronica has one model per kind (the Giant Black Widow is another type with another skeleton), and Umbrella Chronicles' dogs, crows and spiders are exported as glTF only ([IMPORT_UMBRELLA.md](IMPORT_UMBRELLA.md) "Next steps"), not as `.cvxm`. Not possible for now |
+| Nosferatu, Alexia's first form, Monster Steve, Alfred, the knights | none | bosses whose fights show linked parts (Nosferatu's heart, his weak point, is a record linked to his chest: drawn as a model it would vanish; Monster Steve's claw and axe arm are linked enemies, and his variant has its own model) or are scripted around their model |
+
+### Choices
+
+Each row: **Original**; a **random group**, each enemy of the row one of its models: Random Code: Veronica Zombie (the
+24 zombie looks and the two scripted ones), Random Umbrella Chronicles Zombie (EZ00..EZ38), Random Zombie (Any Game),
+Random Code: Veronica Monster (Alexia's first form, Nosferatu, the Tyrant, Monster Steve, the Hunter, the Sweeper, the
+Bandersnatch, the anatomist), Random Umbrella Chronicles Monster (Hunter, Licker, Nemesis, the Tyrants, Lisa Trevor, the
+Eliminator, Ivy), Random Code: Veronica Character, Random Umbrella Chronicles Character, Random Outbreak Character, Random
+Model (Any); a group with no member is not listed; or **one model** (every listed humanoid catalogue model, then every
+import). One model for Zombies: every zombie looks like it. Imports count only while their game is checked (GAME SETUP >
+CHARACTERS, "Umbrella Chronicles", "Outbreak File 2", ...; `actor_import_shown`): an unchecked game's models leave the
+list and the groups, and a row set to one of them shows the original.
+
+* **Picks** (`emodel_pick`): a random group takes at most 3 of its models per room (`EM_ROOM_PICKS`, the first of a
+  shuffle by enemy seed, room file and row), and each enemy one of those by its slot, so neighbouring slots (a room's
+  records) differ; the same on every visit and on both co-op screens.
+* **Display slots**: one per model the room shows (`ACTOR_ENEMY` + k, 6). A seventh model: the enemy takes a model its
+  row already shows, else stays itself (logged). A model that cannot be loaded or mapped: the enemy stays itself.
+* **The page** (`enemymdl_list.c`): a row per category with its model between arrows; Left / Right step, L1 / R1 jump to
+  the next group of the list (Random, Monsters, Zombies, Characters, each imported game), Confirm steps on; the value of
+  the GAME SETUP row is "Original", "Zombies: Nemesis" or "3 changed". No 3D preview (the pause menu has no title scene
+  to draw it in). In a game the row has the next-room mark: a change takes effect at the next room load.
+
+### In the game
+
+* **Room load** (`enemyopt_glue.c enemy_room_finished` -> `emodel_room`, after the enemy randomizer, the placements and
+  the cutscene cast): every enemy body (not a part linked to another enemy, not an enemy variant) of a row with a choice
+  gets its model, each model loaded once. After the randomizer: a record it turned into a Hunter takes the Hunter's
+  row. **Every game frame** (`spawn_glue.c spawn_frame` -> `emodel_frame`): enemies that came since (Extra Enemies, the
+  spawner, a co-op host's spawn notes, a slot taken by another type) get theirs.
+* **Drawing** (`eneset.c bhDrawEnemy` -> `variant_glue.c pc_variant_draw` -> `emodel_draw` for every enemy that is not
+  a variant; no decomp change: `pc_variant_n` counts one more while the room has enemy models): the body is posed
+  (`actor_pose`) and drawn in its place, with a player character's cutscene model's head part (Claire's ponytail,
+  Wesker's sunglasses) and, for a model without hands of its own (the cutscene models), the unarmed hands of the
+  character it is (`actor_extras_draw`, as the cutscene cast's). An enemy whose skeleton gets no humanoid map is drawn as
+  itself. Third person's Locational Hit Reactions show on the model (the flinch is in the enemy's matrices before the
+  pose).
+* **Parts**: what is linked to the body (a zombie's upper half, its cap, scope, the worm of model version 21) is not
+  drawn while the body is the model; a part that flies off (unlinked) is drawn as it is. **Head blow-offs**: a zombie
+  whose head burst (`exp0 + 0x78` -1, "Head blow-offs") has the model's head role and the nodes below it hidden while it
+  is drawn (as an enemy variant's; logged `enemymdl: slot n lost its head`). The original's limbs were never hidden by the
+  game (`npCutSkin` is empty), so nothing else changes.
+* **Lifetime**: model data from the spawn pool (`spawn_pool_alloc`: room lifetime; `actor_glue.c keep_fit`), textures in
+  the texture heap; released with the room's textures (`spawn_release` -> `emodel_release`, the door) and at
+  `njReleaseTextureAll` (game over, the title; the next draw finds the slot empty and draws the original). The spawn pool
+  is emptied at the next room's set-up only after every slot let go of it (`actor_pool_reset`, which also releases one
+  still loaded: logged). The enemy variants' models moved there too (their 2 x 1.5 MB static buffers freed, the image's
+  room in the 0x40000000 window for the new slots).
+* **Precedence**: an enemy variant draws its own model (Mutated Steve); a record the cutscene cast casts (Cutscene
+  Monsters: the creatures and scene zombies only cutscenes show) is drawn by the cast; the doubles are characters, never
+  a category. Everything else of a row with a choice is drawn as its model, scene zombies the cast leaves alone too.
+
+### Co-op
+
+The host decides: its choices go to the guest as `EV_EMODEL` (protocol 61; at the session's start and on every change;
+a value per category), and the guest draws the host's (a guest's own page shows them read-only, "Set by the host.").
+The picks come from the host's enemy seed, the room file and the slot, which both sides share, so both screens show the
+same models. Imported models count on each screen as its imports and checked games allow: partners need the same
+imports and the same games on, else the guest shows the original where it lacks one. Nothing else on the wire changed.
+
+### Performance
+
+Measured headless (0/6, four zombies, `--profile`, game thread mean over 600 frames, three runs at once on one machine):
+original 1.23 ms; four zombies as Steve's cutscene model 2.24 ms; as Nemesis (6051 vertices, skinned on the CPU per
+zombie and frame) 3.65 ms. Loading: an import 0.3..1.9 ms, a catalogue model 10..14 ms (its room file is read), at the
+room load (or the first frame an added enemy is there). Memory: the model's chunks (an import 0.55..0.9 MB, a catalogue
+model 0.1..0.2 MB) in the 32 MB spawn pool, its textures (0.24..0.94 MB) in the texture heap, refused like every
+display model under its margins (32 entries, 2 MB).
+
+### Limits
+
+* Only drawn: hits, collision, the shadow and the camera follow the enemy's skeleton (a much taller model, Nemesis for a
+  zombie, is hit where the zombie is; a grab or bite lines up with the enemy's proportions, not the model's).
+* A model's face does not move (no jaw is driven), its eyes blink on their own.
+* The Bandersnatch's arm (above); the Tyrant's and the Bandersnatch's claws are the model's hands.
+* Several enemies sharing a model share its head part's swing (each pose steps it).
+* Test aids: the log (`enemymdl: room ... slot ... drawn as ...`, the load times), `RECVX_HEADSHOT`, `RECVX_SPAWN`.
+
 ## Enemy options
 
 Extra enemies, placements and the randomizer are off by default; off, the code returns before touching

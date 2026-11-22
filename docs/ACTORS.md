@@ -475,7 +475,7 @@ cutscene double ("Custom Cutscene Model" on) and the lobby previews (`actor_glue
   shows the same swing), in work of its own (`exp0`/`exp3`, 20 KB per slot,
   flag `0x100000`), so it never takes `bhGetFreeMemory` (the earlier crash: memory under a pending
   weapon read). Drawn right after the display actor.
-* **Memory**: per display slot (11) 34 KB of static buffers (374 KB in all, not the game's arena); per shown head part one texture
+* **Memory**: per display slot (17, with "Enemy Models"' six) 34 KB of static buffers (374 KB in all, not the game's arena); per shown head part one texture
   entry and the texture above; one part-file read (about 1.2 MB, the existing buffer) per model
   change. Released with the model (`unload`, `njReleaseTextureAll`: game over, the title).
 * **The played character's own cutscene model** (Claire's while Claire is played): the doubles
@@ -514,7 +514,9 @@ Models not in the catalogue:
 * **Display actor**: a `BH_PWORK` per slot (our player, the co-op partner, the cutscene double,
   two for enemy variants' models: [ENEMIES.md](ENEMIES.md) "Enemy variants", posed from each such
   enemy's skeleton, or from another enemy's (a donor) playing a borrowed motion, when it is drawn,
-  and six for the cutscene cast's models, "Cutscene cast"),
+  six for "Enemy Models" ([ENEMIES.md](ENEMIES.md) "Enemy models": the enemies you fight drawn as other models,
+  posed from each enemy's skeleton; their model data, as the variants', from the spawn pool) and six for the cutscene
+  cast's models, "Cutscene cast"),
   drawn in place of the source (`game.c actor_put_player`, `coop_draw_remote`,
   `eneset.c actor_put_enemy`). The source stays what the game animates, collides with and links
   weapons and effects to; it is only not drawn. The head part (`sys->obwp[2]`) is disabled while a

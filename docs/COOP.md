@@ -37,7 +37,7 @@ Ways to start a session:
 ## Lobby
 
 MULTIPLAYER opens the new screens described in the next section; with Menu Style Legacy (or `--legacy-menu`), the lobby
-below, unchanged. Both use the same session, rules and wire (protocol 60): a host on one can be joined from the other.
+below, unchanged. Both use the same session, rules and wire (protocol 61; 61: the host's Enemy Models, `EV_EMODEL`, [ENEMIES.md](ENEMIES.md) "Enemy models"): a host on one can be joined from the other.
 
 ### The new MULTIPLAYER screens
 

@@ -375,7 +375,14 @@ voices (unless Randomize Voice Lines is on) and what happens stay as they are.
   second costume, whose mouth does not move), so
   with Randomize Voice Lines everyone in a cutscene speaks; check the monsters too if you want the characters to
   become monsters.
-* **Enemy Models**: the monsters that appear only in cutscenes (Nosferatu breaking free, the Tyrant Alfred
+* **Enemy Models (the enemies you fight)**: GAME SETUP > CHARACTERS > MONSTERS YOU FIGHT (also in the pause menu, and
+  on the old ENHANCED SETTINGS GAMEPLAY page): a model for each enemy type you fight: Zombies (all of them at once),
+  Anatomist Zombie, Hunter, Sweeper, Bandersnatch, Tyrant. Original, a random group (each enemy gets one of its models,
+  e.g. Random Umbrella Chronicles Zombie) or one model (e.g. Nemesis, Steve, an Outbreak character): with one model all
+  zombies look like it. They keep their own moves, hits, grabs and sounds; only how they look changes. Imported models
+  need their game turned on in CHARACTERS. From the next room; in co-op the host's. Dogs, spiders, bats and other
+  creatures not shaped like a person cannot be changed.
+* **Cutscene Monsters** (Enemy Models in the old menus): the monsters that appear only in cutscenes (Nosferatu breaking free, the Tyrant Alfred
   releases, the Hunter Wesker sends out, Steve's father, the zombies around Chris and at the courtyard fence) are
   swapped too, by their own setting. *All Enemies* (the default) makes them other monsters: Alexia's first form,
   Nosferatu, the Tyrant, Monster Steve, the Hunter, the Sweeper, the Bandersnatch, the anatomist or another zombie.
