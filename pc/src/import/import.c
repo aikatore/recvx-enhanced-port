@@ -11,6 +11,7 @@
 #include <time.h>
 
 void host_log(const char* fmt, ...);
+void voice_import_load(const char* text);   /* host/voices.c */
 
 ImportSettings g_import;
 ImportProgress g_import_progress;
@@ -43,7 +44,7 @@ const ImportSource import_sources[IMPORT_SOURCES] = {
       "Needs the European disc image with the Italian fan translation by KimeraVX: %s." },
     { "umbrella", "Resident Evil: The Umbrella Chronicles", "RBUE08", IMPORT_CAT_CHARACTERS,
       "Chris, Jill, Rebecca, Richard, Kenneth, Billy, Carlos, Ada, HUNK and Wesker in their costumes, and the game's monsters. Import them from your own disc image of the US Wii release (RBUE08) in Dolphin's RVZ format.",
-      "Needs a clean US disc image of Resident Evil: The Umbrella Chronicles in Dolphin's RVZ format: %s.", IMPORT_PLAYERS | IMPORT_NPCS, "rvz",
+      "Needs a clean US disc image of Resident Evil: The Umbrella Chronicles in Dolphin's RVZ format: %s.", IMPORT_PLAYERS | IMPORT_NPCS | IMPORT_VOICES, "rvz",
       { "Umbrella Chronicles Characters", "Umbrella Chronicles Cutscenes", "Umbrella Chronicles Monsters and Others", "Umbrella Chronicles Enemies" } },
 };
 
@@ -57,6 +58,12 @@ static void source_dir(int src, char* out, int n)
     else snprintf(out, n, "%s/import/%s", mods, import_sources[src].key);
 }
 void import_source_dir(int src, char* out, int n) { source_dir(src, out, n); }
+void import_voices_path(char* out, int n)
+{
+    char d[1100];
+    source_dir(IMPORT_UMBRELLA, d, sizeof(d));
+    snprintf(out, n, "%s/voices.txt", d);
+}
 int import_present(int src)
 {
     char d[1100];
@@ -196,6 +203,21 @@ void import_registry_load(void)
             actor_imports[k] = (ActorModel){ .name = nm, .anim = items[i].female ? ANIM_FEMALE : ANIM_MALE };
             k++;
         }
+    }
+    {   /* Umbrella Chronicles' voice lines (host/voices.c): the list, none without it */
+        char p[1200];
+        FILE* f;
+        long len = 0;
+        char* t = NULL;
+        import_voices_path(p, sizeof(p));
+        if ((f = pc_fopen(p, "rb"))) {
+            if (!fseek(f, 0, SEEK_END) && (len = ftell(f)) > 0 && len < (4 << 20) && !fseek(f, 0, SEEK_SET) && (t = malloc((size_t)len + 1)) &&
+                fread(t, 1, (size_t)len, f) == (size_t)len) t[len] = 0;
+            else { free(t); t = NULL; }
+            fclose(f);
+        }
+        voice_import_load(t);
+        free(t);
     }
     if (full) host_log("import: the list of imported models is full (%d): %d more not listed\n", ACTOR_IMPORT_MAX, full);
     if (k != actor_import_n) host_log("import: %d imported player models listed\n", k);

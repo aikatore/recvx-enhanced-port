@@ -6,6 +6,7 @@
 #include "../src/import/import.h"
 #include "../src/host/actors.h"
 #include <SDL3/SDL.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +21,7 @@ unsigned int fstbl[24], fsheader[24];            /* (set by the languages' test)
 unsigned int wallpaper[24];                      /* (the decomp's, for import/lang.c) */
 void* comevt_message_tab[8];
 const char* tr(const char* en) { return en; }   /* (host/tr.c) */
+void voice_import_load(const char* text) { (void)text; }   /* (host/voices.c) */
 static uint32_t rd(const unsigned char* p) { uint32_t v; memcpy(&v, p, 4); return v; }
 
 /* an 8-bit 16x16 TIM2 (16-byte header): pixel i has index i, palette entry k is (k, 0, 0, 0x80) */
@@ -288,6 +290,42 @@ int main(int argc, char** argv)
         }
         CHECK(actor_import_n == 3 && actor_import_file[0] == kevin && actor_imports[1].name == nurse && strstr(actor_import_file[2], "/P01_00/"));
         remove(p);
+    }
+    {   /* Umbrella Chronicles' voice lines (uc_voice.c): the ADX encoder against audio.c's decoder (a sine sweep back within
+           a few percent), the speaker guesses on made-up lines */
+        enum { N = 32000 };
+        static short x[N];
+        size_t size;
+        unsigned char* a;
+        double err = 0, sig = 0, cc, ca, cb;
+        int h1 = 0, h2 = 0, c1, c2;
+        for (int i = 0; i < N; i++) x[i] = (short)(12000 * sin(i * (0.01 + i * 1e-6)));
+        CHECK((a = uc_adx_encode(x, N, 32000, &size)) && size == 0x24 + (N + 31) / 32 * 18 && a[0] == 0x80 && a[4] == 3 && a[5] == 18 &&
+              !memcmp(a + 0x1E, "(c)CRI", 6) && (a[12] << 24 | a[13] << 16 | a[14] << 8 | a[15]) == N && a[18] == 3);
+        ca = M_SQRT2 - cos(2.0 * M_PI * 500 / 32000); cb = M_SQRT2 - 1.0; cc = (ca - sqrt((ca + cb) * (ca - cb))) / cb;
+        c1 = (int)(cc * 8192.0); c2 = (int)(cc * cc * -4096.0);
+        for (int i = 0; i < N; i++) {   /* (audio.c decode_frames) */
+            const unsigned char* fr = a + 0x24 + 18 * (i / 32);
+            int scale = (int16_t)(fr[0] << 8 | fr[1]) + 1, nib = (fr[2 + i % 32 / 2] >> (i & 1 ? 0 : 4)) & 15, s;
+            if (nib & 8) nib -= 16;
+            s = nib * scale + ((c1 * h1) >> 12) + ((c2 * h2) >> 12);
+            s = s > 32767 ? 32767 : s < -32768 ? -32768 : s;
+            h2 = h1; h1 = s;
+            err += (double)(s - x[i]) * (s - x[i]); sig += (double)x[i] * x[i];
+        }
+        CHECK(err < sig * 0.002);   /* (better than 27 dB) */
+        free(a);
+        static UcVoiceLine l[] = { { "VO_0010001", "Billy! Up there!" }, { "VO_0010002", "Right." }, { "VO_0010003", "What now?" },
+            { "VO_0010004", "Are you alright, Rebecca?" }, { "VO_0101001", "Pathetic..." }, { "VO_1010002", "I'm Chris." },
+            { "VO_1020003", "Billy's gone." }, { "VO_1030001", "Chris! Jill! Are you OK!?" }, { "VO_2001001", " " }, { "VO_2311001", "This is war." },
+            { "VO_civman_zombies", "Zombies!" } };
+        uc_voice_guess(l, (int)(sizeof l / sizeof l[0]));
+#define WHO(i, w, c, k) (!strcmp(l[i].who, w) && !strcmp(l[i].conf, c) && !strcmp(l[i].kind, k))
+        CHECK(WHO(0, "Rebecca", "sure", "line") && WHO(1, "Billy", "guess", "line") && WHO(3, "Billy", "sure", "line"));   /* (calls the other; the next one answers) */
+        CHECK(WHO(2, "Rebecca", "guess", "line") && WHO(4, "Wesker", "pair", "line") && WHO(7, "-", "none", "line"));    /* (before a sure line; alone; both named) */
+        CHECK(WHO(5, "Chris", "sure", "line") && WHO(6, "-", "none", "line") && WHO(8, "-", "none", "grunt") && !strcmp(l[8].scen, "20"));
+        CHECK(WHO(9, "-", "none", "radio") && WHO(10, "-", "none", "npc"));
+#undef WHO
     }
     printf("import: ok\n");
     return 0;

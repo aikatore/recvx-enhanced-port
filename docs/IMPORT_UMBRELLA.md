@@ -17,6 +17,7 @@ Model") and cutscene cast models, moving with Claire's / Chris's motions, blinki
 | 3. Faces | the blink (the game's own morph), a jaw made for the mouth; the monsters' own jaws, the Tyrant ETY0's lids |
 | 4. Monsters and others (phase 3) | done: 35 zombies (EZ00..EZ21, EZ26..EZ38), Hunter EHT1, Licker ELK1, Nemesis ENS1, Tyrants ETY0, ETY5..7, Lisa Trevor ELT1, Eliminator EEL0, Ivy EIV1, an office worker OSIT1: "Monsters and Others" |
 | 5. Skeleton review (phase 3) | done: the limbs posed to Code: Veronica's rest pose, the gun-grip hands, coat tails and skirts on the thighs, repeating textures cut into tiles |
+| 6. Voice lines | done: the 940 played lines and 75 grunts as ADX for "Randomize Voice Lines", speakers guessed (`uc_voice.c`; "Voice lines" below) |
 
 Headless: `RECVX_MODS=<out> RECVX_IMPORT=umbrella RECVX_IMPORT_ISO=<image>.rvz build/pc/recvx --save-dir <tmp>`
 (exit status 0 = no failures; the players only, about 8 seconds; `RECVX_IMPORT_WHAT=5` with the monsters and others, 62
@@ -176,7 +177,7 @@ would show); files without them stay version 5, Outbreak's byte for byte.
 second group, here "Monsters and Others" (`IMPORT_GROUP_NPCS`; `uc_group`: `P*` players, `E*`/`O*` the others; the IMPORT
 screen's row and its help say so for this source, heading "Umbrella Chronicles Monsters and Others"),
 `ext` = `rvz` (the file dialogs' filter, F9 and the IMPORT screen's), its group headings ("Umbrella Chronicles
-Characters"). IMPORT > CHARACTERS lists it in the new and the legacy screen (Playable Characters, Monsters and Others, Disc Image, START
+Characters"). IMPORT > CHARACTERS lists it in the new and the legacy screen (Playable Characters, Monsters and Others, Voice Lines, Disc Image, START
 IMPORT, DELETE, Show in Model Lists); F9 has its section ("Other Characters"). Names: Chris Redfield (S.T.A.R.S. / Umbrella's End), Jill
 Valentine (S.T.A.R.S. / Raccoon City / Umbrella's End), Rebecca Chambers, Richard Aiken, Kenneth J. Sullivan, Billy
 Coen, Carlos Oliveira, Ada Wong (Costume 1 / 2), HUNK, Albert Wesker (S.T.A.R.S. / Umbrella's End / S.T.A.R.S.,
@@ -189,6 +190,85 @@ Model" / "Custom" pools with imports (`cast_pool`), and so the cutscene monsters
 Story Characters" (`cast_model`: with "Enemy Models" the same as the cast, the creatures pick from the cast's pool). The
 enemies' own list (cutscene monsters "Any Monster" / "Custom") takes no imports at all (`cast.c imps`), as for
 Outbreak. "Show in Model Lists" hides all of them with the players.
+
+## Voice lines
+
+`uc_voice.c`: the IMPORT screen's row "Voice Lines" (Umbrella Chronicles only, on by default; `IMPORT_VOICES`, headless
+`RECVX_IMPORT_WHAT=17` with the players) writes the game's voice lines next to the models, for "Randomize Voice Lines":
+what an imported model says when the cast shows a speaker as it. Nothing of them is in the repository; the speakers are
+guesses that the user checks in the local voice tool (`voice_curation.json` -> `pc/tools/voice_curation.py` ->
+`voice_curation.inc`, ids and flags only).
+
+**From the disc.** The lines are the stream sounds named `VO_...` of `Data/sound/biosound.brsar` (the ones the game plays:
+951, of them 940 on the disc; `VO_civwomzonbie` and ten others name files that are not there; the other 177 `VO_` files
+are unused retakes and are skipped), each `Data/sound/stream/<name>.brstm`: DSP-ADPCM, mono, 32 kHz (24 at 48 kHz). The
+grunts: the RWSD of the brsar's groups `CV1_Gr` .. `CV9_Gr` (9..11 waves each; `CV7_Gr` is `CV6_Gr` again and skipped):
+1 Rebecca, 2 Billy, 3 Chris, 4 Jill, 5 Carlos, 6 Wesker, 8 Ada, 9 HUNK (main.dol's table). The cutscenes' `EV_` / `AC_` / `RT_`
+streams are stereo mixes with music and are not used. The subtitles: `Data/message/mes_us.txtres` (`TRES`: a count at 8,
+the table's offset at 12, records of 20 bytes: id, key, line count, the first line; the lines follow one another, NUL
+ended). The scripts (`Data/script/sXXcY.arc`, Lua 5.0) only call `_Jimaku("VO_...")`: no speaker, not read.
+
+**Converted.** DSP-ADPCM decoded (8-byte frames: a header byte of coefficient pair and scale, 14 nibbles), the first
+channel; one gain per file to Code: Veronica's loudness, -20 dBFS RMS, lowered further where a peak would pass -1 dBFS (the
+disc's lines are about 7 dB louder: median -13 dBFS, peaks at 0); written as standard CRI ADX at the file's own rate: a
+0x24-byte header (`80 00 00 20`, encoding 3, 18-byte frames, 4 bits, 1 channel, rate, samples, cutoff 500, version 3, no
+loop, `(c)CRI` at 0x1E), frames of a big-endian scale - 1 and 32 nibbles (as `audio.c` and every ADX decoder read them;
+the scale per frame the best of four by the decoder's own error). About 28..34 dB SNR against the decoded original; 34 MB,
+about 30 seconds with the players.
+
+**Files** in `<import dir>/umbrella/` (`mods/import/umbrella/`, or `import_dir`):
+
+* `voice/<n>.adx`, n = 0.. in the order of voices.txt: the `VO_` lines by their id (byte order), then the grunts by bank
+  and wave. The same disc gives the same numbers on every machine.
+* `voices.txt`: a first line `# ...` (lines starting with `#` are comments), then one line per file, fields separated by
+  ` | `:
+  `n | source id | speaker guess | confidence | ms | kind | scenario`, e.g. `190 | VO_1010013 | Jill | sure | 449 | line | 10`.
+  * source id: `VO_...` as the brsar names it, or `CV<bank>_Gr_<wave>`.
+  * speaker guess: Rebecca, Billy, Chris, Jill, Carlos, Wesker, Richard, Ada, HUNK, an extra's name (Sergei), or `-` none.
+  * confidence: `sure` (the line names its speaker or calls the other one by name; the grunt banks), `pair` (the scenario
+    has one speaker), `guess` (right before or after a sure line in the same numbered dialogue: the other one), `none`.
+  * ms: the length. kind: `line`, `grunt` (no letters in its subtitle: a shout, a gasp; the banks), `radio` (VO_2311...,
+    Raccoon City's radio and TV, the police's calls), `npc` (the civilians, `VO_civ...`).
+  * scenario: the id's two digits after `VO_` (`10`), the bank (`CV3`), or `-`.
+* `voices_text.txt`: `source id | subtitle` per line (the subtitle's lines joined by a space; `|`, tabs and line breaks
+  as spaces; empty when it has none). The user's own disc's text, for the voice tool; never in the repository.
+
+**The guess** (`uc_voice_guess`, rules only, no data): the scenario (`VO_<story><sub-scenario><chapter><0/1><nnn>`, chapter
+0 the battle shouts) gives the speakers: 00 Rebecca / Billy, 01 Wesker, 10 Jill / Chris, 11 Rebecca / Richard, 12 Wesker,
+20 Jill / Carlos, 21 none (HUNK speaks only in his grunt bank), 22 Ada, 23 Wesker / another (2311 radio), 30 Jill / Chris,
+31 Wesker / Sergei. One speaker: `pair`. Two: a line that starts with the other's name, has ", <name>" or ends with it
+(only punctuation after it), or names its speaker ("I'm Carlos", "Wesker here"): `sure`; both names in it: no cue. Then a
+line right next to a sure line (number one apart, same dialogue) the other one: `guess`. Pitch was tried and left out: on
+the 40 lines the names make sure, a median-F0 threshold is wrong for 13 (the men shout high); next to a sure line, wrong
+as often as right. The import of the US disc: 1015 files, 115 sure (75 of them the banks), 78 by the scenario, 63
+guessed, 759 none; usable as below: Wesker 58, Ada 41, Chris 38, Jill 32, Rebecca 31, Billy 17, Richard 12, Carlos 12,
+HUNK 11 (grunts counted).
+
+**In the game** (`host/voices.c`, `glue/cast_glue.c`, `audio/adx.c`; docs/ACTORS.md "Voice lines"):
+`import_registry_load` reads voices.txt (`voice_import_load`). Its lines whose speaker is sure, from the scenario or
+guessed, and of kind `line` or `grunt` (a grunt for a grunt), join the catalogue after the cast's as disc 3
+(`VOICE_DISC_UC`, file n), unless the voice tool's table (`voice_curated(3, n)`) says otherwise: a checked speaker
+(`VOICE_CONFIRMED`) whatever the guess, also for a line of confidence `none`; "do not use" none. So until the lines are
+checked, the guesses count: a wrong one says a line in the wrong voice now and then, which the check fixes. The voice
+characters go past the cast's 7 (`cast.h VOICE_*`: Jill, Rebecca, Billy, Carlos, Richard, Ada, HUNK; ids kept for
+Outbreak's eight survivors, off; then the imported pools of Chris and Wesker): `voice_model_chr` gives an imported
+model's by its id (PJL Jill, PRB Rebecca, PBI Billy, PCA Carlos, PRC Richard, PAD Ada, PHK HUNK, grunts only; PCR / PWS
+Chris's and Wesker's imported lines, never mixed with their own: without imported lines their own; a Chris record shown as
+an imported Chris keeps its line; PKS and the monsters none). The lines play from partition 30, a folder partition
+(`adx_folder_partition`: `<dir>/voice/<n>.adx`), so lengths, lips made from the sound, fades and the cut at the next
+line work as for the disc's. The voice plan (`--voice-plan`, format 3) picks them like any other; its JSON is version 2
+still, with disc 3 lines. voices.txt's hash is part of the catalogue's key (`voice_cat_hash`), `cast_import_id` (co-op:
+both need the same imports, voices too) and so the plan's key; without imported voice lines every key and pick is as
+before.
+
+**The voice tool** (local, outside the repository) reads `voices.txt`, `voices_text.txt` and decodes `<n>.adx`; its
+`voice_curation.json` (version 1) holds the checks of these lines in `"imported"`: `{"3:<n>": {disc: 3, vid: n, id: "<source
+id>", speaker: <name or null>, speaker_name, confirmed, exclude, grunt, notes, group: null, guess, confidence, ms, kind,
+scenario}}` (null speaker: not a playable voice; an entry whose n moved is matched by `id`). `voice_curation.py
+[--voices <dir>/voices.txt] voice_curation.json` (default `mods/import/umbrella/voices.txt`) writes them as rows
+`{ 3, n, character, flags, 0xFFFF }`, n from voices.txt by the id, the character the speaker's index in the voice
+characters up to `VOICE_NAMED` (the cast's 7, then Jill .. HUNK, Kevin .. Cindy), -1 none; an id the import does not have
+is skipped. Groups (lines said as one) are not taken for imported lines.
 
 ## Verification
 

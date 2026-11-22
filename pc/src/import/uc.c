@@ -1311,6 +1311,7 @@ int uc_extract(const char* iso, const char* outdir, int what, ImportItem* items,
         pg->failed = fails;
         pg->done++;
     }
+    if (what & IMPORT_VOICES) uc_voice_extract(d, outdir);   /* (its failures logged: not the models') */
     rvz_close(d);
     return fails;
 }

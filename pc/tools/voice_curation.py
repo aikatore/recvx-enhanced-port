@@ -1,7 +1,7 @@
 # pc/src/host/voice_curation.inc ("Randomize Voice Lines": the lines checked by hand, voices.c) from the local voice tool's
 # voice_curation.json (docs/ACTORS.md "Voice lines", "Lines checked by hand"), and from voice_played.json (beside it) how long
 # each line plays in each scene, measured in the game. Ids and numbers only: no sound, no text.
-# usage: voice_curation.py voice_curation.json [pc/src/host/voice_curation.inc [voice_played.json]]
+# usage: voice_curation.py [--voices voices.txt] voice_curation.json [pc/src/host/voice_curation.inc [voice_played.json]]
 #        voice_curation.py --measure voice_played.json LOG...   (the logs of headless runs with RECVX_VOICE_TIME=1, voices off)
 import json, os, re, sys
 
@@ -29,6 +29,8 @@ def measure(out, logs):
     print("voice_curation.py: %d runs, %d lines -> %s" % (len(runs), sum(len(e) > 1 for r in runs for e in r["events"]), out))
 
 if sys.argv[1] == "--measure": measure(sys.argv[2], sys.argv[3:]); sys.exit(0)
+voices = None   # --voices PATH: the Umbrella Chronicles import's voices.txt (its file numbers), default <repo>/mods/import/umbrella/voices.txt
+if "--voices" in sys.argv: i = sys.argv.index("--voices"); voices = sys.argv[i + 1]; del sys.argv[i:i + 2]
 src = sys.argv[1]
 out = sys.argv[2] if len(sys.argv) > 2 else __file__.rsplit("/", 2)[0] + "/src/host/voice_curation.inc"
 pfile = sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.path.dirname(os.path.abspath(src)), "voice_played.json")
@@ -52,6 +54,23 @@ for e in lines.values():
     if not f and k not in nxt: continue
     chr_ = e["speaker"] if e["speaker"] is not None else -1   # (unconfirmed: the tool's prediction, used for a grunt only)
     rows.append((k[0], k[1], chr_, f, nxt.get(k, 0xFFFF)))
+
+# The imported lines (disc 3: Umbrella Chronicles, docs/IMPORT_UMBRELLA.md "Voice lines"): the tool's "imported" entries, speakers
+# by name (null: not a playable voice), matched by their source id to the file numbers of voices.txt (the import's order; without
+# voices.txt the entry's own number). Characters: cast.h's voice characters up to VOICE_NAMED, in order.
+VOICE_NAMES = CHARS + ["Jill", "Rebecca", "Billy", "Carlos", "Richard", "Ada", "HUNK", "Kevin", "Mark", "Jim", "George", "David", "Alyssa", "Yoko", "Cindy"]
+imp = d.get("imported", {})
+if imp:
+    vpath = voices or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "mods", "import", "umbrella", "voices.txt")
+    try: num = {l.split("|")[1].strip(): int(l.split("|")[0]) for l in open(vpath, encoding="utf-8") if l[:1].isdigit()}
+    except OSError: num = None; print("voice_curation.py: no voices.txt at %s: the imported lines by their own numbers" % vpath)
+    skipped = 0
+    for e in imp.values():
+        n = num.get(e.get("id")) if num is not None else e.get("vid")
+        f = (e.get("confirmed") and 1) | (e.get("exclude") and 2) | (e.get("grunt") and 4)
+        if n is None or e.get("disc", 3) != 3: skipped += 1; continue   # (an id the import does not have)
+        if f: rows.append((3, n, VOICE_NAMES.index(e["speaker"]) if e.get("speaker") in VOICE_NAMES else -1, f, 0xFFFF))
+    if skipped: print("voice_curation.py: %d imported entries not in voices.txt, skipped" % skipped)
 rows.sort()
 
 # How long a line plays in a scene, measured (voice_played.json: headless runs of the scenes, voices off): until the next

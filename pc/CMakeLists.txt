@@ -299,7 +299,7 @@ add_executable(test_appear tests/test_appear.c src/host/actors.c)
 add_test(NAME appear COMMAND test_appear)
 
 # imports (src/import): SLD, TIM2, the glTF and .cvxm writers on a synthetic model
-add_executable(test_import tests/test_import.c src/import/impmodel.c src/import/ob2.c src/import/uc.c src/import/rvz.c src/import/import.c src/import/lang.c src/host/glyphs.c src/host/actors.c src/host/fileio.c src/host/parse.c)
+add_executable(test_import tests/test_import.c src/import/impmodel.c src/import/ob2.c src/import/uc.c src/import/uc_voice.c src/import/rvz.c src/import/import.c src/import/lang.c src/host/glyphs.c src/host/actors.c src/host/fileio.c src/host/parse.c)
 target_link_libraries(test_import PRIVATE SDL3::SDL3 zstd_dec m)
 add_test(NAME import COMMAND test_import ${CMAKE_CURRENT_BINARY_DIR})
 

@@ -3,6 +3,7 @@
 #include "../src/host/cast.h"
 #include "../src/host/actors.h"
 #include "../src/host/enemies.h"
+#include "../src/import/import.h"
 int coop_insn_len_raw(const unsigned char* p);   /* net/coop_proto.c */
 #include <stdio.h>
 #include <stdlib.h>
@@ -598,6 +599,38 @@ int main(void)
                 CHECK(voice_cat_hash() != h0);
             }
             free(b); free(b2);
+            {   /* the imported lines (Umbrella Chronicles, voice_import_load): those of a known speaker join the catalogue after the
+                   cast's, Chris's in his imported pool; checked by hand: another speaker, "do not use"; the cache keeps the cast's
+                   only; an imported model says its character's; none again: all as before */
+                static const VoiceCurated t3[] = { { 3, 3, VOICE_RICHARD, VOICE_CONFIRMED, 0xFFFF }, { 3, 4, -1, VOICE_EXCLUDE, 0xFFFF }, { 0 } };
+                unsigned h0 = voice_cat_hash();
+                CHECK((b = voice_cache_save(42, &n)) && !voice_import_hash() && !strcmp(voice_name(VOICE_REBECCA), "Rebecca") && VOICE_NAMED == 22 &&
+                      !strcmp(voice_name(VOICE_UC_CHRIS), "Chris") && voice_base(VOICE_UC_WESKER) == 3 && !strcmp(voice_name(2), "Steve"));
+                voice_import_load("# head\n0 | VO_1 | Jill | sure | 900 | line | 10\n1 | VO_2 | Chris | guess | 800 | line | 10\n2 | VO_3 | - | none | 700 | line | 10\n"
+                                  "3 | VO_4 | - | none | 700 | line | 11\n4 | VO_5 | Billy | pair | 500 | grunt | 00\n5 | VO_6 | Wesker | none | 1 | line | 31\n"
+                                  "6 | VO_7 | Ada | pair | 1 | radio | 23\n7 | CV9_Gr_0 | HUNK | sure | 300 | grunt | CV9\n");
+                CHECK(voice_import_hash() && voice_cat_hash() != h0 && voice_import_count(VOICE_JILL) == 1 && voice_import_count(VOICE_UC_CHRIS) == 1 &&
+                      !voice_import_count(VOICE_UC_WESKER) && !voice_import_count(VOICE_ADA) && voice_import_count(VOICE_HUNK) == 1);
+                voice_curation_use(t3);
+                CHECK(voice_cache_load(b, n, 42) && voice_count(2) == 2 && voice_count(1) == 1);   /* (the cast's as before) */
+                CHECK(voice_count(VOICE_JILL) == 1 && voice_count(VOICE_UC_CHRIS) == 1 && voice_count(VOICE_RICHARD) == 1 && !voice_count(VOICE_BILLY) &&
+                      !voice_count(VOICE_UC_WESKER) && !voice_count(VOICE_ADA) && voice_count(VOICE_HUNK) == 1 && voice_line(VOICE_HUNK, 0)->grunt);
+                l = voice_line(VOICE_JILL, 0);
+                CHECK(l && l->disc == VOICE_DISC_UC && l->vid == 0 && l->room == VOICE_NO_ROOM && !l->lip && !l->grunt && voice_line(VOICE_RICHARD, 0)->vid == 3);
+                CHECK(voice_pick(1, 1020, 1, 5, VOICE_JILL, 0, 0, NULL, NULL, VOICE_PICK_SPOKEN) == l);
+                CHECK((b2 = voice_cache_save(42, &n2)) && n2 == n && !memcmp(b, b2, n));   /* (voices.cache: the cast's lines) */
+                actor_import_n = 2; actor_import_file[0] = "m/import/umbrella/PJL1/PJL1.cvxm"; actor_import_file[1] = "m/import/umbrella/PCR2/PCR2.cvxm";
+                actor_import_src[0] = actor_import_src[1] = IMPORT_UMBRELLA;
+                CHECK(voice_model_chr(ACTOR_MODELS) == VOICE_JILL && voice_model_chr(ACTOR_MODELS + 1) == VOICE_UC_CHRIS && voice_model_chr(ACTOR_MODELS + 2) == -1);
+                voice_curation_use(none);
+                voice_import_load(NULL);
+                CHECK(!voice_import_hash() && voice_cat_hash() == h0 && voice_model_chr(ACTOR_MODELS) == -1 && voice_model_chr(ACTOR_MODELS + 1) == 1);   /* (no
+                    imported lines: Jill has none, Chris his own) */
+                actor_import_src[0] = IMPORT_OUTBREAK2;
+                CHECK(voice_model_chr(ACTOR_MODELS) == -1);
+                actor_import_n = 0; actor_import_file[0] = actor_import_file[1] = NULL;
+                free(b); free(b2);
+            }
             voice_curation_use(NULL);
         }
         {   /* the picks in a row (cast_glue.c: the lines said with the seed): none of the last min(pool - 1, max(3, pool / 2))

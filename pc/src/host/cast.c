@@ -360,7 +360,7 @@ void cast_off_default(void)
     memset(cast_off, 0, sizeof(cast_off));
     for (j = 0; j < nb + listed(); j++) {   /* voiced and with a moving mouth: not a player file (Claire's second costume has no face motion) */
         int m = j < nb ? b[j] : ACTOR_MODELS + j - nb;
-        cast_off_put(cast_off, j, voice_model_chr(m) < 0 || m >= ACTOR_PART);
+        cast_off_put(cast_off, j, voice_model_chr(m) < 0 || m >= ACTOR_MODELS);   /* (the imports unchecked, those with lines too) */
     }
 }
 
@@ -381,12 +381,14 @@ int cast_custom_count(int list, const unsigned char* off, int imports, int* tota
 unsigned cast_import_id(void)
 {
     static int last = -1;
-    static unsigned id, last_hidden;
+    static unsigned id, last_hidden, last_voices;
     unsigned h = 2166136261u;
     int n = listed();
-    if (n == last && g_import_hidden == last_hidden) return id;   /* (append-only: the count names the list) */
+    if (n == last && g_import_hidden == last_hidden && voice_import_hash() == last_voices) return id;   /* (append-only: the count names the list) */
     last = n;
     last_hidden = g_import_hidden;
+    last_voices = voice_import_hash();
+    if (last_voices) h = (h ^ last_voices) * 16777619u;   /* (the imported voice lines too: what the imported models say) */
     if (!n) return id = 0;
     for (int k = 0; k < n; k++) {   /* (with whether its source is hidden: in co-op the cast takes imports only while both
                                        sides list and show the same, so both pools are the same; else neither takes any) */

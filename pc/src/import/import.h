@@ -22,6 +22,7 @@ enum { IMPORT_CAT_CHARACTERS, IMPORT_CAT_LANGUAGES };   /* what a source gives (
    RECVX_IMPORT_WHAT) */
 enum { IMPORT_GROUP_PLAYERS, IMPORT_GROUP_CUTSCENE, IMPORT_GROUP_NPCS, IMPORT_GROUP_ENEMIES, IMPORT_GROUPS };
 enum { IMPORT_PLAYERS = 1, IMPORT_CUTSCENE = 2, IMPORT_NPCS = 4, IMPORT_ENEMIES = 8, IMPORT_ALL = 15 };
+#define IMPORT_VOICES 16   /* not a group of models: Umbrella Chronicles' voice lines (uc_voice.c; ImportSource.offered) */
 /* the groups offered for now (Outbreak's; each source has its own, ImportSource.offered): F9's checkboxes and table, what
    import_run extracts and what "You appear as" lists (a manifest of an older run may hold the others: left out). The
    cutscene / high-detail versions and the enemies work the same way; IMPORT_ALL here brings them back. */
@@ -109,6 +110,21 @@ RvzDisc* rvz_open(const char* path, char* id, int idn);
 unsigned char* rvz_file(RvzDisc* d, const char* path, uint32_t* size);
 void rvz_close(RvzDisc* d);
 int u8_find(const unsigned char* d, uint32_t n, const char* name, const unsigned char** out, uint32_t* size);
+
+/* Umbrella Chronicles' voice lines (uc_voice.c; docs/IMPORT_UMBRELLA.md "Voice lines"): <outdir>/voice/<n>.adx, voices.txt,
+   voices_text.txt from the open disc; how many failed, -1 none readable. uc_voice_guess: the speaker guesses of n lines (id,
+   text set; sorted by id) */
+int uc_voice_extract(RvzDisc* d, const char* outdir);
+typedef struct UcVoiceLine {
+    char id[48], text[600];
+    const char *who, *conf, *kind;   /* a name or "-"; sure, pair, guess, none; line, grunt, radio, npc */
+    char scen[8];                    /* "10", "CV3", "-" */
+    int ms, bank, pair;
+} UcVoiceLine;
+void uc_voice_guess(UcVoiceLine* l, int n);
+unsigned char* uc_adx_encode(const short* x, int n, int rate, size_t* size);   /* mono 16-bit to a standard ADX file (malloc'd, *size bytes) */
+/* the voices.txt of the import (n | id | ...; its path), for the game (host/voices.c voice_import_load) */
+void import_voices_path(char* out, int n);
 
 #ifdef __cplusplus
 }
