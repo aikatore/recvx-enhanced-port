@@ -122,7 +122,8 @@ static VoiceLine* imp_lines(int* count)
 int voice_model_chr(int m)
 {
     if (m >= 0 && m < ACTOR_MODELS) return cast_character(actor_models[m].id, actor_models[m].mdlver);
-    if (m >= ACTOR_PART && m < ACTOR_PART + 5) return (m - ACTOR_PART) & 3;   /* the player files (4: Claire's second costume) */
+    if (m >= ACTOR_PART && (m < ACTOR_PART + 5 || m == ACTOR_PART + ACTOR_DC_PART)) return (m - ACTOR_PART) & 3;   /* the player files (4: Claire's second
+        costume; 6 the Dreamcast Steve) */
     if (m >= ACTOR_MODELS && m < ACTOR_MODELS + __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE) && actor_imports[m - ACTOR_MODELS].id)   /* a model in
         the game's own format (the Dreamcast Steve): its record type's character, as the catalogue's */
         return cast_character(actor_imports[m - ACTOR_MODELS].id, actor_imports[m - ACTOR_MODELS].mdlver);

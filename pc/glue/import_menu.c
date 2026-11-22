@@ -47,7 +47,7 @@ enum { IS_MENU, IS_ASK, IS_WORK, IS_RESULT };
 #define NPCS_NAME (UC_SRC ? "Monsters and Others" : "NPCs")
 #define DC_SRC (im.src == IMPORT_DREAMCAST)   /* the Dreamcast release: one model (no groups to choose), Steve in cutscenes */
 enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK, K_CARD, K_HEAD, K_SHOW, K_VOICES, K_STEVE };   /* K_STEVE: the Dreamcast
-    release's "Dreamcast Steve in Cutscenes" (import.h g_import.dc_steve); K_SHOW: "Show in Model Lists" (actors.h
+    release's "Dreamcast Steve" (import.h g_import.dc_steve); K_SHOW: "Show in Model Lists" (actors.h
     g_import_hidden); K_VOICES: Umbrella Chronicles' "Voice Lines" (IMPORT_VOICES, uc_voice.c) */
 #define TOGGLES(k) ((k) == K_PLAYERS || (k) == K_NPCS || (k) == K_VOICES)   /* (the On / Off rows of what to import) */
 #define TOGGLE_BIT(k) ((k) == K_PLAYERS ? IMPORT_PLAYERS : (k) == K_NPCS ? IMPORT_NPCS : IMPORT_VOICES)
@@ -141,17 +141,18 @@ static void show_toggle(void)
     host_log("import menu: %s models %s in the model lists\n", import_sources[im.src].key, shown_src() ? "shown" : "hidden");
 }
 
-/* "Dreamcast Steve in Cutscenes" (cast_glue.c own_look): from the next room on */
-static void steve_toggle(void)
+/* "Dreamcast Steve" (import.h DC_STEVE_*: cast_glue.c own_look from the next room on; played: coop_glue.c self_frame at once) */
+static const char* const steve_values[] = { "Off", "Cutscenes", "Cutscenes and Gameplay" };
+static void steve_step(int dir)
 {
-    g_import.dc_steve ^= 1;
+    g_import.dc_steve = (g_import.dc_steve + (dir < 0 ? 2 : 1)) % 3;
     settings_save_later();
     CallSystemSe(0, 2);
-    host_log("import menu: Dreamcast Steve in cutscenes %s\n", g_import.dc_steve ? "on" : "off");
+    host_log("import menu: Dreamcast Steve: %s\n", steve_values[g_import.dc_steve]);
 }
-static int is_switch(int k) { return k == K_SHOW || k == K_STEVE; }   /* (an On / Off row of settings) */
-static void switch_toggle(int k) { if (k == K_SHOW) show_toggle(); else steve_toggle(); }
-static int switch_on(int k) { return k == K_SHOW ? shown_src() : g_import.dc_steve; }
+static int is_switch(int k) { return k == K_SHOW || k == K_STEVE; }   /* (a row of settings: On / Off, K_STEVE's three values) */
+static void switch_toggle(int k, int dir) { if (k == K_SHOW) show_toggle(); else steve_step(dir); }
+static const char* switch_value(int k) { return k == K_SHOW ? (shown_src() ? "On" : "Off") : steve_values[(unsigned)g_import.dc_steve % 3]; }
 
 static void build_rows(void)
 {
@@ -338,7 +339,7 @@ static int activate(const Row* r)
     case K_CAT: CallSystemSe(0, 3); im.cat = r->idx; set_page(P_GAMES); return 0;   /* (cats[] in IMPORT_CAT_* order) */
     case K_GAME: CallSystemSe(0, 3); im.src = r->idx; set_page(P_OPTS); return 0;
     case K_PLAYERS: case K_NPCS: case K_VOICES: toggle(r); return 0;
-    case K_SHOW: case K_STEVE: switch_toggle(r->kind); return 0;
+    case K_SHOW: case K_STEVE: switch_toggle(r->kind, 1); return 0;
     case K_DISC:
         if (why) { refuse(why); return 0; }
         snprintf(g_lobby_io.file, sizeof(g_lobby_io.file), "%s", g_import.iso[im.src]);
@@ -411,7 +412,7 @@ static int input(void)
         r = &rows[im.row];
         if (m->left && hit >= 0) {
             if (TOGGLES(r->kind) && m->x >= VAL_X - 10) { toggle(r); return 0; }
-            if (is_switch(r->kind)) { switch_toggle(r->kind); return 0; }
+            if (is_switch(r->kind)) { switch_toggle(r->kind, 1); return 0; }
             return activate(r);
         }
         if (m->right || (press & cancel)) {
@@ -422,7 +423,7 @@ static int input(void)
         if (rept & BTN_UP) { im.row = (im.row + nrows - 1) % nrows; im.say_t = 0; CallSystemSe(0, 2); }
         else if (rept & BTN_DOWN) { im.row = (im.row + 1) % nrows; im.say_t = 0; CallSystemSe(0, 2); }
         else if ((rept & (BTN_LEFT | BTN_RIGHT)) && TOGGLES(r->kind)) toggle(r);
-        else if ((rept & (BTN_LEFT | BTN_RIGHT)) && is_switch(r->kind)) switch_toggle(r->kind);
+        else if ((rept & (BTN_LEFT | BTN_RIGHT)) && is_switch(r->kind)) switch_toggle(r->kind, (rept & BTN_LEFT) ? -1 : 1);
         else if (press & ok) return activate(r);
         return 0;
     }
@@ -459,7 +460,7 @@ static const char* row_help(const Row* r)
                                        : "Import the chosen groups from the disc image. This takes a few seconds to a minute.";
     case K_DELETE: return langs() >= 0 ? "Delete the imported languages from the mods folder." : "Delete the imported models of this game from the mods folder.";
     case K_SHOW: return "Off: this game's models leave every model list and random pool, without deleting them. A look you already use stays until you change it.";
-    case K_STEVE: return "On: Steve is shown as his Dreamcast model in the cutscenes, his mouth and eyes moving as before, wherever the cutscene cast leaves him as himself. While you play Steve, choose it as Character Model.";
+    case K_STEVE: return "Cutscenes: Steve is shown as his Dreamcast models in the cutscenes, his mouth and eyes moving as before, wherever the cutscene cast leaves him as himself. Cutscenes and Gameplay: you also play him as his Dreamcast model, with all his motions and weapons.";
     default: return im.page == P_CATS ? "Back to the title menu (also cancel or a right click)." : "Back (also cancel or a right click).";
     }
 }
@@ -482,7 +483,7 @@ static void draw_row(int i)
     case K_VOICES: v = (im.what & IMPORT_VOICES) ? "On" : "Off"; label = "Voice Lines"; break;
     case K_DISC: v = disc_name(); break;
     case K_SHOW: v = shown_src() ? "On" : "Off"; label = "Show in Model Lists"; break;
-    case K_STEVE: v = g_import.dc_steve ? "On" : "Off"; label = "Dreamcast Steve in Cutscenes"; break;
+    case K_STEVE: v = tr(switch_value(K_STEVE)); label = "Dreamcast Steve"; break;
     }
     pc_ui_text(ROW_X, y, tr(label), ROW_SC, col);
     if (r->kind == K_DISC) {   /* the file's name, its end cut when it is long */
@@ -690,7 +691,7 @@ static int nm_input(int port)
     if (m->left && hit >= 0) {
         const Row* r = &rows[hit];
         if (TOGGLES(r->kind) && mx >= N_VALUE - 16) { toggle(r); return 0; }
-        if (is_switch(r->kind)) { switch_toggle(r->kind); return 0; }
+        if (is_switch(r->kind)) { switch_toggle(r->kind, 1); return 0; }
         return r->kind == K_CARD ? (CallSystemSe(0, 3), card(), 0) : activate(r);
     }
     if (m->right || esc_edge || (press & cancel)) return nm_back();
@@ -698,7 +699,7 @@ static int nm_input(int port)
     if (rept & BTN_UP) nm_move(-1);
     else if (rept & BTN_DOWN) nm_move(1);
     else if ((rept & (BTN_LEFT | BTN_RIGHT)) && TOGGLES(rows[im.row].kind)) toggle(&rows[im.row]);
-    else if ((rept & (BTN_LEFT | BTN_RIGHT)) && is_switch(rows[im.row].kind)) switch_toggle(rows[im.row].kind);
+    else if ((rept & (BTN_LEFT | BTN_RIGHT)) && is_switch(rows[im.row].kind)) switch_toggle(rows[im.row].kind, ((rept & BTN_LEFT) != 0) != (rtl != 0) ? -1 : 1);
     else if (press & ok) {
         if (rows[im.row].kind == K_CARD) { CallSystemSe(0, 3); card(); return 0; }
         return activate(&rows[im.row]);
@@ -729,12 +730,11 @@ static void nm_row(int i)
         nm_arrow(N_X1 - 6, y + 9, 1, col);
         return;
     case K_PLAYERS: case K_NPCS: case K_VOICES: case K_SHOW: case K_STEVE: {
-        int on = is_switch(r->kind) ? switch_on(r->kind) : im.what & TOGGLE_BIT(r->kind);
-        const char* s = tr(on ? "On" : "Off");
-        float w = pc_ui_text_w(s, 0.55f);
-        nm_text(N_LABEL, y, tr(r->kind == K_STEVE ? "Dreamcast Steve in Cutscenes" : r->kind == K_SHOW ? "Show in Model Lists" : r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_VOICES ? "Voice Lines" : NPCS_NAME), 0.55f, N_VALUE - N_LABEL - 16, col);
-        if (live) { nm_arrow(N_VALUE - 12, y + 9, -1, col); nm_arrow(N_VALUE + w + 13, y + 9, 1, col); }
-        nm_t(N_VALUE, y, s, 0.55f, col);
+        const char* s = tr(is_switch(r->kind) ? switch_value(r->kind) : im.what & TOGGLE_BIT(r->kind) ? "On" : "Off");
+        float w = pc_ui_text_w(s, 0.55f), vx = N_VALUE + w + 26 > N_X1 ? N_X1 - 26 - w : N_VALUE;   /* (a long value: "Cutscenes and Gameplay") */
+        nm_text(N_LABEL, y, tr(r->kind == K_STEVE ? "Dreamcast Steve" : r->kind == K_SHOW ? "Show in Model Lists" : r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_VOICES ? "Voice Lines" : NPCS_NAME), 0.55f, vx - N_LABEL - 16, col);
+        if (live) { nm_arrow(vx - 12, y + 9, -1, col); nm_arrow(vx + w + 13, y + 9, 1, col); }
+        nm_t(vx, y, s, 0.55f, col);
         return;
     }
     case K_DISC:
@@ -831,7 +831,7 @@ static void nm_draw(void)
         case K_GAME: nm_text(20, N_HELP - 2, title_of(r->idx), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_CARD: nm_text(20, N_HELP - 2, tr("Import Memory Card Saves"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_PLAYERS: case K_NPCS: case K_DISC: case K_SHOW: case K_STEVE:
-            nm_text(20, N_HELP - 2, tr(r->kind == K_STEVE ? "Dreamcast Steve in Cutscenes" : r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_NPCS ? NPCS_NAME : r->kind == K_SHOW ? "Show in Model Lists" : "Disc Image"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
+            nm_text(20, N_HELP - 2, tr(r->kind == K_STEVE ? "Dreamcast Steve" : r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_NPCS ? NPCS_NAME : r->kind == K_SHOW ? "Show in Model Lists" : "Disc Image"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_START: nm_text(20, N_HELP - 2, tr("START IMPORT"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_DELETE: nm_text(20, N_HELP - 2, tr(langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : "DELETE IMPORTED MODELS"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         }

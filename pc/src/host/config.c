@@ -224,7 +224,7 @@ static int import_iso_line(const char* line)
         if (s == IMPORT_DREAMCAST && !strncmp(v, "_steve", 6)) {   /* (Steve in Cutscenes) */
             for (v += 6; *v == ' '; v++) {}
             if (*v++ != '=') return 0;
-            g_import.dc_steve = atoi(v) != 0;
+            g_import.dc_steve = atoi(v) >= DC_STEVE_GAMEPLAY ? DC_STEVE_GAMEPLAY : atoi(v) > 0;   /* (1: Cutscenes, as before Gameplay) */
             return 1;
         }
         if (strncmp(v, "_iso", 4)) continue;
@@ -369,7 +369,7 @@ static int write_ini(FILE* f, void* ud)
     if (g_import.dir[0]) fprintf(f, "import_dir = %s\n", g_import.dir);
     for (int s = 0; s < IMPORT_SOURCES; s++) if (g_import.iso[s][0]) fprintf(f, "import_%s_iso = %s\n", import_sources[s].key, g_import.iso[s]);
     for (int s = 0; s < IMPORT_SOURCES; s++) if ((g_import_hidden >> s) & 1) fprintf(f, "import_%s_shown = 0\n", import_sources[s].key);
-    if (g_import.dc_steve) fprintf(f, "import_%s_steve = 1\n", import_sources[IMPORT_DREAMCAST].key);
+    if (g_import.dc_steve) fprintf(f, "import_%s_steve = %d\n", import_sources[IMPORT_DREAMCAST].key, g_import.dc_steve);
     if (g_lang) fprintf(f, "language = %s\n", lang_codes[g_lang]);
     if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);
     if (g_update_skip[0]) fprintf(f, "update_skip = %s\n", g_update_skip);

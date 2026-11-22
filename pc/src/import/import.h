@@ -32,9 +32,11 @@ enum { IMPORT_PLAYERS = 1, IMPORT_CUTSCENE = 2, IMPORT_NPCS = 4, IMPORT_ENEMIES 
 typedef struct ImportSettings {
     char dir[1024];                     /* ini import_dir; empty: <mods>/import (RECVX_MODS, default ./mods) */
     char iso[IMPORT_SOURCES][1024];     /* ini import_<key>_iso */
-    int dc_steve;                       /* ini import_dreamcast_steve: Steve's records in cutscenes drawn as the Dreamcast model
-                                           (cast_glue.c; docs/IMPORT_DREAMCAST.md "Steve in cutscenes") */
+    int dc_steve;                       /* ini import_dreamcast_steve, "Dreamcast Steve": DC_STEVE_* (docs/IMPORT_DREAMCAST.md) */
 } ImportSettings;
+/* "Dreamcast Steve": Off; Cutscenes (his records drawn as the Dreamcast models: cast_glue.c own_look); Cutscenes and
+   Gameplay (also played as the Dreamcast Steve: actor_glue.c pc_part_file) */
+enum { DC_STEVE_OFF, DC_STEVE_CUTSCENES, DC_STEVE_GAMEPLAY };
 extern ImportSettings g_import;
 
 /* one extracted model (a line of <dir>/<source>/manifest.txt) */
@@ -100,10 +102,13 @@ int uc_group(const char* id);
 int uc_extract(const char* rvz, const char* outdir, int what, ImportItem* items, int max, int* n);
 int ob2_extract(const char* iso, const char* outdir, int what, ImportItem* items, int max, int* n);
 int dc_extract(const char* image, const char* outdir, int what, ImportItem* items, int max, int* n);
-int dc_model(const char* id, unsigned char* type, unsigned char* ver);   /* the record type and model version of a Dreamcast model; 0 none */
+int dc_model(const char* id, unsigned char* type, unsigned char* ver);   /* the record type and model version of a Dreamcast model; 0 none, 2
+    one standing in for its type's records only (not listed: actors.h ACTOR_GROUP_UNLISTED) */
+#define DC_PART_ID "STEVE_PLAYER"   /* the Dreamcast Steve's player part file (dc.c): <dreamcast>/STEVE_PLAYER/STEVE_PLAYER.part */
+int dc_part_path(char* out, int n);   /* its path; 1 if it is there (game thread too) */
 /* Dreamcast GD-ROM images (gdrom.c): a CUE or GDI sheet or a CHD (v5) image; a sector's 2048 bytes of user data by its
-   address (the high-density area from 45000); a file of the ISO 9660 file system of the high-density area by path
-   (malloc'd). gd_open: NULL with why in err */
+   address (the high-density area from 45000); a file of the ISO 9660 file system of the high-density area by path, or an
+   entry of an AFS archive there ("SYSTEM.AFS/12") (malloc'd). gd_open: NULL with why in err */
 typedef struct GdDisc GdDisc;
 GdDisc* gd_open(const char* path, char* err, int en);
 int gd_read(GdDisc* d, uint32_t lba, unsigned char* out);

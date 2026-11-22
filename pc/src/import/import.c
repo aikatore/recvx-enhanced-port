@@ -47,7 +47,7 @@ const ImportSource import_sources[IMPORT_SOURCES] = {
       "Needs a clean US disc image of Resident Evil: The Umbrella Chronicles in Dolphin's RVZ format: %s.", IMPORT_PLAYERS | IMPORT_NPCS | IMPORT_VOICES, "rvz",
       { "Umbrella Chronicles Characters", "Umbrella Chronicles Cutscenes", "Umbrella Chronicles Monsters and Others", "Umbrella Chronicles Enemies" } },
     { "dreamcast", "Resident Evil Code: Veronica (Dreamcast)", "T-1204N", IMPORT_CAT_CHARACTERS,
-      "Steve's cutscene model with his Dreamcast hairstyle, face and mouth moving as the game's own. Import it from your own disc image of the US Dreamcast release (disc 1) as a CUE, GDI or CHD image.",
+      "Steve with his Dreamcast hairstyle: his player model to play him or wear as a look, and his cutscene models, face and mouth moving as the game's own. Import them from your own disc image of the US Dreamcast release (disc 1) as a CUE, GDI or CHD image.",
       "Needs the US Dreamcast disc 1 of Resident Evil Code: Veronica as a CUE, GDI or CHD image: %s.", IMPORT_PLAYERS, "cue;gdi;chd;cd1",
       { "Dreamcast Models", "Dreamcast Models", "Dreamcast Models", "Dreamcast Models" } },
 };
@@ -191,11 +191,19 @@ int import_start(int src, int what)
     return 1;
 }
 
+int dc_part_path(char* out, int n)
+{
+    char dir[1100];
+    source_dir(IMPORT_DREAMCAST, dir, sizeof(dir));
+    SDL_snprintf(out, (size_t)n, "%s/%s/%s.part", dir, DC_PART_ID, DC_PART_ID);
+    return SDL_GetPathInfo(out, NULL);
+}
+
 /* ---------------------------------------------------------------- "You appear as" */
 void import_registry_load(void)
 {
     static ImportItem items[ITEMS_MAX];
-    int k = actor_import_n, full = 0;   /* (we are the only writer) */
+    int k = actor_import_n, full = 0, part = 0;   /* (we are the only writer) */
     for (int src = 0; src < IMPORT_SOURCES; src++) {
         char dir[1100];
         int n = import_results(src, items, ITEMS_MAX, NULL, 0);
@@ -206,7 +214,10 @@ void import_registry_load(void)
             int j;
             if (!items[i].player || (items[i].group > 0 ? items[i].group : 0) != g || !(import_sources[src].offered & (1 << g))) continue;
             unsigned char type = 0, ver = 0;   /* (a model in the game's own format: its record's type, as a catalogue entry) */
-            if (items[i].player == 3 && !(src == IMPORT_DREAMCAST && dc_model(items[i].id, &type, &ver))) continue;
+            int listed = 1;
+            if (src == IMPORT_DREAMCAST && !strcmp(items[i].id, DC_PART_ID)) { part = items[i].ok && dc_part_path(file, sizeof(file)); continue; }   /* (not an
+                entry: the look COOP_CHR_DC, actors.h) */
+            if (items[i].player == 3 && !(src == IMPORT_DREAMCAST && (listed = dc_model(items[i].id, &type, &ver)))) continue;
             SDL_snprintf(file, sizeof(file), "%s/%s/%s.%s", dir, items[i].id, items[i].id, items[i].player == 3 ? "rdx" : "cvxm");
             for (j = 0; j < k && strcmp(actor_import_file[j], file); j++) {}
             if (j < k) continue;   /* listed already: it keeps its place (a later extraction appends) */
@@ -216,7 +227,7 @@ void import_registry_load(void)
             char *f = SDL_strdup(file), *nm = SDL_strdup(name);   /* never freed: the game may show it any time */
             if (!f || !nm) { SDL_free(f); SDL_free(nm); full++; continue; }
             actor_import_file[k] = f;
-            actor_import_group[k] = (unsigned char)(items[i].group >= 0 ? items[i].group : 0);
+            actor_import_group[k] = (unsigned char)(listed == 2 ? ACTOR_GROUP_UNLISTED : items[i].group >= 0 ? items[i].group : 0);
             actor_import_src[k] = (unsigned char)src;
             actor_import_heading[k] = import_sources[src].groups[actor_import_group[k] & 3];
             actor_imports[k] = (ActorModel){ .name = nm, .anim = items[i].female ? ANIM_FEMALE : ANIM_MALE, .id = type, .mdlver = ver };
@@ -239,6 +250,8 @@ void import_registry_load(void)
         free(t);
     }
     if (full) host_log("import: the list of imported models is full (%d): %d more not listed\n", ACTOR_IMPORT_MAX, full);
+    if (part != actor_dc_part) host_log("import: the Dreamcast Steve's player model %s\n", part ? "is there" : "is gone");
+    __atomic_store_n(&actor_dc_part, part, __ATOMIC_RELEASE);
     if (k != actor_import_n) host_log("import: %d imported player models listed\n", k);
     __atomic_store_n(&actor_import_n, k, __ATOMIC_RELEASE);
 }

@@ -36,6 +36,7 @@ int ikou3(BH_PWORK* epw, NJS_POINT3* pos, int add_dir);   /* zonzon.c (its heade
 #include "../src/host/cheat.h"
 #include "../src/host/bindings.h"
 #include "../src/host/actors.h"
+#include "../src/import/import.h"
 #include "../src/host/tps.h"
 #include "../src/host/cast.h"
 #include "../src/host/enemies.h"
@@ -480,8 +481,18 @@ static int my_chr(void) { return look_of(sys ? sys->ply_id & 3 : 0); }
 /* the model (an actor index) for look chr on the doubles of a character whose own part file is own, -1 the game's */
 static int look_index(int chr, int own)
 {
-    int f = chr == 5 ? 4 : chr - 1;
-    return !chr ? -1 : chr >= COOP_CHR_ACTOR ? chr - COOP_CHR_ACTOR : f == own ? -1 : ACTOR_PART + f;
+    int f = appear_file(chr);
+    return !chr ? -1 : appear_actor(chr) >= 0 ? appear_actor(chr) : f == own ? -1 : ACTOR_PART + f;
+}
+
+/* "Dreamcast Steve" at Cutscenes and Gameplay (docs/IMPORT_DREAMCAST.md): Steve played as himself wears the Dreamcast
+   Steve's part file. The mesh the game loaded for the character played (part file - 10; the game's own load of Steve's
+   with that setting: ACTOR_DC_PART) and the one it should wear as played. */
+static int self_loaded(void) { int own = sys->ply_id + (sys->costume & 3) * 4; return own == 2 && actor_part_dc() ? ACTOR_DC_PART : own; }
+static int self_played(void)
+{
+    int own = sys->ply_id + (sys->costume & 3) * 4;
+    return own == 2 && g_import.dc_steve == DC_STEVE_GAMEPLAY && __atomic_load_n(&actor_dc_part, __ATOMIC_ACQUIRE) ? ACTOR_DC_PART : own;
 }
 
 /* cast_glue.c: Claire's or Chris's records (c 0, 1) in the cutscenes of a part they are not played in show the player's
@@ -503,9 +514,10 @@ static void self_frame(void)
     if (self_mesh >= 0 && !self_ours()) self_restore();   /* the game reloaded the player */
     if (tx_in_game) actor_doubles(look_index(chr, own));   /* in cutscenes the character played is acted by its event double */
     if (!tx_in_game || (sys->cb_flg & 0x1)) return;
-    self_actor(chr >= COOP_CHR_ACTOR ? chr - COOP_CHR_ACTOR : -1);
-    want = !chr || chr >= COOP_CHR_ACTOR ? -1 : chr == 5 ? 4 : chr - 1;
-    if (want == own) want = -1;
+    self_actor(appear_actor(chr));
+    want = !chr ? self_played() : appear_file(chr);   /* (as played: the Dreamcast Steve's when the setting says so, also when the
+        game loaded Steve before it was set) */
+    if (want == self_loaded()) want = -1;
     if (want == self_mesh || (want >= 0 && want == self_fail)) return;   /* (-1 is no failure: back to the original) */
     self_restore();
     self_fail = -1;
@@ -701,6 +713,8 @@ void coop_control_remote(void)
     i = my_chr();   /* ("As played (cutscene)": sent as the cutscene model) */
     tx.chr = !i || i >= COOP_CHR_IMPORT ? sys->ply_id : i == 5 ? 0 : i >= COOP_CHR_ACTOR ? 4 + i - COOP_CHR_ACTOR : i - 1;   /* (an imported model, which the partner may not have: shown as played) */
     tx.costume = !i ? sys->costume & 3 : i == 5;
+    if (i == COOP_CHR_DC || (appear_actor(i) < 0 && (self_mesh >= 0 && self_ours() ? self_mesh : self_loaded()) == ACTOR_DC_PART)) tx.chr = 2, tx.costume = 1;   /* the
+        Dreamcast Steve: Steve in costume 1 (part file 16; a partner without the import shows the PS2's Steve, actor_glue.c afs_read) */
     tx.stg = sys->stg_no; tx.rom = sys->rom_no; tx.pos = sys->pos_no;
     tx.rcase = (unsigned)my_case() <= 9 ? (uint8_t)(my_case() + 1) : 0;   /* (sys->rcase alone: a door's script picks the next room's before it leaves) */
     tx.px = plp->px; tx.py = plp->py; tx.pz = plp->pz;
@@ -9287,7 +9301,7 @@ void coop_frame(void)
     }
     g_coop.at_title = sys && (sys->tk_flg & 0x8);   /* the lobby hint (overlay) */
     if (!coop_on) {   /* "You appear as" also in single player (appear_on: game.c calls coop_control_remote) */
-        appear_on = sys && plp && (my_chr() || pc_biorand_appear(0) > 0 || self_mesh >= 0 || actor_shown(0) || actor_shown(ACTOR_DOUBLE) || cast_n);   /* (cast_n: the cutscene cast's hands and faces, actor_double_tick) */
+        appear_on = sys && plp && (my_chr() || pc_biorand_appear(0) > 0 || self_mesh >= 0 || self_played() != self_loaded() || actor_shown(0) || actor_shown(ACTOR_DOUBLE) || cast_n);   /* (cast_n: the cutscene cast's hands and faces, actor_double_tick) */
         if (appear_on) self_frame();
         tx_in_game = 0;
         publish_status();

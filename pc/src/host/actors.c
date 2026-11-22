@@ -96,13 +96,27 @@ unsigned char actor_import_group[ACTOR_IMPORT_MAX];
 unsigned char actor_import_src[ACTOR_IMPORT_MAX];
 const char* actor_import_heading[ACTOR_IMPORT_MAX];
 int actor_import_n;
+int actor_dc_part;
 unsigned g_import_hidden;
 int (*appear_in_use)(int chr);
 
 static int imports(void) { return __atomic_load_n(&actor_import_n, __ATOMIC_ACQUIRE); }
 static int import_of(int chr) { int k = chr - COOP_CHR_IMPORT; return k >= 0 && k < imports() ? k : -1; }   /* -1: not an import */
 
-int actor_import_shown(int k) { return !((g_import_hidden >> (actor_import_src[k] & 31)) & 1); }
+int actor_import_shown(int k) { return actor_import_group[k] != ACTOR_GROUP_UNLISTED && !((g_import_hidden >> (actor_import_src[k] & 31)) & 1); }
+
+/* the look COOP_CHR_DC: imported (dc), listed (its source shown, or the look in use) */
+static int dc(void) { return __atomic_load_n(&actor_dc_part, __ATOMIC_ACQUIRE); }
+static int dc_shown(void) { return dc() && !((g_import_hidden >> ((dc() - 1) & 31)) & 1); }
+static int dc_listed(void) { return dc() && (dc_shown() || (appear_in_use && appear_in_use(COOP_CHR_DC))); }
+
+int appear_actor(int chr) { return chr >= COOP_CHR_ACTOR && chr != COOP_CHR_DC ? chr - COOP_CHR_ACTOR : -1; }
+
+int appear_file(int chr)
+{
+    if (chr == COOP_CHR_DC) return ACTOR_DC_PART;
+    return chr >= 1 && chr <= 4 ? chr - 1 : chr == 5 ? 4 : -1;
+}
 
 unsigned actor_import_sources(void)
 {
@@ -119,26 +133,36 @@ void appear_sources_toggle(void)
     else g_import_hidden = have & ~before ? before : g_import_hidden & ~have;
 }
 
+/* an import stands in for records only (ACTOR_GROUP_UNLISTED): the lists cannot skip the count (imports are append-only:
+   checked again when there are more) */
+static int unlisted(void)
+{
+    static int seen = -1, any;
+    int n = imports();
+    if (n != seen) { any = 0; for (int k = 0; k < n; k++) any |= actor_import_group[k] == ACTOR_GROUP_UNLISTED; seen = n; }
+    return any;
+}
+
 /* import k is in the lists: its source shown, or the look in use */
 static int listed_import(int k) { return actor_import_shown(k) || (appear_in_use && appear_in_use(COOP_CHR_IMPORT + k)); }
 static int listed_imports(void)
 {
     int n = imports(), c = 0;
-    if (!g_import_hidden) return n;
+    if (!g_import_hidden && !unlisted()) return n;
     for (int k = 0; k < n; k++) c += listed_import(k);
     return c;
 }
 static int listed_import_at(int i)   /* the i-th listed import, -1 */
 {
     int n = imports();
-    if (!g_import_hidden) return i >= 0 && i < n ? i : -1;
+    if (!g_import_hidden && !unlisted()) return i >= 0 && i < n ? i : -1;
     for (int k = 0; k < n && i >= 0; k++) if (listed_import(k) && i-- == 0) return k;
     return -1;
 }
 static int listed_import_pos(int k)   /* among the listed ones (one not listed: the next listed one's place) */
 {
     int c = 0;
-    if (!g_import_hidden) return k;
+    if (!g_import_hidden && !unlisted()) return k;
     for (int j = 0; j < k; j++) c += listed_import(j);
     return c;
 }
@@ -176,6 +200,7 @@ int appear_voice(int chr)
             own format: as the catalogue's model of its type, the Dreamcast Steve as Steve) */
         return a->anim == ANIM_FEMALE ? 0 : 1;
     }
+    if (chr == COOP_CHR_DC) return 2;
     if (chr < 0 || chr > COOP_CHR_MAX) return -1;
     if (m < 0) return files[chr];
     if (m >= 3 && m <= 4) return 2;   /* Steve's doubles */
@@ -226,6 +251,7 @@ static const short tail[] = { M(0), M(1), M(3), M(5) };
 #define TAILS ((int)(sizeof(tail) / sizeof(tail[0])))
 
 _Static_assert(COOP_CHR_CINE >= COOP_CHR_IMPORT + ACTOR_IMPORT_MAX, "COOP_CHR_CINE");
+_Static_assert(COOP_CHR_DC >= COOP_CHR_IMPORT + ACTOR_IMPORT_MAX && COOP_CHR_DC != COOP_CHR_CINE, "COOP_CHR_DC");
 
 int appear_played(int chr, int ply_id)
 {
@@ -236,7 +262,7 @@ int appear_played(int chr, int ply_id)
 
 int appear_canon(int chr)
 {
-    if (import_of(chr) >= 0 || chr == COOP_CHR_CINE) return chr;
+    if (import_of(chr) >= 0 || chr == COOP_CHR_CINE || (chr == COOP_CHR_DC && dc())) return chr;
     if (chr < 0 || chr > COOP_CHR_MAX) return 0;
     for (int i = 0; i < (int)(sizeof(twins) / sizeof(twins[0])); i++)
         if (chr == twins[i].hidden) return twins[i].kept;
@@ -256,7 +282,7 @@ int appear_count(void)
 {
     int n = 1;
     for (int c = 0; c <= COOP_CHR_MAX; c++) n += appear_canon(c) == c;
-    return n + listed_imports();
+    return n + listed_imports() + dc_listed();
 }
 
 int appear_at(int i)
@@ -266,6 +292,7 @@ int appear_at(int i)
     for (int c = 0; c <= COOP_CHR_MAX; c++)
         if (head(c) && i-- == 0) return c;
     if (i >= 0 && i < TAILS) return tail[i];
+    if (i - TAILS == listed_imports() && dc_listed()) return COOP_CHR_DC;   /* (after the imports: under their heading) */
     i = listed_import_at(i - TAILS);
     return i >= 0 ? COOP_CHR_IMPORT + i : 0;
 }
@@ -274,6 +301,7 @@ int appear_pos(int chr)
 {
     int n = 0, t = tail_at(chr = appear_canon(chr)), k = import_of(chr);
     if (chr == COOP_CHR_CINE) return 1;
+    if (chr == COOP_CHR_DC) return appear_count() - 1;
     for (int c = 0; c < (t >= 0 || k >= 0 ? COOP_CHR_MAX + 1 : chr); c++) n += head(c);
     n += (t >= 0 ? t : 0) + (k >= 0 ? TAILS + listed_import_pos(k) : 0);
     n += n > 0;   /* (everything but "As played" after "As played (cutscene)") */
@@ -293,6 +321,7 @@ const char* appear_group(int chr)
     static const char* const imp[4] = { "Outbreak Characters", "Outbreak Cutscenes", "Outbreak Supporting Cast", "Outbreak Enemies" };
     int k = import_of(chr), id;
     if (k >= 0) return !actor_import_shown(k) ? "Hidden Source (Still in Use)" : actor_import_heading[k] ? actor_import_heading[k] : imp[actor_import_group[k] & 3];
+    if (chr == COOP_CHR_DC) return dc_shown() ? "Dreamcast Models" : "Hidden Source (Still in Use)";   /* (import.c: the source's heading) */
     chr = appear_canon(chr);
     if (chr < COOP_CHR_ACTOR || chr == COOP_CHR_CINE) return "Code: Veronica Characters";
     if (tail_at(chr) >= 0) return "Code: Veronica Cutscenes";
@@ -305,5 +334,6 @@ const char* appear_name(int chr)
     static const char* files[COOP_CHR_ACTOR] = { "Current Character", "Claire", "Chris", "Steve", "Wesker", "Claire (Alternate Costume)" };
     if (import_of(chr) >= 0) return actor_imports[import_of(chr)].name;
     if (chr == COOP_CHR_CINE) return "Current Character (Cutscene)";
+    if (chr == COOP_CHR_DC) return "Steve (Dreamcast Hair)";
     return chr >= 0 && chr < COOP_CHR_ACTOR ? files[chr] : chr <= COOP_CHR_MAX ? actor_models[chr - COOP_CHR_ACTOR].name : "?";
 }

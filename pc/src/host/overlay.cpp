@@ -1128,8 +1128,12 @@ static void import_window(void)
         if (((actor_import_sources() | g_import_hidden) >> s) & 1) {   /* (actors.h; IMPORT > CHARACTERS has it too) */
             bool shown = !((g_import_hidden >> s) & 1);
             if (ImGui::Checkbox(tr("Show in Model Lists"), &shown)) { g_import_hidden ^= 1u << s; settings_save_later(); }
-            bool steve = g_import.dc_steve != 0;   /* (the Dreamcast release: cast_glue.c own_look) */
-            if (s == IMPORT_DREAMCAST && ImGui::Checkbox(tr("Dreamcast Steve in Cutscenes"), &steve)) { g_import.dc_steve = steve; settings_save_later(); }
+            static const char* const steve[] = { "Off", "Cutscenes", "Cutscenes and Gameplay" };   /* (the Dreamcast release: import.h DC_STEVE_*) */
+            if (s == IMPORT_DREAMCAST && ImGui::BeginCombo(tr("Dreamcast Steve"), tr(steve[(unsigned)g_import.dc_steve % 3]))) {
+                for (int v = 0; v < 3; v++)
+                    if (ImGui::Selectable(tr(steve[v]), g_import.dc_steve == v)) { g_import.dc_steve = v; settings_save_later(); }
+                ImGui::EndCombo();
+            }
         }
         if (running || pg->total) {
             char ov[64];

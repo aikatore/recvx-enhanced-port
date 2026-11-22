@@ -1,26 +1,43 @@
 # Import: Code: Veronica on the Dreamcast
 
-Steve's cutscene model of the original Dreamcast release (his first hairstyle, with the strand over his face) put
-into the PS2 game's own formats, so the game draws, skins and animates it as its own model: his mouth moves with the
-lines (`bhLipSet`, the face mask's mouth shapes) and his eyes blink (the mask's lid muscles 8 and 9) exactly as the PS2
-Steve's do. Read from the user's own disc image at run time; nothing of the disc is in the repository.
+Steve's models of the original Dreamcast release (his first hairstyle, with the strand over his face) put into the PS2
+game's own formats, so the game draws, skins and animates them as its own: his cutscene model (his mouth moves with the
+lines, `bhLipSet`, the face mask's mouth shapes, and his eyes blink, the mask's lid muscles 8 and 9, exactly as the PS2
+Steve's do), his event model, and his player model, which the game plays as Steve with all his motions, weapons, grabs
+and deaths. Read from the user's own disc image at run time; nothing of the disc is in the repository.
 
 Code: `pc/src/import/gdrom.c` (disc images), `pc/src/import/dc.c` (the conversion), `import.c` (source `dreamcast`,
 `IMPORT_DREAMCAST`), `pc/glue/actor_glue.c` (`load_rdx_file`, `load_room_model`), `pc/glue/cast_glue.c` (`own_look`),
-`pc/glue/import_menu.c`. Test: ctest `import` (LZMA, deflate, a synthetic GDI and CUE disc, PVR twiddled and VQ).
+`pc/glue/import_menu.c`, the player model `pc/src/audio/adx.c ADXF_OpenAfs` and `actor_glue.c pc_part_file`, `afs_read`,
+`coop_glue.c self_frame` (played, looks, co-op). Tests: ctest `import` (LZMA, deflate, a synthetic GDI and CUE disc, an AFS
+entry on it, PVR twiddled and VQ), `appear` (the look).
 
 ## Using it
 
 IMPORT > CHARACTERS > Resident Evil Code: Veronica (Dreamcast) (new and legacy menu; F9 the same): choose the disc
-image, START IMPORT (well under a second). The model is then **Steve (Dreamcast Hair)**, listed under the imports
-("Dreamcast Models") everywhere a look is chosen: Character Model (any character's look, the co-op partner), the
-cutscene cast's pools with Include Imported Models, *Custom*'s lists. "Show in Model Lists" hides it as any import.
+image, START IMPORT (well under a second). Three models come out:
 
-**Dreamcast Steve in Cutscenes** (that page, ini `import_dreamcast_steve = 1`, default off): Steve's records
-(types 93 and 43) are drawn as the Dreamcast model in every room where the cutscene cast leaves him as himself (cast
-off, or a pick of his own look), from the next room load on. Not while Steve is played (his double is "Character
-Model"'s: choose the model there). It applies with the source hidden too (it is asked for by name). Visual only;
-in co-op each screen follows its own setting.
+* **Steve (Dreamcast Hair)**: his player model, a look under "Dreamcast Models" (last in the lists) everywhere a look is
+  chosen: Character Model, Claire's and Chris's Model; worn on the player's own skeleton as the player files are (the
+  "Steve" look's way: his motions, the weapon's hands, the character played's motions with gender-matched animations).
+  Not in the cutscene cast's pools (as the player files there are the cutscene models).
+* **Steve (Dreamcast Hair, Cutscene)**: his cutscene model, listed as the imports are (looks, the cast's pools with
+  Include Imported Models, *Custom*'s lists).
+* his event model (type 43): in no list; it stands in for his type-43 records (below).
+
+"Show in Model Lists" hides the first two as any import.
+
+**Dreamcast Steve** (that page, ini `import_dreamcast_steve`, default 0):
+
+| Value | ini | |
+|---|---|---|
+| Off | 0 | the PS2's Steve |
+| Cutscenes | 1 (the old On) | Steve's records are drawn as the Dreamcast models (type 93 as the cutscene model, 43 as the event model; an import from before the event model: the cutscene model for both) in every room where the cutscene cast leaves him as himself (cast off, or a pick of his own look), from the next room load on; while he is played, his doubles too where they would be the game's own Steve |
+| Cutscenes and Gameplay | 2 | as Cutscenes, and Steve played is the Dreamcast Steve: the game loads the imported part file for `SYSTEM.AFS/12` (`pc_part_file`); set during a game, the model is swapped at once (`coop_glue.c self_frame`), from the next load of Steve on the game's own |
+
+It applies with the source hidden too (asked for by name). In co-op the partner sees what you play: Steve in
+"costume 1" (protocol 60), which a partner with the import shows as the Dreamcast Steve and one without as the PS2's
+Steve (`actor_glue.c afs_read`); the cutscene part follows each screen's own setting (visual only).
 
 Headless: `RECVX_IMPORT=dreamcast RECVX_IMPORT_ISO=<image>` (as the other sources).
 
@@ -67,16 +84,42 @@ face mask is set up (`face_init`), the lips and lids are the record's (`face_ste
 Steve's and the voice is Steve's (`appear_voice`, `voice_model_chr`, `cast.c model_char`: an import with a type counts
 as that type's character).
 
+### The player model
+
+`SYSTEM.AFS` file 12 (as on the PS2: part file `ply_id + 10`, `dread.c bhReadPlayerData`), read from the disc's AFS
+(`gd_file` "SYSTEM.AFS/12"). Its layout is the PS2's: the model block (`SKIN`, the body MLB on node 1, two texture-list
+MLBs for the eye blink, the untextured 22-node hit model), the motions, the z translations, a texture block per textured
+sub-model.
+
+| | Dreamcast | PS2 | Done |
+|---|---|---|---|
+| body | 717 vertices (type 41), its own skin | 765 (type 51) | the lists written as 51, 64-byte aligned in the block as `sys->plmdlp` holds it, as the PS2's |
+| hit model | type 34 lists | the same | kept |
+| motions (105 slots), z translations | byte for byte the PS2's | | kept (so every motion, weapon, grab and death is the PS2 Steve's) |
+| textures | 3 blocks of `TPVR` (5 textures, the blink's 04a/04b) | TIM2 | as the cutscene model's (`put_textures`), Gindex `0xD00000` + GBIX; the GBIXes the cutscene model shares (0x2C1, 0x2BE, 0x2BF) are the same pictures on the disc |
+
+The output is `<import>/dreamcast/STEVE_PLAYER/STEVE_PLAYER.part` (1 MB), a PS2 part file. The game reads it in place of
+`SYSTEM.AFS/12` with Cutscenes and Gameplay; "part file 16" (Steve's unused costume 1, an 11-byte placeholder on the
+disc) is always it (the look, a co-op partner's Dreamcast Steve; not imported: 12). Weapon files, hands and voice stay
+Steve's (`ply_id` 2).
+
+### The event model
+
+Type 43 is the player model as a room record (22 nodes, the same `SKIN`; on the PS2 too). The Dreamcast's differs from
+the PS2's as the player model does, and from the Dreamcast player model in its materials (diffuse colours) and strips;
+taken from `R0_1130.RDX` record 0 (the same in 1140, 3120, 3220, 4011, 4030, 4050) as the cutscene model is
+(`STEVE_EVENT.rdx`, five textures, the player model's pictures).
+
 ## Other differences on the Dreamcast disc (not imported)
 
-* **Steve's player model** (`SYSTEM.AFS` file 12): his Dreamcast hair too (717 vertices against 765, its own skin).
-  The same conversion would apply (the part file's layout, `dread.c`).
-* Steve's event model (type 43, rooms 1130, 1140, 3120, 3220, 4011, 4030, 4050): probably the same hair; not compared.
-  With Dreamcast Steve in Cutscenes its records are drawn as the cutscene model.
 * Disc 1 holds the rooms of stages 0..5 (Claire's part); stages 6..9 are on disc 2. Disc 2 passes the product check
   but has no `R0_0040.RDX`: the model fails with "Cannot read R0_0040.RDX from the disc (disc 1 has it)".
 
 ## Not tested
 
 GDI images (only a synthetic one in the test), CHDs from other chdman versions (map or track layout), multi-track GD
-layouts with data after audio tracks, disc 2, PAL / Japanese discs (refused), the Windows build (built, not run).
+layouts with data after audio tracks, disc 2, PAL / Japanese discs (refused), the Windows build (built, not run). The
+player model: checked headless with idle, walk, run, turn, stairs, the sub machine guns (fire, reload), the Gold Lugers,
+a zombie's grab and bite, death, third person, as Claire's and Chris's look, a co-op partner with and without the
+import; not every weapon's every motion (knife, other characters' weapons through BioRand), the Battle Game, a
+real playthrough of his sections, the new menu's look picker preview.
