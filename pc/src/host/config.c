@@ -19,6 +19,7 @@
 #include "weapons.h"
 #include "devcine.h"
 #include "changelog.h"
+#include "enemymdl.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -306,6 +307,7 @@ void config_load(void)
     while (fgets(line, sizeof(line), f)) {
         int list = !strncmp(line, "appear_custom_off =", 19) ? 1 : !strncmp(line, "enemy_custom_off =", 18) ? 2 : !strncmp(line, "cast_custom_off =", 17) ? 0 : -1;
         char* v = line + (list == 1 ? 19 : list == 2 ? 18 : 17);
+        if (sscanf(line, " %63[a-z_0-9] = %127[^\r\n]", k, val) == 2 && emodel_ini_line(k, trim(val))) continue;   /* "Enemy Models" (enemymdl.h) */
         if (list < 0) continue;
         had_off |= !list;
         v += strspn(v, " ");
@@ -355,6 +357,8 @@ static void off_line(const char* key, void* f) { fprintf((FILE*)f, "cast_custom_
 static void appear_off_line(const char* key, void* f) { fprintf((FILE*)f, "appear_custom_off = %s\n", key); }
 static void enemy_off_line(const char* key, void* f) { fprintf((FILE*)f, "enemy_custom_off = %s\n", key); }
 
+static void emodel_line(const char* key, const char* val, void* f) { fprintf((FILE*)f, "%s = %s\n", key, val); }
+
 static int write_ini(FILE* f, void* ud)
 {
     (void)ud;
@@ -388,6 +392,7 @@ static int write_ini(FILE* f, void* ud)
     cast_off_write(0, cast_off, off_line, f);
     cast_off_write(1, cast_appear_off, appear_off_line, f);
     cast_off_write(2, g_enemy_opts.cast_enemy_off, enemy_off_line, f);
+    emodel_ini_write(emodel_line, f);   /* "Enemy Models": a line per category not Original */
     bind_ini_write(f);
     wpn_ini_write(f);
     return 0;

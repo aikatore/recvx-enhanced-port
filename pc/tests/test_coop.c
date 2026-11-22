@@ -3,6 +3,7 @@
    script checks of world events - each rejected without changing anything - then a fuzz loop of
    random and mutated datagrams. */
 #include "../src/net/coop_proto.h"
+#include "../src/host/enemymdl.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,6 +42,7 @@ static Event ev(int type)
     case EV_GONE: e.u.gn.n = 2; e.u.gn.slot[0] = 3; e.u.gn.id[0] = 1; e.u.gn.slot[1] = 30; e.u.gn.id[1] = 1; break;
     case EV_SKIP: e.stg = 0; e.rom = 2; e.u.sk.op = SKIP_GO; break;
     case EV_CASTOFF: e.u.co.at = 4 * COOP_CASTOFF_CHUNK; e.u.co.n = 9; e.u.co.bits[0] = 0x5A; break;
+    case EV_EMODEL: e.u.em.v[0] = EM_IMPORT + 40; e.u.em.v[2] = EM_MODEL + 17; e.u.em.v[3] = EM_RANDOM_UC_ZOMBIE; break;
     case EV_BRSEED: memcpy(e.u.br.str, "R840-T1C0-XXHH4HZZZMEZ9H0007JZZZZZZZ5ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ", COOP_BR_STR);
                     memcpy(e.u.br.dig, "8465e8280f3a", COOP_BR_DIG); break;
     case EV_FX: e.idx = 4; e.u.fx.id = 350; e.u.fx.flg = 1; e.u.fx.owner = 4; e.u.fx.txp = 0; e.u.fx.mlw = -1; e.u.fx.stflg = 0x20; e.u.fx.tex_id = 7;   /* a zombie's vomit */
@@ -49,7 +51,7 @@ static Event ev(int type)
     return e;
 }
 static int host_sends(int t) { return t != EV_GONE && t != EV_OWN; }
-static int guest_sends(int t) { return t != EV_BLOB && t != EV_BOXFIX && t != EV_EOPTS && t != EV_SKIP && t != EV_BRSEED && t != EV_CASTOFF; }
+static int guest_sends(int t) { return t != EV_BLOB && t != EV_BOXFIX && t != EV_EOPTS && t != EV_SKIP && t != EV_BRSEED && t != EV_CASTOFF && t != EV_EMODEL; }
 
 /* a generic EV_FX of effect `id` as its FxRule allows it (any rule's for an id without one) */
 static Event fx_sample(int id)
@@ -246,6 +248,12 @@ static void test_events(void)
     BAD(EV_CASTOFF, 1, e->u.co.at = 5 * COOP_CASTOFF_CHUNK);
     BAD(EV_CASTOFF, 1, e->u.co.pad = 1);
     { Event e = ev(EV_CASTOFF); e.u.co.at = 0; e.u.co.n = COOP_CASTOFF_CHUNK; CHECK(coop_check_event(&e, 1) == COOP_OK); }
+    /* EV_EMODEL (protocol 61): the host's "Enemy Models" */
+    BAD(EV_EMODEL, 0, (void)0);                          /* the host's only */
+    BAD(EV_EMODEL, 1, e->u.em.v[1] = EM_RANDOM_END);
+    BAD(EV_EMODEL, 1, e->u.em.v[1] = EM_MODEL + ACTOR_MODELS);
+    BAD(EV_EMODEL, 1, e->u.em.v[1] = EM_IMPORT + ACTOR_IMPORT_MAX);
+    BAD(EV_EMODEL, 1, e->u.em.v[EM_CATS] = 1);           /* past the categories */
     { Event e = ev(EV_EOPTS); e.u.eo.cast_all = 2; CHECK(coop_check_event(&e, 1) == COOP_OK); }
     { Event e = ev(EV_EOPTS); e.u.eo.variety = 2; e.u.eo.types = ENEMY_TYPES_MAX; e.u.eo.extra = ENEMY_EXTRA_MAX; memset(e.u.eo.rate, ENEMY_RATE_MAX, ENEMY_RATE_N); CHECK(coop_check_event(&e, 1) == COOP_OK); }   /* (protocol 38) */
     /* EV_GONE: 1..COOP_GONE_MAX enemy slots below COOP_ENE_SLOTS, a room case */

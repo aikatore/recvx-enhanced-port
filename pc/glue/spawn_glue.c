@@ -125,7 +125,9 @@ void itemmdl_release(void);   /* itemmdl_glue.c */
 void itemmdl_room_setup(void);
 /* ps2_texture.c bhReleaseMainTexture; also the enemy variants' and the cutscene cast's models, and the item spots'
    original models back (before the room's own item textures are released) */
-void spawn_release(void) { itemmdl_release(); variant_release(); cast_release(); release_textures(); }
+void emodel_release(void);              /* enemymdl_glue.c */
+void emodel_frame(void);
+void spawn_release(void) { itemmdl_release(); variant_release(); emodel_release(); cast_release(); release_textures(); }
 
 void spawn_textures_released(void) { itemmdl_release(); tl_n = tn_n = 0; memset(spawned, 0, sizeof(spawned)); }   /* njReleaseTextureAll */
 
@@ -171,7 +173,7 @@ static const char* tex_full(int entries, int heap)
 static unsigned char pool[POOL_SIZE] __attribute__((aligned(64)));
 static int pool_n;
 static void sound_release(void);
-void spawn_room_setup(void) { pool_n = 0; pc_enemy_added = 0; sound_release(); itemmdl_room_setup(); }
+void spawn_room_setup(void) { actor_pool_reset(); pool_n = 0; pc_enemy_added = 0; sound_release(); itemmdl_room_setup(); }
 
 /* len bytes of the pool at mis mod 64 (the item models of itemmdl_glue.c too), NULL: full */
 unsigned char* spawn_pool_alloc(int len, int mis)
@@ -654,6 +656,7 @@ void spawn_frame(int clock)
     if (tl_n && room_key != room_file_now() && !(sys->gm_flg & 0x9) && !(sys->cb_flg & 0x1))
         release_textures();   /* a new room loaded without bhReleaseMainTexture (enemy variants' models may be loaded for it) */
     enemy_extras_frame();
+    emodel_frame();   /* "Enemy Models" for the enemies that came (enemymdl_glue.c) */
     survey();
     if (env && (sscanf(env, "%d:%d%n", &f, &id, &n) == 2 || (sscanf(env, "%d:v%d%n", &f, &id, &n) == 2 && (vid = id))) && clock >= f && ready()) {
         const char* e = env + n;

@@ -266,6 +266,9 @@ const MenuRow menu_rows[] = {
       .help = "Whole Game: Steve keeps one look all game. New Each Scene: a new look in every cutscene." },
     { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_SHOW_PICKS, "Show This Game's Looks", N("Off", "On"),
       .help = "In game only, a spoiler: the preview names who each story character looks like in this game (with Keep Their Look Whole Game)." },
+    { MC_CHARACTERS, "MONSTERS YOU FIGHT", ML_ENEMYMDL, NULL, .label = "Enemy Models",
+      .help = "Draw the enemies you fight as other models, per enemy type: zombies as Nemesis, random Umbrella Chronicles zombies, a "
+              "character... They keep their own moves, hits and sounds. In co-op, the host's." },
     { MC_CHARACTERS, "MONSTERS IN CUTSCENES", ML_VAR, NULL, SV_MONSTERS, "Cutscene Monsters", N("Original", "Any Monster", "Like Story Characters", "Custom"),
       .help = "Monsters only cutscenes show, e.g. the Tyrant on the plane. Like Story Characters takes their choice. Monsters you "
               "fight are ENEMIES'." },

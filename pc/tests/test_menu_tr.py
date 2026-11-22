@@ -14,7 +14,7 @@ LANGS = ['fr', 'de', 'es', 'ja', 'ru', 'tr', 'pt-BR', 'ar', 'ko', 'it']
 # not words: names, keys, codes the screens draw as they are
 KEEP = {'Claire', 'Chris', 'Steve', 'Wesker', 'BioRand', 'BIORAND', 'Esc', 'Del', 'Enter', 'Return', 'Backspace', 'Ctrl F',
         'Ctrl+V', 'Ctrl\\tV', 'button hint', 'XXXX-XXXX', 'OK', 'Resident Evil Code: Veronica X', 'COPY JOIN ADDRESS: both'}
-SCREENS = ['glue/ui_rows.c', 'glue/setup_glue.c', 'glue/pause_glue.c', 'glue/text_grid.c', 'glue/import_menu.c', 'glue/lobby_glue.c', 'glue/give_list.c', 'glue/whatsnew_menu.c',
+SCREENS = ['glue/ui_rows.c', 'glue/setup_glue.c', 'glue/pause_glue.c', 'glue/text_grid.c', 'glue/import_menu.c', 'glue/lobby_glue.c', 'glue/give_list.c', 'glue/whatsnew_menu.c', 'glue/enemymdl_list.c',
            'glue/menu_glue.c']
 CALLS = r'\b(?:tr|ui_hint|text|text_c|text_m|text_fit|line_at|say|ui_rows_say|pc_ui_text\w*|pc_ui_dialog\w*|nm_text)\('
 

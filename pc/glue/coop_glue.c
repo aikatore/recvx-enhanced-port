@@ -40,6 +40,7 @@ int ikou3(BH_PWORK* epw, NJS_POINT3* pos, int add_dir);   /* zonzon.c (its heade
 #include "../src/host/tps.h"
 #include "../src/host/cast.h"
 #include "../src/host/enemies.h"
+#include "../src/host/enemymdl.h"
 #include "../src/host/biorand.h"
 #include "../src/host/biorand_opts.h"
 #include "../src/net/biorand_dl.h"
@@ -4680,6 +4681,22 @@ static void castoff_sync(void)
     }
     castoff_sid = peer_sid;
 }
+/* the host's "Enemy Models" (EV_EMODEL, protocol 61): at the session's start and whenever they change */
+static unsigned short emodel_sent[COOP_EMODEL_CATS];
+static unsigned int emodel_sid;
+void emodel_from_host(const unsigned short* v);   /* enemymdl_glue.c */
+static void emodel_sync(void)
+{
+    Event e = { 0 };
+    int c;
+    for (c = 0; c < EM_CATS; c++) e.u.em.v[c] = (uint16_t)g_emodel[c];
+    if (emodel_sid == peer_sid && !memcmp(emodel_sent, e.u.em.v, sizeof(emodel_sent))) return;
+    e.type = EV_EMODEL;
+    queue_event(&e);
+    memcpy(emodel_sent, e.u.em.v, sizeof(emodel_sent));
+    emodel_sid = peer_sid;
+}
+
 static void eopts_send(void)
 {
     Event e = { 0 };
@@ -4792,6 +4809,7 @@ static void enemy_sync(void)
     if (!is_host || !have_peer || echo_delay) { was = 0; return; }
     castoff_sync();
     if (eopts_sid != peer_sid || memcmp(&eopts_sent, &g_enemy_opts, sizeof(eopts_sent))) eopts_send();
+    emodel_sync();
     brseed_sync();
     if (kept_out.sent_sid != peer_sid && have_rx && (rx.flags & (PF_IN_GAME | PF_VISIBLE)) == (PF_IN_GAME | PF_VISIBLE)) kept_send();
     now = same_room() && tx_in_game && !(sys->gm_flg & 0x9) && !(sys->cb_flg & 0x1);
@@ -8205,6 +8223,7 @@ static void skip_frame(void)
 static int apply_event(const Event* e)
 {
     if (e->type == EV_EOPTS) { if (!is_host) enemy_opts_from_host(&e->u.eo); return 1; }   /* before the blob it precedes */
+    if (e->type == EV_EMODEL) { if (!is_host) emodel_from_host(e->u.em.v); return 1; }
     if (e->type == EV_CASTOFF) { if (!is_host) enemy_cast_off_from_host(e->u.co.at, e->u.co.n, e->u.co.bits); return 1; }   /* (and EV_EOPTS) */
     if (e->type == EV_BRSEED) {   /* the host's BioRand seed string (checked: coop_check_event; decoded here) and CLI digest */
         BioOpts o;
@@ -8462,6 +8481,7 @@ static void stop(void)
     peer_opts = -1;
     spawn_pending(0);
     enemy_opts_from_host(NULL);   /* single player again: our own enemy options */
+    emodel_from_host(NULL);
     note_msg[0] = 0;
     was_game = 0;
     coop_on = 0;

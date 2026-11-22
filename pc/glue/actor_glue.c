@@ -125,10 +125,13 @@ static struct {
     unsigned char mdl[2][HAND_MDL] __attribute__((aligned(64)));
     int on, tried, chr;                 /* chr: whose pieces (0 Claire, 1 Chris, 2 Steve, 3 Wesker) */
 } ch[ACTOR_SLOTS] __attribute__((aligned(64)));   /* (by slot: the double's and the cast's used) */
-/* The model buffers: our player's, the partner's, the double's and the variants' 1.5 MB each; the cast slots share
-   one buffer, each taking what its model needs (no motions: a cast model is always posed from its source), given back
-   when all of them are unloaded (the room's end). All of it inside the PS2 address window (ps2/memory.c). */
-static unsigned char keep_big[ACTOR_CAST][KEEP_SIZE] __attribute__((aligned(64)));
+/* The model buffers: our player's, the partner's and the double's 1.5 MB each; the cast slots share one buffer, each
+   taking what its model needs (no motions: a cast model is always posed from its source), given back when all of them
+   are unloaded (the room's end). The enemy variants' and "Enemy Models"' slots take theirs from the spawner's pool
+   (spawn_glue.c spawn_pool_alloc: room lifetime, emptied when the next room is set up, actor_pool_reset; their models
+   are released with the room's textures before that). All of it inside the PS2 address window (ps2/memory.c). */
+static unsigned char keep_big[ACTOR_VARIANT][KEEP_SIZE] __attribute__((aligned(64)));
+unsigned char* spawn_pool_alloc(int len, int mis);   /* spawn_glue.c */
 #define CAST_MEM (3 << 20)              /* the largest models: imported ones (0.35..1.07 MB without their skin); the cast's own 0.1..0.2 MB */
 static unsigned char cast_mem[CAST_MEM] __attribute__((aligned(64)));
 static int cast_used;
@@ -136,9 +139,16 @@ static int cast_used;
 /* d->keep holds `need` bytes (a cast slot: a piece of cast_mem, kept for the slot's reloads) */
 static int keep_fit(Disguise* d, int need)
 {
-    if (d < &dg[ACTOR_CAST]) return need <= KEEP_SIZE;
+    if (d < &dg[ACTOR_VARIANT]) return need <= KEEP_SIZE;
     if (d->keep && need <= d->keep_cap) return 1;
     need = (need + 63) & ~63;
+    if (d < &dg[ACTOR_CAST]) {   /* (a variant's, an enemy model's: the spawn pool) */
+        unsigned char* p = need <= KEEP_SIZE ? spawn_pool_alloc(need, 0) : NULL;
+        if (!p) return 0;
+        d->keep = p;
+        d->keep_cap = need;
+        return 1;
+    }
     if (need > CAST_MEM - cast_used) return 0;
     d->keep = cast_mem + cast_used;
     d->keep_cap = need;
@@ -1135,7 +1145,7 @@ static int load_room_model(Disguise* d, const ActorModel* am, const char* path)
 
     if (!find_in(am, path, &a)) return 0;
     mofs = (int)((unsigned int)a.mdl & 63);   /* keep the data's alignment */
-    if (d >= &dg[ACTOR_CAST]) a.mtn = NULL, a.nlen = 0;   /* (posed from its source only) */
+    if (d >= &dg[ACTOR_ENEMY]) a.mtn = NULL, a.nlen = 0;   /* (posed from its source only) */
     if (a.mtn) nofs = ((mofs + a.mlen + 63) & ~63) + (int)((unsigned int)a.mtn & 63);
     if (!keep_fit(d, mofs + a.mlen) || !keep_fit(d, nofs + a.nlen)) { host_log("actor: %s does not fit\n", am->name); return 0; }
 
@@ -1892,6 +1902,17 @@ int actor_set(int who, int idx)
 int actor_shown(int who) { return dg[who].model >= 0; }
 int actor_shown_model(int who) { return dg[who].model; }   /* (the --dev cutscene log) */
 int actor_rigged(int who) { return dg[who].model >= 0 && dg[who].rig.ok; }
+int actor_mapped(int who) { return dg[who].model >= 0 && dg[who].posed && dg[who].mapped; }
+
+void actor_pool_reset(void)
+{
+    int i;
+    for (i = ACTOR_VARIANT; i < ACTOR_CAST; i++) {
+        if (dg[i].model >= 0) { host_log("actor: slot %d still showed model %d at the room's set-up: released\n", i, dg[i].model); actor_set(i, -1); }
+        dg[i].keep = NULL;
+        dg[i].keep_cap = 0;
+    }
+}
 
 /* pose slot `who` from `src` (after its bhSetMotion and bhCalcModel), in its gender-matched pose
    if it has one (slots 0, 1: actor_source) */
@@ -2432,7 +2453,7 @@ __attribute__((constructor)) static void actor_init(void)
 {
     int i;
     for (i = 0; i < ACTOR_SLOTS; i++) dg[i].model = dg[i].fail = -1;
-    for (i = 0; i < ACTOR_CAST; i++) { dg[i].keep = keep_big[i]; dg[i].keep_cap = KEEP_SIZE; }
+    for (i = 0; i < ACTOR_VARIANT; i++) { dg[i].keep = keep_big[i]; dg[i].keep_cap = KEEP_SIZE; }
     for (i = 0; i < 2; i++) sh[i].chr = sh[i].fail = sh[i].wpn_no = sh[i].motion = -1;
     if (getenv("RECVX_CAST_REACH")) cast_reach = atoi(getenv("RECVX_CAST_REACH")) != 0;
     if (getenv("RECVX_CAST_LIDS")) lids_test = (float)atof(getenv("RECVX_CAST_LIDS"));
@@ -2491,7 +2512,7 @@ void actor_cast_hands(int who)
     unsigned char* p = pack;
     const unsigned char* end = pack + sizeof(pack);
     int side, c, n, need = 0;
-    if ((who < ACTOR_CAST && who != ACTOR_DOUBLE) || who >= ACTOR_SLOTS || d->model < 0 || !d->rig.ok || d->skin || ch[who].tried) return;
+    if ((who < ACTOR_ENEMY && who != ACTOR_DOUBLE) || who >= ACTOR_SLOTS || d->model < 0 || !d->rig.ok || d->skin || ch[who].tried) return;
     ch[who].tried = 1;
     for (side = 0; side < 2; side++) need |= (n = d->rig.map[side ? 13 : 9]) >= 0 && !node_has_mesh(&d->w, n);
     if (!need) return;   /* (hands of its own: a zombie, a creature) */
@@ -2563,6 +2584,15 @@ static void cast_hands_draw(int who, const BH_PWORK* ep)
         bhCalcModel((BH_PWORK*)op);
         bhPutModel((BH_PWORK*)op);
     }
+}
+
+/* "Enemy Models" (enemymdl_glue.c), after drawing slot who's work posed from enemy src: the head part of a player character's
+   cutscene model (Claire's ponytail, Wesker's sunglasses) and the unarmed hands of a model without hands of its own */
+void actor_extras_draw(int who, const BH_PWORK* src)
+{
+    if (who < 0 || who >= ACTOR_SLOTS || dg[who].model < 0) return;
+    head_draw(&dg[who]);
+    cast_hands_draw(who, src);
 }
 
 int actor_src_head(int who, int node)

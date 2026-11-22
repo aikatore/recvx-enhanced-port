@@ -292,7 +292,7 @@ static int yours(const MenuRow* m)
 int setup_row_next_room(const MenuRow* m)
 {
     return ctx() == SC_INGAME && (m->cat == MC_RULES || m->cat == MC_ENEMIES || m->cat == MC_CHARACTERS) && !yours(m)
-           && (m->kind == ML_SET || m->kind == ML_VAR) && !(m->kind == ML_VAR && m->arg == SV_SHOW_PICKS);
+           && (m->kind == ML_SET || m->kind == ML_VAR || m->kind == ML_ENEMYMDL) && !(m->kind == ML_VAR && m->arg == SV_SHOW_PICKS);
 }
 
 const char* setup_row_lock(const MenuRow* m)

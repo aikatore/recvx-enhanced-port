@@ -117,15 +117,22 @@ const char* appear_group(int chr);    /* the list's group of chr (the lobby's mo
    for player part file 10 + n, or -1. */
 #define ACTOR_DOUBLE 2
 #define ACTOR_VARIANT 3                 /* 3, 4: enemy variants' models (pc/glue/variant_glue.c), each posed per enemy drawn */
-#define ACTOR_CAST 5                    /* 5..10: the cutscene cast's models (pc/glue/cast_glue.c), one per model a room shows */
+#define ACTOR_ENEMY 5                   /* 5..10: "Enemy Models"' models (pc/glue/enemymdl_glue.c), one per model a room shows */
+#define ACTOR_CAST 11                   /* 11..16: the cutscene cast's models (pc/glue/cast_glue.c), one per model a room shows */
 #define ACTOR_SLOTS (ACTOR_CAST + 6)
 #define ACTOR_PART 10000   /* past ACTOR_MODELS + ACTOR_IMPORT_MAX */
 int  actor_set(int who, int idx);       /* 1 = shown (a failed entry is not retried) */
 int  actor_shown(int who);
 int  actor_shown_model(int who);       /* the model idx slot who shows, -1 none */
 int  actor_rigged(int who);             /* its model is posed from a source's skeleton (a humanoid node map was found) */
+struct BH_PWORK;
+int  actor_mapped(int who);             /* its last pose came from the source's skeleton (the source has a humanoid node map too) */
+void actor_extras_draw(int who, const struct BH_PWORK* src);   /* after drawing slot who's work: its head part and its unarmed hands (a model without hands) */
+void actor_pool_reset(void);            /* spawn_glue.c spawn_room_setup: the spawn pool is emptied; the slots whose models live there (the
+                                           variants', "Enemy Models"') let go of it */
 int  actor_talks(int who);              /* its model moves a mouth with its source's lips (a face mask with mouth shapes, an imported model's jaw) */
 struct BH_PWORK;
+struct O_WRK;
 void actor_pose(int who, struct BH_PWORK* src);   /* after src's bhSetMotion and bhCalcModel */
 void actor_draw(int who);               /* bhPutModel: the caller sets camera matrix, lights, textures state */
 struct BH_PWORK* actor_work(int who);   /* its work (model, node matrices), NULL when none is shown */

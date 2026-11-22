@@ -1,6 +1,7 @@
 /* Co-op wire checks, join code, transfers and room script tables (coop_proto.h). Pure functions:
    no game state, so pc/tests/test_coop.c runs them against malformed input. */
 #include "coop_proto.h"
+#include "../host/enemymdl.h"
 #include "monocypher.h"
 #include <string.h>
 #include <math.h>
@@ -368,7 +369,7 @@ static int zero_or(const char* b, int n, const char* set)
 /* events only the host sends (it runs the session and the enemies), and those only a guest sends */
 /* (protocol 46: EV_PLY_HIT, EV_GRAB and EV_UNGRAB go either way - with OPT2_OWNERSHIP the guest runs enemies too;
    coop_glue.c takes them from the guest only under that rule) */
-static int host_only(int t) { return t == EV_BLOB || t == EV_BOXFIX || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED || t == EV_CASTOFF; }
+static int host_only(int t) { return t == EV_BLOB || t == EV_BOXFIX || t == EV_EOPTS || t == EV_SKIP || t == EV_BRSEED || t == EV_CASTOFF || t == EV_EMODEL; }
 static int guest_only(int t) { return t == EV_GONE || t == EV_OWN; }
 
 int coop_check_event(const Event* e, int from_host)
@@ -518,6 +519,10 @@ int coop_check_event(const Event* e, int from_host)
     case EV_BRSEED:   /* "R840-XXXX-..." in BioRand's alphabet (upper case), the digest in lower-case hex */
         if (!zero_or(e->u.br.str, COOP_BR_STR, "0123456789ABCEFGHJKLMNPQRTUVWXYZ-") || !zero_or(e->u.br.dig, COOP_BR_DIG, "0123456789abcdef")) return COOP_BAD_FIELD;
         return !e->u.br.str[0] || (e->u.br.str[0] == 'R' && e->u.br.str[4] == '-' && e->u.br.str[9] == '-') ? COOP_OK : COOP_BAD_FIELD;
+    case EV_EMODEL:   /* a choice per category, the unused ones 0 */
+        for (k = 0; k < COOP_EMODEL_CATS; k++)
+            if (!emodel_valid(e->u.em.v[k]) || (k >= EM_CATS && e->u.em.v[k])) return COOP_BAD_FIELD;
+        return COOP_OK;
     case EV_CASTOFF:   /* a chunk of the bit list, in place */
         return e->u.co.n >= 1 && e->u.co.n <= COOP_CASTOFF_CHUNK && !(e->u.co.at % COOP_CASTOFF_CHUNK) && e->u.co.at + e->u.co.n <= COOP_CASTOFF_MAX &&
                !e->u.co.pad ? COOP_OK : COOP_BAD_FIELD;

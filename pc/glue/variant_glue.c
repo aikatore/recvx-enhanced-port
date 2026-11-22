@@ -36,10 +36,11 @@ void RequestEnemySe(int EnemyNo, NJS_POINT3* pPos, int SeNo);   /* sdfunc.c */
 int snd_xbank_load(int key);
 extern int enemy_room_gen;              /* enemyopt_glue.c */
 
-#define VSLOTS (ACTOR_CAST - ACTOR_VARIANT)
+#define VSLOTS (ACTOR_ENEMY - ACTOR_VARIANT)
 #define VSETS 4                         /* variants with their own motion set in one room */
 
-int pc_variant_n;                       /* variant enemies in this room */
+int pc_variant_n;                       /* variant enemies in this room (+ 1 while "Enemy Models" draws some: enemymdl_glue.c, through
+                                           pc_variant_draw; the other hooks find no variant then) */
 static unsigned short slot_var[PC_ENE_SLOTS];    /* slot -> variant id (the variant's body) */
 static float steps[PC_ENE_SLOTS], dam_left[PC_ENE_SLOTS];
 static int death_t[PC_ENE_SLOTS];                /* ticks since it died (flg & 2), -1 alive */
@@ -48,6 +49,7 @@ static struct { unsigned short id; MN_WORK set[512]; } mset[VSETS];
 static struct { unsigned short id; signed char bank; } vbank[VARIANT_MAX];
 static int nbank;
 static int pre_hp, hurt_now;
+static unsigned char head_logged[PC_ENE_SLOTS];   /* "Enemy Models": a blown-off head's log line once per enemy and room */
 static BH_PWORK* pre_pl;
 
 static BH_PWORK* root(BH_PWORK* ep)
@@ -191,6 +193,7 @@ static BH_PWORK* donor_now(const EnemyVariant* v, BH_PWORK* r)
 void variant_room(void)
 {
     memset(slot_var, 0, sizeof(slot_var));
+    memset(head_logged, 0, sizeof(head_logged));
     memset(mset, 0, sizeof(mset));
     nbank = 0;
     pc_variant_n = 0;
@@ -394,12 +397,31 @@ int pc_zombie_head(BH_PWORK* ep, int hide)
     return head_n > 0;
 }
 
+/* "Enemy Models" (enemymdl_glue.c): enemy r (a body, not a part) drawn as display slot who's model, posed from it; its blown-off head
+   hidden on the model as for a variant. 0: not drawn (no humanoid node map for r's skeleton): r is drawn itself */
+int variant_put(int who, BH_PWORK* ep, BH_PWORK* r)
+{
+    BH_PWORK* w;
+    actor_pose(who, r);
+    if (!actor_mapped(who) || !(w = actor_work(who))) return 0;
+    w->draw_tp = ep->draw_tp;
+    if (headless(r)) {
+        head_hide(w->mlwP, actor_head_node(who));
+        if (!head_logged[r - ene]) { head_logged[r - ene] = 1; host_log("enemymdl: slot %d lost its head: the model's head node %d and below hidden\n", (int)(r - ene), actor_head_node(who)); }
+    }
+    bhPutModel(w);
+    head_show();
+    actor_extras_draw(who, r);
+    return 1;
+}
+
+int emodel_draw(BH_PWORK* ep);          /* enemymdl_glue.c */
 int pc_variant_draw(BH_PWORK* ep)
 {
     const EnemyVariant* v = of(ep);
     BH_PWORK *r, *src;
     int k, i, dm;
-    if (!v) return 0;
+    if (!v) return emodel_draw(ep);   /* (not a variant: "Enemy Models"' choice for its type, if any) */
     r = root(ep);
     src = donor_now(v, r);
     dm = src ? drawn_model(v) : v->model;

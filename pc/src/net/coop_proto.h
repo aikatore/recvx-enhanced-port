@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 60                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 61                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -100,7 +100,8 @@ extern "C" {
                                                stains) as a generic entry;
                                            59: OPT2_SHOVE ("Break Free Pushes Enemies"), EV_ENE_HIT COOP_HIT_SHOVE / COOP_HIT_MARK
                                                (a push from the point dp for the enemy's runner; the sender broke free);
-                                           60: Pose.chr 2 with costume 1, the Dreamcast Steve (part file 16; docs/IMPORT_DREAMCAST.md) */
+                                           60: Pose.chr 2 with costume 1, the Dreamcast Steve (part file 16; docs/IMPORT_DREAMCAST.md);
+                                           61: EV_EMODEL (the host's "Enemy Models": a model per enemy category, enemymdl.h) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per datagram (the receiver's check; a frame sends up to 96: coop_glue.c EV_BURST) */
 #define COOP_SNAP_BUDGET 2400           /* enemy snapshot bytes per frame (records past it wait, by priority) */
@@ -224,7 +225,8 @@ enum { REC_UNKNOWN, REC_NONE, REC_HAVE, REC_OFF };   /* PoseExt.rec: not known y
 enum { EV_ENE_HIT = 1, EV_PLY_HIT = 2, EV_BLOB = 3, EV_FLAGS = 4, EV_PICKUP = 5, EV_LOST = 6,
        EV_ESTATE = 7, EV_GRAB = 8, EV_UNGRAB = 9, EV_TRIG = 10, EV_TRADE = 11, EV_BOX = 12, EV_BOXFIX = 13,
        EV_SPAWN = 14, EV_EOPTS = 15, EV_ATR = 16, EV_FX = 17, EV_GRANT = 18, EV_TSCREEN = 19, EV_GONE = 20, EV_OWN = 21,
-       EV_SKIP = 22, EV_BRSEED = 23, EV_CASTOFF = 24, EV_ENEOWN = 25, EV_TYPES };
+       EV_SKIP = 22, EV_BRSEED = 23, EV_CASTOFF = 24, EV_ENEOWN = 25, EV_EMODEL = 26, EV_TYPES };
+#define COOP_EMODEL_CATS 8              /* EV_EMODEL: choices sent (enemymdl.h EM_CATS of them used, the rest 0) */
 #define COOP_BR_STR 68                  /* EV_BRSEED: BioRand's seed string (biorand_opts.h BIORAND_SEED_LEN), no NUL */
 #define COOP_BR_DIG 12                  /*   and the first hex digits of the host's CLI archive's SHA-256 */
 #define COOP_CASTOFF_CHUNK 64           /* EV_CASTOFF: bytes per event */
@@ -471,6 +473,9 @@ typedef struct Event {
         } co;
         SpawnNote sp;                   /* host: an enemy not in the room file, into slot idx */
         EnemyOpts eo;                   /* host: its enemy options */
+        struct {                        /* host (protocol 61): its "Enemy Models" (enemymdl.h values; each screen draws them with its own imports) */
+            uint16_t v[COOP_EMODEL_CATS];
+        } em;
     } u;
 } Event;
 

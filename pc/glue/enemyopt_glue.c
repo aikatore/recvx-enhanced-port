@@ -912,6 +912,7 @@ int enemy_rec_scripted(int slot)
 }
 
 /* ---------------------------------------------------------------- the room load (room.c bhFinishRoom) */
+void emodel_room(void);                 /* enemymdl_glue.c */
 void enemy_room_finished(void)
 {
     const EnemyOpts* o;
@@ -943,6 +944,7 @@ void enemy_room_finished(void)
     }
     cast_room(o);   /* the cutscene cast's models (cast_glue.c; it touches no record), after the randomizer: a record it gives another
                        look (an event's zombie: "Randomize Event Enemies") is no longer what the cast saw, and was drawn as itself */
+    emodel_room();   /* "Enemy Models" (enemymdl_glue.c): after the randomizer, by the type each record is now */
 }
 
 /* ---------------------------------------------------------------- (a) extra enemies */

@@ -54,6 +54,12 @@ int pc_ui_dialog_hit(float y1, const char* b0, const char* b1, int glyphs, float
 int bind_any_down(void);
 int pad_last_pad(void);
 void cast_list_open(int appear, float x0, float x1, float y0, float h, float sc, int rows);
+void emodel_list_open(int ro, float x0, float x1, float y0, float h, float sc);   /* enemymdl_list.c: "Enemy Models" (st.list 4) */
+int  emodel_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
+void emodel_list_draw(void);
+const char* emodel_list_help(void);
+const char* emodel_list_summary(const int* v, char* buf, int n);
+const int* emodel_now(void);
 int  cast_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
 void cast_list_draw(void);
 const char* cast_list_help(void);
@@ -255,6 +261,7 @@ static const char* value_text(const Row* r, char* buf, int n)
     case ML_OUTPUT: snprintf(buf, n, "%s", tr(GetSoundMode() ? "Mono" : "Stereo")); return buf;
     case ML_PRESET: { static const char* const p[] = { "Original Look", "Enhanced", "Custom" }; snprintf(buf, n, "%s", tr(p[preset_get()])); return buf; }
     case ML_TEXT: snprintf(buf, n, "%s", text_value(m->arg)); return buf;
+    case ML_ENEMYMDL: return emodel_list_summary(emodel_now(), buf, n);
     case ML_PAGE: {
         int k = 0;
         if (is_bind_cat(m->arg)) return NULL;
@@ -698,6 +705,7 @@ static int activate(const Row* r)
         return UR_STAY;
     case ML_WINDOW: st.window = r->m->arg; CallSystemSe(0, 3); return UR_CLOSE;
     case ML_GIVE: st.list = 3; give_list_open(X_LABEL - 8, ROWS_X1, Y0 + 16, 24, 11); CallSystemSe(0, 3); return UR_STAY;
+    case ML_ENEMYMDL: st.list = 4; emodel_list_open(lock_of(r) != NULL, X_LABEL - 8, ROWS_X1, Y0 + 16, ROW_H, SC_ROW); return UR_STAY;   /* (a guest: read-only) */
     case ML_OUTPUT: case ML_PRESET: change(r, 1); return UR_STAY;
     case ML_SET:
         if (!s) return UR_STAY;
@@ -1086,6 +1094,10 @@ static void bar_build(void)
     }
     hints[nhints++] = (Hint){ ui_glyph(UG_OK, g[0], 40), "Select", UG_OK };
     hints[nhints++] = (Hint){ ui_glyph(UG_BACK, g[1], 40), st.search && !st.depth ? "Close Search" : "Back", UG_BACK };
+    if (st.list == 4) {   /* Enemy Models: the model, its groups */
+        hints[nhints++] = (Hint){ ui_glyph(UG_CHANGE, g[2], 40), "Model", UG_CHANGE };
+        hints[nhints++] = (Hint){ ui_glyph(UG_CAT, g[3], 40), "Group", UG_CAT };
+    }
     if (st.list == 3) {   /* Give Item: the amount, the groups */
         hints[nhints++] = (Hint){ ui_glyph(UG_CHANGE, g[2], 40), "Amount", UG_CHANGE };
         hints[nhints++] = (Hint){ ui_glyph(UG_CAT, g[3], 40), "Group", UG_CAT };
@@ -1242,7 +1254,7 @@ static void draw_row(int i, int sel)
     }
     v = value_text(r, val, sizeof(val));
     switch (r->m->kind) {
-    case ML_PAGE: case ML_SHORTCUT: case ML_SCREEN: case ML_WINDOW: case ML_TEXT: case ML_IMPORT: case ML_GIVE:   /* opens something: an arrow at the end */
+    case ML_PAGE: case ML_SHORTCUT: case ML_SCREEN: case ML_WINDOW: case ML_TEXT: case ML_IMPORT: case ML_GIVE: case ML_ENEMYMDL:   /* opens something: an arrow at the end */
         if (v) text_fit(X_VALUE, y, v, SC_ROW, VALUE_W, col);
         pc_ui_arrow(mx(ROWS_X1 - 6, 0), y + 9, rtl ? -1 : 1, col);
         return;
@@ -1411,7 +1423,7 @@ static void draw_help(void)
         snprintf(t, sizeof(t), "%s", tr("Type a word of a setting's name, help or value: every category's matches are listed. Enter or Down: to the results; Esc: close."));
         col = 0xFFFFE080;
     } else if (st.msg_t > 0) { st.msg_t--; snprintf(t, sizeof(t), "%s", st.msg); col = 0xFFFFE080; }
-    else if (st.list) { snprintf(t, sizeof(t), "%s", tr(st.list == 3 ? give_list_help() : st.list == 2 ? rate_list_help() : cast_list_help())); name[0] = 0; }
+    else if (st.list) { snprintf(t, sizeof(t), "%s", tr(st.list == 4 ? emodel_list_help() : st.list == 3 ? give_list_help() : st.list == 2 ? rate_list_help() : cast_list_help())); name[0] = 0; }
     else switch (r->kind) {
     case R_BIND: {
         int dev = st.cat == MC_BIND_PAD, c = bind_conflict(r->idx, dev);
@@ -1528,9 +1540,9 @@ static void draw(void)
     }
     if (st.confirm || st.keep) ;   /* (the question alone: the font's text would show through its box) */
     else if (st.list) {   /* a list in the rows' place, its name above */
-        const char* h = st.list == 3 ? "GIVE ITEM" : st.list == 2 ? "ENEMY RATES" : rows[SEL].idx == 2 ? "MONSTER LOOKS" : rows[SEL].idx ? "YOUR RANDOM LOOKS" : "STORY CHARACTER LOOKS";
+        const char* h = st.list == 4 ? "ENEMY MODELS" : st.list == 3 ? "GIVE ITEM" : st.list == 2 ? "ENEMY RATES" : rows[SEL].idx == 2 ? "MONSTER LOOKS" : rows[SEL].idx ? "YOUR RANDOM LOOKS" : "STORY CHARACTER LOOKS";
         text_m(ROWS_X0 + 4, Y0 - 2, h, 0.5f, C_GOLD);
-        if (st.list == 3) give_list_draw(); else if (st.list == 2) rate_list_draw(); else cast_list_draw();
+        if (st.list == 4) emodel_list_draw(); else if (st.list == 3) give_list_draw(); else if (st.list == 2) rate_list_draw(); else cast_list_draw();
     } else {
         for (int i = TOP; i < nrows && i < TOP + VIS; i++) draw_row(i, i == SEL);
         if (nrows > VIS) {   /* the scroll bar */
@@ -1630,7 +1642,7 @@ static int input(int port)
     }
     if (st.list) {   /* its BACK, cancel or a right click: the rows again */
         if (esc) press |= cancel;
-        if ((st.list == 3 ? give_list_input : st.list == 2 ? rate_list_input : cast_list_input)(&mt, press, rept, ok, cancel)) st.list = 0;
+        if ((st.list == 4 ? emodel_list_input : st.list == 3 ? give_list_input : st.list == 2 ? rate_list_input : cast_list_input)(&mt, press, rept, ok, cancel)) st.list = 0;
         return UR_STAY;
     }
     if (st.search && st.typing) {   /* typing the search (the keyboard's ring); a click on a result goes to it */

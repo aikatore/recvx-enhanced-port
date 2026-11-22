@@ -53,6 +53,13 @@ int  rate_list_input(const MouseTake* m, unsigned int press, unsigned int rept, 
 void rate_list_draw(void);
 const char* rate_list_help(void);
 const char* rate_list_summary(const unsigned char* rate, char* buf, int n);
+void emodel_list_open(int ro, float x0, float x1, float y0, float h, float sc);   /* enemymdl_list.c: "Enemy Models" (st.list 3) */
+int  emodel_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
+void emodel_list_draw(void);
+const char* emodel_list_help(void);
+const char* emodel_list_summary(const int* v, char* buf, int n);
+const int* emodel_now(void);
+int coop_is_guest(void);
 
 enum { P_UP = 0x1000, P_RIGHT = 0x2000, P_DOWN = 0x4000, P_LEFT = 0x8000, P_START = 0x800, P_SELECT = 0x100, P_L1 = 0x4, P_R1 = 0x8 };   /* Pad[] bits */
 
@@ -413,7 +420,7 @@ void pc_options_mouse_back(int port, int level)
 }
 
 /* ---------------------------------------------------------------- the pages */
-enum { K_PAGE, K_SET, K_DEVICE, K_BIND, K_HEAD, K_GROUP, K_RESET, K_BACK, K_RATES, K_CUSTOM };   /* K_HEAD, K_GROUP: headings; K_RATES,
+enum { K_PAGE, K_SET, K_DEVICE, K_BIND, K_HEAD, K_GROUP, K_RESET, K_BACK, K_RATES, K_CUSTOM, K_EMODEL };   /* K_EMODEL: "Enemy Models" (st.list 3) */   /* K_HEAD, K_GROUP: headings; K_RATES,
     K_CUSTOM: the enemy rates' and the cast's "Custom" list (st.list 2, 1; K_CUSTOM idx: cast_list.c's list, 0 the characters', 2 the enemies') */
 typedef struct Row { int kind, idx; } Row;
 
@@ -466,6 +473,7 @@ static void page_rows(void)
         if (g_settings[i].val == &g_enemy_opts.variety && g_enemy_opts.variety == 2) rows[nrows++] = (Row){ K_RATES, 0 };
         if (g_settings[i].val == &g_enemy_opts.cast_all && g_enemy_opts.cast_all == 2) rows[nrows++] = (Row){ K_CUSTOM, 0 };
         if (g_settings[i].val == &g_enemy_opts.cast_enemy && g_enemy_opts.cast_enemy == CAST_ENEMY_CUSTOM) rows[nrows++] = (Row){ K_CUSTOM, 2 };
+        if (g_settings[i].val == &g_enemy_opts.seed) rows[nrows++] = (Row){ K_EMODEL, 0 };   /* (the enemies' rows end there) */
     }
 }
 
@@ -559,6 +567,10 @@ static int activate(const Row* r)
         CallSystemSe(0, 3);
         return 0;
     case K_BACK: CallSystemSe(0, 0); return 1;
+    case K_EMODEL:
+        st.list = 3;
+        emodel_list_open(coop_is_guest(), X_LABEL, 600, Y_ROW0, ROW_H, SC_ROW);
+        return 0;
     case K_RATES: case K_CUSTOM:   /* where the rows are, BACK above the help line */
         st.list = r->kind == K_RATES ? 2 : 1;
         if (st.list == 2) rate_list_open(0, X_LABEL, 600, Y_ROW0, ROW_H, SC_ROW, 7);
@@ -667,6 +679,12 @@ static void draw_row(int i, int sel)
         break;
     case K_RESET: text_m(X_LABEL, y, "RESET TO DEFAULTS", SC_ROW, col); return;
     case K_BACK: text_m(X_LABEL, y, "BACK", SC_ROW, col); return;
+    case K_EMODEL:
+        text_m(X_LABEL, y, "Enemy Models", SC_ROW, col);
+        emodel_list_summary(emodel_now(), val, sizeof(val));
+        text_m(X_VALUE + 6, y, val, SC_ROW, col);
+        pc_ui_arrow(mx(X_VALUE + 6 + pc_ui_text_w(val, SC_ROW) + 16, 0), y + 9, rtl ? -1 : 1, col);
+        return;
     case K_RATES: case K_CUSTOM:   /* how many can appear; confirm opens the list (an arrow after it) */
         text_m(X_LABEL, y, r->kind == K_RATES ? "Enemy Rates" : r->idx ? "Choose Enemies" : "Choose Models", SC_ROW, col);
         if (r->kind == K_RATES) rate_list_summary(g_enemy_opts.rate, val, sizeof(val));
@@ -731,7 +749,7 @@ static void draw_help(void)
                  tr(bind_rows[st.capture - 1].name), (bind_capture_left_ms() + 999) / 1000);
         col = 0xFFFFE080;
     } else if (st.msg_t > 0) { st.msg_t--; snprintf(t, sizeof(t), "%s", st.msg); col = 0xFFFFE080; }
-    else if (st.list) snprintf(t, sizeof(t), "%s", tr(st.list == 2 ? rate_list_help() : cast_list_help()));
+    else if (st.list) snprintf(t, sizeof(t), "%s", tr(st.list == 3 ? emodel_list_help() : st.list == 2 ? rate_list_help() : cast_list_help()));
     else switch (r->kind) {
     case K_PAGE: snprintf(t, sizeof(t), tr("Left/right or %s: change page; up/down: choose a setting. Changes save automatically."),
                           page_keys(nm, sizeof(nm))); break;
@@ -739,6 +757,7 @@ static void draw_help(void)
     case K_RESET: snprintf(t, sizeof(t), tr("Restore default %s bindings."), tr(st.dev ? "gamepad" : "keyboard and mouse")); break;
     case K_BACK: snprintf(t, sizeof(t), tr("Return to OPTION. Cancel or right-click also goes back.")); break;
     case K_RATES: snprintf(t, sizeof(t), "%s", tr("Set how often each enemy type is chosen.")); break;
+    case K_EMODEL: snprintf(t, sizeof(t), "%s", tr("Choose a model for each enemy type you fight. From the next room.")); break;
     case K_CUSTOM: snprintf(t, sizeof(t), "%s", tr(r->idx ? "Choose the enemies the monsters can appear as." : "Choose the models the characters can appear as.")); break;
     case K_BIND: {
         int c = bind_conflict(r->idx, st.dev);
@@ -775,9 +794,9 @@ static void draw(void)
     pc_ui_rect(36, 176, 604, 177, 0x60FFFFFF, Z_PANEL + 0.001f);
     pc_ui_rect(36, Y_HELP - 4, 604, Y_HELP - 3, 0x60FFFFFF, Z_PANEL + 0.001f);
     if (st.list) {   /* the list where the rows are, its name in the page row's place */
-        const char* h = st.list == 2 ? "ENEMY RATES" : cast_list_kind() == 2 ? "CHOOSE ENEMIES" : "CHOOSE MODELS";
+        const char* h = st.list == 3 ? "ENEMY MODELS" : st.list == 2 ? "ENEMY RATES" : cast_list_kind() == 2 ? "CHOOSE ENEMIES" : "CHOOSE MODELS";
         pc_ui_text(320 - pc_ui_text_w(h, 0.72f) / 2, 150, h, 0.72f, 0xFFE8E0C0);
-        if (st.list == 2) rate_list_draw(); else cast_list_draw();
+        if (st.list == 3) emodel_list_draw(); else if (st.list == 2) rate_list_draw(); else cast_list_draw();
         draw_help();
         AdvEasySetTextureList(0);
         return;
@@ -816,7 +835,7 @@ static int input(int port)
         st.wait_release = 0;
     }
     if (st.list) {   /* its BACK, cancel or a right click: the rows again, on its row */
-        if ((st.list == 2 ? rate_list_input : cast_list_input)(&mt, press, rept, ok, cancel)) st.list = 0;
+        if ((st.list == 3 ? emodel_list_input : st.list == 2 ? rate_list_input : cast_list_input)(&mt, press, rept, ok, cancel)) st.list = 0;
         return 0;
     }
     hit = row_at(mt.x, mt.y);
