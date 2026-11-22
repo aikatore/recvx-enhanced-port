@@ -3,7 +3,7 @@
 #pragma once
 #include <stdint.h>
 
-#define IMP_NODES 192        /* (Umbrella Chronicles' players: up to 138 bones) */
+#define IMP_NODES 256        /* (Umbrella Chronicles: players up to 138 bones, Lisa Trevor 229; the joint bytes reach 255) */
 #define IMP_TEX 16
 
 typedef struct ImpNode {
@@ -15,11 +15,14 @@ typedef struct ImpNode {
 
 /* the face bones: per eye the upper lid (its margin: what closes) and the crease above it (Outbreak's two
    lid bones are both on the upper lid; the crease's skin reaches up to the brow and stays), the jaw */
+/* hand poses: a vertex of the open or the gun-grip right / left hand (the player's shows the grip while it holds a weapon) */
+enum { IMP_HAND_NONE, IMP_HAND_R_OPEN, IMP_HAND_R_GRIP, IMP_HAND_L_OPEN, IMP_HAND_L_GRIP };
 enum { IMP_FACE_NONE, IMP_FACE_LID_L, IMP_FACE_CREASE_L, IMP_FACE_LID_R, IMP_FACE_CREASE_R, IMP_FACE_JAW, IMP_FACES };
 
 typedef struct ImpStrip {   /* idx[first .. first + n): a triangle strip; tex: texture slot or -1 */
     int first, n, tex;
-    int clamp;              /* its texture clamps (Wii: GX_CLAMP): UVs taken as they are; 0: it repeats (Outbreak), the strip moved by whole tiles */
+    int clamp;              /* uc.c: its UVs lie in one tile (a clamped texture, or cut_tiles done); 0: it repeats. The writer moves
+                               every strip into the tile holding most of it (impmodel.c tile) */
 } ImpStrip;
 
 typedef struct ImpModel {
@@ -41,6 +44,7 @@ typedef struct ImpModel {
     int* idx;
     float (*iuv)[2];        /* per strip index its UV (imp_weld: one vertex then serves several UVs); NULL: uv[idx] */
     float (*morph)[3];      /* per vertex its offset with the eyes closed (Umbrella Chronicles' blink morph); NULL: none */
+    unsigned char* hand;    /* per vertex IMP_HAND_* (Umbrella Chronicles' open and gun-grip hands, both kept); NULL: none */
     int ntex;
     unsigned char* tim2[IMP_TEX];   /* PS2 TIM2 files (one picture each), owned */
     int tim2_len[IMP_TEX];
@@ -92,6 +96,7 @@ int  imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned g
         44: u32 morph offset, 48: u32 morph entries (version 5; 0: none): the blink as vertex offsets,
         per entry u32 vertex, float d[3] (the game's units, eyes fully closed), by vertex
         52: float jaw gain (version 5; 0: 1): the jaw turned this times the angle imp_face computes
+        56: u32 hand poses offset (version 6, written only with them; 0 none): per vertex a byte, IMP_HAND_*
      vertices: at most CVXM_VERTS (version 5; before 8189: the chunk's size word; above that it holds 0xFFFF)
      version 4 also: the CLUTs' alpha in the PS2 range (0x80 opaque; before: Outbreak's 0..255)
      model chunk list: u32 size, MLB (bhMlbBinRealize), u32 -1

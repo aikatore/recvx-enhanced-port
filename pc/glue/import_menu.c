@@ -43,6 +43,8 @@ enum { BTN_START = 0x800, BTN_UP = 0x1000, BTN_RIGHT = 0x2000, BTN_DOWN = 0x4000
 enum { P_CATS, P_GAMES, P_OPTS, P_SAVES };
 enum { IS_MENU, IS_ASK, IS_WORK, IS_RESULT };
 #define OFFERED (import_sources[im.src].offered)   /* the groups the game offers (ImportSource.offered) */
+#define UC_SRC (im.src == IMPORT_UMBRELLA)   /* Umbrella Chronicles: its second group is its monsters and an office worker */
+#define NPCS_NAME (UC_SRC ? "Monsters and Others" : "NPCs")
 enum { K_CAT, K_GAME, K_PLAYERS, K_NPCS, K_DISC, K_START, K_DELETE, K_BACK, K_CARD, K_HEAD, K_SHOW };   /* K_SHOW: "Show in Model Lists" (actors.h g_import_hidden) */
 typedef struct { int kind, idx; } Row;
 
@@ -185,8 +187,8 @@ static void look(void)
 
 static const char* counts(char* t, int n)
 {
-    if (im.players && im.npcs) snprintf(t, n, tr("%d playable characters and %d NPCs can be played."), im.players, im.npcs);
-    else if (im.players || im.npcs) snprintf(t, n, tr("%d %s can be played."), im.players + im.npcs, tr(im.players ? "playable characters" : "NPCs"));
+    if (im.players && im.npcs) snprintf(t, n, tr(UC_SRC ? "%d playable characters and %d monsters and others can be played." : "%d playable characters and %d NPCs can be played."), im.players, im.npcs);
+    else if (im.players || im.npcs) snprintf(t, n, tr("%d %s can be played."), im.players + im.npcs, tr(im.players ? "playable characters" : UC_SRC ? "monsters and others" : "NPCs"));
     else snprintf(t, n, tr("No models can be played."));
     return t;
 }
@@ -231,7 +233,7 @@ static const char* row_why(const Row* r)
     case K_START:
         if (running()) return "An import is running.";
         if (!g_import.iso[im.src][0]) return "Choose the disc image first.";
-        if (langs() < 0 && !(im.what & OFFERED)) return OFFERED & IMPORT_NPCS ? "Turn on Playable Characters or NPCs first." : "Turn on Playable Characters first.";
+        if (langs() < 0 && !(im.what & OFFERED)) return OFFERED & IMPORT_NPCS ? (UC_SRC ? "Turn on Playable Characters or Monsters and Others first." : "Turn on Playable Characters or NPCs first.") : "Turn on Playable Characters first.";
         return NULL;
     case K_DELETE:
         if (running()) return "An import is running.";
@@ -429,7 +431,7 @@ static const char* row_help(const Row* r)
                         : import_sources[r->idx].cat == IMPORT_CAT_LANGUAGES ? "Import the languages of your own disc image of this release."
                                                                               : "Import from your own disc image of this game.";
     case K_PLAYERS: return "The playable characters and their costumes.";
-    case K_NPCS: return "The other people of the game. Some have no names; they are listed by their file.";
+    case K_NPCS: return UC_SRC ? "The zombies, the Hunter, the Licker, Nemesis, the Tyrants, Lisa Trevor, the Eliminator, Ivy and an office worker." : "The other people of the game. Some have no names; they are listed by their file.";
     case K_DISC: return import_sources[im.src].ext ? "Choose your disc image (.rvz, Dolphin's format) in a file dialog." : "Choose your disc image (.iso) in a file dialog.";
     case K_START: return langs() >= 0 ? "Import every language of the disc image. This takes a few seconds."
                                        : "Import the chosen groups from the disc image. This takes a few seconds to a minute.";
@@ -446,7 +448,7 @@ static void draw_row(int i)
     float y = row_y(i);
     unsigned int col = !live ? (sel ? 0xFF909090 : 0xFF686868) : sel ? 0xFFFFFFFF : 0xFFB0B0B0;
     static const char* const names[] = { "", "", "Playable Characters", "NPCs", "Disc Image", "START IMPORT", "DELETE IMPORTED MODELS", "BACK" };
-    const char* label = r->kind == K_DELETE && langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : r->kind <= K_BACK ? names[r->kind] : "";
+    const char* label = r->kind == K_DELETE && langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : r->kind == K_NPCS ? NPCS_NAME : r->kind <= K_BACK ? names[r->kind] : "";
     const char* v = NULL;
     if (sel) pc_ui_rect(ROW_X - 8, y - 3, 600, y + ROW_H - 4, 0x50FFFFFF, Z_ROW);
     switch (r->kind) {
@@ -705,7 +707,7 @@ static void nm_row(int i)
         int on = r->kind == K_SHOW ? shown_src() : im.what & (r->kind == K_PLAYERS ? IMPORT_PLAYERS : IMPORT_NPCS);
         const char* s = tr(on ? "On" : "Off");
         float w = pc_ui_text_w(s, 0.55f);
-        nm_text(N_LABEL, y, tr(r->kind == K_SHOW ? "Show in Model Lists" : r->kind == K_PLAYERS ? "Playable Characters" : "NPCs"), 0.55f, N_VALUE - N_LABEL - 16, col);
+        nm_text(N_LABEL, y, tr(r->kind == K_SHOW ? "Show in Model Lists" : r->kind == K_PLAYERS ? "Playable Characters" : NPCS_NAME), 0.55f, N_VALUE - N_LABEL - 16, col);
         if (live) { nm_arrow(N_VALUE - 12, y + 9, -1, col); nm_arrow(N_VALUE + w + 13, y + 9, 1, col); }
         nm_t(N_VALUE, y, s, 0.55f, col);
         return;
@@ -804,7 +806,7 @@ static void nm_draw(void)
         case K_GAME: nm_text(20, N_HELP - 2, title_of(r->idx), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_CARD: nm_text(20, N_HELP - 2, tr("Import Memory Card Saves"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_PLAYERS: case K_NPCS: case K_DISC: case K_SHOW:
-            nm_text(20, N_HELP - 2, tr(r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_NPCS ? "NPCs" : r->kind == K_SHOW ? "Show in Model Lists" : "Disc Image"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
+            nm_text(20, N_HELP - 2, tr(r->kind == K_PLAYERS ? "Playable Characters" : r->kind == K_NPCS ? NPCS_NAME : r->kind == K_SHOW ? "Show in Model Lists" : "Disc Image"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_START: nm_text(20, N_HELP - 2, tr("START IMPORT"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         case K_DELETE: nm_text(20, N_HELP - 2, tr(langs() >= 0 ? "DELETE IMPORTED LANGUAGES" : "DELETE IMPORTED MODELS"), 0.55f, N_PREVIEW - 34, 0xFFFFFFFF); break;
         }

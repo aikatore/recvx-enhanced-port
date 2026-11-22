@@ -177,7 +177,7 @@ static void euler_quat(float x, float y, float z, float* q)   /* rotation x, the
 static int read_ahi(Rd* r, uint32_t o, ImpModel* m, int* meshnode)
 {
     uint32_t cnt = u32(r, o + 4), rs = u32(r, o + 12 + 8);
-    if (u32(r, o) != T_HIER || r->bad || cnt < 2 || cnt - 1 > IMP_NODES) return 0;
+    if (u32(r, o) != T_HIER || r->bad || cnt < 2 || cnt - 1 > 192) return 0;   /* (192: the limit before Umbrella Chronicles' monsters raised IMP_NODES; the same models as before) */
     uint32_t p = o + 12 + rs;
     m->nn = (int)cnt - 1;
     for (int i = 0; i < m->nn; i++, p += u32(r, p + 8)) {

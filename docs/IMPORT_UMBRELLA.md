@@ -14,11 +14,13 @@ Model") and cutscene cast models, moving with Claire's / Chris's motions, blinki
 |---|---|
 | 1. Format research | done (phase 1, outside the repository: a Python reference extractor of all 152 character models) |
 | 2. Converter (C, `pc/src/import/rvz.c`, `uc.c`) | done for the 16 player models: PCR1, PCR2, PJL1..3, PRB1, PRC1, PKS1, PBI1, PCA1, PAD1, PAD2, PHK1, PWS1..3 |
-| 3. Faces | the blink (the game's own morph), a jaw made for the mouth |
-| 4. Monsters and NPCs (zombies, Hunter, Licker, Nemesis, T-103, Lisa, Eliminator, Ivy, OSIT1) | phase 3 ("Next steps") |
+| 3. Faces | the blink (the game's own morph), a jaw made for the mouth; the monsters' own jaws, the Tyrant ETY0's lids |
+| 4. Monsters and others (phase 3) | done: 35 zombies (EZ00..EZ21, EZ26..EZ38), Hunter EHT1, Licker ELK1, Nemesis ENS1, Tyrants ETY0, ETY5..7, Lisa Trevor ELT1, Eliminator EEL0, Ivy EIV1, an office worker OSIT1: "Monsters and Others" |
+| 5. Skeleton review (phase 3) | done: the limbs posed to Code: Veronica's rest pose, the gun-grip hands, coat tails and skirts on the thighs, repeating textures cut into tiles |
 
 Headless: `RECVX_MODS=<out> RECVX_IMPORT=umbrella RECVX_IMPORT_ISO=<image>.rvz build/pc/recvx --save-dir <tmp>`
-(exit status 0 = no failures; about 8 seconds for all 16). `RECVX_IMPORT_MESHES=1` also writes per model
+(exit status 0 = no failures; the players only, about 8 seconds; `RECVX_IMPORT_WHAT=5` with the monsters and others, 62
+models in 13 seconds). `RECVX_IMPORT_MESHES=1` also writes per model
 `<KEY>.meshes.txt` (each object of the model: kept, left out and why; the textures by slot).
 
 ## Disc format
@@ -61,50 +63,86 @@ bones, positions, normals, colours, UVs, materials, shaders, objects, texture li
 Per model, in this order:
 
 1. **The meshes of the body**: every object with a draw call and a textured material. Left out: materials without
-   layers (environment shells), the hands' other poses (`hand_l1`, `hand_r2`: gun grip, half open; variant 0 stays),
-   the knife and Samurai Edge of the model's weapon set (by their visibility bone), and **weapons held in a hand**: an
-   object wholly on one wrist, past it and flat (under 0.6 high): Ada's and Carlos's pistols, HUNK's gun,
-   Billy's and Wesker's (2003) guns, Jill's stun gun. The colour map of a material: the first layer whose name is not an environment,
-   sphere, specular, light or indirect (`_ind`) map (a name rule, as the reference extractor).
+   layers (environment shells), the hands' half-open poses (`hand_l2`, `hand_r2`; the relaxed `hand_?0` and the gun grip
+   `hand_?1` are both kept, see "Hand poses"), the knife and Samurai Edge of the model's weapon set (by their visibility
+   bone), **weapons held in a hand**: an object wholly on one wrist, past it and flat (under 0.6 high): Ada's and Carlos's
+   pistols, HUNK's gun, Billy's and Wesker's (2003) guns, Jill's stun gun, and **loose parts far out of the body**
+   (objects or visibility bones named `Tongue`, `syo_`, `cube1`, `it_root` reaching 5 units past the joints' box: the
+   Licker's tongue stretched 2.5 m forward, Lisa Trevor's chains, Nemesis's rocket launcher; by name, since the Tyrant
+   ETY0's claw and Ivy's leaves reach as far and are the body). The colour map of a material: the first layer whose name
+   is not an environment, sphere, specular, light or indirect (`_ind`) map (a name rule, as the reference extractor).
 2. **Textures**: GX decoded to RGBA, resized to powers of two where needed (PKS1's 550x312 -> 512x256), then 8-bit
    indexed with a 32-bit CLUT (median cut to 256 colours, refined three times, alpha weighed double; the CLUT in CSM1
-   order and the PS2's alpha range): the `.cvxm`'s texture path unchanged. 6..15 textures, 0.24..0.66 MB per model.
+   order and the PS2's alpha range): the `.cvxm`'s texture path unchanged. 6..15 textures, 0.24..0.66 MB per model. What
+   the game reads must fit the model buffer (1.5 MB): above 1 MB of texels the largest texture is halved until they fit
+   (Nemesis: six of 512x512; the glTF keeps them whole).
 3. **The glTF** of the whole model (`<KEY>.glb`: every bone, the source weights; scale 0.1 to metres) and the textures
    as PNG.
-4. **The skeleton** (`reduce`): 20 roles (root, pelvis, spine, chest, neck, head, both arms clavicle / shoulder /
-   elbow / wrist, both legs hip / knee / ankle) + the jaw, from the family's bone names:
+4. **Repeating textures** (`cut_tiles`): the monsters repeat (and mirror) textures, one strip of a zombie's coat over u
+   -18..+9; the game clamps. A strip inside one tile per repeating axis moves into it (mirrored for an odd tile of a
+   mirroring axis); one over several is cut: each triangle clipped at the tile edges (Sutherland-Hodgman), each piece
+   in one tile, the new vertices' position, normal, weights and blink offset interpolated. Never clamped: no smeared
+   edge texels, no texture stretched across a seam. Clamped textures with UVs outside 0..1 (the zombies EZ06, EZ13,
+   EZ18, EZ20, EZ33, Nemesis's belt, the T-103's zipper) take Outbreak's round-9 rule in the writer: a strip mostly
+   outside moves by whole tiles into the tile holding most of it (EZ33's shirt at v 1..2), the overhang clamped as the Wii
+   shows it.
+5. **The skeleton** (`reduce`): 20 roles (root, pelvis, spine, chest, neck, head, both arms clavicle / shoulder /
+   elbow / wrist, both legs hip / knee / ankle) + the face (jaw, lids), from the family's bone names ("a|b": either; a
+   name also matches with `0` or `_root_<n>` after it):
 
-   | family | models | root | pelvis | spine..head | arms (right) | legs (right) |
-   |---|---|---|---|---|---|---|
-   | A `_00.._23` | Chris, Jill, Rebecca, Richard, Kenneth | N_ALL | _00 (+ hips _15) | _01.._04 | _05 _07 _08 _09 | _16 _17 _18 (+ toe _19) |
-   | B `_NN_Sxx` | Ada, Carlos, HUNK, Wesker | N_ALL | _00 (+ hips _17) | _01.._04 | _05_S _07_S _08_S _10_S | _18_S _19_S _20_S |
-   | C1 Japanese | Billy | trans | kosi | hara mune kubi atama | kata jowan kawan te | momo sune asikub |
+   | family | models | root | pelvis | spine..head | arms (right) | legs (right) | face |
+   |---|---|---|---|---|---|---|---|
+   | A `_00.._23` | Chris, Jill, Rebecca, Richard, Kenneth; zombies, Lisa, Ivy | N_ALL | _00 (+ hips _15) | _01.._04 | _05 _07 _08 _09 | _16 _17 _18 (+ toe _19) | jaw _24 (on the head) |
+   | B `_NN_Sxx` | Ada, Carlos, HUNK, Wesker | N_ALL | _00 (+ hips _17) | _01.._04 | _05_S _07_S _08_S _10_S | _18_S _19_S _20_S | |
+   | H numbered | Hunter | N_ALL | _00 (+ hips _21) | _01.._04 | _07 _09 _10 _11 | _22 _23 _24 | jaw _05 |
+   | C1 Japanese | Billy; Tyrant ETY0 | trans / N_ALL | kosi | hara/kara mune kubi atama | kata jowan/jyowan kawan/hiji te | momo sune/hiza asikub/asi | jaw ago, lids mabu_l / mabu_r |
+   | C1E | Eliminator | trans | hara | koshi mune kubi kao | kata jouwan kawan tekubi | momo sune asikubi | jaw ago |
+   | C2 `L_` / `R_` | Licker, Nemesis, T-103 ETY5..7, office worker | locator2 | koshi | hara mune kubi kao | R_sako R_kata R_hiji R_te | R_momo R_hiza R_ashi | jaw ago / kuchi |
 
+   A family is taken only if its bones hang from each other as the roles do (the forearm from the upper arm, the arm
+   from the chest, the leg from the pelvis, the head from the neck): the Hunter's `_05` is its jaw, not a clavicle,
+   so family A does not fit it, and the Eliminator's legs hang from `hara`. A face bone must hang from the head
+   (the players' `_24` is a knee helper or Jill's chest: no jaw).
    Every other bone's weight goes to its nearest kept ancestor (toes to the ankle, fingers to the wrist, the hips'
-   pivot, coat tails and packs to the pelvis, Jill's skirt flaps and shoulder pads to the thigh / clavicle they hang
-   from, family B's forearm twist `_09_S15` to the elbow), except **driven bones**, split by how far they turn: an
-   `.exp` `a b r radv` bone by 1/r to b's role and the rest to its parent's (the upper-arm twists `_06`/`_11`: half),
-   family B's `_NN_D<a>_<b>_<pct>` bones by pct between bones a and b, Billy's `kenko` half to the clavicle and half
-   to the shoulder. Weights are summed per role (never duplicated), the 4 largest kept, normalised. Right and left by
-   x (the character's right at -x). Family B's clavicles start 0.11 from the chest's middle: moved to 0.2 (the rig
-   takes a sideways child of the chest for an arm only from 0.15). Scale 1:1, turned 180 degrees about y (the
-   writer, as Outbreak's).
-5. **The jaw** (`make_jaw`; the players have none): on the face's meshes (a texture named `face` or `lip`, or a mesh
+   pivot, packs to the pelvis, Jill's skirt flaps and shoulder pads to the thigh / clavicle they hang from, family B's
+   forearm twist `_09_S15` to the elbow); a bone hung from the root beside the body (the Licker's tongue chain) to the
+   nearest joint. Except **driven bones**, split by how far they turn: an `.exp` `a b r radv` bone by 1/r to b's role
+   and the rest to its parent's (the upper-arm twists `_06`/`_11`: half), family B's `_NN_D<a>_<b>_<pct>` bones by pct
+   between bones a and b, C1's `kenko` half to the clavicle and half to the shoulder. **Coat tails and skirts** (bones
+   below the pelvis that are not the legs: Wesker's 12 coat tails in PWS2, the office worker's skirt): a vertex's
+   share on them goes to the thigh on its side as far as it hangs down (none at the hips, 0.6 from the knees down,
+   between the legs half on each; Outbreak's `flaps_to_thighs`, softened). Weights are summed per role (never
+   duplicated), the 4 largest kept, normalised. Right and left by x (the character's right at -x). Family B's
+   clavicles start 0.11 from the chest's middle: moved to 0.2 (the rig takes a sideways child of the chest for an arm
+   only from 0.15). Scale 1:1, turned 180 degrees about y (the writer, as Outbreak's).
+6. **The rest pose** (`repose`): an imported model takes the player's world rotations unchanged (`actor_glue.c
+   retarget`: it is skinned to its own rest pose), so a limb that lies otherwise than the game's at rest lies otherwise
+   in every pose. UC's limbs are straight (arms level, legs plumb); Code: Veronica's player skeleton (Claire's offsets,
+   which also drive the hidden copy that moves a man) has its upper arms 4 degrees down, its thighs 4 degrees in and 5
+   back, its shins 6 back. Measured in game on the pose dumps (`RECVX_IMPORT_POSE`, Chris and Jill): every limb 4..6.5
+   degrees off the player's, the feet 0.5 wider apart and 0.8 ahead. So the mesh is posed: upper arm, forearm and hand,
+   thigh and shin turned onto the game's bone directions (the shortest turn: no twist), the feet moved along without
+   turning (flat as before), by the vertices' weights (linear blend). After: every limb within 0.1 degrees, the ankles
+   within 0.07. The spine keeps its own curve (the mesh is upright in both; only the joints' places differ). Monsters
+   whose arms are not level at rest come out in the same pose.
+7. **The jaw** (`make_jaw`; the players have none): on the face's meshes (a texture named `face` or `lip`, or a mesh
    of the blink), the head's share of the vertices below the mouth's line (a third of the way from the chin up to the
    eyes: the eyes from the blink morph) and in front of the head's pivot moves to a new node under the head, at 0.75 of
    that way, the head bone's depth: chin and lower lip, softly at the edges. The lips are closed meshes (no mouth
    inside: Rebecca's teeth show a little): they stretch. So the jaw turns 0.6 of the game's angle (`.cvxm` header
    `jaw gain`): Talking Mouths / the double's lip sync and the player's voice as for Outbreak. PKS1 (no face animation)
-   and PHK1 (a mask) get none.
-6. **Welding** (`imp_weld`): the display lists give a vertex per triangle corner (12000..24000); vertices of the
+   and PHK1 (a mask) get none. **A jaw bone of the model's own** (the zombies' `_24`, the Hunter's `_05`, `ago` of the
+   Licker, Nemesis, the Tyrants, the Eliminator; the office worker's mouth `kuchi`) becomes the jaw with what hangs from
+   it, turned by half the game's angle (gain 0.5: the Licker gaped through every line at the full angle). **Lid bones** (the Tyrant ETY0's `mabu_l` / `mabu_r`) become the lids
+   (`IMP_FACE_LID_L` / `_R`): they slide down by 2.5 times the height of what is on them (a thin flap; at most 0.29).
+8. **Welding** (`imp_weld`): the display lists give a vertex per triangle corner (12000..24000); vertices of the
    same position, normal, weights and blink offset are merged, the UVs move into the strips (CsUvh has a UV per strip
    index): 5100..11200 vertices.
-7. **The fit** (`uc_fit`, `fits[]`): the arms moved in by 0.8 of the difference to Claire's width-to-height
+9. **The fit** (`uc_fit`, `fits[]`): the arms moved in by 0.8 of the difference to Claire's width-to-height
    proportion (Chris: 0.15 units), not lowered (UC's shoulders sit at the game's height: Chris 0.52 below the neck,
    CVX's Chris 0.56).
-8. **The `.cvxm`** (`imp_write_cvxm`, version 5): **UVs**: a strip on a clamped texture keeps its UVs (the game
-   clamps too); on a repeating one it moves by whole tiles (the round-9 rule: into the tile holding most of it).
-   **See-through** strips (hair, lashes: texels under 255 alpha) are drawn last, blended. **The blink** as a morph
+10. **The `.cvxm`** (`imp_write_cvxm`, version 5, 6 with hand poses): **UVs**: every strip in one tile (`cut_tiles`, or
+   moved by whole tiles into the one holding most of it: the round-9 rule). **See-through** strips (hair, lashes: texels under 255 alpha) are drawn last, blended. **The blink** as a morph
    block: per moving vertex its offset with the eyes closed (56..271 vertices).
 
 ### `.cvxm` version 5 and the vertex limit
@@ -120,15 +158,37 @@ Per model, in this order:
   push the image's bss past 0x40000000 (the address window). The game's own models stay below 8192.
 * Memory: what the game reads is 0.55..0.9 MB a model (`KEEP_SIZE` 1.5 MB; the cast's 3 MB fit three).
 
+### Hand poses (`.cvxm` version 6)
+
+UC's hands come in three poses, each a mesh of its own shown by a visibility bone: `hand_r0` / `hand_l0` relaxed,
+`hand_?1` the gun grip, `hand_?2` half open. The relaxed and the gun-grip hands are both kept; header 56 points to a byte
+per vertex (`IMP_HAND_R_OPEN`, `_R_GRIP`, `_L_OPEN`, `_L_GRIP`, 0 the rest; `imp_weld` keeps the poses apart at the wrist's
+seam). A side with only one of them (Kenneth's hands have no visibility bones) gets no poses. `actor_glue.c`: the right
+hand grips while the player (or the partner) holds a weapon (`wpnr_no` > 0: the gun in the hand at all times, aimed or
+not), the left one too while the model's wrists are under 2.5 apart (a long gun's fore-end, a two-handed aim); the
+cutscene double and the cast keep their hands open. The pose not shown is shrunk to its wrist in `imp_skin`.
+`RECVX_IMPORT_GRIP=0/1/3` holds them (test aid). Files with poses are version 6 (older builds refuse them: both hands
+would show); files without them stay version 5, Outbreak's byte for byte.
+
 ## The source in the menus
 
-`import_sources[]` "umbrella" (`IMPORT_UMBRELLA`, at the end: the hide bits): `offered` = playable characters only,
+`import_sources[]` "umbrella" (`IMPORT_UMBRELLA`, at the end: the hide bits): `offered` = playable characters and the
+second group, here "Monsters and Others" (`IMPORT_GROUP_NPCS`; `uc_group`: `P*` players, `E*`/`O*` the others; the IMPORT
+screen's row and its help say so for this source, heading "Umbrella Chronicles Monsters and Others"),
 `ext` = `rvz` (the file dialogs' filter, F9 and the IMPORT screen's), its group headings ("Umbrella Chronicles
-Characters"). IMPORT > CHARACTERS lists it in the new and the legacy screen (Playable Characters, Disc Image, START
-IMPORT, DELETE, Show in Model Lists); F9 has its section. Names: Chris Redfield (S.T.A.R.S. / Umbrella's End), Jill
+Characters"). IMPORT > CHARACTERS lists it in the new and the legacy screen (Playable Characters, Monsters and Others, Disc Image, START
+IMPORT, DELETE, Show in Model Lists); F9 has its section ("Other Characters"). Names: Chris Redfield (S.T.A.R.S. / Umbrella's End), Jill
 Valentine (S.T.A.R.S. / Raccoon City / Umbrella's End), Rebecca Chambers, Richard Aiken, Kenneth J. Sullivan, Billy
 Coen, Carlos Oliveira, Ada Wong (Costume 1 / 2), HUNK, Albert Wesker (S.T.A.R.S. / Umbrella's End / S.T.A.R.S.,
-Wounded); women move with Claire's motions.
+Wounded); women move with Claire's motions. The others: Zombie (1..35, the file order), Hunter, Licker, Nemesis, Tyrant
+(T-002 / T-103, 2, 3), Lisa Trevor, Eliminator, Ivy, Office Worker; Lisa and the office worker move with Claire's
+motions, the others with a man's.
+
+How they are used: as every import, "Character Model" (the player's look, the partner's), the cutscene cast's "Any
+Model" / "Custom" pools with imports (`cast_pool`), and so the cutscene monsters while "Cutscene Monsters" is "Like
+Story Characters" (`cast_model`: with "Enemy Models" the same as the cast, the creatures pick from the cast's pool). The
+enemies' own list (cutscene monsters "Any Monster" / "Custom") takes no imports at all (`cast.c imps`), as for
+Outbreak. "Show in Model Lists" hides all of them with the players.
 
 ## Verification
 
@@ -144,15 +204,30 @@ Wounded); women move with Claire's motions.
   files shown by both builds: the same frames (Kevin, Alyssa, Cindy).
 * `layout_check.sh` (legacy menu) main vs this: 156 vanilla and 311 enhanced frames identical. ctest.
 
-## Next steps (phase 3)
+Phase 3 (the skeleton review, the monsters; sheets outside the repository):
 
-1. **Monsters and NPCs**: family C2 (`L_`/`R_` Japanese names: Licker, Nemesis ENS1, T-103, Talos, OSIT1) needs its
-   role table (locator2, koshi, hara, mune, kubi, kao, sako / kata / hiji / te, momo / hiza / ashi); the zombies and
-   Hunter are family A. Their real jaw bones (`_24`, `ago`) map straight to the jaw; OSIT1 has lids and brows. Many
-   monsters repeat their textures with UVs from -18 to +9 in one strip and mirror: a strip spanning more than one tile
-   needs the texture tiled into a larger one (or the strip cut at the tile edges); mirror is taken as repeat now.
-   Non-humanoids (dogs, crows, plants) export glTF only.
-2. **A skeleton review**: rest pose against CVX's (UC's arms are level, CVX's motions start from the same T-pose); the
-   hands' gun-grip variant (`hand_r1`) could replace the open right hand while aiming; the eyeball bones (Ada, Wesker,
-   Carlos, Richard) could turn the eyes; Wesker's coat tails and Jill's skirt follow the pelvis / thighs rigidly.
-3. The colour-map choice is a name rule; the TEV stages would decide it for sure.
+* The limbs measured on the pose dumps (`RECVX_IMPORT_POSE`, idle, walk, run, turn, aim, fire): before 3.9..6.5 degrees
+  off the player's at every pose (the feet 0.5 wider apart, 0.8 ahead), after 0.0..0.1 (the ankles within 0.07); the
+  left arm of a two-handed aim differs by its IK, as before. All 62 models load with the player's motions (the rig maps
+  every role).
+* `check.py` against the reference for all 62: the body meshes as the reference's (the extra gun-grip hands, the
+  tongue, Lisa's chains and Nemesis's launcher left out on purpose), skin weights per position 100% the same, textures
+  PSNR 35..52 dB (EZ00's 212x256 texture resized to 256: 25.6 against the unresized reference).
+* In game, before (main's build and import) and after, each of the 16 players: gameplay at three orbits (idle, walk,
+  run, turn on the stairs, aim, fire), the handgun, shotgun, sniper rifle (normal aim), bow gun and rocket launcher held
+  and fired, a zombie's bite (grab, struggle) and the death; the coat, skirt and pack side by side in the walk.
+  The monsters and others (15 of them): the same, and face close-ups (jaw at 14 degrees, lids). Cutscenes: Claire's
+  double in the opening's talk as Chris, Jill, a zombie, the Licker, the Tyrant ETY0 and the office worker (mouths
+  with the lines), Rodrigo as a random import (`RECVX_CAST=1:imports`: Lisa Trevor, Nemesis).
+* Outbreak: its players and NPCs (306 models) imported by main's build and this one: all 1032 files identical; main's
+  files shown by both builds: the same game frames (Kevin, Alyssa, Cindy, HN13).
+
+## Next steps
+
+1. Eye direction: the eyeball bones of Ada, Wesker, Carlos, Richard and the office worker (`L_me` / `R_me`) could turn
+   the eyes towards the camera or what the record looks at.
+2. The Tyrant ETY0's lids slide down (UC turns its flaps): they close only partly.
+3. Toes: merged into the ankles (the game's skeleton has toe nodes: walking would roll the foot).
+4. The colour-map choice is a name rule; the TEV stages would decide it for sure.
+5. The monsters move with a person's motions; the enemies' own list (cutscene monsters "Any Monster" / "Custom") takes
+   no imports. Non-humanoids (dogs, crows, plants, spiders) export glTF only.
