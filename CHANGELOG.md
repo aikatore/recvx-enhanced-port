@@ -36,6 +36,9 @@
 
 ### Fixes
 
+- **Co-op**: your partner moves smoothly over laggy connections, less data is sent while you are in different rooms,
+  the switch to the relay server is much faster when the direct connection drops, and Windows and Linux players can
+  play together without the Tyrant breaking.
 - Characters swapped in cutscenes now put their hands where the original's are and blink and close their eyes with
   it.
 - The sniper rifle aimed normally no longer points up in the over-the-shoulder camera when you play as another model.
