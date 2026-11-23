@@ -3,7 +3,8 @@
    the Russian one the Cyrillic letters, the European one its accents, the Arabic one the letters' joined forms, the
    Korean one the Hangul syllables its fan translation uses).
    Lists the texts and letters otherwise. Arabic (in display order, lang_shape): the printf placeholders are filled
-   left to right on screen, so they must come out in the English order. */
+   left to right on screen, so they must come out in the English order; the other languages' formats (an English text
+   with a placeholder) too, as printf takes them in order. */
 #include "../src/host/lang.h"
 #include <stdio.h>
 #include <string.h>
@@ -49,9 +50,10 @@ int main(void)
             if (!t || !*t) continue;
             lang_missing(l, t, miss, sizeof(miss));
             if (miss[0]) { printf("%s: [%s] %s\n    (%s)\n", codes[l], miss, t, rows[i].en); bad++; }
-            if (l != LANG_AR) continue;
-            conversions(rows[i].en, a, sizeof(a));
-            conversions(lang_shape(t, sh, sizeof(sh)), b, sizeof(b));
+            conversions(rows[i].en, a, sizeof(a));   /* (printf takes them in order: every language's for a format;
+                                                        Arabic's for every text, as before) */
+            if (l != LANG_AR && !a[0]) continue;
+            conversions(l == LANG_AR ? lang_shape(t, sh, sizeof(sh)) : t, b, sizeof(b));
             if (strcmp(a, b)) { printf("%s: placeholders %s, the English %s: %s\n    (%s)\n", codes[l], b, a, t, rows[i].en); bad++; }
         }
     if (bad) printf("%d translations use letters their game font lacks or other placeholders: reword them (docs/LANGUAGES.md \"Letters\")\n", bad);

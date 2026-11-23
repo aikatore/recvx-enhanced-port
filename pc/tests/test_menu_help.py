@@ -3,6 +3,7 @@
 (settings.c .help) or the layout's (.help on its ML_SET / ML_SHORTCUT entry). Retired and merged rows are not shown.
 A row without one fails. Reads the sources only.
    test_menu_help.py <pc dir>"""
+import os
 import re
 import sys
 
@@ -29,7 +30,7 @@ def missing(table, layout):
 
 
 def main():
-    pc = sys.argv[1]
+    pc = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # (default: this test's pc dir)
     table = open(pc + '/src/host/settings.c', encoding='utf-8').read()
     layout = open(pc + '/src/host/menu_layout.c', encoding='utf-8').read()
     bad = missing(table, layout)

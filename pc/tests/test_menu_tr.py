@@ -2,9 +2,11 @@
 """ctest "menu_tr": every text the new menu (docs/MENUS.md) shows is translated into every language of
 src/host/tr_table.inc. The texts: menu_layout.c's category names, headings, labels, value names and help; the string
 literals the new menu's screens pass to tr(), ui_hint(), the text functions and the dialogs (ui_rows.c, setup_glue.c,
-pause_glue.c, text_grid.c, import_menu.c, lobby_glue.c: the MULTIPLAYER screens and the lobby, give_list.c; menu_glue.c: the Redesigned overlay). A text without a row, or
+pause_glue.c, text_grid.c, import_menu.c, lobby_glue.c: the MULTIPLAYER screens and the lobby, give_list.c; menu_glue.c: the Redesigned overlay), with
+their static string arrays an element of which goes to tr(), and settings.c's value lists. A text without a row, or
 with an empty column, fails ("" = English shown; where the word is the same in a language, write it out). A button bar's
-word is looked up as "word (button hint)" first (lang.h tr_ctx). Reads the sources.
+word is looked up as "word (button hint)" first (lang.h tr_ctx). A translation that is another row's English must translate to itself (the texts are translated
+twice: the callers' tr() and the text functions'). Reads the sources.
    test_menu_tr.py <pc dir>"""
 import re
 import sys
@@ -12,7 +14,7 @@ import sys
 LIT = r'"((?:[^"\\\n]|\\.)*)"'
 LANGS = ['fr', 'de', 'es', 'ja', 'ru', 'tr', 'pt-BR', 'ar', 'ko', 'it']
 # not words: names, keys, codes the screens draw as they are
-KEEP = {'Claire', 'Chris', 'Steve', 'Wesker', 'BioRand', 'BIORAND', 'Esc', 'Del', 'Enter', 'Return', 'Backspace', 'Ctrl F',
+KEEP = {'Claire', 'Chris', 'Steve', 'Wesker', 'BioRand', 'BIORAND', 'FXAA', 'SMAA', 'Esc', 'Del', 'Enter', 'Return', 'Backspace', 'Ctrl F',
         'Ctrl+V', 'Ctrl\\tV', 'button hint', 'XXXX-XXXX', 'OK', 'Resident Evil Code: Veronica X', 'COPY JOIN ADDRESS: both'}
 SCREENS = ['glue/ui_rows.c', 'glue/setup_glue.c', 'glue/pause_glue.c', 'glue/text_grid.c', 'glue/import_menu.c', 'glue/lobby_glue.c', 'glue/give_list.c', 'glue/whatsnew_menu.c', 'glue/enemymdl_list.c',
            'glue/menu_glue.c']
@@ -59,6 +61,19 @@ def call_texts(src):
     return out
 
 
+def array_texts(src, every=False):
+    """the literals of static string arrays an element of which goes to tr() (tr(st[story])); every: also all the
+    (const char* const[]){ ... } value lists (settings.c's, which the new menu's rows translate)"""
+    out = set()
+    for m in re.finditer(r'static const char\* const (\w+)\[\w*\] = \{([^}]*)\}', src):
+        if re.search(r'\btr\(\s*' + m.group(1) + r'\[', src):
+            out.update(re.findall(LIT, m.group(2)))
+    if every:
+        for m in re.finditer(r'\(const char\* const\[\]\)\{([^}]*)\}', src):
+            out.update(re.findall(LIT, m.group(1)))
+    return out
+
+
 def table(text):
     rows = {}
     for line in text.split('\n'):
@@ -83,17 +98,36 @@ def missing(texts, rows):
     return bad
 
 
+def twice(rows):
+    """the text functions translate what they draw, and many callers pass tr()'s result: a translation that is itself
+    another row's English must translate to itself (or not at all) in that language, else it is shown as that row's"""
+    bad = []
+    for en, r in rows.items():
+        for i, t in enumerate(r):
+            again = rows.get(t)
+            if t and t != en and again and again[i] not in ('', t):
+                bad.append('"%s" in %s is "%s", which tr() turns into "%s"' % (en, LANGS[i], t, again[i]))
+    return bad
+
+
 def main():
     pc = sys.argv[1]
     rd = lambda f: open(pc + '/' + f, encoding='utf-8').read()
     texts = layout_texts(joined(rd('src/host/menu_layout.c')))
     for f in SCREENS:
-        texts |= call_texts(joined(rd(f)))
+        texts |= call_texts(joined(rd(f))) | array_texts(joined(rd(f)))
+    texts |= array_texts(joined(rd('src/host/settings.c')), True)
     rows = table(rd('src/host/tr_table.inc'))
-    bad = missing(texts, rows)
+    bad = missing(texts, rows) + twice(rows)
     # self-test: a text without a row must be caught
     if not missing({'A text no table has'}, rows):
         print('menu_tr self-test: a missing text passed')
+        return 1
+    if not twice({'A': ['B'] + [''] * 9, 'B': ['C'] + [''] * 9}):
+        print('menu_tr self-test: a translation translated again passed')
+        return 1
+    if array_texts('static const char* const zz[] = { "", "Zzz" }; tr(zz[k]);') != {'', 'Zzz'}:
+        print('menu_tr self-test: a static array given to tr() was not read')
         return 1
     if bad:
         print('new-menu texts not translated in src/host/tr_table.inc (%d):' % len(bad))
