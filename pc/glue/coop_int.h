@@ -80,10 +80,10 @@ extern NJS_POINT3 PlayerPos;            /* sdfunc.c: where CallPlayerVoice plays
    of the type's work (its Init's bhEne_CallocWork); keep: byte ranges [from, to) of it that stay the receiver's own - its
    pointers (other enemies, its children, eff[] entries, tables) and what belongs to its own game's player, which its own
    Init and steps set in this room; atr: words holding an ATR_WORK* of the room's collision (the wall or floor it stands
-   on), which go as their table and index (atr_enc) and become the receiver's same record. p3: Shared Enemy Control
+   on), which go as their table and index (atr_enc) and become the receiver's same record. shared: Shared Enemy Control
    hands it over between attacks (own_movable); the others change hands only at the hand-in. Before (protocol 47) every
    hand-over copied the zombie's 0xB0 bytes less a 0x24-byte pointer head, which only the zombie has. */
-typedef struct { unsigned char id, p3; unsigned short exp0, keep[6][2], atr[3]; unsigned int rmf; } OwnType;   /* p3 2: a boss (rmf below) */
+typedef struct { unsigned char id, shared; unsigned short exp0, keep[6][2], atr[3]; unsigned int rmf; } OwnType;   /* shared 2: a boss (rmf below) */
 void pc_enemy_unhold(BH_PWORK* ep);
 extern BH_SCEWORK bhEtask[16];
 extern BH_SCEWORK* bhCetask;            /* event.c: the event task running now */
@@ -188,9 +188,9 @@ extern int peer_opts;
 extern unsigned char own_grab[PC_ENE_SLOTS];
 extern unsigned int own_ms[PC_ENE_SLOTS];
 extern unsigned int hit_t[PC_ENE_SLOTS][2];
-extern unsigned int p3_n[8];
-int p3_env(void);
-int p3_on(void);
+extern unsigned int own_n[8];
+int shared_env(void);
+int shared_on(void);
 int we_run(int i);
 void own_set(int i, int m);
 extern unsigned char giving[PC_ENE_SLOTS];
@@ -215,7 +215,7 @@ int set_left(const BH_PWORK* ep, const MN_WORK* set);
 int mtn_ok(const BH_PWORK* ep, const MN_WORK* set, unsigned int mtn, int frm);
 int finite3(float x, float y, float z);
 const OwnType* own_type(const BH_PWORK* ep);
-int own_p3(const BH_PWORK* ep);
+int own_shared(const BH_PWORK* ep);
 int own_child(const BH_PWORK* ep);
 int child_here(int i, int c);
 int ene_len(const BH_PWORK* ep, int c);

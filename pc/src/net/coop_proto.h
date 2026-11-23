@@ -91,7 +91,7 @@ extern "C" {
                                                6 "it runs here now"), make-before-break hand-overs, hits passed on to the runner
                                                (COOP_HIT_FWD), BUSY_PAUSED, snapshots sent also with the partner elsewhere, events
                                                ahead of a gap kept (no head-of-line blocking), EV_ESTATE packed (coop_zpack);
-                                           57: bosses go with their state when their runner leaves through a door (own_types p3 2, their
+                                           57: bosses go with their state when their runner leaves through a door (own_types shared 2, their
                                                rm_flg bits after their work), a Black Widow with its legs off (EV_ESTATE: leg records
                                                after the body), EV_FX x1/ao (an effect's exp1 as a word of its owner's work: Alexia 1's
                                                burning blood) and FX_POOL (a blood pool as its call);
@@ -133,7 +133,7 @@ enum { OPT_INDIVIDUAL = 1, OPT_TRADE_FREEZE = 2,   /* Pose.opts: the host's sess
 enum { OPT2_EXTRA_OBJECTS = 1,          /* Pose.opts2 (protocol 33): extra item boxes and blue herb planters (pc/glue/extras_glue.c) */
        OPT2_HEADSHOTS = 2,              /* (protocol 41) third person "Headshots & Piercing": rifle head damage, head bursts, piercing (tps_glue.c) */
        OPT2_OWNERSHIP = 4,              /* (protocol 46) "Shared Enemy Control", engaged-player enemy ownership: common enemies
-                                           run in the game of the player they are engaged with (coop_glue.c "Phase 3") */
+                                           run in the game of the player they are engaged with (coop_own.c "Shared Enemy Control") */
        OPT2_SHOVE = 8,                  /* (protocol 59) "Break Free Pushes Enemies" in effect (shove_glue.c) */
        OPT2_ALL = 15 };
 enum { BUSY_NONE, BUSY_EVENT, BUSY_MENU, BUSY_BOX, BUSY_TRADE,

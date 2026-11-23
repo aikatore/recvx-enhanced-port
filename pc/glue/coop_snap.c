@@ -75,7 +75,7 @@ void owners_sync(void)
     int i;
     /* a zombie's helper parts (ids 31..38: its link, head, arms, legs, cap) while linked go with their body: its runner
        runs them (their hit capsules follow its body there; a limb shot off comes off in the game that runs the body).
-       Before (phase 3) they stayed with the host, following its puppet of a body the guest ran. A part shot off
+       Before (protocol 46..55) they stayed with the host, following its puppet of a body the guest ran. A part shot off
        (unlinked) stays with the game that ran it then. */
     /* (protocol 56) every linked part goes with its body (a Black Widow's legs, a Hunter's helper): the room's runner leaves
        and hands the bodies over, their parts stood still in the other game without a runner */
@@ -177,7 +177,7 @@ int event_driven(const BH_PWORK* ep)
    the player - stuck in the grab motion, then dragged along by the puppet's snapshots.
    Helper parts (ids 31..38: a zombie's limbs, Monster Steve's arms) share their parent's set but
    hold nothing: counted as holders, they kept every orphaned zombie grab "held".
-   A zombie's hold bit counts only while its steps run here: a puppet's is the stale one of its last step here (Phase 3:
+   A zombie's hold bit counts only while its steps run here: a puppet's is the stale one of its last step here (Shared Enemy Control:
    a zombie that ran here and went to the partner's game, e.g. with its grab of the partner). Counted, it ran here too
    (both games) while another zombie of the set held our player. */
 int grips_us(BH_PWORK* ep)
@@ -277,7 +277,7 @@ static int partner_held(void)
     if (ghost.slot >= 0 && (!(ene[ghost.slot].flg & 0x1) || ghost.key != enemy_room_gen)) ghost.slot = -1;   /* gone with its room */
     if (ghost.slot >= 0) return 1;
     for (k = 0; k < PC_ENE_SLOTS; k++)
-        if (own_grab[k] && !we_run(k)) return 1;   /* (Phase 3: an enemy it runs between attacks holds nobody) */
+        if (own_grab[k] && !we_run(k)) return 1;   /* (Shared Enemy Control: an enemy it runs between attacks holds nobody) */
     return 0;
 }
 /* the frame step of bhSetMotion (Motion.c) for a copy that has no model of its own to pose */
@@ -397,7 +397,7 @@ int coop_enemy_begin(BH_PWORK* ep)
     step_kind = r != 0;
     if (!r && i >= 0 && i < PC_ENE_SLOTS && !echo_delay) {   /* its step runs here */
         aim_for_step(ep, i);
-        /* our own shot on an enemy we run (not the partner's EV_ENE_HIT of this frame): it takes it now (Phase 3: the
+        /* our own shot on an enemy we run (not the partner's EV_ENE_HIT of this frame): it takes it now (Shared Enemy Control: the
            shooter's game reacts at once; the logs measure it) */
         if (coop_on && have_peer && ep->mode0 && !(ep->flg & 0x80) && hit_t[i][1] != frame_no + 1 && has_hit(ep)) {
             hit_t[i][0] = frame_no + 1;
@@ -487,7 +487,7 @@ static int enemy_begin(BH_PWORK* ep)
             if (held || cool_p || (int)(hit_until - frame_no) > 0) ply2.flg |= 4;
             if (ghost.slot == i) { ghost.was = ghost.pw; plp = &ghost.pw; }   /* its hold of the partner goes on */
             /* the zombie picks its and the player's grab motions by sys->ply_id: the partner's */
-            if (own_p3(ep) && rx.mfile >= 0) { swap_pid = sys->ply_id; sys->ply_id = rx.mfile & 3; }   /* (Cerberus, Bandersnatch,
+            if (own_shared(ep) && rx.mfile >= 0) { swap_pid = sys->ply_id; sys->ply_id = rx.mfile & 3; }   /* (Cerberus, Bandersnatch,
                                                   anatomist: the victim's motions and place by it; the Hunter's beheading by its hp) */
         } else if ((examining || coop_atk_cooling(&atk[i][0], frame_no)) && !(plp->flg & 4)) {
             plp->flg |= 4;   /* its loop guard on our player, or our examine: busy for this step only */
@@ -595,7 +595,7 @@ void coop_enemy_end(BH_PWORK* ep)
         memcpy(p2.plhdw, exp_save + 128, 128);
         plp = swap_plp;
         swap_plp = NULL;
-    } else if (h_mode0 >= 0) {   /* its step on our player: a hit reaction or a grab it started (the host's, Phase 3 the guest's too) */
+    } else if (h_mode0 >= 0) {   /* its step on our player: a hit reaction or a grab it started (the host's, with Shared Enemy Control the guest's too) */
         if (h_flg4) plp->flg &= ~4;
         if ((plp->mode0 == 2 || plp->mode0 == 4) && h_mode0 != 2 && h_mode0 != 4 && h_mode0 != 6 && coop_atk_note(&atk[i][0], frame_no))
             host_log("coop: loop guard: enemy %d (id %d) started %d attacks on our player within %u frames: it leaves us alone for %u frames\n",

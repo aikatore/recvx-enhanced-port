@@ -3333,7 +3333,7 @@ static void ts_frame(void)
     binding_names(B_TRADE, g_trade.key, sizeof(g_trade.key));
     host_swap_frame();
     me = tx_in_game && local_visible() && plp->mode0 == 1 && plp->mnwP == plp->mnwPb && plp->hp >= 0;
-    { int i; for (i = 0; i < PC_ENE_SLOTS && me; i++) if (own_grab[i] && !we_run(i)) me = 0; }   /* the partner runs a grab of one of ours (Phase 3: either side) */
+    { int i; for (i = 0; i < PC_ENE_SLOTS && me; i++) if (own_grab[i] && !we_run(i)) me = 0; }   /* the partner runs a grab of one of ours (Shared Enemy Control: either side) */
     partner = have_rx && same_room() && (rx.flags & (PF_IN_GAME | PF_VISIBLE)) == (PF_IN_GAME | PF_VISIBLE) &&
               (rx.busy == BUSY_NONE || rx.busy == BUSY_PAUSED || rx.busy == BUSY_TRADE) && rx.mode0 == 1 && rx.mset == MSET_OWN;
     near = have_peer && have_rx && tx_in_game && trade_near();
@@ -4001,7 +4001,7 @@ static int apply_event(const Event* e)
             own_grab[i] = 0;
             return 1;
         }
-        if (!own_grab[i]) c = own_child(&ene[i]);   /* (Phase 3: one the partner ran between attacks, given up as it leaves) */
+        if (!own_grab[i]) c = own_child(&ene[i]);   /* (Shared Enemy Control: one the partner ran between attacks, given up as it leaves) */
         own_set(i, 1);
         own_grab[i] = 0;
         owned_child[i] = 255;
@@ -4040,7 +4040,7 @@ static int apply_event(const Event* e)
                 Event f = *e;
                 f.u.eh.flg |= COOP_HIT_FWD;
                 ev_room = e->stg * 256 + e->rom; queue_event(&f); ev_room = -1;
-                p3_n[7]++;
+                own_n[7]++;
             }
             return 1;
         }
@@ -4055,7 +4055,7 @@ static int apply_event(const Event* e)
             Event f = *e;
             f.u.eh.flg |= COOP_HIT_FWD;
             ev_room = run_room & 0xFFFF; queue_event(&f); ev_room = -1;   /* (in a door ours may be the next room's already) */
-            p3_n[7]++;
+            own_n[7]++;
             if (trace) fprintf(stderr, "coop: hit on enemy %d passed on to the partner's game, which runs it\n", i);
         } else host_log("coop: own: a hit on enemy %d came back from the partner, and we do not run it either: dropped\n", i);
         return 1;
@@ -4620,9 +4620,9 @@ static void receive(void)
                 for (k = 0; k < got; k++) {
                     int i = sn[k].idx;
                     coop_hist_put(&hist[i], p.seq, &sn[k]);
-                    if (own_ms[i] && !we_run(i)) {   /* Phase 3: the new runner's first snapshot of one we handed over */
+                    if (own_ms[i] && !we_run(i)) {   /* the new runner's first snapshot of one we handed over */
                         unsigned int ms = net_ms() - own_ms[i];
-                        p3_n[5] += ms; p3_n[6]++;
+                        own_n[5] += ms; own_n[6]++;
                         own_ms[i] = 0;
                         host_log("coop: p3: enemy %d: the partner's first snapshot %u ms after the hand-over\n", i, ms);
                     }
@@ -4922,13 +4922,13 @@ static void send_frame(void)
                  via_rdv(&peer) ? rdv_path() : "direct (address)", via_rdv(&peer) ? rdv_wire_extra() : COOP_DIRECT_OVER, peakd, peakb, fx_sent, fx_dropped);
         fx_sent = fx_dropped = 0;
         frames = dgrams = evn = snn = bytes = maxb = peakd = peakb = 0;
-        {   /* Phase 3: hand-overs, the glitch (until the new runner's first snapshot), what the enemy steps cost here */
+        {   /* hand-overs, the glitch (until the new runner's first snapshot), what the enemy steps cost here */
             int k, mine_n = 0;
             for (k = 0; sys && k < (int)sys->ewk_n && k < PC_ENE_SLOTS; k++) mine_n += (ene[k].flg & 0x81) == 0x1 && we_run(k);
             host_log("coop: p3 stats: on %d, we run %d enemies, handed over %u, taken %u, refused %u, given back leaving %u, taken back %u, "
                      "glitch avg %u ms (%u), windows %u: frames carried on %u, held %u, correction %.2f units, frames back %u, "
                      "enemy steps run here %u at %.1f us, puppets %u at %.1f us, cpu %ld ms\n",
-                     p3_on(), mine_n, p3_n[0], p3_n[1], p3_n[2], p3_n[3], p3_n[4], p3_n[6] ? p3_n[5] / p3_n[6] : 0, p3_n[6],
+                     shared_on(), mine_n, own_n[0], own_n[1], own_n[2], own_n[3], own_n[4], own_n[6] ? own_n[5] / own_n[6] : 0, own_n[6],
                      win_st[2], win_st[0], win_st[1], win_st[3] / 100.0, win_st[4],
                      step_cnt[0], step_cnt[0] ? step_ns[0] / 1000.0 / step_cnt[0] : 0.0, step_cnt[1], step_cnt[1] ? step_ns[1] / 1000.0 / step_cnt[1] : 0.0,
                      (long)(clock() / (CLOCKS_PER_SEC / 1000)));
@@ -5057,7 +5057,7 @@ void coop_frame(void)
                         (pc_cfg_no_ink_ribbon() ? OPT_NO_RIBBON : 0) | (g_coop.skip_sync ? OPT_SKIP_SYNC : 0) |
                         (g_coop.gameover_both ? OPT_GAMEOVER_BOTH : 0) | (g_coop.skip_detector ? OPT_SKIP_DETECTOR : 0) |
                         (g_coop.quick_start && !biorand_next() ? OPT_QUICK_START : 0) : 0;   /* BioRand: its own start inventory */
-    tx.opts2 = is_host ? (pc_cfg_extra_objects() ? OPT2_EXTRA_OBJECTS : 0) | (g_tps.headshots ? OPT2_HEADSHOTS : 0) | (p3_env() ? OPT2_OWNERSHIP : 0) |
+    tx.opts2 = is_host ? (pc_cfg_extra_objects() ? OPT2_EXTRA_OBJECTS : 0) | (g_tps.headshots ? OPT2_HEADSHOTS : 0) | (shared_env() ? OPT2_OWNERSHIP : 0) |
                          (shove_local() ? OPT2_SHOVE : 0) : 0;   /* (protocols 33, 41, 46, 59) */
     tx.regroup = regroups;
     tx.seq = frame_no;

@@ -1043,7 +1043,7 @@ partner's weapon's arms sound bank is loaded beside ours (programs `0x40 + n`).
   enemy an event of the leaver drives goes too in a door (the event ends there). Refused (EV_ENEOWN 0): the giver runs it on
   (2: the receiver runs it already); no answer in 10 s: the same. The replies are stamped with the enemy's room (a receiver
   in its door is in the next one already). Protocol 57: a boss (Gulp Worm, Alexia 1, Alfred, Monster Steve and his knights:
-  `own_types` p3 2, their works from their Inits, their pointers kept) goes with its state when its runner leaves through a
+  `own_types` shared 2, their works from their Inits, their pointers kept) goes with its state when its runner leaves through a
   door, in any state, with the bits of `sys->rm_flg` its steps set for the room's script (`rmf`: the Gulp Worm's and Alexia
   1's 0x1); before, it went without its state and the receiver ran it on from its puppet's modes with its own stale work (the
   Gulp Worm jumped 188 units where it moves 39). Alexia 2 (a work of 992 bytes with 50 heap pointers of her vertices, larger
