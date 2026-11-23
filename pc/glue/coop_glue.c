@@ -1713,6 +1713,17 @@ static void defer_run(int i)
         else defer[j++] = defer[k];
     defer_n = j;
 }
+/* a hand-over of slot i to us that does not happen (refused as stale, or the partner took it back): the hits kept for it go to
+   the partner's game, which runs it on. Before, they waited in defer[] until the slot became ours, if ever: lost */
+static void defer_fwd(int i)
+{
+    int k, j, n = 0;
+    for (k = j = 0; k < defer_n; k++)
+        if (defer[k].e.idx == i) { ev_room = run_room & 0xFFFF; queue_event(&defer[k].e); ev_room = -1; n++; }
+        else defer[j++] = defer[k];
+    defer_n = j;
+    if (n) host_log("coop: own: %d hit(s) kept for enemy %d passed on to the partner's game, which runs it\n", n, i);
+}
 
 /* slot i (and its child c) runs here now: no hand-over of it is under way any more, it shows, the hits kept for it apply */
 static void own_ours(int i, int c)
@@ -2195,9 +2206,21 @@ static int examining;                   /* host: this enemy step runs although o
 /* an event task works on this enemy (LoadWork): it runs here, as in a cutscene */
 extern BH_SCEWORK bhEtask[16];
 extern BH_SCEWORK* bhCetask;            /* event.c: the event task running now */
+/* test aid RECVX_COOP_SCENE="hostframe:slot:frames" (host): from that frame our game stops its enemies for `frames` frames as a
+   scene does (own_frame: they go to the partner's game after PAUSE_LEAVE), and in the frame it hands `slot` over the scene's
+   event takes that one (the take-back goes in the same datagram as the hand-over: pc/tools/coop_scene_check.sh) */
+static struct { unsigned int f, n; int slot, gave; } aid_scene = { 0, 0, -1, 0 };
+static int aid_scene_on(void)
+{
+    static int rd;
+    if (!rd++ && getenv("RECVX_COOP_SCENE") && sscanf(getenv("RECVX_COOP_SCENE"), "%u:%d:%u", &aid_scene.f, &aid_scene.slot, &aid_scene.n) == 3)
+        host_log("coop: test: a scene at frame %u for %u frames, its event drives enemy %d once we gave it\n", aid_scene.f, aid_scene.n, aid_scene.slot);
+    return is_host && aid_scene.slot >= 0 && frame_no >= aid_scene.f && frame_no < aid_scene.f + aid_scene.n;
+}
 static int event_driven(const BH_PWORK* ep)
 {
     int i;
+    if (aid_scene.gave && ep == &ene[aid_scene.slot] && aid_scene_on()) return 1;
     for (i = 0; i < 16; i++)
         if (bhEtask[i].status && bhEtask[i].work == ep) return 1;
     return 0;
@@ -2820,6 +2843,16 @@ static void own_apply(const Event* e)
         return;
     }
     if (e->u.gr.state == 2) {   /* taken back by the host (or a hand-over crossed one of the partner's): it runs it */
+        if (!we_run(i) && take_at[i]) {   /* its hand-over to us is void: the partner runs it on. Before, take_at stayed, we took it at
+                                             its frame and sent 6, which the partner ignored: both games ran it to the end of the room
+                                             load (a scene of the host's stops its enemies, gives them away leaving, then its event
+                                             drives one of them; pc/tools/coop_scene_check.sh) */
+            int k, s2[2] = { i, c };
+            for (k = 0; k < 2; k++)
+                if (s2[k] >= 0 && s2[k] < PC_ENE_SLOTS) { take_at[s2[k]] = 0; take_how[s2[k]] = 0; defer_fwd(s2[k]); }
+            host_log("coop: own: enemy %d: its hand-over to us is void, the partner's game runs it\n", i);
+            return;
+        }
         if (!we_run(i) || (is_host && !giving[i])) return;   /* (the host keeps one both took) */
         own_set(i, 0); own_set(c, 0); own_grab[i] = 0;
         giving[i] = 0; if (c < PC_ENE_SLOTS) giving[c] = 0;
@@ -2894,7 +2927,8 @@ static void own_frame(void)
             ev_room = run_room & 0xFFFF;
             own_msg(i, c, 0, frame_no);
             ev_room = -1;
-            take_at[i] = 0; if (c < PC_ENE_SLOTS) take_at[c] = 0;
+            take_at[i] = 0; take_how[i] = 0; defer_fwd(i);
+            if (c < PC_ENE_SLOTS) { take_at[c] = 0; take_how[c] = 0; defer_fwd(c); }
             p3_n[2]++;
             continue;
         }
@@ -2938,7 +2972,7 @@ static void own_frame(void)
        game. Our enemies are the room's still until our next room loads (run_room), so the hand-over may take a few frames */
     runs = pres && (rx.flags & PF_IN_GAME) && rx.busy != BUSY_PAUSED;
     door = run_room != me || (sys->cb_flg & 0x1);
-    paused = !tx_in_game || door || !((sys->sp_flg & 0x2) || coop_enemies_run());
+    paused = !tx_in_game || door || !((sys->sp_flg & 0x2) || coop_enemies_run()) || aid_scene_on();
     /* (a scene or message that stops our enemies counts after PAUSE_LEAVE frames: a short one hands nothing over and back) */
     paused_n = paused ? paused_n + 1 : 0;
     leave = runs && (door || !tx_in_game || paused_n >= PAUSE_LEAVE) && !frozen;
@@ -2977,6 +3011,7 @@ static void own_frame(void)
             ev_room = run_room & 0xFFFF;   /* (in a door ours may be the next room's already) */
             own_give(i, 1, st, door ? "we leave the room" : "our game stops its enemies");
             ev_room = -1;
+            if (i == aid_scene.slot && aid_scene_on()) { aid_scene.gave = 1; seen[i] = 1; p3_takeback(i, 0, "an event of ours drives it"); }   /* (test aid) */
             budget -= need;
             continue;
         }
@@ -9346,7 +9381,7 @@ void coop_frame(void)
               (sys->cb_flg & 0x1) || !room_ready() ? BUSY_DOOR :   /* (protocol 56; before, BUSY_NONE: gone) a door, the next room loading */
               !tx_in_game ? ((sys->cb_flg & 0x40000) ? BUSY_BOX : BUSY_MENU) : !(tx.flags & PF_VISIBLE) ? BUSY_EVENT :
               /* (protocol 56) in game, its enemies stand still (a scene, a message): it hands over what it runs, takes nothing */
-              !((sys->sp_flg & 0x2) || coop_enemies_run()) ? BUSY_PAUSED : BUSY_NONE;
+              aid_scene_on() || !((sys->sp_flg & 0x2) || coop_enemies_run()) ? BUSY_PAUSED : BUSY_NONE;
     if (tx.busy == BUSY_NONE && tx_in_game && g_trade.phase == TRADE_OPEN) tx.busy = BUSY_TRADE;
     if (sys) use_frame(); else tx.use = 0;
     tx.type = PKT_POSE;

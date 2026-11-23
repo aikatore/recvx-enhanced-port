@@ -2176,6 +2176,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_BYE_GRABBED=n` | Joiner: Disconnect n frames into a zombie grab it runs. |
 | `RECVX_COOP_KILL="hostframe:slot[:damage],..."` | A lethal hit (or one of that damage) on our enemy in that slot, as the weapon code leaves it. |
 | `RECVX_COOP_OWNERSHIP=0\|1` | Host: forces "Shared Enemy Control" (engaged-player ownership) off (0: the host runs the enemies, only zombie grabs of the joiner go over) or on (1), whatever the setting says; the joiner follows the host's rule either way. |
+| `RECVX_COOP_SCENE="hostframe:slot:frames"` | Host: from that frame its game stops its enemies as a scene does (`Pose.busy` `BUSY_PAUSED`; after `PAUSE_LEAVE` frames they go to the joiner, leaving), and in the frame it hands `slot` over the scene's event takes that one back (`EV_ENEOWN` 2 in the same datagram as the hand-over; `coop_scene_check.sh`). |
 | `RECVX_COOP_ALIVE="hostframe,..."` | Log the room's living, shown enemies (slot:type), how many `ed_flg` bits are set, and `rm_flg` (a kill-count door's bit). |
 | `RECVX_COOP_ENEPOS="hostframe,..."` | Log the room's enemies (not linked parts): slot:type.look@x,z,hp,mode0, `D` dead, `H` hidden (also one of ours waiting for the runner's state, protocol 56; `coop_handin_check.sh`, `coop_owner_check.sh`), `G` the guest's game runs it. |
 | `RECVX_COOP_WARP="hostframe:x:z,..."` | Both players to x/z at that host frame. |
@@ -2275,6 +2276,14 @@ enemy moves more than 12 units in 5 frames on either side (entries, leaves, hand
 afterwards, the leaving runner's enemies go with their state, and no hit is lost (each slot's HP falls by its hits). Main
 before protocol 56: the entering side's enemies stood at their records' places up to 16 frames (34 to 182 units), the
 Black Widows jumped when the host left, hits were lost around hand-overs.
+
+`pc/tools/coop_scene_check.sh OUT [PORT] [SCENE] [SLOT]` (the same needs, about a minute; `NETEM` puts a `tc netem` path on
+`lo` inside a network namespace of its own): a scene of the host's starts during a hand-over (`RECVX_COOP_SCENE`). Both are
+in 0/6, the host runs the zombies; at SCENE (1330) its game stops them, hands them to the joiner (leaving) and its event
+takes zombie SLOT (0) back while the joiner's take of it is pending. It fails unless the joiner drops that take (or gives
+the zombie back, had it taken it first) and both list the same enemies afterwards. Main before: the joiner took it at its
+frame anyway and both games ran it to the end of the room load. Hits kept for a hand-over that does not happen (this one,
+or one refused as stale) go on to the runner.
 
 `pc/tools/coop_passage_check.sh OUT [PORT] [host|guest]` (the same needs, about two minutes): in the palace's passage
 to the residence (1/10) the watcher (default the host) examines the trigger at the foot of the stairs, whose scene
