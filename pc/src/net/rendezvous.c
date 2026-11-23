@@ -30,12 +30,17 @@ const NetAddr rdv_peer = { 0, 0xFFFF };
 #define FALLBACK_MS 1500                /* a direct path silent this long (the game sends every frame): back to the relay */
 #define RELAYS_MS 250                   /* ... at once when the partner relays and nothing came direct for this long */
 #define SERVER_OK_MS 7000               /* the server answered a keepalive this recently: the relay is there */
+#define BRIDGE_MS 200                   /* direct, nothing from the partner for this long: each datagram also goes through the
+                                           relay (until the partner is heard again or the fall-back), so a dead path costs
+                                           ~BRIDGE_MS, not FALLBACK_MS: the partner falls back at its first relayed datagram */
+#define BRIDGE_HOLD_MS 1000             /* ... and this long after a relayed datagram came while direct (the partner lost us) */
 
 static RdvConfig cfg;
 static int st, relay, heard, confirmed, path_lan, have_ses, e2e, pw_used, n_cand, lan_cand, attempt, keys_ok, orphan, flags;
 static uint32_t t_start, t_sent, t_ka, t_ack, t_intro, t_punch, t_rx, relay_ctr;
 static uint32_t t_unans, t_frame;       /* the first keepalive since the server's last answer (0: none); the last rdv_frame */
 static uint32_t t_dir;                  /* the last authenticated datagram (punch or game) straight from the partner */
+static uint32_t t_bridge;               /* the last relayed datagram (new, not a copy of a direct one) while direct */
 static uint32_t nonce, room_id, member_seq;
 static uint32_t kick_seq;               /* host: the member we removed (its KICK goes again while the server still shows it) */
 static uint64_t req_id;
@@ -425,6 +430,7 @@ static void on_intro(const RdvMsg* m)
     n_cand = 0;
     lan_cand = -1;
     t_ack = t_rx = t_dir = net_ms();
+    t_bridge = 0;
     if (from_rdv(&m->pub, &pub)) {
         same_nat = m->pub.fam == my_pub.fam && !memcmp(m->pub.ip, my_pub.ip, 16);
         if (same_nat && from_rdv(&m->lan, &lan) && lan.ip) { lan_cand = n_cand; cand[n_cand++] = lan; }   /* behind the same router */
@@ -567,6 +573,7 @@ int rdv_input(NetAddr* from, unsigned char* buf, int n, int cap)
         case RDV_RELAY:
             if (!room_id || m.room_id != room_id || (n = game_in(buf, cap, m.payload, m.payload_len)) < 0) return -1;
             if (confirmed && net_ms() - t_dir > RELAYS_MS) fall_back("the partner relays, nothing direct");   /* our direct datagrams likely do not reach it either */
+            else if (confirmed) t_bridge = net_ms() | 1;   /* it does not hear us: ours go through the relay too (rdv_send) */
             *from = rdv_peer;
             return n;
         default: return -1;
@@ -602,7 +609,15 @@ int rdv_send(const void* buf, int n)
         if (orphan) return 0;   /* the server lost the room: nothing to relay through */
         return net_send(&cfg.server, b, rdv_relay_seal(b, k, room_id, ++relay_ctr, token));
     }
-    return net_send(&path, p, k);
+    {   /* the direct path may be dying: the same datagram through the relay too (the partner drops the second copy: its
+           replay window; without e2e the game's own sequence numbers) */
+        uint32_t now = net_ms();
+        int r = net_send(&path, p, k);
+        if (confirmed && !orphan && !cfg.force_relay && now - t_ack < SERVER_OK_MS &&
+            (now - t_dir > BRIDGE_MS || (t_bridge && now - t_bridge < BRIDGE_HOLD_MS)))
+            net_send(&cfg.server, b, rdv_relay_seal(b, k, room_id, ++relay_ctr, token));
+        return r;
+    }
 }
 
 void rdv_frame(void)

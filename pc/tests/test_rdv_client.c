@@ -471,6 +471,37 @@ static void test_paths(void)
     }
     rdv_stop();
 
+    /* the direct path goes quiet: after BRIDGE_MS each datagram goes through the relay too (the partner takes it once),
+       long before the fall-back; heard again: direct only. A relayed datagram while direct (the partner lost us): ours go
+       both ways for BRIDGE_HOLD_MS */
+    reset_server();
+    rdv_start(&c);
+    run(200);
+    snprintf(room, sizeof(room), "%s", rdv_room());
+    peer_new(&p1, PEER);
+    CHECK(peer_join(&p1, room, NULL) == RDV_INTRO);
+    pump();
+    CHECK(peer_send(&p1, 0, "COOP direct") > 0 && rdv_state() == RDV_ST_DIRECT);
+    peer_got = 0;
+    rdv_send("COOPa", 6);
+    pump();
+    CHECK(peer_got == 1 && srv_stats()->relay_out_dgrams == 0);
+    run(300);   /* nothing from the partner */
+    peer_got = 0;
+    rdv_send("COOPb", 6);
+    pump();
+    CHECK(rdv_state() == RDV_ST_DIRECT && peer_got == 1 && srv_stats()->relay_out_dgrams == 1);
+    CHECK(peer_send(&p1, 0, "COOP back") > 0);
+    rdv_send("COOPc", 6);
+    pump();
+    CHECK(srv_stats()->relay_out_dgrams == 1);
+    peer_send(&p1, 1, "COOP lost you");
+    CHECK(rdv_state() == RDV_ST_DIRECT && srv_stats()->relay_out_dgrams == 2);
+    rdv_send("COOPd", 6);
+    pump();
+    CHECK(srv_stats()->relay_out_dgrams == 3);
+    rdv_stop();
+
     /* the direct path dies mid-session (docs/SERVER.md "Direct to relay"): the relay takes over with
        the same keys and counters, a new punching round brings the direct path back */
     reset_server();

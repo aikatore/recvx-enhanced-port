@@ -471,6 +471,13 @@ code, token or key is logged.
    restarts, but the partner of a game that stalls that long falls back too and returns by
    punching. With the server gone as well, the session stays on the direct path (nothing better
    to switch to).
+   **Bridging** (before that switch): while a confirmed direct path has brought nothing for 200 ms, each datagram goes
+   through the relay too (the same sealed datagram: the partner's replay window drops the second copy), and for 1 s after
+   a relayed datagram came while direct that was not a copy of a direct one (the partner lost the path toward us). The
+   partner takes the relayed copy, finds nothing direct for 250 ms and falls back at once, so a path that dies stalls the
+   game for about 200-300 ms plus a round trip instead of 1.5 s; one that only hiccups costs a few relayed copies. When
+   only our direct datagrams to the partner are lost, its datagrams still reach us directly and it bridges (it hears
+   nothing from us); when only its datagrams are lost, we bridge.
 6. **Close.** CLOSE (sent twice; the second, finding its room or member gone, is dropped without a log line) from the host, or `room_timeout` without its keepalive; the joiner's place
    frees after `member_timeout`.
 
