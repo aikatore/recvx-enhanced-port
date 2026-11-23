@@ -691,8 +691,15 @@ list and the groups, and a row set to one of them shows the original.
 * **Room load** (`enemyopt_glue.c enemy_room_finished` -> `emodel_room`, after the enemy randomizer, the placements and
   the cutscene cast): every enemy body (not a part linked to another enemy, not an enemy variant) of a row with a choice
   gets its model, each model loaded once. After the randomizer: a record it turned into a Hunter takes the Hunter's
-  row. **Every game frame** (`spawn_glue.c spawn_frame` -> `emodel_frame`): enemies that came since (Extra Enemies, the
-  spawner, a co-op host's spawn notes, a slot taken by another type) get theirs.
+  row. Then the **preload** (`preload`): the other models the room's records' rows can still show (a random group draws
+  at most `EM_ROOM_PICKS` = 3 models a room, the slot only chooses among them) are loaded too, into display slots left
+  free, while the spawn pool keeps half its 32 MB (the spawned enemies take theirs from it). **Every game frame**
+  (`spawn_glue.c spawn_frame` -> `emodel_frame`): enemies that came since (Extra Enemies, the spawner, a co-op host's
+  spawn notes, an event's enemy, a slot taken by another type) get theirs, preloaded: a catalogue model loaded in that
+  frame took 8-20 ms of the game thread (its room file read and decoded), a hitch per new model; a model the preload left
+  out (another row's: the randomizer's kinds, the spawner) still loads then, into a free slot or one preloaded and unused.
+  Measured (0/15, one zombie, `random:any`, six spawned): the spawn frames 21.7 / 16.9 / 13.5 / 13.1 ms before, 1.3..2.2
+  ms now (the spawner's own first read of its room file, 13.6 ms, stays); the room load takes the 35 ms instead.
 * **Drawing** (`eneset.c bhDrawEnemy` -> `variant_glue.c pc_variant_draw` -> `emodel_draw` for every enemy that is not
   a variant; no decomp change: `pc_variant_n` counts one more while the room has enemy models): the body is posed
   (`actor_pose`) and drawn in its place, with a player character's cutscene model's head part (Claire's ponytail,
