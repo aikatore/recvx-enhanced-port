@@ -535,10 +535,44 @@ void lighter_light(int on)
     }
 }
 
+/* The partner's poses by its frame (receive) and the one its stand-in shows: that of the playout's frame P, as its
+   enemies are shown (docs/COOP.md "The partner's playout"); rx stays the newest (its room, what it is busy with, its look,
+   its sounds). Before, the newest pose was applied as it came: at a lost or late datagram the stand-in held for a frame
+   and then made two frames' way in one. Test aid RECVX_COOP_PARTNER_RAW=1: the newest, as before (the comparison runs). */
+CoopPoseHist pose_hist;
+static int pose_shown(Pose* sh)
+{
+    static int raw = -1, stats = -1;
+    static unsigned int n[5], frames;
+    Pose at;
+    int k;
+    *sh = rx;
+    if (raw < 0) raw = getenv("RECVX_COOP_PARTNER_RAW") && atoi(getenv("RECVX_COOP_PARTNER_RAW"));
+    if (stats < 0) stats = getenv("RECVX_COOP_STATS") != NULL;
+    k = raw || echo_delay || !playout.started ? COOP_AT_NONE : coop_pose_at(&pose_hist, playout.P, &at);
+    if (k != COOP_AT_NONE && (at.stg != rx.stg || at.rom != rx.rom || at.rcase != rx.rcase)) k = COOP_AT_NONE;   /* of the room it came from */
+    if (k != COOP_AT_NONE) {
+        sh->px = at.px; sh->py = at.py; sh->pz = at.pz; sh->ax = at.ax; sh->ay = at.ay; sh->az = at.az;
+        sh->mtn_no = at.mtn_no; sh->frm_no = at.frm_no; sh->mtn_md = at.mtn_md; sh->hokan_count = at.hokan_count; sh->hokan_rate = at.hokan_rate;
+        sh->mset = at.mset; sh->wpnr_no = at.wpnr_no; sh->hp = at.hp; sh->mode0 = at.mode0; sh->mode1 = at.mode1; sh->stflg = at.stflg;
+        sh->pflg = at.pflg; sh->flr = at.flr; sh->legs = at.legs; sh->legs_frm = at.legs_frm;
+    }
+    n[k]++;
+    if (trace > 0) fprintf(stderr, "coop: partner shown at frame %u: its frame %u (%d) pos=(%.2f,%.2f,%.2f) ay=%d mtn=%d frm=%d\n", frame_no,
+                           k != COOP_AT_NONE ? playout.P : rx.seq, k, sh->px, sh->py, sh->pz, sh->ay, sh->mtn_no, sh->frm_no >> 16);
+    if (stats && ++frames == 300) {
+        host_log("coop: partner playout: %u frames: exact %u, between %u, carried on %u, held %u, newest %u\n", frames, n[COOP_AT_EXACT],
+                 n[COOP_AT_INTERP], n[COOP_AT_EXTRAP], n[COOP_AT_OLD], n[COOP_AT_NONE]);
+        frames = 0; memset(n, 0, sizeof(n));
+    }
+    return k;
+}
+
 void coop_control_remote(void)
 {
     MN_WORK* set;
-    int i, mtn;
+    Pose sh;
+    int i, mtn, shown;
 
     if (fx_open == 1) fx_end(plp, 1);   /* the effects our step started (coop_fx_player) */
     if (!plp || !plp->mnwP) return;
@@ -591,6 +625,7 @@ void coop_control_remote(void)
        stays, frozen in its last pose: it is drawn only (enemies do not target it, proxy_ok) */
     if (!have_rx || !local_visible()) return;
     if (!partner_here()) { p2_seen_room = -1; return; }
+    shown = pose_shown(&sh);
     p2_busy = rx.busy == BUSY_DOOR || rx.busy == BUSY_PAUSED ? 0 :   /* (protocol 56: as BUSY_NONE before) */
               (rx.flags & (PF_IN_GAME | PF_VISIBLE)) != (PF_IN_GAME | PF_VISIBLE) ? rx.busy : rx.busy == BUSY_TRADE ? BUSY_TRADE : 0;   /* trading: drawn live, no target */
     if ((rx.flags & (PF_IN_GAME | PF_VISIBLE)) != (PF_IN_GAME | PF_VISIBLE) && (!p2_busy || p2_seen_room != coop_room_key() || p2_chr < 0)) return;
@@ -601,9 +636,9 @@ void coop_control_remote(void)
         if (!load_player(rx.chr, rx.costume, rx.mfile)) { p2_fail = key; return; }
         p2_fail = -1;
     }
-    if ((!p2_busy || p2_busy == BUSY_TRADE) && rx.wpnr_no != p2_wpn) {
-        load_weapon(rx.wpnr_no);
-        if (rx.wpnr_no >= 0 && rx.wpnr_no < 23 && WpnTab[rx.wpnr_no].seno0) partner_arms(WpnTab[rx.wpnr_no].snd_wpno);   /* before its first shot */
+    if ((!p2_busy || p2_busy == BUSY_TRADE) && sh.wpnr_no != p2_wpn) {
+        load_weapon(sh.wpnr_no);
+        if (sh.wpnr_no >= 0 && sh.wpnr_no < 23 && WpnTab[sh.wpnr_no].seno0) partner_arms(WpnTab[sh.wpnr_no].snd_wpno);   /* before its first shot */
     }
     if (p2_busy && p2_busy != BUSY_TRADE) {   /* the last pose */
         /* (not one of another room load: a room or an enemy motion set of the load before it, freed - a Retry of the room, the
@@ -612,41 +647,45 @@ void coop_control_remote(void)
         set = ply2.mnwP; mtn = ply2.mtn_no; goto pose;
     }
 
-    set = rx.mset == MSET_OWN ? ply2.mnwPb : rx.mset == MSET_ROOM ? sys->rmthp :
-          rx.mset >= 0 && rx.mset < (int)sys->ewk_n && rx.mset < PC_ENE_SLOTS && (ene[rx.mset].flg & 0x1) ? ene[rx.mset].mnwP : NULL;
-    mtn = rx.mtn_no;
+    set = sh.mset == MSET_OWN ? ply2.mnwPb : sh.mset == MSET_ROOM ? sys->rmthp :
+          sh.mset >= 0 && sh.mset < (int)sys->ewk_n && sh.mset < PC_ENE_SLOTS && (ene[sh.mset].flg & 0x1) ? ene[sh.mset].mnwP : NULL;
+    mtn = sh.mtn_no;
     /* the partner's motion numbers index its own sets; never trust them blindly (room and
        enemy sets have 512 entries) */
-    if (!set || mtn < 0 || mtn >= (set == ply2.mnwPb ? MAX_MTN : set_left(rx.mset >= 0 ? &ene[rx.mset] : NULL, set)) || !set[mtn].datP || rx.frm_no < 0 || (rx.frm_no >> 16) >= (int)set[mtn].frm_num) return;
+    if (!set || mtn < 0 || mtn >= (set == ply2.mnwPb ? MAX_MTN : set_left(sh.mset >= 0 ? &ene[sh.mset] : NULL, set)) || !set[mtn].datP || sh.frm_no < 0) return;
+    if ((sh.frm_no >> 16) >= (int)set[mtn].frm_num) {
+        if (shown != COOP_AT_EXTRAP) return;
+        sh.frm_no = ((int)set[mtn].frm_num - 1) << 16;   /* carried on past the motion's end: its last frame */
+    }
     if (mtn != (int)ply2.mtn_no || set != ply2.mnwP) {
         /* a motion change blends from the current pose like on the sender (which already
            took one blend step for this frame) */
-        ply2.hokan_count = rx.hokan_count ? rx.hokan_count + 1 : 0;
-        ply2.hokan_rate = rx.hokan_rate;
+        ply2.hokan_count = sh.hokan_count ? sh.hokan_count + 1 : 0;
+        ply2.hokan_rate = sh.hokan_rate;
     }
     p2_seen_room = coop_room_key();
     p2_seen_gen = enemy_room_gen;
     ply2.mnwP = set;
     ply2.mtn_no = mtn;
-    ply2.frm_no = rx.frm_no;
-    ply2.mtn_md = rx.mtn_md;
-    ply2.px = rx.px; ply2.py = rx.py; ply2.pz = rx.pz;
-    ply2.ax = rx.ax; ply2.ay = rx.ay; ply2.az = rx.az;
+    ply2.frm_no = sh.frm_no;
+    ply2.mtn_md = sh.mtn_md;
+    ply2.px = sh.px; ply2.py = sh.py; ply2.pz = sh.pz;
+    ply2.ax = sh.ax; ply2.ay = sh.ay; ply2.az = sh.az;
     ply2.draw_tp = plp->draw_tp;
     /* its own floor (enemies attack only on theirs: with ours a partner on another level of the room was
        never attacked); from a build without it, the floor of its height on slopes, else ours */
-    ply2.flr_no = rx.flr ? rx.flr - 3 : rom->flg & PC_ROOM_SLOPES ? bhCheckFloorNum(rx.py) : plp->flr_no;
+    ply2.flr_no = sh.flr ? sh.flr - 3 : rom->flg & PC_ROOM_SLOPES ? bhCheckFloorNum(sh.py) : plp->flr_no;
     /* what enemies read when ply2 stands in for the partner (host): also whether its game has it hit or
        held (flg 2/4: other enemies wait, one attack at a time, as for our player) */
-    ply2.hp = rx.hp; ply2.stflg = rx.stflg; ply2.mode0 = rx.mode0; ply2.mode1 = rx.mode1;
-    ply2.flg = (ply2.flg & ~6u) | (rx.pflg & 6);
+    ply2.hp = sh.hp; ply2.stflg = sh.stflg; ply2.mode0 = sh.mode0; ply2.mode1 = sh.mode1;
+    ply2.flg = (ply2.flg & ~6u) | (sh.pflg & 6);
     /* its aim pitch: the upper body bent as its third-person free aim bends it (the fixed cameras' aim up/down is
        in its motion), eased over the poses; straight from a build without it */
-    p2_pitch += (coop_pitch_get(rx.pflg) * COOP_PITCH_STEP - p2_pitch) * 0.5f;
+    p2_pitch += (coop_pitch_get(sh.pflg) * COOP_PITCH_STEP - p2_pitch) * 0.5f;
     {   /* its legs walking under its aim ("Move While Aiming"), eased in and out as the sender eases its own */
         TpsLegs* l = &tps_legs_p2;
-        l->on = rx.legs_frm != 0;
-        if (l->on) l->mtn = coop_legs_mtn(rx.legs), l->frm = (rx.legs_frm - 1) << 16, l->yaw = coop_legs_yaw(rx.legs);
+        l->on = sh.legs_frm != 0;
+        if (l->on) l->mtn = coop_legs_mtn(sh.legs), l->frm = (sh.legs_frm - 1) << 16, l->yaw = coop_legs_yaw(sh.legs);
         l->w += ((float)l->on - l->w) * 0.3f;
         if (!l->on && l->w < 0.02f) l->w = 0;
     }
@@ -670,7 +709,7 @@ pose:
         O_WRK* op = &p2wpn[i];
         if (!(op->flg & 0x1) || op->mlwP == &no_model || !op->mlwP || !op->mlwP->objP) continue;
         if (op->lkono == 9) {   /* bhObjWpn: weapon angle in the hand depends on aiming */
-            int held = rx.mode1 == 0 || rx.mode0 == 7;
+            int held = sh.mode1 == 0 || sh.mode0 == 7;
             op->ax = held ? WpnAngTab[op->type][0] : 0;
             op->ay = held ? WpnAngTab[op->type][1] : 0;
             op->az = held ? WpnAngTab[op->type][2] : 0;

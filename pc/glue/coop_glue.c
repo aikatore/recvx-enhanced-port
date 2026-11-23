@@ -4607,8 +4607,9 @@ static void receive(void)
         }
         /* a frame comes in one or more datagrams, each with the pose: each datagram's snapshots are kept under its
            frame (also a late one's), the playout learns the path from every arrival; an older frame's pose changes
-           nothing */
+           nothing but the stand-in's history (pose_hist) */
         coop_playout_arrive(&playout, p.seq, arr, net_rx_exact());
+        coop_pose_put(&pose_hist, &p);   /* (the stand-in shows the pose of the playout's frame: coop_look.c pose_shown) */
         {
             int room = (p.stg * 256 + (unsigned char)p.rom) | p.rcase << 16;
             if ((nene || (p.flags & PF_IN_GAME)) && (!have_rx || (int)(p.seq - rx.seq) >= 0) && room != snap_room) {   /* the partner's room: other enemies */
@@ -4857,6 +4858,7 @@ static void send_frame(void)
     owners_sync();
     ns = build_snapshots(snaps);
     snap_prioritise(snaps, ns);
+    if (ns && snaps_sparse()) ns = 0;   /* the partner is in another room: not this frame */
     while (nr < ns && used < COOP_SNAP_BUDGET) {   /* coded = sent (coop_snaptx_put notes it as this frame's) */
         int full = 0, r = coop_snaptx_put(stx, tx.seq, &snaps[nr], recs + used, (int)sizeof(recs) - used, &full);
         if (!r) break;

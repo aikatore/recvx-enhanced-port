@@ -1206,6 +1206,49 @@ static int32_t ang_at(int32_t a0, int32_t a1, double t)   /* from a0 towards a1 
     return a0 >= 0 && a0 < 0x10000 ? r & 0xFFFF : r;
 }
 
+void coop_pose_put(CoopPoseHist* h, const Pose* p)
+{
+    int k = p->seq % COOP_POSE_HIST;
+    if (!p->seq || (h->seq[k] && (int32_t)(h->seq[k] - p->seq) >= 0)) return;   /* that frame's (another datagram of it) or older */
+    h->seq[k] = p->seq;
+    h->p[k] = *p;
+}
+
+static int pose_free(const Pose* p) { return p->mset == MSET_OWN && !(p->pflg & 6); }   /* moving on its own: not hit, held, grabbed */
+
+int coop_pose_at(const CoopPoseHist* h, uint32_t P, Pose* out)
+{
+    int j, b = -1, o = -1, n = -1;   /* the newest at or before P, the one before that, the first after P */
+    const Pose *s0, *s1;
+    double gap, t;
+    for (j = 0; j < COOP_POSE_HIST; j++) {
+        if (!h->seq[j]) continue;
+        if ((int32_t)(h->seq[j] - P) <= 0) { if (b < 0 || (int32_t)(h->seq[j] - h->seq[b]) > 0) b = j; }
+        else if (n < 0 || (int32_t)(h->seq[j] - h->seq[n]) < 0) n = j;
+    }
+    if (b < 0) return COOP_AT_NONE;
+    for (j = 0; j < COOP_POSE_HIST; j++)
+        if (h->seq[j] && (int32_t)(h->seq[j] - h->seq[b]) < 0 && (o < 0 || (int32_t)(h->seq[j] - h->seq[o]) > 0)) o = j;
+    *out = h->p[b];
+    if (h->seq[b] == P) return COOP_AT_EXACT;
+    if ((int32_t)(P - h->seq[b]) > COOP_POSE_EXTRA) return COOP_AT_OLD;
+    s0 = &h->p[b];
+    if (n >= 0 && (int32_t)(h->seq[n] - h->seq[b]) <= 2 * COOP_POSE_EXTRA) s1 = &h->p[n], gap = (double)(h->seq[n] - h->seq[b]);
+    else if (o >= 0 && (int32_t)(h->seq[b] - h->seq[o]) <= COOP_POSE_EXTRA) s1 = &h->p[o], gap = -(double)(h->seq[b] - h->seq[o]);
+    else return COOP_AT_OLD;   /* one pose: held */
+    if (!pose_free(s0) || !pose_free(s1) || s0->mtn_no != s1->mtn_no || s0->stg != s1->stg || s0->rom != s1->rom ||
+        fabsf(s1->px - s0->px) + fabsf(s1->py - s0->py) + fabsf(s1->pz - s0->pz) >= 20.0 * fabs(gap))
+        return COOP_AT_OLD;
+    t = (double)(P - h->seq[b]) / gap;   /* P's place from s0 towards s1 (the older one: backwards, t < 0) */
+    out->px = (float)(s0->px + (s1->px - s0->px) * t);
+    out->py = (float)(s0->py + (s1->py - s0->py) * t);
+    out->pz = (float)(s0->pz + (s1->pz - s0->pz) * t);
+    out->ax = ang_at(s0->ax, s1->ax, t); out->ay = ang_at(s0->ay, s1->ay, t); out->az = ang_at(s0->az, s1->az, t);
+    if (gap > 0 ? s1->frm_no >= s0->frm_no : s1->frm_no <= s0->frm_no)   /* one motion, going forward (the caller checks the end) */
+        out->frm_no = s0->frm_no + (int32_t)lround((double)(s1->frm_no - s0->frm_no) * t);
+    return gap > 0 ? COOP_AT_INTERP : COOP_AT_EXTRAP;
+}
+
 /* frm_no at sender frame P from a's anchor (not wrapped: the caller knows the motion's length), 0: none */
 static int anchor_at(const EneSnap* a, const EneSnap* s0, uint32_t P, int32_t* f)
 {

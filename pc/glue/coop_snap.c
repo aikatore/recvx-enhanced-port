@@ -51,7 +51,7 @@ void snaps_reset(void)
     if (hist) memset(hist, 0, PC_ENE_SLOTS * sizeof(*hist));
     memset(hist_applied, 0, sizeof(hist_applied)); memset(shown_seq, 0, sizeof(shown_seq));
     memset(shown_local, 0, sizeof(shown_local)); memset(ease_n, 0, sizeof(ease_n));
-    coop_playout_reset(&playout);
+    coop_playout_reset(&playout); memset(&pose_hist, 0, sizeof(pose_hist));
 }
 void snaps_lost(void)   /* an outage: what the puppets show stays where it is, eased on when the partner is back */
 {
@@ -740,6 +740,20 @@ int build_snapshots(EneSnap* out)
         run_snap[i][0] = *s; run_q[i][0] = tx.seq;
     }
     return n;
+}
+
+/* With the partner in another room our snapshots only keep its copies of our room's enemies current for when it comes in
+   (protocol 56): they go every SNAP_APART-th frame then (build_snapshots still runs every frame: the motion anchors and
+   run_snap stay current). At full rate again as soon as its pose names our room - its door towards us, the room loading,
+   so what it first shows of ours is fresh - and while a hand-over of one of ours is under way. */
+#define SNAP_APART 4
+int snaps_sparse(void)
+{
+    int i;
+    if (!have_rx || partner_here() || tx.seq % SNAP_APART == 0) return 0;
+    for (i = 0; i < PC_ENE_SLOTS; i++)
+        if (giving[i] || take_at[i] || own_ms[i]) return 0;
+    return 1;
 }
 
 /* RECVX_COOP_STATS (protocol 45): the motion anchors checked against the frames that came */

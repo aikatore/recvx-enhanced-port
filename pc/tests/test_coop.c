@@ -1719,6 +1719,35 @@ static void test_playout(void)
         CHECK(coop_hist_at(&h, 201, 0, &o, &from) == COOP_AT_INTERP && o.frm_no == 8 << 16);   /* still the first anchor */
         CHECK(coop_hist_at(&h, 202, 0, &o, &from) == COOP_AT_INTERP && o.frm_no == 0);         /* the next one's */
     }
+    {   /* the partner's pose at P: exact, between (a lost one), carried on (a late one, at most COOP_POSE_EXTRA), held;
+           a grab, a hit, another motion or a jump: the frames as they came */
+        static CoopPoseHist h;
+        Pose p, o;
+        memset(&h, 0, sizeof(h)); memset(&p, 0, sizeof(p));
+        p.mset = MSET_OWN; p.mtn_no = 4; p.frm_no = 10 << 16; p.px = 100; p.pz = 50; p.ay = 0xFFF0; p.hp = 100;
+        CHECK(coop_pose_at(&h, 100, &o) == COOP_AT_NONE);
+        p.seq = 100; coop_pose_put(&h, &p);
+        CHECK(coop_pose_at(&h, 99, &o) == COOP_AT_NONE);
+        CHECK(coop_pose_at(&h, 100, &o) == COOP_AT_EXACT && o.px == 100);
+        CHECK(coop_pose_at(&h, 101, &o) == COOP_AT_OLD && o.px == 100);                   /* one pose: held */
+        p.seq = 102; p.px = 104; p.frm_no = 12 << 16; p.ay = 0x10; p.hp = 90; coop_pose_put(&h, &p);   /* 101 lost */
+        CHECK(coop_pose_at(&h, 101, &o) == COOP_AT_INTERP && fabsf(o.px - 102) < 1e-3f && o.frm_no == 11 << 16 && o.ay == 0 && o.hp == 100);
+        CHECK(coop_pose_at(&h, 104, &o) == COOP_AT_EXTRAP && fabsf(o.px - 108) < 1e-3f && o.frm_no == 14 << 16 && o.ay == 0x30 && o.hp == 90);
+        CHECK(coop_pose_at(&h, 102 + COOP_POSE_EXTRA + 1, &o) == COOP_AT_OLD && o.px == 104);   /* then held */
+        p.seq = 102; p.px = 999; coop_pose_put(&h, &p);                                 /* another datagram of 102: the first kept */
+        CHECK(coop_pose_at(&h, 102, &o) == COOP_AT_EXACT && o.px == 104);
+        p.seq = 104; p.px = 108; p.pflg = 4; coop_pose_put(&h, &p);                     /* held by an enemy */
+        CHECK(coop_pose_at(&h, 103, &o) == COOP_AT_OLD && o.px == 104);
+        p.seq = 106; p.px = 112; p.pflg = 0; p.mset = 3; coop_pose_put(&h, &p);         /* grabbed: the enemy's motion set */
+        CHECK(coop_pose_at(&h, 107, &o) == COOP_AT_OLD && o.px == 112 && o.mset == 3);
+        p.seq = 108; p.mset = MSET_OWN; p.mtn_no = 5; p.px = 116; coop_pose_put(&h, &p);
+        p.seq = 110; p.mtn_no = 6; p.px = 120; coop_pose_put(&h, &p);                    /* another motion */
+        CHECK(coop_pose_at(&h, 109, &o) == COOP_AT_OLD && o.px == 116 && o.mtn_no == 5);
+        p.seq = 112; p.px = 200; coop_pose_put(&h, &p);                                  /* a jump (a door, a teleport) */
+        CHECK(coop_pose_at(&h, 111, &o) == COOP_AT_OLD && o.px == 120);
+        p.seq = 96; coop_pose_put(&h, &p);                                               /* older than the place holds: ignored */
+        CHECK(h.seq[96 % COOP_POSE_HIST] == 112);
+    }
 }
 
 int main(int argc, char** argv)

@@ -766,6 +766,18 @@ typedef struct CoopSnapHist { uint32_t seq[COOP_HIST]; EneSnap s[COOP_HIST]; } C
 enum { COOP_AT_NONE, COOP_AT_EXACT, COOP_AT_INTERP, COOP_AT_EXTRAP, COOP_AT_OLD };
 void coop_hist_put(CoopSnapHist* h, uint32_t seq, const EneSnap* s);
 int coop_hist_at(const CoopSnapHist* h, uint32_t P, uint32_t applied, EneSnap* out, uint32_t* from);
+/* The partner's poses kept by its frame (docs/COOP.md "The partner's playout"): the stand-in shows the pose of the
+   playout's frame P, as the enemies do. coop_pose_at: the pose of P (COOP_AT_EXACT), else between the ones before and
+   after it (COOP_AT_INTERP), else carried on from the newest before it at the last two's rate for at most
+   COOP_POSE_EXTRA frames (COOP_AT_EXTRAP), else that newest one (COOP_AT_OLD: held); COOP_AT_NONE: none at or before P.
+   Only the position, the angles and, in one motion going forward, its frame are made up, and only while the partner
+   moves on its own between the two (MSET_OWN, the same motion, not hit or held: pflg & 6, no jump of 2 m a frame); a
+   grab, a hit or a motion change shows the frames as they came (the newest at or before P). */
+#define COOP_POSE_HIST 16
+#define COOP_POSE_EXTRA 2
+typedef struct CoopPoseHist { uint32_t seq[COOP_POSE_HIST]; Pose p[COOP_POSE_HIST]; } CoopPoseHist;   /* seq 0: empty */
+void coop_pose_put(CoopPoseHist* h, const Pose* p);
+int coop_pose_at(const CoopPoseHist* h, uint32_t P, Pose* out);
 
 /* room scripts (docs/modding/ROOM_FORMAT.md "Event scripts") */
 int coop_insn_len_raw(const uint8_t* p);    /* bytes of the instruction at p, 0 unknown */
