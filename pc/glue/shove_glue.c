@@ -22,7 +22,7 @@
  *   Black Widow (3): its reel (en03 DG01, a hit of 30 to 50); close: its heavy hit (DG03); on the floor only
  * Bosses, enemy variants, the other types, the records the room's scripts act on (enemy_rec_scripted), the dead,
  * the hidden, linked parts and enemies in any other mode (attacking, grabbing, in an event) are left alone.
- * There is no grab immunity afterwards (pc_grab_immune answers no): the push and stagger alone give the player room.
+ * There is no grab immunity afterwards: the push and stagger alone give the player room.
  * Co-op: each game watches its own player. An enemy the partner's game runs gets the push as EV_ENE_HIT with
  * COOP_HIT_SHOVE (forwarded, deferred like a shot), and its runner applies it.
  */
@@ -37,10 +37,8 @@
 
 #define SHOVE_R 20.0f       /* reach around the player: a shaken-off zombie flies ~9 units from ~6, its push reaches ~17 */
 #define SHOVE_REACH 28.0f   /* ... an attacking enemy's (mode0 2): the Bandersnatch grabs with its arm from ~21 */
-#define SHOVE_IMMUNE 75     /* game frames (30 a second) without a new grab once the player stands again: 2.5 s */
 #define SHOVE_DELAY 15      /* release to push: the shaken-off zombie flies from its shove's frame 17 (en01.c NG00 mode3 3) */
-#define SHOVE_LETGO 54      /* the longest let-go, release to standing (a Cerberus's; a zombie's 36): the partner's
-                               immunity comes with its push, before it stands */
+#define SHOVE_LETGO 54      /* the longest let-go, release to standing (a Cerberus's; a zombie's 36) */
 #define SHOVE_LATE (SHOVE_LETGO + 45)   /* an enemy busy at the push (its attack, the grabber's let-go) is pushed
                                            when it walks again within 3.3 s */
 #define KNOCK_R 6.0f        /* closer than this it goes down: pressed against the player (zombies queue at 6.5-7.5,
@@ -61,7 +59,7 @@ int coop_plp_partner(void);             /* coop_glue.c: plp is the partner's sta
 int coop_runs(int slot);                /* coop_glue.c: our game runs that enemy */
 extern int enemy_room_gen;              /* enemyopt_glue.c: room loads so far */
 
-static int frame, mine, partner;        /* game frames; the immunity of our player / the partner's ends at that frame */
+static int frame, freed;                /* game frames; freed: the frame of our player's last break free (the trace) */
 static int prev_m0 = -1, gen = -1, released, grab_at, push_at;   /* released: this hold's let-go seen; push_at: its push's frame */
 static struct { int n; float dx, dz; } slide[PC_ENE_SLOTS];
 static int trace = -1, trace_until;
@@ -70,10 +68,7 @@ static int trace = -1, trace_until;
 
 int pc_shove_on(void) { return coop_shove_rule(); }
 
-/* enemy code (en01, en03, en04, en09, en26), with plp the player it goes for: no new grab on it now */
-int pc_grab_immune(void) { return 0; }   /* (no grab immunity after a push: the stagger alone is the window) */
-
-void pc_shove_partner(void) { partner = frame + SHOVE_LETGO + SHOVE_IMMUNE; }   /* coop_glue.c: the partner was let go (it stands again later) */
+void pc_shove_partner(void) {}   /* coop_glue.c, an older peer's break free news (COOP_HIT_MARK): nothing to do (no grab immunity) */
 
 /* the game's own zombie push (en01.c bhEne01_CollCheckPush), from the point (cx, cz); not knock: its stagger only */
 static int push_zombie(BH_PWORK* ep, float cx, float cz, int knock)
@@ -173,25 +168,22 @@ int pc_shove_apply(BH_PWORK* ep, float cx, float cz)
 static void break_free(void)
 {
     float cx = plp->px, cz = plp->pz;
-    int i, n = 0, sent = 0, best = -1;
-    float bd = 1e9f;
-    mine = frame + SHOVE_IMMUNE;
+    int i, n = 0, sent = 0;
+    freed = frame;
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
         BH_PWORK* ep = &ene[i];
         float dx = ep->px - cx, dz = ep->pz - cz, d = sqrtf(dx * dx + dz * dz);
         NJS_POINT3 a, b;
         int m = ep->mode0, ok;
         if (!(ep->flg & 0x1) || (ep->flg & 0x82) || ep->hp < 0 || (ep->stflg & 0x41000000)) continue;
-        if (coop_on && !coop_runs(i) && d < bd) { bd = d; best = i; }
         if (d > (m == 2 ? SHOVE_REACH : SHOVE_R) || fabsf(ep->py - plp->py) > 8.0f) continue;
         a.x = cx; a.y = plp->py + 10.0f; a.z = cz; b.x = ep->px; b.y = a.y; b.z = ep->pz;
         if (bhCollisionCheckLine(&a, &b)) continue;   /* (not through a wall) */
-        if (coop_on && coop_shove(i, cx, cz, 0)) { sent++; best = -2; host_log("breakfree: enemy %d (id %d) dist %.1f: to the partner's game\n", i, ep->id, d); continue; }
+        if (coop_on && coop_shove(i, cx, cz, 0)) { sent++; host_log("breakfree: enemy %d (id %d) dist %.1f: to the partner's game\n", i, ep->id, d); continue; }
         ok = pc_shove_apply(ep, cx, cz);
         n += ok;
         host_log("breakfree: enemy %d (id %d type %d) dist %.1f mode %d -> %d/%d%s\n", i, ep->id, ep->type, d, m, ep->mode0, ep->mode2, ok ? "" : " (left alone)");
     }
-    if (best >= 0) coop_shove(best, cx, cz, 1);   /* (co-op: the partner learns of our immunity) */
     host_log("breakfree: room %d/%d at %.0f %.0f: %d enemies pushed, %d sent\n", sys->stg_no, sys->rom_no, cx, cz, n, sent);
 }
 
@@ -223,13 +215,13 @@ void pc_shove_frame(void)
     if (!plp || !sys) return;
     m0 = plp->mode0;
     if (gen != enemy_room_gen) {   /* a room (re)loaded (a door, a retry): nothing carries over */
-        gen = enemy_room_gen; prev_m0 = -1; mine = partner = push_at = 0;
+        gen = enemy_room_gen; prev_m0 = -1; freed = push_at = 0;
         memset(pend, 0, sizeof(pend)); memset(slide, 0, sizeof(slide));
     }
     if (trace < 0) trace = getenv("RECVX_SHOVE_TRACE") != NULL;
     if (m0 == 4 && prev_m0 != 4) { released = 0; push_at = 0; grab_at = frame; }
     if (trace && m0 == 4 && prev_m0 != 4)
-        printf("test: shove frame %d grabbed (hp %d)%s, %d frames after the last break free\n", frame, plp->hp, pc_grab_immune() ? " WHILE IMMUNE" : "", mine ? frame - (mine - SHOVE_IMMUNE) : -1);
+        printf("test: shove frame %d grabbed (hp %d), %d frames after the last break free\n", frame, plp->hp, freed ? frame - freed : -1);
     if (push_at && frame >= push_at) {
         if (plp->hp >= 0) push_now();
         push_at = 0;
@@ -237,7 +229,7 @@ void pc_shove_frame(void)
     if (prev_m0 == 4 && m0 != 4 && m0 != 6 && m0 != 3 && plp->hp >= 0) {
         if (trace) printf("test: shove frame %d player free (mode %d, hp %d)%s\n", frame, m0, plp->hp, released ? "" : ", no release seen");
         if (!released || push_at) { released = 1; push_now(); }   /* (a hold without the hook, or one the partner's game ran) */
-        if (pc_shove_on()) mine = frame + SHOVE_IMMUNE;   /* (the immunity counts from standing again) */
+        if (pc_shove_on()) freed = frame;
     }
     prev_m0 = m0;
     for (i = 0; i < (int)sys->ewk_n && i < PC_ENE_SLOTS; i++) {
