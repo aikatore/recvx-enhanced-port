@@ -860,8 +860,10 @@ picks; no game state, ctest `cast`), `pc/glue/cast_glue.c` (in the game), the di
 GAME SETUP > CHARACTERS (`setup_glue.c SV_GAME_*`, shown while the game has models) and as IMPORT > CHARACTERS > the
 game's "Show in Model Lists" (F9 too). Code: `cast_list.c cast_list_game_*`, the bit `actors.h g_import_hidden` (ini
 `import_<key>_shown = 0|1`, every character source written). **Default: every game unchecked**, only Code: Veronica's
-own models in the lists and pools. Migration: an ini without the line starts unchecked (before, a game started shown
-and only `= 0` was written, so an explicit hide stays hidden; nobody had an explicit `= 1`); a look already chosen from
+own models in the lists and pools. Migration (`import_shown_version = 1`, written since): a new install starts every game
+unchecked; an ini from before the checkboxes (no `import_shown_version`) keeps its games as they were, so after
+updating a game without a line stays checked (before, a game started shown and only `= 0` was written) and an explicit
+hide stays hidden; a look already chosen from
 an unchecked game stays in use and listed ("Hidden Source (Still in Use)"). Only a checked game's models are listed and
 in the random pools: the cast's (`cast_glue.c cast_imports_now`: all imports, `cast.c drop_hidden` the unchecked
 games'), the random look's, the *Custom* lists. That replaced **Include Imported Models** (the cast's and the random

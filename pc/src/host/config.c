@@ -210,6 +210,8 @@ static char* trim(char* s)
 }
 
 static char ini_hd_dir[1024];
+static unsigned import_seen;   /* the sources whose import_<key>_shown the file names */
+static int import_shown_version;   /* the file's import_shown_version: 0 a file from before the checkboxes */
 
 /* "import_<key>_iso = <path>" (import.h), "import_<key>_shown = 0|1" (actors.h g_import_hidden): 1 if it is one */
 static int import_iso_line(const char* line)
@@ -222,6 +224,7 @@ static int import_iso_line(const char* line)
             for (v += 6; *v == ' '; v++) {}
             if (*v++ != '=') return 0;
             if (atoi(v)) g_import_hidden &= ~(1u << s); else g_import_hidden |= 1u << s;
+            import_seen |= 1u << s;
             return 1;
         }
         if (s == IMPORT_DREAMCAST && !strncmp(v, "_steve", 6)) {   /* (Steve in Cutscenes) */
@@ -258,7 +261,7 @@ void config_load(void)
     FILE* f;
     appear_in_use = look_in_use;
     for (int s = 0; s < IMPORT_SOURCES; s++)   /* the imported games start unchecked (not in the lists or pools): a file's import_<key>_shown = 1
-                                                  checks one (before 2026-11-22 they started shown and only = 0 was written: kept as written) */
+                                                  checks one; a file from before (no import_shown_version): below */
         if (import_sources[s].cat == IMPORT_CAT_CHARACTERS) g_import_hidden |= 1u << s;
     path(p, sizeof(p));
     if (!(f = pc_fopen(p, "r"))) {   /* first start: the defaults (player_id saves them) */
@@ -279,7 +282,8 @@ void config_load(void)
         else if (sscanf(line, " coop_name = %15[^\r\n]", g_coop.name) == 1) continue;
         else if (sscanf(line, " iso = %1023[^\r\n]", g_config.iso_path) == 1) continue;
         else if (sscanf(line, " hd_textures_dir = %1023[^\r\n]", ini_hd_dir) == 1) { SDL_strlcpy(g_config.hd_textures_dir, ini_hd_dir, sizeof(ini_hd_dir)); continue; }
-        else if (sscanf(line, " import_dir = %1023[^\r\n]", g_import.dir) == 1) continue;   /* F9 imports (pc/src/import) */
+        else if (sscanf(line, " import_dir = %1023[^\r\n]", g_import.dir) == 1) continue;
+        else if (sscanf(line, " import_shown_version = %d", &import_shown_version) == 1) continue;   /* F9 imports (pc/src/import) */
         else if (!strncmp(line, "import_", 7) && import_iso_line(line)) continue;   /* import_<key>_iso */
         else if (sscanf(line, " language = %7s", k) == 1) { for (int l = 0; l < LANG_COUNT; l++) if (!strcmp(k, lang_codes[l])) g_lang = l; continue; }   /* (lang.h) */
         else if (sscanf(line, " biorand_cli_digest = %71s", g_biorand_cli_digest) == 1) continue;   /* the installed BioRand CLI (biorand_dl.h) */
@@ -296,6 +300,10 @@ void config_load(void)
         else if (sscanf(line, " %63[a-z_0-9] = %d", k, &v) == 2)
             for (size_t i = 0; i < SDL_arraysize(keys); i++)
                 if (!strcmp(k, keys[i].key) && v >= keys[i].lo && v <= keys[i].hi) *keys[i].val = v;
+    if (!import_shown_version)   /* a file from before the checkboxes (it wrote only = 0, absent was shown): its imported games stay
+                                    checked after updating; only a new install starts them unchecked */
+        for (int s = 0; s < IMPORT_SOURCES; s++)
+            if (import_sources[s].cat == IMPORT_CAT_CHARACTERS && !(import_seen & (1u << s))) g_import_hidden &= ~(1u << s);
     import_registry_load();   /* the imported player models: their chr values exist from here */
     /* a file from before "Enemy Models": the cast's "Custom" keeps its monsters' checks in the enemies' list (the same names)
        and its creatures and scene zombies on them; else they become enemies (the scene zombies did with every pool) */
@@ -381,6 +389,7 @@ static int write_ini(FILE* f, void* ud)
     for (int s = 0; s < IMPORT_SOURCES; s++) if (g_import.iso[s][0]) fprintf(f, "import_%s_iso = %s\n", import_sources[s].key, g_import.iso[s]);
     for (int s = 0; s < IMPORT_SOURCES; s++)   /* (every game's, checked or not: absent means unchecked) */
         if (import_sources[s].cat == IMPORT_CAT_CHARACTERS) fprintf(f, "import_%s_shown = %d\n", import_sources[s].key, !((g_import_hidden >> s) & 1));
+    fprintf(f, "import_shown_version = 1\n");   /* (absent: an older file, config_load) */
     if (g_import.dc_steve) fprintf(f, "import_%s_steve = %d\n", import_sources[IMPORT_DREAMCAST].key, g_import.dc_steve);
     if (g_lang) fprintf(f, "language = %s\n", lang_codes[g_lang]);
     if (g_biorand_cli_digest[0]) fprintf(f, "biorand_cli_digest = %s\n", g_biorand_cli_digest);
