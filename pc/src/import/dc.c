@@ -77,7 +77,7 @@ unsigned char* dc_pvr_rgba(const unsigned char* p, uint32_t n, int* W, int* H, c
         const unsigned char* idx = d + dn - (uint32_t)(w / 2) * (h / 2);
         for (int y = 0; y < h; y += 2)
             for (int x = 0; x < w; x += 2) {
-                const unsigned char* e = d + 8 * idx[twiddle((uint32_t)x / 2, (uint32_t)y / 2)];
+                const unsigned char* e = d + 8 * (idx[twiddle((uint32_t)x / 2, (uint32_t)y / 2)] & (cb - 1));   /* (cb: a power of two; a small codebook's index kept in it) */
                 for (int k = 0; k < 4; k++) texel(fmt, pc_rd16(e + 2 * k), o + 4 * ((size_t)(y + (k & 1)) * w + x + (k >> 1)));
             }
     } else if (dat == 1 || dat == 2 || dat == 0x12 || dat == 9 || dat == 0x0D) {   /* twiddled (square, mipmaps), rectangle, twiddled rectangle */
@@ -173,7 +173,7 @@ static int owner(const unsigned char* e, uint32_t n, uint32_t enep, int ene, uin
         uint32_t p = pc_rd32(e + h1 + 4 * m++);
         int t = -1;
         int32_t dt;
-        while (p + 4 <= n && (dt = (int32_t)pc_rd32(e + p)) != -1) {
+        while (pc_range_ok(p, 4, n) && (dt = (int32_t)pc_rd32(e + p)) != -1) {
             p += 4;
             if (dt < 0 || dt > (int32_t)(n - p)) break;
             if (dt >= 16 && memcmp(e + p, "MASK", 4) && memcmp(e + p, "SKIN", 4) && pc_rd32(e + p + 8) != 0xFFFFFFFFu) {
@@ -257,7 +257,7 @@ static int convert(const struct DcModel* md, const unsigned char* e, uint32_t n,
     size_t prev = 0;   /* the size word of the chunk before (0: none, or an empty one: not grown) */
     int first = 1;
     int32_t dt;
-    while (p + 4 <= n && (dt = (int32_t)pc_rd32(e + p)) != -1) {
+    while (pc_range_ok(p, 4, n) && (dt = (int32_t)pc_rd32(e + p)) != -1) {
         p += 4;
         if (dt < 0 || dt > (int32_t)(n - p)) { snprintf(why, wn, "a damaged chunk list in %s", md->room); return 0; }
         int mlb = dt >= 16 && memcmp(e + p, "MASK", 4) && memcmp(e + p, "SKIN", 4);

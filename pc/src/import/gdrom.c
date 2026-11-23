@@ -342,7 +342,7 @@ static int chd_open(GdDisc* d, FILE* f, char* err, int en)
     uint64_t logical = be64(h + 32), mapoff = be64(h + 40), meta = be64(h + 48);
     d->hunkbytes = be32(h + 56);
     for (int i = 0; i < 20; i++) if (h[104 + i]) { snprintf(err, en, "a CHD with a parent image is not read"); return 0; }
-    if (be32(h + 60) != CHD_FRAME || !d->hunkbytes || d->hunkbytes % CHD_FRAME || d->hunkbytes > (1u << 20) || logical / d->hunkbytes > (1u << 24)) {
+    if (be32(h + 60) != CHD_FRAME || !d->hunkbytes || d->hunkbytes % CHD_FRAME || d->hunkbytes > (1u << 20) || logical > (4ull << 30)) {   /* (a GD-ROM: 1.3 GB; the map allocated below stays small) */
         snprintf(err, en, "not a CD image (CHD)");
         return 0;
     }
@@ -366,7 +366,7 @@ static int chd_open(GdDisc* d, FILE* f, char* err, int en)
         uint32_t mapbytes = be32(mh);
         uint64_t cur = be48(mh + 4);
         int lb = mh[12], sb = mh[13];
-        uint8_t* cm = mapbytes < (64u << 20) ? malloc(mapbytes ? mapbytes : 1) : NULL;
+        uint8_t* cm = mapbytes <= d->nhunk * 16u + 256 ? malloc(mapbytes ? mapbytes : 1) : NULL;
         if (!cm || fread(cm, 1, mapbytes, f) != mapbytes) { free(cm); snprintf(err, en, "the CHD's hunk map cannot be read"); return 0; }
         Bits s = { cm, mapbytes, 0 };
         MapHuff hf;
@@ -402,8 +402,8 @@ static int chd_open(GdDisc* d, FILE* f, char* err, int en)
     /* the tracks (GD-ROM: CHGD; CD: CHT2, CHTR): consecutive in the image, each padded to 4 frames; on a GD-ROM track 3
        starts the high-density area. A pregap stored with the track (PGTYPE V...) comes first. */
     uint32_t lba = 0, frame = 0;
-    int gd = 0;
-    while (meta && d->ntrack < GD_TRACKS) {
+    int gd = 0, steps = 0;
+    while (meta && d->ntrack < GD_TRACKS && steps++ < 1024) {   /* (steps: a damaged chain may loop) */
         uint8_t mh[16];
         char txt[256], type[32] = "", pgtype[32] = "";
         int tk = 0, frames = 0, pregap = 0, pad = 0, postgap = 0;

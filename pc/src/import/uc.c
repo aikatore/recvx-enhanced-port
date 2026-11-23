@@ -353,7 +353,7 @@ static void arr_get(B* b, const Arr* a, int i, float* out)   /* element i (posit
         case 3: v = (int16_t)U16(b, p); break;
         default: v = F32(b, p); break;
         }
-        out[k] = a->fmt == 4 ? v : v / (float)(1 << a->div);
+        out[k] = a->fmt == 4 ? v : ldexpf(v, -a->div);   /* (v / 2^div; div is a file byte) */
     }
 }
 
@@ -933,9 +933,9 @@ static int make_jaw(ImpModel* r, const unsigned char* face, float rest[ROLES][3]
     for (int v = 0; ok && v < nv; v++) {
         wid[v] = -1;
         if (!(face[v] & 1)) continue;
-        int64_t k = 0;
-        for (int c = 0; c < 3; c++) k = k * 2097152 + (int64_t)lroundf(r->pos[v][c] / 0.0005f) + 1048576;
-        Q[nq][0] = k; Q[nq][1] = v; nq++;
+        uint64_t k = 0;   /* (unsigned: a damaged position far out wraps, it is only a key) */
+        for (int c = 0; c < 3; c++) k = k * 2097152u + (uint64_t)(int64_t)lroundf(r->pos[v][c] / 0.0005f) + 1048576u;
+        Q[nq][0] = (int64_t)k; Q[nq][1] = v; nq++;
     }
     if (ok) qsort(Q, (size_t)nq, sizeof(*Q), cmp_q);
     for (int i = 0; ok && i < nq; i++) {
