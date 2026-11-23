@@ -77,6 +77,9 @@ int  lang_has_char(int l, const char* s);   /* the UTF-8 character at s has a co
 char* lang_shape(const char* s, char* out, int n);
 int  lang_rtl(const char* s);
 int  lang_rtl_text(void);             /* our texts are right to left (Arabic): pieces joined in code go in reverse */
+/* two translated pieces joined in code (a label and its value): a sep b, in Arabic b and a around sep reversed
+   (": " -> " :"), so the line reads right to left as the table's texts do; into out (n bytes); returns out */
+char* lang_join(char* out, int n, const char* a, const char* sep, const char* b);
 /* the byte where the last line of s[0, len) that is at most w wide starts (at a space; 0: all of it fits), for wrapping
    a display-order text from its right end; width(s, n, ud) measures n bytes */
 int  lang_rtl_cut(const char* s, int len, float w, float (*width)(const char* s, int n, void* ud), void* ud);

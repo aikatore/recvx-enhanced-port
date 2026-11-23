@@ -1182,7 +1182,7 @@ static const char* row_label(const Row* r, char* buf, int n)
         if (!m && r->idx >= 200) {   /* the search's: the category (a sub-page: and its parent's) */
             const MenuCat* c = &menu_cats[r->idx - 200];
             if (c->parent < 0) return c->name;
-            snprintf(buf, n, "%s: %s", tr(menu_cats[c->parent].name), tr(c->name));
+            lang_join(buf, n, tr(menu_cats[c->parent].name), ": ", tr(c->name));
             return buf;
         }
         if (!m) {   /* a binding group (idx 100 + BG_*) */
@@ -1523,7 +1523,8 @@ static void draw(void)
         char q[64];
         int n = 0;
         if (st.search) {   /* SEARCH: the text (a cursor while it is typed), no category on its plate */
-            snprintf(q, sizeof(q), "%s %s%s", tr("SEARCH:"), st.query, st.typing && (SDL_GetTicks() / 400 & 1) ? "_" : "");
+            snprintf(q, sizeof(q), "%s %s%s", tr("SEARCH:"), st.query, st.typing && (SDL_GetTicks() / 400 & 1) ? (lang_has_char(lang_font(), "_") ? "_" : "-") : "");   /* (the Japanese
+                                                                                                                font has no '_') */
             path[n++] = q;
         }
         for (int i = 0; i < st.depth && !st.search; i++) path[n++] = menu_cats[st.stack[i]].name;

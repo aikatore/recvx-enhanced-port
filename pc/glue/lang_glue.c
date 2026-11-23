@@ -476,6 +476,16 @@ static int text_font(void)
 }
 int lang_font(void) { return text_font(); }
 int lang_rtl_text(void) { return data_lang() == LANG_AR; }
+char* lang_join(char* out, int n, const char* a, const char* sep, const char* b)
+{
+    char r[8];
+    int k = (int)strlen(sep);
+    if (!lang_rtl_text() || k >= (int)sizeof(r)) { snprintf(out, n, "%s%s%s", a, sep, b); return out; }
+    for (int i = 0; i < k; i++) r[i] = sep[k - 1 - i];   /* (": " -> " :") */
+    r[k] = 0;
+    snprintf(out, n, "%s%s%s", b, r, a);
+    return out;
+}
 
 /* a glyph's advance in language l's font */
 static float width_of(int l, int code)

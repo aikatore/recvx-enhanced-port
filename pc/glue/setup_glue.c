@@ -558,18 +558,25 @@ static void paste_end(const char* text)
 
 /* ---------------------------------------------------------------- what this run is (ACTIVE MODIFIERS, the LOAD note) */
 enum { MOD_MAX = 12 };
+static void part(char* t, int n, const char* v)   /* the Looks line: a part more (" / " between: the Japanese font has no ';') */
+{
+    char p[128];
+    snprintf(p, sizeof(p), "%s", t);
+    if (p[0]) lang_join(t, n, p, " / ", v); else snprintf(t, n, "%s", v);
+}
 /* the modifiers in effect, one line each (short: the LOAD GAME note's names); the count */
 static int modifiers(char out[MOD_MAX][128], int brief)
 {
-    char a[64], b[64];
+    char a[64], b[64], v[128];
     int n = 0;
     const EnemyOpts* o = eo();
 #define ADD(...) do { if (n < MOD_MAX) snprintf(out[n++], 128, __VA_ARGS__); } while (0)
+#define PAIR(l, x) do { if (n < MOD_MAX) lang_join(out[n++], 128, l, ": ", x); } while (0)   /* "label: value" (Arabic: reversed) */
     if (o->rand) {
         if (brief) ADD("%s", tr("Enemy Randomizer"));
-        else ADD("%s: %s%s", tr("Enemy Randomizer"), settings_value_of(settings_of(&g_enemy_opts.variety), o->variety, a, sizeof(a)), o->events ? tr(", Event Enemies On") : "");
+        else PAIR(tr("Enemy Randomizer"), lang_join(v, sizeof(v), settings_value_of(settings_of(&g_enemy_opts.variety), o->variety, a, sizeof(a)), "", o->events ? tr(", Event Enemies On") : ""));
     }
-    if (o->extra) { if (brief) ADD("%s", tr("Extra Enemies")); else ADD("%s: %s", tr("Extra Enemies"), settings_value_of(settings_of(&g_enemy_opts.extra), o->extra, a, sizeof(a))); }
+    if (o->extra) { if (brief) ADD("%s", tr("Extra Enemies")); else PAIR(tr("Extra Enemies"), settings_value_of(settings_of(&g_enemy_opts.extra), o->extra, a, sizeof(a))); }
     if (o->place) ADD("%s", tr("Rearranged Enemies"));
     {   /* the looks, in one line */
         char t[128] = "";
@@ -579,26 +586,29 @@ static int modifiers(char out[MOD_MAX][128], int brief)
         else if (look == 1) snprintf(t, sizeof(t), tr("you Claire %s, Chris %s"), look_name(0, a, sizeof(a)), look_name(1, b, sizeof(b)));
         if (story) {
             static const char* const st[] = { "", "swapped", "any model", "custom" };
-            snprintf(t + strlen(t), sizeof(t) - strlen(t), "%s%s %s%s", t[0] ? "; " : "", tr("story characters"), tr(st[story]), o->cast_assign ? tr(", new each scene") : "");
+            lang_join(v, sizeof(v), tr("story characters"), " ", lang_join(b, sizeof(b), tr(st[story]), "", o->cast_assign ? tr(", new each scene") : ""));
+            part(t, sizeof(t), v);
         }
         if (mon != MV_ORIG) {
             static const char* const mt[] = { "", "any monster", "like story characters", "custom" };
-            snprintf(t + strlen(t), sizeof(t) - strlen(t), "%s%s %s", t[0] ? "; " : "", tr("monsters"), tr(mt[mon]));
+            lang_join(v, sizeof(v), tr("monsters"), " ", tr(mt[mon]));
+            part(t, sizeof(t), v);
         }
-        if (t[0]) { if (brief) ADD("%s", tr("Looks")); else ADD("%s: %s", tr("Looks"), t); }
+        if (t[0]) { if (brief) ADD("%s", tr("Looks")); else PAIR(tr("Looks"), t); }
     }
     if (o->voices) ADD("%s", tr("Voices Match Used Character"));
     if (val_of("Extra Item Boxes and Herbs")) ADD("%s", tr("Extra Item Boxes and Herbs"));
     if (val_of("Free Typewriter Saves")) ADD("%s", tr("Save Without Ink Ribbons"));
     {
         int k = menu_setting("Headshots & Piercing"), d;
-        if (k >= 0 && menu_default(k, &d) && val(k) != d) ADD("%s: %s", tr("Headshots and Piercing"), tr(val(k) ? "On" : "Off"));
+        if (k >= 0 && menu_default(k, &d) && val(k) != d) PAIR(tr("Headshots and Piercing"), tr(val(k) ? "On" : "Off"));
     }
     {   /* (Auto: on with the randomizer or extra enemies of this setup) */
         int b = val_of("Break Free Pushes Enemies");
         if (b == 2 || (b == 1 && (val_of("Enemy Randomizer") || val_of("Extra Enemies")))) ADD("%s", tr("Break Free Pushes Enemies"));
     }
 #undef ADD
+#undef PAIR
     return n;
 }
 
@@ -662,11 +672,13 @@ static void who_is_who(float x, float y, float w)
         int imports = cast_imports_now(o);
         t[0] = 0;
         for (int c = 2; c < CAST_CHARACTERS; c++) {
-            char* p;
+            char* p, u[200];
             int mdl = cast_model((unsigned)o->seed, 0, c, o->cast_all, imports, enemy_cast_off(), o->cast_enemy, o->cast_enemy_off);
-            snprintf(a, sizeof(a), "%s", mdl >= 0 ? tr(cast_entry_name(mdl)) : tr("original"));
-            if ((p = strstr(a, " (Cutscene Model)"))) *p = 0;   /* (short) */
-            snprintf(t + strlen(t), sizeof(t) - strlen(t), "%s%s: %s", t[0] ? ", " : "", tr(cast_name(c)), a);
+            snprintf(b, sizeof(b), "%s", mdl >= 0 ? cast_entry_name(mdl) : "original");
+            if ((p = strstr(b, " (Cutscene Model)"))) *p = 0;   /* (short: on the English name, then translated) */
+            lang_join(a, sizeof(a), tr(cast_name(c)), ": ", tr(b));
+            snprintf(u, sizeof(u), "%s", t);
+            if (u[0]) lang_join(t, sizeof(t), u, ", ", a); else snprintf(t, sizeof(t), "%s", a);
             if (c == 3 || c == 5 || c == CAST_CHARACTERS - 1) { line_at(x, y + 11 * row++, w, t, 0.4f, 0xFFE8E8E2u); t[0] = 0; }
         }
     } else {
@@ -941,7 +953,7 @@ void setup_track(void)
         int v;
         if (!host_decided(m, &v)) continue;
         if (hc.have[i] && hc.v[i] != v && now - hc.since > 2000) {
-            snprintf(hc.msg, sizeof(hc.msg), "%s: %s", tr(m->label ? m->label : m->ref), ui_rows_value(m, a, sizeof(a)));
+            lang_join(hc.msg, sizeof(hc.msg), tr(m->label ? m->label : m->ref), ": ", ui_rows_value(m, a, sizeof(a)));
             hc.at = now | 1;
             host_log("setup: the host changed %s\n", hc.msg);
         }
@@ -980,7 +992,7 @@ int setup_lobby_lines(char out[][128], int max, int view, char* brief, int nb)
         const MenuRow* m = &menu_rows[i];
         int s = menu_setting(m->ref), d;
         if (m->cat != MC_COOP_RULES || m->kind != ML_SET || s < 0 || !menu_default(s, &d) || val(s) == d) continue;
-        OUT("%s: %s", tr(m->label ? m->label : m->ref), ui_rows_value(m, a, sizeof(a)));
+        if (n < max) lang_join(out[n++], 128, tr(m->label ? m->label : m->ref), ": ", ui_rows_value(m, a, sizeof(a)));
         changes++;
     }
     if (!changes) OUT("%s", tr("No modifiers: the original game."));

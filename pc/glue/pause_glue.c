@@ -360,7 +360,7 @@ static void this_game(float y)
         for (int j = 0; j < menu_rows_n; j++) if (menu_rows[j].kind == ML_SET && !strcmp(menu_rows[j].ref, rows[i])) m = &menu_rows[j];
         if (m && m->names && !g_settings[k].name) snprintf(v, sizeof(v), "%s", tr(m->names[settings_get(&g_settings[k]) - g_settings[k].lo]));
         else settings_value(&g_settings[k], v, sizeof(v));
-        snprintf(t, sizeof(t), "%s: %s", tr(m && m->label ? m->label : rows[i]), v);
+        lang_join(t, sizeof(t), tr(m && m->label ? m->label : rows[i]), ": ", v);
         text_m(PANEL_X0 + 16, y, t, 0.46f, C_HELP); y += 15; n++;
     }
     if (!n) { text_m(PANEL_X0 + 16, y, "No modifiers: the original game.", 0.46f, C_HELP); y += 15; }
@@ -409,7 +409,7 @@ static void pause_draw(void)
                 pc_ui_rect(mx(PX - 10, 262), y - 3, mx(PX - 10, 262) + 262, y + PDY - 5, 0x40FFFFFF, 0.3f);
                 pc_ui_rect(mx(PX - 10, 3), y - 3, mx(PX - 10, 3) + 3, y + PDY - 5, C_GOLD, 0.31f);
             }
-            if (i == C_SHOW) { snprintf(t, sizeof(t), "%s: %s", tr(coop_label(i)), tr(coop_show ? "On" : "Off")); text_m(PX, y, t, PSC * 0.85f, col); }
+            if (i == C_SHOW) { lang_join(t, sizeof(t), tr(coop_label(i)), ": ", tr(coop_show ? "On" : "Off")); text_m(PX, y, t, PSC * 0.85f, col); }
             else text_m(PX, y, coop_label(i), i == C_LEAVE && coop_leave ? PSC * 0.7f : PSC, col);
             if (i == C_WINDOW) pc_ui_arrow(mx(PX + 240, 0), y + 10, rtl ? -1 : 1, col);
         }
