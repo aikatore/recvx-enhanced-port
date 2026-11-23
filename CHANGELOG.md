@@ -36,6 +36,8 @@
 
 ### Fixes
 
+- **Smoother Motion**: imported models in larger numbers (for example zombies drawn as Umbrella Chronicles zombies) no
+  longer drop the frame rate. Import Umbrella Chronicles again for the full speed-up.
 - **Co-op**: your partner moves smoothly over laggy connections, less data is sent while you are in different rooms,
   the switch to the relay server is much faster when the direct connection drops, and Windows and Linux players can
   play together without the Tyrant breaking.
