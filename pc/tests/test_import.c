@@ -197,6 +197,58 @@ int main(int argc, char** argv)
         CHECK(s[0].w[0] > 0.74f && s[0].w[0] < 0.76f && s[0].w[1] > 0.24f && s[0].w[2] == 0 && s[0].node[0] != s[0].node[1]);
         CHECK(s[0].pos[0] < -2.49f && s[0].pos[0] > -2.51f && s[0].pos[1] > 13.74f && s[0].pos[1] < 13.76f);   /* turned (x negated), scaled, moved with its arm */
     }
+    {   /* single triangles (a triangle list: one 3-corner strip each, in a scrambled order) joined into strips
+           (impmodel.c join_tris): the very same triangles, each with its corners and its turn, in fewer strips */
+        enum { G = 5, NT = 2 * (G - 1) * (G - 1) };   /* a 4 x 4 grid of quads, two triangles each */
+        ImpModel g = m;   /* (the skeleton; geometry of its own) */
+        int tri[NT][3], got[NT] = { 0 }, ns = 0, nt = 0;
+        g.nv = G * G; g.ns = NT; g.nidx = 3 * NT; g.ntex = 0; g.iuv = NULL; g.morph = NULL; g.hand = NULL;
+        g.pos = calloc(G * G, 12); g.nrm = calloc(G * G, 12); g.uv = calloc(G * G, 8); g.jnt = calloc(G * G, 4); g.wgt = calloc(G * G, 16);
+        g.strip = calloc(NT, sizeof(ImpStrip)); g.idx = calloc(3 * NT, sizeof(int));
+        CHECK(g.pos && g.nrm && g.uv && g.jnt && g.wgt && g.strip && g.idx);
+        for (int v = 0; v < G * G; v++) {
+            g.pos[v][0] = 30.0f + 5 * (v % G); g.pos[v][1] = 140.0f + 5 * (v / G); g.nrm[v][2] = 1;
+            g.uv[v][0] = 0.25f * (v % G); g.uv[v][1] = 0.25f * (v / G); g.jnt[v][0] = 3; g.wgt[v][0] = 1;
+        }
+        for (int q = 0; q < (G - 1) * (G - 1); q++) {   /* a b / c d: a b c and b d c, both turned the same way */
+            int a = q / (G - 1) * G + q % (G - 1);
+            tri[2 * q][0] = a; tri[2 * q][1] = a + 1; tri[2 * q][2] = a + G;
+            tri[2 * q + 1][0] = a + 1; tri[2 * q + 1][1] = a + G + 1; tri[2 * q + 1][2] = a + G;
+        }
+        for (int i = 0; i < NT; i++) {   /* (strip i: triangle i * 7 mod NT) */
+            g.strip[i] = (ImpStrip){ 3 * i, 3, -1, 1 };
+            for (int k = 0; k < 3; k++) g.idx[3 * i + k] = tri[i * 7 % NT][k];
+        }
+        snprintf(p, sizeof(p), "%s/test_import_join.cvxm", dir);
+        CHECK(imp_write_cvxm(&g, p, 1.0f, 0xE00000, NULL, err, sizeof(err)) || (printf("%s\n", err), 0));
+        f = fopen(p, "rb");
+        CHECK(f);
+        n = fread(d, 1, sizeof(d), f);
+        fclose(f);
+        size_t q = 64;
+        while (q + 6 <= n && !(d[q] == 0x42 && d[q + 1] == 0x12)) q += 2;   /* the strips' chunk (CsUvh, both sides) */
+        CHECK(q + 6 <= n);
+        uint16_t words, cnt, c[64][3];
+        memcpy(&words, d + q + 2, 2); memcpy(&cnt, d + q + 4, 2);
+        size_t at = q + 6, end = q + 4 + 2 * (size_t)words;
+        for (int s2 = 0; s2 < cnt; s2++, ns++) {
+            uint16_t len;
+            memcpy(&len, d + at, 2); at += 2;
+            CHECK(len >= 3 && len <= 64 && at + 6 * (size_t)len <= end);
+            memcpy(c, d + at, 6 * (size_t)len); at += 6 * (size_t)len;
+            for (int k = 0; k < len; k++)   /* every corner the vertex's own UV (1023 = 1.0) */
+                CHECK(c[k][0] < G * G && c[k][1] == (uint16_t)(g.uv[c[k][0]][0] * 1023.0f + 0.5f) && c[k][2] == (uint16_t)(g.uv[c[k][0]][1] * 1023.0f + 0.5f));
+            for (int k = 0; k + 2 < len; k++) {   /* its triangles as drawn (odd ones flipped), found among the grid's turned the same way */
+                int x = c[k + (k & 1)][0], y = c[k + 1 - (k & 1)][0], z = c[k + 2][0], hit = -1;
+                for (int i = 0; i < NT && hit < 0; i++)
+                    for (int r = 0; r < 3; r++) if (tri[i][r] == x && tri[i][(r + 1) % 3] == y && tri[i][(r + 2) % 3] == z) hit = i;
+                CHECK(hit >= 0 && !got[hit]);
+                got[hit] = 1; nt++;
+            }
+        }
+        CHECK(at == end && nt == NT && ns < NT / 2);   /* all of them, once; in under half as many strips */
+        free(g.pos); free(g.nrm); free(g.uv); free(g.jnt); free(g.wgt); free(g.strip); free(g.idx);
+    }
     snprintf(p, sizeof(p), "%s/test_import.glb", dir);
     CHECK(imp_write_glb(&m, p, "test", 0.01f, err, sizeof(err)) || (printf("%s\n", err), 0));
     f = fopen(p, "rb");

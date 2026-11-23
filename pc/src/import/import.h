@@ -84,6 +84,8 @@ int  import_present(int src);
 
 /* the results of the last extraction of `src` (read from its manifest; a language source has none: lang.h) */
 int import_results(int src, ImportItem* out, int max, char* when, int wn);
+/* 1: the game's models come from an older importer whose output an import again improves (manifest version, import.c) */
+int import_old(int src);
 
 /* runs the extraction of `src` (`what`: IMPORT_* bits) on a thread of its own; 0 if one is running */
 int import_start(int src, int what);
