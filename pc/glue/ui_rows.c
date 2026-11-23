@@ -422,7 +422,7 @@ static void build_rows(void)
             if (in_setup(m) && setup_custom_list(m) >= 0) rows[nrows++] = (Row){ R_CUSTOM, m, -1, setup_custom_list(m) };   /* "Custom": its list's row under it */
             if (m->kind == ML_SET && set >= 0 && g_settings[set].val == &g_enemy_opts.variety && g_enemy_opts.variety == 2) rows[nrows++] = (Row){ R_RATES, m, -1, 0 };
         }
-        if (menu_cats[st.cat].parent < 0 && menu_cats[st.cat].screen != MS_CHEATS && st.cat != MC_OVERVIEW) rows[nrows++] = (Row){ R_RESET_CAT, NULL, -1, 0 };
+        if (!st.depth && menu_cats[st.cat].parent < 0 && menu_cats[st.cat].screen != MS_CHEATS && st.cat != MC_OVERVIEW) rows[nrows++] = (Row){ R_RESET_CAT, NULL, -1, 0 };
     }
     if (st.go) {   /* ui_rows_goto's row */
         for (int i = 0; i < nrows; i++) if (rows[i].kind == R_ITEM && rows[i].m == st.go) { st.sel[st.cat] = i; st.top[st.cat] = 0; }
@@ -1528,7 +1528,8 @@ static void draw(void)
         }
         for (int i = 0; i < st.depth && !st.search; i++) path[n++] = menu_cats[st.stack[i]].name;
         if (!st.search || st.depth) path[n++] = menu_cats[st.cat].name;
-        frame(st.root, path, n, cat_listed, menu_cats[st.cat].screen == st.screen && !st.search ? (st.depth ? st.stack[0] : st.cat) : -1);
+        frame(st.root, path, n, cat_listed, st.depth ? st.stack[0] : menu_cats[st.cat].screen == st.screen && !st.search ? st.cat : -1);   /* (a sub-page: its
+                                                                                                                     category, also SETTINGS > GAMEPLAY's Game Rules) */
     }
     if (st.edit) {   /* the character grid draws itself over this (text_grid.c): the help line alone */
         char nm[96];
@@ -1673,7 +1674,12 @@ static int input(int port)
     if (mt.left) {
         int b = bar_hit(x, mt.y);
         if ((c = cat_at(x, mt.y)) >= 0) {
-            if (c != st.cat || st.depth) { st.depth = 0; set_cat(c); CallSystemSe(0, 2); }
+            if (c != st.cat || st.depth || st.search) {   /* (a click ends the search, as L1/R1 do) */
+                if (st.depth) st.cat = st.stack[0], st.depth = 0;
+                search_end();
+                set_cat(c);
+                CallSystemSe(0, 2);
+            }
             return UR_STAY;
         }
         if (b == UG_OK) return activate(&rows[SEL]);

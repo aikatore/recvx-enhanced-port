@@ -18,7 +18,7 @@ under the panel). Eight categories on the left:
 
 | Category | Rows |
 |---|---|
-| GAMEPLAY | GENERAL (door animations, loading, quick knife, stairs, Your Character ▸), COMBAT (aim and hit options: Move While Aiming (Third Person) and (Fixed Cameras), Aim Scoped Weapons Normally; Game Rules ▸: GAME SETUP > RULES, as the co-op lobby names it), SAVES (Save System, Import Memory Card Saves ▸: IMPORT's MEMORY CARD SAVES), STARTUP AND UNLOCKS (Skip Intro, updates, Battle Game, Menu Style) |
+| GAMEPLAY | GENERAL (door animations, loading, quick knife, stairs, Your Character ▸), COMBAT (aim and hit options: Move While Aiming (Third Person) and (Fixed Cameras), Aim Scoped Weapons Normally; Game Rules ▸: GAME SETUP > RULES, as the co-op lobby names it; a sub-page of GAMEPLAY there, GAMEPLAY stays marked and it has no Reset Category row), SAVES (Save System, Import Memory Card Saves ▸: IMPORT's MEMORY CARD SAVES), STARTUP AND UNLOCKS (Skip Intro, updates, Battle Game, Menu Style) |
 | CAMERA AND HUD | CAMERA (Camera Mode: Fixed / Over Shoulder / First Person, Camera Lighting and Fog), THIRD-PERSON CAMERA (field of view, aiming field of view, shoulder; Advanced ▸ distances, height and shoulder offset), FIRST-PERSON CAMERA (Field of View, HUD, Body), HUD (HUD, position, style, Crosshair) |
 | CONTROLS | INPUT (Fixed-camera Movement, devices, Control Type ▸ = the game's KEY CONFIG, Button Icons, Vibration), MOUSE, CONTROLLER (Advanced ▸ dead zones), BUTTONS (Customize Keyboard and Mouse ▸, Customize Controller ▸) |
 | DISPLAY | WINDOW, PICTURE (aspect, brightness, contrast, gamma, Screen Position ▸ = SCREEN SETUP, Monitor Test ▸ = MONITOR ADJUSTMENT), WIDESCREEN, INFO (Show Frame Rate, Performance Graph: F1's Performance section as a panel in the top right corner; not saved) |
@@ -33,7 +33,7 @@ Off turns the game's vibration off (the system save's VIBRATION), a percentage t
 
 **Search** (SETTINGS only, the keyboard's): Ctrl+F or `/` (or a click on the bar's Search), then type. Every SETTINGS
 row whose label, old name (the table's label, e.g. "Mouse Camera Style"), help or value holds the text is listed under its
-category; Enter or Down goes to the results, which change as anywhere else; Esc (Back) closes the search, L1 / R1 too.
+category; Enter or Down goes to the results, which change as anywhere else; Esc (Back) closes the search, L1 / R1 and a click on a category too.
 
 **Display Mode and Fullscreen Resolution** ask "Keep these settings? Reverting in 10 s." after a change: KEEP keeps it,
 REVERT, Cancel or no answer within 10 seconds puts the old one back (REVERT is chosen first).
@@ -131,7 +131,8 @@ The lobby is laid out as mockup 06 (P4): the two players' models side by side on
 its state under the name (Host / Guest, the partner's Ready or Not ready and the ping), the room code (or the join
 address) and the GAME SETUP box right of them, the rows below the box (the host: START GAME, Edit Game Setup, Room
 Password with a server, Your Character, COPY ROOM CODE, REMOVE PARTNER, CLOSE LOBBY; Start From is in Edit Game Setup's
-OVERVIEW). With a controller the host's bar also shows Start (START GAME) and Triangle (Copy Code / Copy Address).
+OVERVIEW). CLOSE LOBBY with a partner in it, and a guest's LEAVE (also Cancel, Esc or a right click), ask YES / NO
+first. With a controller the host's bar also shows Start (START GAME) and Triangle (Copy Code / Copy Address).
 
 **WHAT'S NEW** (both menus) shows the changelog of the version being played, so nobody has to look it up elsewhere.
 Its button is in the title menu's top right corner (top left in Arabic), apart from the menu's rows: a click on it, or

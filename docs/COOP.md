@@ -69,7 +69,8 @@ back here with the reason.
 
 **The guest's lobby**: **READY** (Yes / No: the host sees it; it travels in the lobby note the old lobby already sends,
 so the wire is unchanged), **Game Setup** (the host's GAME SETUP, read-only: every row with the host's value and "Set by
-the host."; your own YOU rows and Extra Mouth Movement stay yours), **Your Character**, **Starting Items**, **LEAVE**.
+the host."; your own YOU rows and Extra Mouth Movement stay yours), **Your Character**, **Starting Items**, **LEAVE** (asks first;
+Cancel, Esc or a right click do the same).
 When the host changes a rule it shows for a few seconds as "Host changed: Extra Enemies: Up to 2" in the summary and in
 the read-only setup. A guest whose You Look Like is Random sees its look from the host's seed and its slot (D19) on its
 model in the lobby, and the host sees it too.

@@ -2164,7 +2164,7 @@ static struct {
     int page, sub, text;                /* NP_*; NS_*; the row typed on the grid */
     int sel[3];                         /* per page: the row chosen (NR_*) */
     int off;                            /* frames the lobby has been without a session: it ended, back to the page before */
-    int ready, asked, show_addr, ask_yes, offered;
+    int ready, asked, show_addr, ask_yes, ask_leave, offered;   /* ask_leave: NS_ASK is a guest's LEAVE */
     int esc, esc_edge;                  /* Esc held (SDL scancode 41), pressed this frame (tracked under the screens over the page too) */
 } nm;
 int pc_newgame_difficulty(int set);     /* host.c */
@@ -2349,6 +2349,14 @@ static void nm_settings(const char* ref)
     nm.sub = NS_SETTINGS;
 }
 
+static void nm_leave_lobby(void)
+{
+    g_coop.request = COOP_REQ_STOP;
+    CallSystemSe(0, 0);
+    host_log("lobby: LEAVE\n");
+    nm_page(NP_JOIN);
+}
+
 static void nm_close_lobby(void)
 {
     g_coop.request = COOP_REQ_STOP;
@@ -2432,11 +2440,11 @@ static int nm_activate(int r)
         return 0;
     case NR_KICK: g_coop.request = COOP_REQ_KICK; say("Partner removed. They can rejoin with the same code."); CallSystemSe(0, 0); return 0;
     case NR_CLOSE:
-        if (partner_in()) { nm.sub = NS_ASK; nm.ask_yes = 0; CallSystemSe(0, 3); return 0; }
+        if (partner_in()) { nm.sub = NS_ASK; nm.ask_yes = nm.ask_leave = 0; CallSystemSe(0, 3); return 0; }
         nm_close_lobby();
         return 0;
     case NR_GEN: CallSystemSe(0, 3); pc_biorand_flow_open(3, 0); nm.sub = NS_GEN; return 0;
-    case NR_LEAVE: g_coop.request = COOP_REQ_STOP; CallSystemSe(0, 0); host_log("lobby: LEAVE\n"); nm_page(NP_JOIN); return 0;
+    case NR_LEAVE: nm.sub = NS_ASK; nm.ask_yes = 0; nm.ask_leave = 1; CallSystemSe(0, 3); return 0;   /* (asked, as CLOSE LOBBY) */
     default: if (nm_value_row(r)) nm_change(r, 1); return 0;
     }
 }
@@ -2718,9 +2726,9 @@ static int nm_frame(void)
         nm_background();
         if (pc_biorand_flow()) nm.sub = NS_NONE;
         break;
-    case NS_ASK: {   /* CLOSE LOBBY with a partner in it */
-        static const char* q = "Close the lobby?";
-        static const char* q2 = "Your partner leaves too.";
+    case NS_ASK: {   /* CLOSE LOBBY with a partner in it, a guest's LEAVE */
+        const char* q = nm.ask_leave ? "Leave the lobby?" : "Close the lobby?";
+        const char* q2 = nm.ask_leave ? "The host's lobby stays open." : "Your partner leaves too.";
         unsigned int press = Pad[AdvWork.PortId].press;
         float y0, y1;
         int hit;
@@ -2730,7 +2738,7 @@ static int nm_frame(void)
         if (hit >= 0) hit = !hit;
         if (hit >= 0 && (mt.moved || mt.left) && hit != nm.ask_yes) { nm.ask_yes = hit; CallSystemSe(0, 2); }
         if (press & (BTN_LEFT | BTN_RIGHT)) { nm.ask_yes ^= 1; CallSystemSe(0, 2); }
-        else if ((mt.left && hit >= 0) || (press & (AdvGetOkButton() | BTN_START))) { nm.sub = NS_NONE; if (nm.ask_yes) nm_close_lobby(); else CallSystemSe(0, 0); }
+        else if ((mt.left && hit >= 0) || (press & (AdvGetOkButton() | BTN_START))) { nm.sub = NS_NONE; if (!nm.ask_yes) CallSystemSe(0, 0); else if (nm.ask_leave) nm_leave_lobby(); else nm_close_lobby(); }
         else if (mt.right || (press & AdvGetCancelButton())) { nm.sub = NS_NONE; CallSystemSe(0, 0); }
         nm_background();
         if (nm.sub == NS_ASK) pc_ui_dialog(y0, y1, 0.303f, q, q2, 0.5f, 0xFFC8C8C2, 1, "YES", "NO", !nm.ask_yes, 0);
