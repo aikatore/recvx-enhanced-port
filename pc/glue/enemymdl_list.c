@@ -65,6 +65,18 @@ static void step(int c, int d, int group)
     CallSystemSe(0, 2);
 }
 
+/* choice v's name, translated; one that draws nothing here (an import whose game is unchecked in the import lists, a
+   random group of only such): "(game unchecked)" after it, as the room then shows the original */
+static const char* shown_name(int v, char* buf, int n)
+{
+    char t[96];
+    int one;
+    snprintf(t, sizeof(t), "%s", tr(emodel_choice_name(v, buf, n)));
+    if (v != EM_ORIGINAL && !emodel_members(v, &one, 1)) return lang_join(buf, n, t, " ", tr("(game unchecked)"));
+    snprintf(buf, (size_t)n, "%s", t);
+    return buf;
+}
+
 static void to(int c)
 {
     c = (c % (EM_CATS + 1) + EM_CATS + 1) % (EM_CATS + 1);
@@ -113,7 +125,7 @@ void emodel_list_draw(void)
     for (c = 0; c < EM_CATS; c++) {
         int sel = el.cur == c;
         unsigned int col = sel ? 0xFFFFFFFF : v[c] ? 0xFFD0D0D0 : 0xFF909090, ac = el.ro ? 0xFF606060 : col;
-        const char* nm = tr(emodel_choice_name(v[c], nb, sizeof(nb)));
+        const char* nm = shown_name(v[c], nb, sizeof(nb));
         float w = pc_ui_text_w(nm, el.sc), sc = w > vw ? el.sc * vw / w : el.sc;
         y = el.y0 + c * el.h;
         if (sel) pc_ui_rect(el.x0 - 8, y - 2, el.x1, y + el.h - 3, 0x50FFFFFF, Z_SEL + c * 0.0004f);
@@ -143,7 +155,7 @@ const char* emodel_list_summary(const int* v, char* buf, int n)
     char nb[96];
     for (c = 0; c < EM_CATS; c++) if (v[c]) { k++; last = c; }
     if (!k) snprintf(buf, (size_t)n, "%s", tr("Original"));
-    else if (k == 1) snprintf(buf, (size_t)n, "%s: %s", tr(emodel_cat_name(last)), tr(emodel_choice_name(v[last], nb, sizeof(nb))));
+    else if (k == 1) lang_join(buf, n, tr(emodel_cat_name(last)), ": ", shown_name(v[last], nb, sizeof(nb)));
     else snprintf(buf, (size_t)n, tr("%d changed"), k);
     return buf;
 }

@@ -674,7 +674,8 @@ Eliminator, Ivy), Random Code: Veronica Character, Random Umbrella Chronicles Ch
 Model (Any); a group with no member is not listed; or **one model** (every listed humanoid catalogue model, then every
 import). One model for Zombies: every zombie looks like it. Imports count only while their game is checked (GAME SETUP >
 CHARACTERS, "Umbrella Chronicles", "Outbreak File 2", ...; `actor_import_shown`): an unchecked game's models leave the
-list and the groups, and a row set to one of them shows the original.
+list and the groups, and a row set to one of them shows the original: the list and the row's value then say
+"(game unchecked)" after its name (`enemymdl_list.c shown_name`), and each room logs it once.
 
 * **Picks** (`emodel_pick`): a random group takes at most 3 of its models per room (`EM_ROOM_PICKS`, the first of a
   shuffle by enemy seed, room file and row), and each enemy one of those by its slot, so neighbouring slots (a room's
