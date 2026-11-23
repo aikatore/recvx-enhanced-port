@@ -54,6 +54,7 @@ void itemmdl_release(void)
         O_WRK* op = &sys->itwp[swapped[k].spot];
         op->mdl[0] = swapped[k].orig;
         op->mlwP = &op->mdl[0];
+        op->py -= swapped[k].dy;   /* (as itemmdl_check: also right should the room stay) */
     }
     nswapped = 0;
 }

@@ -476,6 +476,8 @@ static void fp_mix(NJS_POINT3* eye, NJS_POINT3* sh, const NJS_POINT3* o, float k
 static void fp_head_get(NJS_POINT3* h)
 {
     NJS_POINT3 loc = { 0, FP_UP, 0 };
+    if (plp->mlwP->obj_num <= 5) { *h = *(NJS_POINT3*)&plp->px; h->y += 10.0f + FP_UP; return; }   /* (a model without a head node:
+                                                                                                    about where a head is) */
     njCalcPoint(&plp->mlwP->owP[5].mtx, &loc, h);
 }
 
@@ -489,9 +491,12 @@ static void fp_track(int init)
     {   /* the weapon up or reloading: the eye comes down to FP_ADS above the weapon hand when that is lower, and back by
            FP_BACK, so a weapon held low (the shotgun, the rifles, the launchers at the hip) is in the lower right as a
            handgun held at the eyes is. A reload's hands go down: the hand's height as the weapon was last aimed */
-        static float aim_hand[32];   /* by weapon (0: not aimed yet) */
+        static float aim_hand[32];   /* by weapon (0: not aimed yet); forgotten at every room load (another character, a new game) */
+        static int aim_gen = -1;
         int w = plp->wpnr_no & 31, rld = plp->mode0 == 1 && ((plp->mode1 == 1 && plp->mode2 == 70) || reload_at_rest());
-        float hand = rld && aim_hand[w] ? aim_hand[w] : fp_hand, drop = 0;
+        float hand, drop = 0;
+        if (aim_gen != enemy_room_gen) { memset(aim_hand, 0, sizeof(aim_hand)); aim_gen = enemy_room_gen; }
+        hand = rld && aim_hand[w] ? aim_hand[w] : fp_hand;
         if (aiming() && plp->mode2 >= 65 && plp->mode2 <= 69 && plp->mode2 != 68) aim_hand[w] = fp_hand;   /* (aimed, a shot; not lowering) */
         if ((aiming() || rld) && hand + FP_ADS - FP_RISE < h.y) drop = h.y - (hand + FP_ADS - FP_RISE), h.y -= drop;
         fp_back += ((drop < 2 ? drop / 2 : 1) * FP_BACK - fp_back) * (init ? 1.0f : 0.3f);
@@ -2501,6 +2506,7 @@ void tps_calc_model(void)
    appear as": not drawn at all, 1); the weapon in the hand stays (tps_fp_objects). For this draw only: the partner, the
    shadow and the pose are untouched */
 extern int actor_fp_nohead;
+extern unsigned char pl_sleep_cnt;   /* system.c: a few frames the player is drawn although hidden (event.c) */
 int actor_player_look(void);   /* actor_glue.c: we are drawn as another model */
 /* the body is drawn: the setting, and the eye not pulled back behind the head (a weapon held low, aimed: fp_track) */
 static int fp_body(void) { return g_tps.fp_body && fp_back < 0.3f; }
@@ -2517,7 +2523,10 @@ int tps_fp_hide(int on)
     }
     if (!tps_cam_active || fp_w <= 0.15f || !o) return 0;
     if (fp_body()) { actor_fp_nohead = 1; return 0; }
-    if (actor_player_look() || n > 32) return 1;
+    if (actor_player_look() || n > 32) {   /* (game.c skips its whole draw block: its pl_sleep_cnt count down, here) */
+        if (pl_sleep_cnt && ((sys->pt_flg & 1) || (plp->stflg & 0x01000000))) pl_sleep_cnt--;
+        return 1;
+    }
     for (i = 0; i < n; i++)
         if (o[i].model && !(o[i].evalflags & 0x8)) { o[i].evalflags |= 0x8; hid |= 1u << i; }
     return 0;
@@ -2529,6 +2538,9 @@ int tps_fp_hide(int on)
    to the hand node; up, aiming, from the hip or reloading, it is drawn). The objects linked to a work with id 1210 on (the
    weapons) are drawn only with the player (objitm.c bhDrawObject: sys->pt_flg 1); a linked object without its link flag
    (0x80) keeps its own stflg 0x1000000 (not drawn). For this draw only */
+/* the weapon being lowered (player.c bhCPM2_act_wre: the raise motion backwards) at its end, the lowered pose: drawn
+   there without the body, the shotgun's pump hand floated by itself in the middle of the view for a frame */
+static int lowered_end(void) { return plp->mode1 == 1 && plp->mode2 == 68 && plp->mode3 >= 1 && (int)plp->frm_no / 65536 < 2; }
 void tps_fp_objects(int on)
 {
     static int off, part, hands;
@@ -2548,7 +2560,7 @@ void tps_fp_objects(int on)
         hp->flg &= ~0x80; hp->stflg |= 0x1000000;
     }
     if (fp_body()) return;
-    if (plp->mode0 == 1 && plp->mode1 == 0 && !reload_at_rest() && (sys->pt_flg & 0x1))
+    if (plp->mode0 == 1 && (plp->mode1 == 0 || lowered_end()) && !reload_at_rest() && (sys->pt_flg & 0x1))
         sys->pt_flg &= ~0x1, off = 1;
     for (i = 0; sys->obwp && i < 2 && actor_player_look(); i++) {   /* "You appear as" a model with hands of its own, not drawn: the weapon's own
                                                          hand piece (actor_glue.c actor_weapon_hands hides it on such a model) */
