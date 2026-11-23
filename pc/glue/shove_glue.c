@@ -54,7 +54,7 @@ ATR_WORK* bhEne_CheckEventAtr(int flr_no, float px, float pz, int id, int min, i
 float njSin(int a);
 float njCos(int a);
 int coop_shove_rule(void);              /* coop_glue.c: the rule in effect (the host's in co-op) */
-int coop_shove(int slot, float x, float z, int marker);   /* coop_glue.c: 1 = sent to the partner's game, which runs it */
+int coop_shove(int slot, float x, float z);   /* coop_glue.c: 1 = sent to the partner's game, which runs it */
 int coop_plp_partner(void);             /* coop_glue.c: plp is the partner's stand-in (a step of ours on the partner) */
 int coop_runs(int slot);                /* coop_glue.c: our game runs that enemy */
 extern int enemy_room_gen;              /* enemyopt_glue.c: room loads so far */
@@ -68,7 +68,6 @@ static int trace = -1, trace_until;
 
 int pc_shove_on(void) { return coop_shove_rule(); }
 
-void pc_shove_partner(void) {}   /* coop_glue.c, an older peer's break free news (COOP_HIT_MARK): nothing to do (no grab immunity) */
 
 /* the game's own zombie push (en01.c bhEne01_CollCheckPush), from the point (cx, cz); not knock: its stagger only */
 static int push_zombie(BH_PWORK* ep, float cx, float cz, int knock)
@@ -179,7 +178,7 @@ static void break_free(void)
         if (d > (m == 2 ? SHOVE_REACH : SHOVE_R) || fabsf(ep->py - plp->py) > 8.0f) continue;
         a.x = cx; a.y = plp->py + 10.0f; a.z = cz; b.x = ep->px; b.y = a.y; b.z = ep->pz;
         if (bhCollisionCheckLine(&a, &b)) continue;   /* (not through a wall) */
-        if (coop_on && coop_shove(i, cx, cz, 0)) { sent++; host_log("breakfree: enemy %d (id %d) dist %.1f: to the partner's game\n", i, ep->id, d); continue; }
+        if (coop_on && coop_shove(i, cx, cz)) { sent++; host_log("breakfree: enemy %d (id %d) dist %.1f: to the partner's game\n", i, ep->id, d); continue; }
         ok = pc_shove_apply(ep, cx, cz);
         n += ok;
         host_log("breakfree: enemy %d (id %d type %d) dist %.1f mode %d -> %d/%d%s\n", i, ep->id, ep->type, d, m, ep->mode0, ep->mode2, ok ? "" : " (left alone)");

@@ -3927,15 +3927,14 @@ static void capture_hits(void)
 }
 /* "Break Free Pushes Enemies" (shove_glue.c, protocol 59): our player broke free next to enemy i, which the partner's game
    runs (or will: as a hit, kept or passed on), so that game knocks it back - a COOP_HIT_SHOVE EV_ENE_HIT from the point
-   (x, z). 0: we run it, the caller pushes it. (`marker`: unused since protocol 62, no grab immunity; shove_glue.c still passes 0) */
+   (x, z). 0: we run it, the caller pushes it. */
 int pc_shove_apply(BH_PWORK* ep, float cx, float cz);
 int coop_runs(int i) { return we_run(i) && !giving[i]; }
 int coop_plp_partner(void) { return plp == &ply2; }
-int coop_shove(int i, float x, float z, int marker)
+int coop_shove(int i, float x, float z)
 {
     Event e = { 0 };
     int n;
-    (void)marker;
     if (i < 0 || i >= PC_ENE_SLOTS || coop_runs(i) || echo_delay) return 0;
     for (n = 0; n < 6; n++) e.u.eh.jnt[n] = -1;
     e.type = EV_ENE_HIT; e.idx = i;
