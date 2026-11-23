@@ -268,7 +268,13 @@ shows in-between images at the display rate:
 - The engine tags every 3D mesh it draws (`njCnkDrawModelLocal[Mod]` -> `pc_mesh_begin/end` ->
   `stream_tag`) and every strip (`pc_mesh_strip`), which gives exact vertex correspondence
   between consecutive frames. Of several instances of one mesh, the one that moved least is
-  matched. TEX0 is not part of the key (textures stream through rotating GS memory).
+  matched. TEX0 is not part of the key (textures stream through rotating GS memory). Only the
+  previous frame's instances that share a (strip, order) with one can pair with it: an index of
+  them (`stream.c idx_build` / `cand_of`) lists those, which gives the same choice as judging all
+  (a scratch build ran both on every match of 11 scenes and two co-op pairs: 0 of 8.8 million choices
+  differed). It keeps a crowd linear: an imported model's see-through strips are drawn one by one,
+  each an instance of its tag (ten UC zombies: ~800 of one mesh), and each was judged against all
+  the others (EZ01 x 10: 37 fps, the render thread 22 ms a frame; now 60 fps, 7 ms).
 - The game's clip volume reaches into the GS guard band (`pc_clip_guard`), so geometry crossing a
   screen edge is not re-cut differently every frame.
 - At each display refresh the executed frame's whole GS stream is **replayed** with matched
