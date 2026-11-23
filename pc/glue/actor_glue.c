@@ -183,8 +183,6 @@ int actor_retarget = 1;
 int cast_hands = 1;
 int cast_parts = 1;                     /* cast_glue.c parts_hide; test aid RECVX_CAST_PARTS=0: the head parts kept */
 int actor_fp_nohead;   /* tps_glue.c tps_fp_hide: first person, our model drawn without its head (nor what it wears there) */
-void pc_head_hide(ML_WORK* m, int node);   /* variant_glue.c */
-void pc_head_show(void);
 int actor_head_node(int who);
 static int cast_reach = 1;              /* cutscene records' hands where the record has them (retarget); test aid RECVX_CAST_REACH=0: as before */
 
@@ -1765,9 +1763,7 @@ int actor_put_body(int who, BH_PWORK* src)
         memcpy(keep[i], ow[i].mtx, sizeof(keep[i])); memcpy(ow[i].mtx, s->ow[i].mtx, sizeof(keep[i]));
         memcpy(ang[i], o[i].ang, sizeof(ang[i])); memcpy(o[i].ang, s->obj[i].ang, sizeof(ang[i]));
     }
-    if (actor_fp_nohead && src == plp) pc_head_hide(src->mlwP, 5);   /* (first person: its head node) */
     bhPutModel(src);
-    if (actor_fp_nohead && src == plp) pc_head_show();
     for (i = 0; i < 22; i++) { memcpy(ow[i].mtx, keep[i], sizeof(keep[i])); memcpy(o[i].ang, ang[i], sizeof(ang[i])); }
     return 1;
 }
@@ -2089,10 +2085,8 @@ int actor_put_player(void)
         actor_pose(0, plp);
         redraw = 0;
     }
-    if (actor_fp_nohead) pc_head_hide(dg[0].w.mlwP, actor_head_node(0));
-    bhPutModel(&dg[0].w);
-    if (actor_fp_nohead) pc_head_show();
-    else head_draw(&dg[0]);
+    bhPutModel(&dg[0].w);   /* (first person: drawn without its head, variant_glue.c pc_zombie_head) */
+    if (!actor_fp_nohead) head_draw(&dg[0]);
     return 1;
 }
 
@@ -2617,6 +2611,10 @@ int actor_hand_free(int who, int node)
 }
 
 int actor_head_node(int who) { return dg[who].model >= 0 && dg[who].rig.ok ? dg[who].rig.map[5] : -1; }
+/* its neck (the head's parent role), else its head: first person hides from there */
+int actor_neck_node(int who) { return dg[who].model >= 0 && dg[who].rig.ok && dg[who].rig.map[4] >= 0 ? dg[who].rig.map[4] : actor_head_node(who); }
+/* our player is drawn as another model (actor_put_player draws it; actor_on also counts the partner, enemies and the cast) */
+int actor_player_look(void) { return (dg[0].model >= 0 && dg[0].posed) || sh[0].body; }
 
 int actor_head(int who, float* out)
 {

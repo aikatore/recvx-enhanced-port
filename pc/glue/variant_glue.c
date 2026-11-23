@@ -346,7 +346,7 @@ static void attach_draw(BH_PWORK* w, int sub, int node)
    that model's head role (actor rig). The game's state is untouched (the matrices are put back after
    the draw); off (setting "Head blow-offs"): as the original. */
 int pc_head_blowoff_on(void);           /* host.c */
-#define HEAD_NODES 16
+#define HEAD_NODES 128   /* (an imported head may carry many nodes: hair, jaw, eyes) */
 static float head_rot[HEAD_NODES][9];
 static float* head_mtx[HEAD_NODES];
 static int head_n;
@@ -376,10 +376,6 @@ static void head_show(void)
     head_n = 0;
 }
 
-/* first person (tps_glue.c tps_fp_hide, actor_glue.c): our own head hidden the same way for our draw */
-void pc_head_hide(ML_WORK* m, int node) { head_hide(m, node); }
-void pc_head_show(void) { head_show(); }
-
 /* r (a zombie's body) has lost its head, and it is not the head flying off (en01b.c: the head part, exp0 + 0x10, in its mode 3) */
 static int headless(BH_PWORK* r)
 {
@@ -391,9 +387,16 @@ static int headless(BH_PWORK* r)
 
 /* MdlPut.c bhPutModel, around drawing ep: hide 1 = its head hidden for the draw (1 returned: the draw is
    wrapped), 0 = put back */
+extern int actor_fp_nohead;             /* tps_glue.c tps_fp_hide: first person, around our player's draw */
+int actor_neck_node(int who);           /* actor_glue.c */
 int pc_zombie_head(BH_PWORK* ep, int hide)
 {
     if (!hide) { head_show(); return 0; }
+    if (actor_fp_nohead && plp && (ep == plp || ep == actor_work(0))) {   /* first person: our own neck and head, whichever
+        path draws us (the game's model, "You appear as" another, a fallback to the game's): the view is inside them */
+        head_hide(ep->mlwP, ep == plp ? 4 : actor_neck_node(0));
+        return head_n > 0;
+    }
     if (ep < ene || ep >= ene + PC_ENE_SLOTS || ep->id != 1 || !headless((ep->flg & 0x80) ? (BH_PWORK*)ep->lkwkp : ep) ||
         !ep->mlwP || ep->mlwP->obj_num <= 11)
         return 0;
