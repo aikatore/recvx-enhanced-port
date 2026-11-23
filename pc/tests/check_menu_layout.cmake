@@ -2,7 +2,7 @@
 # table (src/host/settings.c g_settings[]) exactly once (ML_SET, or ML_MERGED into a GAME SETUP row) or retires it
 # (ML_RETIRED), and every shortcut (ML_SHORTCUT) names a real row. GAME SETUP > BIORAND places every BioRand generator
 # option (src/host/biorand_opts.c, but its ENEMIES group: BioRand changes no enemy of this game) exactly once (ML_BIO),
-# and the presets (menu_setup_owned, menu_remix, menu_chaos) name real rows. A new setting or BioRand option without a
+# and the presets (menu_setup_owned, menu_remix, menu_chaos, GRAPHICS' menu_preset) name real rows. A new setting or BioRand option without a
 # home in the new menu fails. No game code is linked.
 #   cmake -DSRC=<pc dir> -P check_menu_layout.cmake
 #   -DSELFTEST=1: the same check on broken copies (a row dropped, a row twice, a shortcut to nothing) must fail
@@ -89,12 +89,14 @@ function(menu_bio_check opts layout table out)
         string(REGEX REPLACE "{ SP_[A-Z]+, \"([^\"]+)\"" "\\1" l "${r}")
         list(APPEND labels "${l}")
     endforeach()
-    string(REGEX MATCH "menu_setup_owned\\[\\] = {[^;]*;" owned "${layout}")
-    string(REGEX MATCH "menu_remix\\[\\] = {[^;]*;" remix "${layout}")
-    string(REGEX MATCH "menu_chaos\\[\\] = {[^;]*;" chaos "${layout}")
-    string(REGEX MATCHALL "\"[^\"]+\"" refs "${owned}${remix}${chaos}")
-    if(NOT owned OR NOT remix OR NOT chaos)
-        list(APPEND errors "the GAME SETUP presets (menu_setup_owned, menu_remix, menu_chaos) are not found")
+    string(REGEX REPLACE "/\\*([^*]|\\*+[^*/])*\\*+/" "" code "${layout}")   # (a comment may hold a ';')
+    string(REGEX MATCH "menu_setup_owned\\[\\] = {[^;]*;" owned "${code}")
+    string(REGEX MATCH "menu_remix\\[\\] = {[^;]*;" remix "${code}")
+    string(REGEX MATCH "menu_chaos\\[\\] = {[^;]*;" chaos "${code}")
+    string(REGEX MATCH "menu_preset\\[\\] = {[^;]*;" preset "${code}")
+    string(REGEX MATCHALL "\"[^\"]+\"" refs "${owned}${remix}${chaos}${preset}")
+    if(NOT owned OR NOT remix OR NOT chaos OR NOT preset)
+        list(APPEND errors "the presets (menu_setup_owned, menu_remix, menu_chaos, menu_preset) are not found")
     endif()
     foreach(r ${refs})
         string(REPLACE "\"" "" l "${r}")
@@ -138,9 +140,14 @@ if(SELFTEST)
     menu_bio_check("${opts}" "${broken}" "${table}" e5)
     string(REPLACE "{ \"Rearranged Enemies\", 1 }" "{ \"Rearranged Enemy\", 1 }" broken "${layout}")
     menu_bio_check("${opts}" "${broken}" "${table}" e6)
+    string(REPLACE "{ \"Randomize Voice Lines\", 1 }," "{ \"Randomize Voice Line\", 1 }," broken "${layout}")
+    menu_bio_check("${opts}" "${broken}" "${table}" e7)
+    string(REPLACE "{ \"Motion Trails\", 1 }" "{ \"Motion Trail\", 1 }" broken "${layout}")
+    menu_bio_check("${opts}" "${broken}" "${table}" e8)
     if(NOT e1 MATCHES "Fast Loading' has no home" OR NOT e2 MATCHES "Quick Knife' is placed twice" OR NOT e3 MATCHES "is no row"
-       OR NOT e4 MATCHES "HiddenKeyItems' has no home" OR NOT e5 MATCHES "EnemyQuantity' \\(ML_BIO\\) is no BioRand" OR NOT e6 MATCHES "Rearranged Enemy' is no row")
-        message(FATAL_ERROR "menu_layout self-test: a broken layout passed (${e1} | ${e2} | ${e3} | ${e4} | ${e5} | ${e6})")
+       OR NOT e4 MATCHES "HiddenKeyItems' has no home" OR NOT e5 MATCHES "EnemyQuantity' \\(ML_BIO\\) is no BioRand" OR NOT e6 MATCHES "Rearranged Enemy' is no row"
+       OR NOT e7 MATCHES "Randomize Voice Line' is no row" OR NOT e8 MATCHES "Motion Trail' is no row")
+        message(FATAL_ERROR "menu_layout self-test: a broken layout passed (${e1} | ${e2} | ${e3} | ${e4} | ${e5} | ${e6} | ${e7} | ${e8})")
     endif()
     message(STATUS "menu_layout self-test: a dropped row, a duplicate, a bad shortcut, a missing or unknown BioRand option and a bad preset row are caught")
 endif()

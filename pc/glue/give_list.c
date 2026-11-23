@@ -365,8 +365,8 @@ void give_list_draw(void)
 
 const char* give_list_help(void)
 {
-    if (gl.cur >= gl.n) return "Back to Cheats and Tools.";
     if (!gl.n) return "The item names are not loaded yet.";
+    if (gl.cur >= gl.n) return "Back to Cheats and Tools.";
     return counted(item_at_row(gl.cur)) ? "Adds the item to your inventory now; the menu stays open. Left/right: the amount."
                                         : "Adds the item to your inventory now; the menu stays open.";
 }

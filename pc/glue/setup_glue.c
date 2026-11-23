@@ -787,7 +787,7 @@ void pc_game_setup_open(int biorand)
     gs.open = 1;
     gs.flow = gs.pasting = 0;
     gs.bio_loaded = 0;
-    if (biorand) gs.type = 1;
+    gs.type = biorand != 0;   /* (EXTRA > BIORAND: BioRand; NEW GAME: Standard) */
     g_setup_ctx = SC_NEWGAME;
     ui_rows_open(MS_SETUP, "NEW GAME");
     ui_rows_picker(1);

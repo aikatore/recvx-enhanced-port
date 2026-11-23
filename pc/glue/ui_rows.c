@@ -709,7 +709,7 @@ static int activate(const Row* r)
     case ML_OUTPUT: case ML_PRESET: change(r, 1); return UR_STAY;
     case ML_SET:
         if (!s) return UR_STAY;
-        if (settings_locked(s)) { CallSystemSe(0, 1); say(settings_locked(s)); return UR_STAY; }
+        if (lock_of(r)) { CallSystemSe(0, 1); say(lock_of(r)); return UR_STAY; }   /* (also GAME SETUP's row locks, as change() does) */
         if (s->flags & SET_ACTION) {
             if (s->flags & SET_NOW) settings_act(s);
             else if (r->set < (int)sizeof(st.pending)) { st.pending[r->set] = 1; st.any_pending = 1; say(pc_in_game() ? "Runs when you resume." : "Applies when you leave this menu."); }

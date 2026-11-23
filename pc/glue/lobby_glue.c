@@ -68,6 +68,7 @@ void host_quit(void);                   /* host.c: as the window's close button 
 void pc_whatsnew_button(float fade);    /* whatsnew_menu.c: WHAT'S NEW's corner button on the title menu */
 int  pc_whatsnew_title(const MouseTake* m, unsigned int press);   /* ... its hover and click, Triangle: 1 open it */
 int  pc_whatsnew(void);                 /* ... the screen, once per frame: 1 back to the title menu */
+void pc_whatsnew_close(void);           /* ... left without its Back */
 void pc_ui_dialog_place(const char* l1, const char* l2, float sc2, int lines, float extra, float* y0, float* y1);   /* options_glue.c */
 void pc_ui_dialog(float y0, float y1, float z, const char* l1, const char* l2, float sc2, unsigned int col2, int lines,
                   const char* b0, const char* b1, int sel, int glyphs);
@@ -978,8 +979,8 @@ enum { R_MODE, R_HOSTSTEP, R_JOINSTEP,
        R_VOICES, R_MOUTHS, R_QUICK, R_DETECTOR, R_EXTRAOBJ,
        R_HOST, R_GO, R_COPY, R_RCOPY, R_KICK, R_STOP, R_JOIN,
        R_BACK, R_N };
-static const unsigned char row_group[R_N] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-                                              5, 5, 5, 5, 5, 5, 5, 6 };
+static const unsigned char row_group[] = { 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 7, 7, 4, 4, 4, 4, 4, 4, 4, 8, 8, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+                                            5, 5, 5, 5, 5, 5, 5, 6 };
 _Static_assert(sizeof(row_group) == R_N, "row_group");
 enum { F_NONE, F_NAME, F_ADDR, F_PORT, F_SEED, F_SERVER, F_PW };
 
@@ -2035,6 +2036,7 @@ void pc_lobby_close(void)
     if (gs_screen) pc_game_setup_close();
     if (im_screen) pc_import_menu_close();
     if (up_screen) pc_update_menu_close();
+    if (wn_screen) pc_whatsnew_close();
     br_screen = gs_screen = im_screen = up_screen = qt_screen = wn_screen = 0;
     lobby_close(0);
 }
@@ -2312,7 +2314,7 @@ static void nm_text_open(int r)
     nm.sub = NS_TEXT;
     switch (r) {
     case NR_CODE: tg_open("Room Code or Address", "", 79, TGK_JOIN, g_coop.hide_ip); break;   /* (empty: left empty or cancelled, the old one stays) */
-    case NR_PW: case NR_ROOMPW: tg_open(r == NR_PW ? "Password" : "Room Password", g_coop.password, 40, TGK_PW, 1); break;
+    case NR_PW: case NR_ROOMPW: tg_open(r == NR_PW ? "Password" : "Room Password", g_coop.password, (int)sizeof(g_coop.password) - 1, TGK_PW, 1); break;
     default: tg_open("Player Name", g_coop.name, COOP_NAME_MAX - 1, TGK_NAME, 0); break;
     }
 }
@@ -2662,9 +2664,7 @@ static int nm_frame(void)
     if (nm.page != NP_LOBBY && session_on() && !g_coop.request && !nm.sub) nm_page(NP_LOBBY);   /* (joined through F3 or --coop-join: its lobby) */
     if (nm.page == NP_LOBBY && !session_on() && !g_coop.request) {   /* the session ended (closed, refused, the host left): the page before */
         if (++nm.off > 2) {
-            if (nm.sub == NS_SETUP) setup_lobby_close();
-            if (nm.sub == NS_TEXT) tg_close();
-            setup_lobby_type(0);
+            nm_shut();   /* (any page over the lobby: BioRand's dialogs too) */
             if (g_coop.status[0]) say(coop_shown(g_coop.status));
             nm_page(lb.role ? NP_JOIN : NP_MENU);
         }
