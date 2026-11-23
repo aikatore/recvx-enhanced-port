@@ -852,7 +852,7 @@ picks; no game state, ctest `cast`), `pc/glue/cast_glue.c` (in the game), the di
 | Randomize Cutscene Cast | `cast_random` | **0 Off**, 1 On (`EnemyOpts.cast`; a file from the first version: 1 Characters and 3 Both read as On, 2 Enemies as Off) |
 | Model Selection (shown while on) | `cast_models` | **0 Cutscene Models**, 1 All Models, 2 Custom (below, "Custom") |
 | Model Assignment (shown while on) | `cast_assign` | **0 Per Character**, 1 Per Cutscene |
-| *(retired)* Include Imported Models | `cast_imports` | read, always written 1, no effect: the imported games checked decide (below) |
+| *(retired)* Include Imported Models | `cast_imports` | not read, always written 1 (for older versions): the imported games checked decide (below) |
 
 **Imported games** (since 2026-11-22; one setting shown in several places): a check box per imported game with models
 ("Umbrella Chronicles", "Outbreak File 2", "Code: Veronica (Dreamcast)") at the top of the look picker's list, of the
@@ -866,7 +866,7 @@ an unchecked game stays in use and listed ("Hidden Source (Still in Use)"). Only
 in the random pools: the cast's (`cast_glue.c cast_imports_now`: all imports, `cast.c drop_hidden` the unchecked
 games'), the random look's, the *Custom* lists. That replaced **Include Imported Models** (the cast's and the random
 look's, `cast_imports`, `biorand_appear_imports`): checking a game is that choice per game, so the rows are gone (GAME
-SETUP, ENHANCED SETTINGS, the lobby's CUTSCENE CAST page, the BIORAND screen); both ini keys are still read and are
+SETUP, ENHANCED SETTINGS, the lobby's CUTSCENE CAST page, the BIORAND screen); both ini keys are no longer read and are
 written as 1, so an older version reading the file takes the checked games' models as well. The Dreamcast Steve
 setting ([IMPORT_DREAMCAST.md](IMPORT_DREAMCAST.md)) is not a list entry and works with its game unchecked.
 

@@ -250,7 +250,7 @@ pressed last). A hold (Default) fills a gold bar under its icon.
 | WHAT'S NEW: the corner button and its input (`pc_whatsnew_button`, `pc_whatsnew_title`, called from `pc_title_plates`, `pc_title_mouse`), the screen (title mode 30); CHANGELOG.md embedded as it is (Linux section `.trtab` beside our texts' table, Windows resource `CHANGELOG`, rebuilt when it changes) and turned into lines the game's font can draw (no `& * # < > = @ [ ]`, ctest `changelog`) | `pc/glue/whatsnew_menu.c`, `pc/src/host/changelog.c` |
 | Hooks in the game's OPTION task | decomp `adv.c`: `Adv_GameOptionScreen` (start level), `DisplayOptionPlateLevel0` (pause), `DisplayOptionBg` (no bands), levels 1-3 (`pc_options_back_level`) |
 
-- **The layout table names settings by their table label** (`ref`), because 21 rows have no variable. A row kind says
+- **The layout table names settings by their table label** (`ref`), because some rows have no variable. A row kind says
   what it is: `ML_SET` (a table row in its home), `ML_SHORTCUT` (a row whose home is elsewhere: shows its value,
   Confirm opens the home category in place), `ML_PAGE` (a sub-page), `ML_SCREEN` (one of the game's OPTION sub-screens),
   `ML_OUTPUT`, `ML_PRESET`, `ML_WINDOW` (an F-key window), `ML_TEXT` (a co-op text), `ML_IMPORT` (EXTRA > IMPORT on one
@@ -277,7 +277,9 @@ pressed last). A hold (Default) fills a gold bar under its icon.
 - **Adding a setting**: besides its settings-table row, give it one home in `menu_layout.c` (ctest `menu_layout` fails
   otherwise). Keep each entry's kind and label together (`ML_SET, "Label"`) so the check finds it.
 - **Defaults** are the variables' values before the command line and `recvx.ini` (`menu_defaults_capture`, first in
-  `main`). Rows without a variable (Display Mode, Window Size, the looks, Language) have no default and no dot.
+  `main`). Rows without a variable take their getter's value then where that reads only built-in defaults (Menu Style,
+  Display Mode, Performance Graph); the others (Window Size, Fullscreen Resolution, the looks, Language, Subtitles)
+  depend on the machine or the disc and have no default and no dot.
 - **The original OPTION rows**: Output writes `SetSoundModeEx` and `AdvWork.SoundMode`; Vibration writes `sys->vibration`
   and `SetUseVibrationUnit` besides the strength; Control Type opens KEY CONFIG (level 1, cycling it in place would swap
   the menu's own Confirm and Cancel). These live in the system save, which OPTION writes when it closes, as before.
@@ -300,8 +302,9 @@ without it nothing of this is listed, honoured or drawn, and the game's screens 
 **The setting.** SETTINGS > GAMEPLAY > STARTUP AND UNLOCKS > **Menu Style** (also the old ENHANCED SETTINGS and F1;
 ini `menu_style`): **Legacy** (the old menus, what Legacy Menu was), **Standard** (the default: the new menus, the
 game's screens as they are), **Redesigned** (the new menus, and the overlay below on the game's inventory; listed only
-with `--dev`, and an ini `menu_style = 2` reads as Standard without it). `legacy_menu = 1` in an older ini still means
-Legacy; choosing a style writes both keys. Legacy and Standard switch on the title menu as before; Redesigned applies
+with `--dev`, and an ini `menu_style = 2` reads as Standard without it but stays in the file, so the next `--dev` run
+is Redesigned again, until Menu Style is changed in a menu). `legacy_menu = 1` in an older ini still means Legacy and is
+read as `menu_style = 0` (both keys are written that way); choosing a style writes both keys. Legacy and Standard switch on the title menu as before; Redesigned applies
 the next time the inventory opens. The name avoids "Modern", which is the fixed-camera controls' word.
 
 **What Redesigned adds (P1)**: an overlay on the vanilla inventory, input and drawing only (`menu_glue.c`, the strip

@@ -1,7 +1,7 @@
 /* The new menu's tree (the default; Menu Style Legacy or --legacy-menu: the old menus; docs/MENUS.md): which screen, category and group each row of the
    settings table (settings.c g_settings[]) lives in, under which words. Pure data (menu_layout.c) over the table: values,
-   ranges, help, locks and apply stay in g_settings[]; a row here names its setting by the table's label (21 rows have no
-   variable, so settings_of() cannot find them) and may override the label, the value names and the help without
+   ranges, help, locks and apply stay in g_settings[]; a row here names its setting by the table's label (rows without a
+   variable exist, which settings_of() cannot find) and may override the label, the value names and the help without
    touching settings.c, F1 or the old ENHANCED SETTINGS pages. ctest "menu_layout" (tests/check_menu_layout.cmake)
    fails unless every table row is placed exactly once (or listed as retired) and every shortcut names a real row.
    The row screen that shows it is pc/glue/ui_rows.c (game thread); its hosts draw background and title. */

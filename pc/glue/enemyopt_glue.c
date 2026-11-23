@@ -44,7 +44,7 @@ int bhCheckFloorNum(float py);   /* pwksub.h */
 int bhCheckCutArea(float px, float pz, char flr_no);   /* cut.h */
 int bhCheckCutAreaInnerTriangle(float px, float pz, CUT_WRK* ct);
 
-EnemyOpts g_enemy_opts = { .variety = 1, .events = 1, .cast_enemy = CAST_ENEMY_ALL };   /* settings (F1, recvx.ini) */
+EnemyOpts g_enemy_opts = { .variety = 1, .events = 1, .cast_enemy = CAST_ENEMY_ALL, .cast_imports = 1 };   /* settings (F1, recvx.ini) */
 _Static_assert(sizeof(g_enemy_opts.cast_enemy_off) == CAST_ENEMY_BYTES, "EnemyOpts.cast_enemy_off");
 static EnemyOpts host_opts;             /* a co-op guest's: the host's */
 static int have_host_opts;

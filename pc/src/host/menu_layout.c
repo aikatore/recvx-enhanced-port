@@ -402,8 +402,14 @@ static unsigned char has_default[512];
 
 void menu_defaults_capture(void)
 {
+    static const char* const by_get[] = { "Menu Style", "Display Mode", "Performance Graph" };   /* rows without a variable whose getter
+                                                                                                     reads only built-in defaults now */
     for (int i = 0; i < g_settings_n && i < (int)sizeof(has_default); i++)
         if (g_settings[i].val && !(g_settings[i].flags & SET_ACTION)) { defaults[i] = *g_settings[i].val; has_default[i] = 1; }
+    for (int k = 0; k < (int)(sizeof(by_get) / sizeof(by_get[0])); k++) {
+        int i = menu_setting(by_get[k]);
+        if (i >= 0 && i < (int)sizeof(has_default)) { defaults[i] = settings_get(&g_settings[i]); has_default[i] = 1; }
+    }
 }
 
 int menu_default(int setting, int* v)

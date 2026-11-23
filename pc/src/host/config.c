@@ -124,7 +124,6 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "cast_random", &g_enemy_opts.cast, 0, 3 },         /* cutscene cast (docs/ACTORS.md "Cutscene cast"): 0/1 (an older 2, Enemies, is off; 3, Both, on: config_load) */
     { "cast_models", &g_enemy_opts.cast_all, 0, 2 },     /* characters: 0 cutscene models, 1 all models, 2 custom (cast_custom_off lines) */
     { "cast_assign", &g_enemy_opts.cast_assign, 0, 1 },  /* 0 fixed per character, 1 random per cutscene */
-    { "cast_imports", &g_enemy_opts.cast_imports, 0, 1 },
     { "cast_custom_set", &cast_custom_set, 0, 1 },
     { "enemy_custom_set", &enemy_custom_set, 0, 1 },
     { "cast_enemy_models", &g_enemy_opts.cast_enemy, 0, 3 },   /* its creatures and scene zombies (cast.h CAST_ENEMY_*: 0 same as cast, 1 all enemies,
@@ -132,9 +131,6 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "voice_random", &g_enemy_opts.voices, 0, 1 },              /* "Randomize Voice Lines" (cast.h) */
     { "voice_mouths", &g_voice_mouths, 0, 1 },                   /* its "Talking Mouths" (cast.h; each screen's own) */
     { "biorand_appear_models", &g_biorand_appear_pool, 0, 2 },     /* "Randomize Character Model"'s Model Selection (biorand_opts.h; appear_custom_off lines) */
-    { "biorand_appear_imports", &g_biorand_appear_imports, 0, 1 }, /* (its old Include Imported Models and cast_imports: no effect since the
-                                                                      imported games' checkboxes, import_<key>_shown; written 1, so an older
-                                                                      version takes the checked games' models too) */
     { "subtitles", &g_subtitles, 0, 1 + LANG_COUNT },     /* cutscene subtitles: 0 off, 1 the game language's, 2 + LANG_* (lang.h) */
     { "translated_pictures", &g_lang_pictures, 0, 1 },    /* the language's pictures with writing: 0 the disc's (lang.h) */
     { "translated_voices", &g_lang_voices, 0, 1 },        /* the language's sounds (the title call): 0 the disc's (lang.h) */
@@ -165,7 +161,7 @@ static const struct { const char* key; int* val; int lo, hi; } keys[] = {
     { "tps_atmos", &g_tps.atmos, 0, 1 },
     { "tps_free_camera", &g_tps.free_cam, 0, 1 },
     { "tps_first_person", &g_tps.fp, 0, 1 },             /* "Camera Mode" First Person (with tps = 1) */
-    { "fp_fov", &g_tps.fp_fov, 30, 130 },
+    { "fp_fov", &g_tps.fp_fov, 60, 120 },   /* (the row's range, settings.c) */
     { "fp_body", &g_tps.fp_body, 0, 1 },                  /* "First Person Body": 1 drawn without its head, 0 not drawn */
     { "fp_hud", &g_tps.fp_hud, 0, 2 },                    /* "First Person HUD": 0 On, 1 Off, 2 Minimal */
     { "tps_key", &g_tps.key, 1, 511 },
@@ -267,7 +263,6 @@ void config_load(void)
     path(p, sizeof(p));
     if (!(f = pc_fopen(p, "r"))) {   /* first start: the defaults (player_id saves them) */
         import_registry_load();
-        g_biorand_appear_imports = g_enemy_opts.cast_imports = 1;   /* (as below) */
         cast_default(0);
         default_name();
         player_id();
@@ -330,7 +325,7 @@ void config_load(void)
     g_coop.chr = appear_canon(g_coop.chr);   /* an event double no longer listed: its listed twin (actors.c) */
     for (int c = 0; c < 2; c++) if (g_appear_own[c] >= 0) g_appear_own[c] = appear_canon(g_appear_own[c]);
     g_enemy_opts.cast = g_enemy_opts.cast == 1 || g_enemy_opts.cast == 3;   /* the cutscene cast had 1 Characters, 2 Enemies, 3 Both: the characters' on */
-    g_biorand_appear_imports = g_enemy_opts.cast_imports = 1;   /* (the old Include Imported Models: the games checked decide, g_import_hidden) */
+    if (g_legacy_menu) g_menu_style = 0;   /* (an older ini's legacy_menu = 1: Legacy, both keys written so) */
     default_name();
     player_id();
 }
@@ -367,6 +362,9 @@ static int write_ini(FILE* f, void* ud)
 {
     (void)ud;
     for (size_t i = 0; i < SDL_arraysize(keys); i++) fprintf(f, "%s = %d\n", keys[i].key, *keys[i].val);
+    fprintf(f, "cast_imports = 1\nbiorand_appear_imports = 1\n");   /* (the old Include Imported Models, not read since the imported games'
+                                                                       checkboxes, import_<key>_shown: written on, so an older version
+                                                                       takes the checked games' models too) */
     fprintf(f, "fixed_cam_version = 1\n");   /* fixed_cam_controls knows Combined (config_load) */
     fprintf(f, "coop_join = %s\n", g_coop.join);
     fprintf(f, "coop_server = %s\n", g_coop.server);

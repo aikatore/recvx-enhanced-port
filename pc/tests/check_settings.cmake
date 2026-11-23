@@ -8,8 +8,6 @@ set(NOT_IN_TABLE
     biorand      # lobby GAME RULES "BIORAND" (--dev): the co-op host's new game plays BioRand (biorand.h; no longer a setting)
     tps_key      # CONTROLS bindings, "Third person on/off" (bindings.c, its first keyboard slot)
     biorand_appear_models    # BIORAND screen, RANDOMIZER page: Randomize Character Model's Model Selection (biorand_menu.c K_APPEAR)
-    biorand_appear_imports   # ini only: its old Include Imported Models, no effect since the imported games' checkboxes (actors.h g_import_hidden; always written 1)
-    cast_imports       # ini only: the cast's old Include Imported Models, the same (docs/ACTORS.md "Cutscene cast")
     cast_custom_set    # ini only: the cutscene cast's Custom list was saved (config.c cast_default), never edited
     enemy_custom_set   # ini only: so was Enemy Models' list with its characters (config.c cast_default)
     dyn_res            # ini only (prototype, branch perfexp-renderer-gpu): Internal Resolution Auto's dynamic resolution (gs_gl.c drs_update)
