@@ -173,6 +173,16 @@ static BH_PWORK* posed_src[ACTOR_SLOTS];   /* the double's and the cast's slots:
 #define dbl_posed posed_src[ACTOR_DOUBLE]
 static unsigned int posed_t[ACTOR_SLOTS];   /* the cast's: the tick (actor_ticks) of that pose */
 static unsigned int actor_ticks;        /* game ticks (actor_hands_back) */
+/* the test aids' variables, read once (each posed actor read ~9 of them every draw) */
+enum { TE_FEET, TE_POSE, TE_BLINK, TE_JAW, TE_RIG, TE_GRIP, TE_CAST, TE_N };
+static const char* test_env(int k)
+{
+    static const char* const name[TE_N] = { "RECVX_FEET_TRACE", "RECVX_IMPORT_POSE", "RECVX_IMPORT_BLINK", "RECVX_IMPORT_JAW", "RECVX_RIG_DUMP", "RECVX_IMPORT_GRIP", "RECVX_CAST_TRACE" };
+    static const char* v[TE_N];
+    static int read;
+    if (!read) { for (int i = 0; i < TE_N; i++) v[i] = getenv(name[i]); read = 1; }
+    return v[k];
+}
 static void face_init(Disguise* d, int idx);
 static unsigned int k_seed;             /* imported models' blink seeds */
 /* the retargeting of docs/ACTORS.md "Retargeting" (limb roles along each chain, the root's height
@@ -597,7 +607,7 @@ static void retarget(Disguise* d, BH_PWORK* src, const Rig* sr)
         if (shift < -lim) shift = -lim;
         scaled[1] += shift;
         place(m, tr, rot, dm, root);
-        if (getenv("RECVX_FEET_TRACE") && !(actor_ticks % 15)) {   /* test aid: the lowest ankle or toe over the base matrix, source and model */
+        if (test_env(TE_FEET) && !(actor_ticks % 15)) {   /* test aid: the lowest ankle or toe over the base matrix, source and model */
             ft = 1e9f;
             for (k = 16; k <= 21; k++) if (k != 18 && k != 19 && tr->map[k] >= 0 && sr->map[k] >= 0) ft = fminf(ft, m->owP[(int)tr->map[k]].mtx[13]);
             host_log("actor: feet slot %d model %d: source %.2f model %.2f over %.2f (hips %.2f/%.2f, rest feet %.2f/%.2f, shift %.2f)\n", (int)(d - dg), d->model,
@@ -1352,7 +1362,7 @@ static int load_import_model(Disguise* d, int k)
         float t = 0;
         if (rd32(d->keep + 4) >= 4) memcpy(&t, d->keep + 36 + 4 * e, 4);
         d->lid_travel[e] = t > 0 && t < 0.3f ? t : 0;
-        if (getenv("RECVX_IMPORT_POSE")) host_log("import: lid %d travel %.3f\n", e, d->lid_travel[e]);   /* (test aid) */
+        if (test_env(TE_POSE)) host_log("import: lid %d travel %.3f\n", e, d->lid_travel[e]);   /* (test aid) */
     }
     d->seed = 0x2545F491u * (unsigned)(k_seed++ + 1);
     return 1;
@@ -1383,13 +1393,13 @@ static void imp_face(Disguise* d, const BH_PWORK* src, int step)
         else if (d->blink >= 0 && ++d->blink > 7) d->blink = -1;
     }
     if (d->blink >= 0) shut = tab[d->blink] / 2.0f;
-    if (getenv("RECVX_IMPORT_BLINK")) shut = (float)atof(getenv("RECVX_IMPORT_BLINK"));   /* test aid: the lids held (0 open, 0.5 half, 1 closed) */
+    if (test_env(TE_BLINK)) shut = (float)atof(test_env(TE_BLINK));   /* test aid: the lids held (0 open, 0.5 half, 1 closed) */
     if (src && src->mskp && src->exp1 && (d == &dg[ACTOR_DOUBLE] || d >= &dg[ACTOR_CAST])) {   /* (the double, the cast) */
         const PARAM_WORK* sp = &((const MASK_WORK*)src->exp1)->param;
         float lid = fmaxf(sp->muscle[8], sp->muscle[9]);   /* the record's eyelids (face_step: 0 open .. 0.87 shut) in place of our
                                                                blinks: it blinks and closes its eyes when the record does */
         shut = lid < 0.05f ? 0 : lid > 0.8f ? 1 : lid / 0.8f;
-        if (getenv("RECVX_IMPORT_BLINK")) shut = (float)atof(getenv("RECVX_IMPORT_BLINK"));
+        if (test_env(TE_BLINK)) shut = (float)atof(test_env(TE_BLINK));
         jaw = sp->jawang;   /* (degrees) */
         if (jaw > 1.5f) jaw += 1.5f * (jaw - 1.5f);
     } else if (d == &dg[0]) {
@@ -1397,12 +1407,12 @@ static void imp_face(Disguise* d, const BH_PWORK* src, int step)
             float v = snd_synth_voice_level() * 90.0f;   /* (degrees: a scream peaks at ~0.18 -> the 14 degree cap, a grunt ~0.03 -> 3) */
             d->talk = v > d->talk ? v : d->talk * 0.6f;
             if (d->talk > 14.0f) d->talk = 14.0f;
-            if (getenv("RECVX_IMPORT_POSE") && d->talk > 0.05f) host_log("import: voice jaw %.1f (level %.4f) frame %d\n", d->talk, v / 90.0f, (int)gs_frame_count());   /* (test aid) */
+            if (test_env(TE_POSE) && d->talk > 0.05f) host_log("import: voice jaw %.1f (level %.4f) frame %d\n", d->talk, v / 90.0f, (int)gs_frame_count());   /* (test aid) */
         }
         jaw = d->talk;
     }
-    if (getenv("RECVX_IMPORT_JAW")) jaw = (float)atof(getenv("RECVX_IMPORT_JAW"));   /* test aid: the jaw open this far (degrees) */
-    if (getenv("RECVX_IMPORT_POSE") && step && d == &dg[ACTOR_DOUBLE] && jaw != 0) host_log("import: double's jaw %.1f frame %d\n", jaw, (int)gs_frame_count());   /* (test aid) */
+    if (test_env(TE_JAW)) jaw = (float)atof(test_env(TE_JAW));   /* test aid: the jaw open this far (degrees) */
+    if (test_env(TE_POSE) && step && d == &dg[ACTOR_DOUBLE] && jaw != 0) host_log("import: double's jaw %.1f frame %d\n", jaw, (int)gs_frame_count());   /* (test aid) */
     jaw *= d->jaw_gain * 3.14159265f / 180.0f;
     d->shut = shut;   /* (a model with a blink morph closes its eyes in imp_skin) */
     for (k = 0; k < 2; k++) {   /* the lid down along the head's up axis until its margin meets the bottom of the eye's
@@ -1467,11 +1477,11 @@ static void imp_skin(Disguise* d)
             o[4 + c] = q[0] * m1[c * 4] + q[1] * m1[c * 4 + 1] + q[2] * m1[c * 4 + 2];
         }
     }
-    if (getenv("RECVX_IMPORT_POSE") && d == &dg[0]) {   /* test aid: per pose (the last of a game frame counts) the node matrices
+    if (test_env(TE_POSE) && d == &dg[0]) {   /* test aid: per pose (the last of a game frame counts) the node matrices
         in the frame of the actor's base matrix (pc/tools/import_check.py --pose renders the model in them) */
         static FILE* f;
         const float* b = (const float*)d->w.mtxbuf;
-        if (!f) f = fopen(getenv("RECVX_IMPORT_POSE"), "w");
+        if (!f) f = fopen(test_env(TE_POSE), "w");
         if (f) {
             fprintf(f, "%d %d %d %d", (int)sys->gfrm_ct, (int)plp->mtn_no, (int)(plp->frm_no >> 16), n);
             for (i = 0; i < n; i++) {
@@ -1531,7 +1541,7 @@ static int load(Disguise* d, int idx)
             if (doubles[0][k] == actor_models[idx].id) load_head(d, 0);
             else if (doubles[3][k] == actor_models[idx].id) load_head(d, 3);
     }
-    if (getenv("RECVX_RIG_DUMP")) {   /* test aid: the rest skeleton (node, parent, model-space position, bind angles) */
+    if (test_env(TE_RIG)) {   /* test aid: the rest skeleton (node, parent, model-space position, bind angles) */
         Rig r;
         const NJS_CNK_OBJECT* o = d->w.mdl[0].objP;
         int i;
@@ -1973,7 +1983,7 @@ void actor_pose(int who, BH_PWORK* src)
         rig_build(&sr, drv->mlwP->objP, drv->mlwP->obj_num, 0);   /* (a cast double's face mask context has 31 nodes, 9 of them face) */
         if (sr.ok) {
             static const void* dumped;
-            if (getenv("RECVX_RIG_DUMP") && dumped != drv->mlwP->objP) {
+            if (test_env(TE_RIG) && dumped != drv->mlwP->objP) {
                 int i;
                 dumped = drv->mlwP->objP;
                 host_log("actor: source skeleton; map");
@@ -1982,11 +1992,11 @@ void actor_pose(int who, BH_PWORK* src)
                 for (i = 0; i < sr.n; i++) host_log("actor:  node %2d par %2d rest %7.2f %7.2f %7.2f\n", i, sr.par[i], sr.rest[i][0], sr.rest[i][1], sr.rest[i][2]);
             }
             retarget(d, drv, &sr);
-            if (getenv("RECVX_IMPORT_POSE") && d->skin && who == 0) {   /* test aid: the source's mapped joints (player node order, -1: none), as the pose dump */
+            if (test_env(TE_POSE) && d->skin && who == 0) {   /* test aid: the source's mapped joints (player node order, -1: none), as the pose dump */
                 static FILE* f;
                 char name[600];
                 const float* b = (const float*)d->w.mtxbuf;
-                if (!f) { snprintf(name, sizeof(name), "%s.src", getenv("RECVX_IMPORT_POSE")); f = fopen(name, "w"); }
+                if (!f) { snprintf(name, sizeof(name), "%s.src", test_env(TE_POSE)); f = fopen(name, "w"); }
                 if (f) {
                     int k, c;
                     fprintf(f, "%d", (int)drv->mtn_no);
@@ -1999,7 +2009,7 @@ void actor_pose(int who, BH_PWORK* src)
                     fflush(f);
                 }
             }
-            if (getenv("RECVX_RIG_DUMP") && who == 0 && !redraw) {   /* the feet over the floor: the source's lowest ankle/toe and the model's */
+            if (test_env(TE_RIG) && who == 0 && !redraw) {   /* the feet over the floor: the source's lowest ankle/toe and the model's */
                 float fs = 1e9f, ft = 1e9f;
                 int k;
                 for (k = 16; k <= 21; k++) {
@@ -2056,7 +2066,7 @@ void actor_pose(int who, BH_PWORK* src)
                 float e = 1e9f;
                 if (r && l) e = (r[0] - l[0]) * (r[0] - l[0]) + (r[1] - l[1]) * (r[1] - l[1]) + (r[2] - l[2]) * (r[2] - l[2]);
                 d->grip = who < 2 && src->wpnr_no > 0 ? 1 | (e < 2.5f * 2.5f ? 2 : 0) : 0;
-                if (getenv("RECVX_IMPORT_GRIP")) d->grip = atoi(getenv("RECVX_IMPORT_GRIP"));   /* test aid: 0 open, 1 right, 3 both */
+                if (test_env(TE_GRIP)) d->grip = atoi(test_env(TE_GRIP));   /* test aid: 0 open, 1 right, 3 both */
             }
             imp_skin(d);
             return;
@@ -2319,7 +2329,7 @@ void actor_act(int who, BH_PWORK* ep)
     Disguise* d = &dg[who];
     if (who < ACTOR_CAST || who >= ACTOR_SLOTS || d->model < 0 || !d->rig.ok) return;
     if (d->face) face_step(d, ep);
-    if (d->face && ep->mskp && ep->exp1 && d->w.exp1 && getenv("RECVX_CAST_TRACE") && !(actor_ticks % 10))   /* test aid: the faces (jaw angles) */
+    if (d->face && ep->mskp && ep->exp1 && d->w.exp1 && test_env(TE_CAST) && !(actor_ticks % 10))   /* test aid: the faces (jaw angles) */
     {
         const PARAM_WORK *a = &((const MASK_WORK*)ep->exp1)->param, *b = &((const MASK_WORK*)d->w.exp1)->param;
         float ma = 0, mb = 0;
