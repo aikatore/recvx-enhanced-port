@@ -2495,36 +2495,29 @@ void tps_calc_model(void)
 }
 
 /* game.c bhAllDrawModel, around our player's draw (on = 1 before, 0 after), in first person. "First Person Body" On: our
-   character drawn without its head (its head node and those below it collapsed onto the head joint for this draw, as a
-   zombie's blown-off head, variant_glue.c; "You appear as" another model: that model's head, actor_glue.c), so looking
-   down shows the body, the arms and what the hands hold. Off: the body is not drawn (the nodes' hide flag, as bhSetCut
-   hides room parts; "You appear as": not drawn at all, 1); the weapon in the hand stays (tps_fp_objects). For this draw
-   only: the partner, the shadow and the pose are untouched */
-extern int actor_on, actor_fp_nohead;
+   character drawn without its head (actor_fp_nohead: MdlPut.c bhPutModel collapses the neck and head of whatever draws
+   us, the game's model or "You appear as" another, variant_glue.c pc_zombie_head), so looking down shows the body, the
+   arms and what the hands hold. Off: the body is not drawn (the nodes' hide flag, as bhSetCut hides room parts; "You
+   appear as": not drawn at all, 1); the weapon in the hand stays (tps_fp_objects). For this draw only: the partner, the
+   shadow and the pose are untouched */
+extern int actor_fp_nohead;
+int actor_player_look(void);   /* actor_glue.c: we are drawn as another model */
 /* the body is drawn: the setting, and the eye not pulled back behind the head (a weapon held low, aimed: fp_track) */
 static int fp_body(void) { return g_tps.fp_body && fp_back < 0.3f; }
-void pc_head_hide(ML_WORK* m, int node);   /* variant_glue.c */
-void pc_head_show(void);
 int tps_fp_hide(int on)
 {
     static unsigned hid;   /* the nodes hidden here */
-    static int head;       /* our head hidden */
     NJS_CNK_OBJECT* o = plp && plp->mlwP ? plp->mlwP->objP : NULL;
     int i, n = o ? plp->mlwP->obj_num : 0;
     if (!on) {
         for (i = 0; i < n && i < 32; i++) if (hid & (1u << i)) o[i].evalflags &= ~0x8;
-        if (head) pc_head_show();
         hid = 0;
-        head = actor_fp_nohead = 0;
+        actor_fp_nohead = 0;
         return 0;
     }
     if (!tps_cam_active || fp_w <= 0.15f || !o) return 0;
-    if (fp_body()) {
-        if (actor_on) actor_fp_nohead = 1;
-        else if (n > 5) pc_head_hide(plp->mlwP, 5), head = 1;
-        return 0;
-    }
-    if (actor_on || n > 32) return 1;
+    if (fp_body()) { actor_fp_nohead = 1; return 0; }
+    if (actor_player_look() || n > 32) return 1;
     for (i = 0; i < n; i++)
         if (o[i].model && !(o[i].evalflags & 0x8)) { o[i].evalflags |= 0x8; hid |= 1u << i; }
     return 0;
@@ -2557,7 +2550,7 @@ void tps_fp_objects(int on)
     if (fp_body()) return;
     if (plp->mode0 == 1 && plp->mode1 == 0 && !reload_at_rest() && (sys->pt_flg & 0x1))
         sys->pt_flg &= ~0x1, off = 1;
-    for (i = 0; actor_on && sys->obwp && i < 2; i++) {   /* "You appear as" a model with hands of its own, not drawn: the weapon's own
+    for (i = 0; sys->obwp && i < 2 && actor_player_look(); i++) {   /* "You appear as" a model with hands of its own, not drawn: the weapon's own
                                                          hand piece (actor_glue.c actor_weapon_hands hides it on such a model) */
         NJS_CNK_OBJECT* w = sys->obwp[i].mlwP && sys->obwp[i].mlwP->objP && sys->obwp[i].mlwP->obj_num > 0 ? &sys->obwp[i].mlwP->objP[0] : NULL;
         if (w && (w->evalflags & 0x8) && (sys->obwp[i].lkono == 9 || sys->obwp[i].lkono == 13)) w->evalflags &= ~0x8u, hands |= 1 << i;

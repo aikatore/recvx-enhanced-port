@@ -197,10 +197,13 @@ character differ. Off it is not used at all (`fp` is 0: every first-person branc
   rifles and the launchers are held at the hip, under the view, and show in the lower right as a handgun held at the
   eyes does (before: 4 above, not back, a sliver in the corner). A reload's hands go down: the hand's height as the
   weapon was last aimed (or shot) is kept through it (mode 70 and the reload of a lowered weapon, `reload_at_rest`).
-* **Our character** ("First Person Body", ini `fp_body`, default On): drawn without its head (`tps_fp_hide`: head node 5
-  and the nodes below it collapsed onto the head joint for our draw, `variant_glue.c pc_head_hide`, as a zombie's
-  blown-off head; "You appear as" another model, native, a part file or an import: that model's head role,
-  `actor_glue.c actor_fp_nohead`, and its head part is not drawn). What the head wears (Claire's ponytail, Wesker's
+* **Our character** ("First Person Body", ini `fp_body`, default On): drawn without its neck and head (`tps_fp_hide` sets
+  `actor_fp_nohead` around our draw; `MdlPut.c bhPutModel`'s hook `variant_glue.c pc_zombie_head` collapses neck node
+  4 and the nodes below it onto the neck joint, as a zombie's blown-off head, in every draw of us: the game's model, a
+  part file, and "You appear as" another model, native or an import: its neck role, else its head role, and its head
+  part is not drawn). Before, only head node 5 went (the neck's ring stayed in view aiming down) and the game's model
+  was hidden only while no display model at all was shown (`actor_on`, which the cutscene cast, Enemy Models, enemy
+  variants and the partner's look set too): in such rooms our own head stayed in the view. What the head wears (Claire's ponytail, Wesker's
   glasses: `sys->obwp[2]` on node 5) is not drawn (`tps_fp_objects`, a hook around `bhDrawObjItm` in `game.c
   bhAllDrawModel`). Looking down shows the legs, the arms and the weapon in the hand. While the eye is pulled back behind
   the head (a low weapon aimed, `fp_back` > 0.3) the body would fill the view from inside: then, and with the setting
