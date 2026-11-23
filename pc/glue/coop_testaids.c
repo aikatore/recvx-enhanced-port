@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdint.h>
 
 void host_log(const char* fmt, ...);
 void bhCheckMothEgg(void);   /* player.c (its header clashes with libc's macros here) */
@@ -240,4 +241,28 @@ void coop_test_aids(CoopTest* t)
                      t->frozen, n, h, near_i, ene[near_i].px, ene[near_i].pz, sqrtf(nd), ene[near_i].mtn_no, ene[near_i].frm_no >> 16, plp->px, plp->pz, plp->hp, plp->mode0);
         }
     }
+}
+
+/* test aid RECVX_COOP_PTRSCAN=1 (Linux): every word of an event and of an enemy state we send that points into the first
+   16 MB of our image is logged ("pointer on the wire"): the code, its tables and data, and eff[], ene[], ply, sys. A float
+   there is below 2e-9, so a hit is an address. A Windows and a Linux build (or two builds of other commits) place them
+   elsewhere: none may cross (docs/COOP.md "Windows and Linux"; pc/tools/coop_crossplay_check.sh). (Pointers into the game's
+   arena, higher up - an enemy's work, the room's collision - read as ordinary floats: own_types' table keeps those) */
+#ifdef __linux__
+extern char __executable_start[];
+#endif
+void ptr_scan(const void* p, int n, const char* what, int idx)
+{
+#ifdef __linux__
+    static int on = -1;
+    uint32_t lo = (uint32_t)(uintptr_t)__executable_start, w;
+    int k;
+    if (on < 0) on = getenv("RECVX_COOP_PTRSCAN") && atoi(getenv("RECVX_COOP_PTRSCAN"));
+    for (k = 0; on && k + 4 <= n; k += 4) {
+        memcpy(&w, (const char*)p + k, 4);
+        if (w - lo < (16u << 20)) host_log("coop: test: pointer on the wire: %s (slot %d) word 0x%X = 0x%08X\n", what, idx, k, w);
+    }
+#else
+    (void)p; (void)n; (void)what; (void)idx;
+#endif
 }

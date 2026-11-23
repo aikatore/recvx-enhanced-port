@@ -890,8 +890,13 @@ new game normal/easy/very easy, 3 + n save n: native number - 1 or card slot), `
 
 | File | Role |
 |---|---|
-| `pc/glue/coop_glue.c` | The session: pose, events, snapshots, enemy authority, grabs, world events, loot, trade, saved inventories. Game thread. |
-| `pc/glue/coop_testaids.c` | Test aids of `coop_frame` (headless runs). |
+| `pc/glue/coop_glue.c` | The session: pose, events, world events, loot, trade, saved inventories, `coop_frame`. Game thread. |
+| `pc/glue/coop_look.c` | The partner's stand-in (model, look, sounds, `coop_control_remote`, `coop_draw_remote`); the host's cast, Enemy Models and enemy options to the guest. |
+| `pc/glue/coop_own.c` | Who runs each enemy: hand-overs (`own_*`, `own_types`, EV_ESTATE), grabs and holds across the games, hits passed on, the hand-in (`hin_*`), kills (`gone_*`). |
+| `pc/glue/coop_snap.c` | Enemy snapshots (`build_snapshots`, `snap_prioritise`) and their playout (`apply_snapshots`); the enemy step hooks (`coop_enemy_begin/end`, puppets). |
+| `pc/glue/coop_fx.c` | Effects (EV_FX, FX_CALL, FX_POOL). |
+| `pc/glue/coop_int.h` | What the co-op files above share (private to them). |
+| `pc/glue/coop_testaids.c` | Test aids of `coop_frame` (headless runs), `ptr_scan` (RECVX_COOP_PTRSCAN). |
 | `pc/glue/lobby_glue.c` | Title menu entry and lobby screen (game thread, the title task). |
 | `pc/glue/trade_glue.c` | Trade screen drawing and input. |
 | `pc/src/net/coop_proto.c/.h` | Wire format and every receive check; no game state (tested by `pc/tests/test_coop.c`). |
