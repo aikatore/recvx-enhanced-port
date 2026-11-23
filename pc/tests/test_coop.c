@@ -42,7 +42,7 @@ static Event ev(int type)
     case EV_GONE: e.u.gn.n = 2; e.u.gn.slot[0] = 3; e.u.gn.id[0] = 1; e.u.gn.slot[1] = 30; e.u.gn.id[1] = 1; break;
     case EV_SKIP: e.stg = 0; e.rom = 2; e.u.sk.op = SKIP_GO; break;
     case EV_CASTOFF: e.u.co.at = 4 * COOP_CASTOFF_CHUNK; e.u.co.n = 9; e.u.co.bits[0] = 0x5A; break;
-    case EV_EMODEL: e.u.em.v[0] = EM_IMPORT + 40; e.u.em.v[2] = EM_MODEL + 17; e.u.em.v[3] = EM_RANDOM_UC_ZOMBIE; break;
+    case EV_EMODEL: e.u.em.v[0] = EM_IMPORT; e.u.em.key[0] = 0x9E3779B9u; e.u.em.v[2] = EM_MODEL + 17; e.u.em.v[3] = EM_RANDOM_UC_ZOMBIE; break;
     case EV_BRSEED: memcpy(e.u.br.str, "R840-T1C0-XXHH4HZZZMEZ9H0007JZZZZZZZ5ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ", COOP_BR_STR);
                     memcpy(e.u.br.dig, "8465e8280f3a", COOP_BR_DIG); break;
     case EV_FX: e.idx = 4; e.u.fx.id = 350; e.u.fx.flg = 1; e.u.fx.owner = 4; e.u.fx.txp = 0; e.u.fx.mlw = -1; e.u.fx.stflg = 0x20; e.u.fx.tex_id = 7;   /* a zombie's vomit */
@@ -107,14 +107,14 @@ static void test_events(void)
     BAD(EV_ENE_HIT, 0, e->u.eh.flg = 0x80);
     BAD(EV_ENE_HIT, 0, e->u.eh.flg = 4 | COOP_HIT_AIM | 0x100);   /* the aim height is at_flg 0xE << 8, nothing else */
     BAD(EV_ENE_HIT, 0, e->u.eh.flg = 4 | 0x8000);      /* (59) a push is no hit */
-    {   /* (protocol 59) "Break Free Pushes Enemies": a push for the runner from dp, no joints, damage or hit bits; the marker only with it */
+    {   /* (protocol 59) "Break Free Pushes Enemies": a push for the runner from dp, no joints, damage or hit bits */
         Event e = ev(EV_ENE_HIT);
         int k;
         for (k = 0; k < 6; k++) { e.u.eh.jnt[k] = -1; e.u.eh.dam[k] = 0; }
         e.u.eh.flg = COOP_HIT_SHOVE; e.u.eh.wpnr_no = 0; e.u.eh.djnt_no = -1;
         CHECK(coop_check_event(&e, 0) == COOP_OK && coop_check_event(&e, 1) == COOP_OK);
-        e.u.eh.flg = COOP_HIT_SHOVE | COOP_HIT_MARK | COOP_HIT_FWD; CHECK(coop_check_event(&e, 1) == COOP_OK);
-        e.u.eh.flg = COOP_HIT_MARK; CHECK(coop_check_event(&e, 1) == COOP_BAD_FIELD);
+        e.u.eh.flg = COOP_HIT_SHOVE | COOP_HIT_FWD; CHECK(coop_check_event(&e, 1) == COOP_OK);
+        e.u.eh.flg = COOP_HIT_SHOVE | 0x10000u; CHECK(coop_check_event(&e, 1) == COOP_BAD_FIELD);   /* (59..61 COOP_HIT_MARK: gone in 62) */
         e.u.eh.flg = COOP_HIT_SHOVE | COOP_HIT_AIM; CHECK(coop_check_event(&e, 1) == COOP_BAD_FIELD);
         e.u.eh.flg = COOP_HIT_SHOVE; e.u.eh.comb_flg = 0x10; CHECK(coop_check_event(&e, 1) == COOP_BAD_FIELD);
         e.u.eh.comb_flg = 0; e.u.eh.jnt[0] = 3; e.u.eh.dam[0] = 10; CHECK(coop_check_event(&e, 1) == COOP_BAD_FIELD);
@@ -254,6 +254,9 @@ static void test_events(void)
     BAD(EV_EMODEL, 1, e->u.em.v[1] = EM_MODEL + ACTOR_MODELS);
     BAD(EV_EMODEL, 1, e->u.em.v[1] = EM_IMPORT + ACTOR_IMPORT_MAX);
     BAD(EV_EMODEL, 1, e->u.em.v[EM_CATS] = 1);           /* past the categories */
+    BAD(EV_EMODEL, 1, e->u.em.v[0] = EM_IMPORT + 40);    /* (protocol 62) an import goes by its key, never by the host's index */
+    BAD(EV_EMODEL, 1, e->u.em.key[0] = 0);               /* ... with one */
+    BAD(EV_EMODEL, 1, e->u.em.key[2] = 7);               /* ... and only an import has one */
     { Event e = ev(EV_EOPTS); e.u.eo.cast_all = 2; CHECK(coop_check_event(&e, 1) == COOP_OK); }
     { Event e = ev(EV_EOPTS); e.u.eo.variety = 2; e.u.eo.types = ENEMY_TYPES_MAX; e.u.eo.extra = ENEMY_EXTRA_MAX; memset(e.u.eo.rate, ENEMY_RATE_MAX, ENEMY_RATE_N); CHECK(coop_check_event(&e, 1) == COOP_OK); }   /* (protocol 38) */
     /* EV_GONE: 1..COOP_GONE_MAX enemy slots below COOP_ENE_SLOTS, a room case */

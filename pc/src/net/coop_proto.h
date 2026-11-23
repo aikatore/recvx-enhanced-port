@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define COOP_MAGIC 0x504F4F43u          /* "COOP" */
-#define COOP_VERSION 61                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
+#define COOP_VERSION 62                /* 11: join code, datagrams <= 1200 bytes, checked events, EV_ATR; 12: EV_FX; 13: EV_GRANT;
                                            14: EV_TSCREEN, BUSY_TRADE, OPT_TRADE_FREEZE; 15: EV_GONE;
                                            16: player id and rejoin tag in PoseExt, EV_OWN, saved inventories (EV_BLOB pad);
                                            17: TS_WANT, TS_DECLINE (trade screen item requests);
@@ -101,7 +101,12 @@ extern "C" {
                                            59: OPT2_SHOVE ("Break Free Pushes Enemies"), EV_ENE_HIT COOP_HIT_SHOVE / COOP_HIT_MARK
                                                (a push from the point dp for the enemy's runner; the sender broke free);
                                            60: Pose.chr 2 with costume 1, the Dreamcast Steve (part file 16; docs/IMPORT_DREAMCAST.md);
-                                           61: EV_EMODEL (the host's "Enemy Models": a model per enemy category, enemymdl.h) */
+                                           61: EV_EMODEL (the host's "Enemy Models": a model per enemy category, enemymdl.h);
+                                           62: no address of the sender's process on the wire (Windows and Linux builds play
+                                               together): EV_ESTATE sends the ranges of own_types the receiver keeps as zeros, the
+                                               Tyrant's ewP (0xC0) and the zombie's 0x70 are kept, a grab's stand-in goes masked;
+                                               EV_EMODEL names an import by its key (em.key), a guest without it draws the original;
+                                               COOP_HIT_MARK is gone (Break Free has no grab immunity) */
 #define COOP_DGRAM_MAX 1200             /* bytes per datagram (below every internet path MTU) */
 #define COOP_EV_FRAME 16                /* events per datagram (the receiver's check; a frame sends up to 96: coop_glue.c EV_BURST) */
 #define COOP_SNAP_BUDGET 2400           /* enemy snapshot bytes per frame (records past it wait, by priority) */
@@ -310,7 +315,7 @@ enum { COOP_ROOM_CLAIM, COOP_ROOM_DONE, COOP_ROOM_GUEST, COOP_ROOM_HOST };   /* 
 #define COOP_HIT_FWD 0x4000u            /* (protocol 56) EV_ENE_HIT flg: passed on by the game that got it and did not run the enemy (once at most) */
 #define COOP_HIT_SHOVE 0x8000u          /* (protocol 59) EV_ENE_HIT flg: no hit but "Break Free Pushes Enemies": the sender broke free at dp,
                                            the runner knocks the enemy back (shove_glue.c pc_shove_apply); no joints, damage or other bits */
-#define COOP_HIT_MARK 0x10000u          /* (protocol 59) with COOP_HIT_SHOVE: only the news (the sender's grab immunity), nothing pushed */
+                                        /* (0x10000u: protocol 59..61 COOP_HIT_MARK, the sender's grab immunity; refused since 62) */
 typedef struct Event {
     uint32_t id;
     uint8_t type, idx, stg, rom;        /* enemy slot; events for another room are dropped */
@@ -474,7 +479,8 @@ typedef struct Event {
         SpawnNote sp;                   /* host: an enemy not in the room file, into slot idx */
         EnemyOpts eo;                   /* host: its enemy options */
         struct {                        /* host (protocol 61): its "Enemy Models" (enemymdl.h values; each screen draws them with its own imports) */
-            uint16_t v[COOP_EMODEL_CATS];
+            uint16_t v[COOP_EMODEL_CATS];   /* (protocol 62) an import is EM_IMPORT itself, named by key[]: its index is the host's own */
+            uint32_t key[COOP_EMODEL_CATS]; /* (protocol 62) with EM_IMPORT: the import's key (enemymdl.h emodel_import_key), else 0 */
         } em;
     } u;
 } Event;

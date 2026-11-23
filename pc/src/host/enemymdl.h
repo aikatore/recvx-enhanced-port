@@ -29,6 +29,15 @@ static inline int emodel_valid(int v)
     return v >= 0 && (v < EM_RANDOM_END || (v >= EM_MODEL && v < EM_MODEL + ACTOR_MODELS) || (v >= EM_IMPORT && v < EM_IMPORT + ACTOR_IMPORT_MAX));
 }
 
+/* (co-op EV_EMODEL, protocol 62) import k's identity across players: its source and folder name hashed, 0 none; the shown
+   import with that key, -1 none (its game not imported or unchecked here) */
+unsigned emodel_import_key(int k);
+int  emodel_import_find(unsigned key);
+/* a random group that can draw imports (its members depend on the player's imports) */
+static inline int emodel_group_imports(int v)
+{
+    return v > EM_ORIGINAL && v < EM_RANDOM_END && v != EM_RANDOM_CVX_ZOMBIE && v != EM_RANDOM_CVX_MONSTER && v != EM_RANDOM_CVX_CHAR;
+}
 int  emodel_cat(int id, int mdlver);    /* the category of enemy type id (model version mdlver), -1 none */
 const char* emodel_cat_name(int c);     /* "Zombies" (English; the menus translate) */
 /* the choices of a row in list order: Original, the random groups with a member, every listed humanoid catalogue model, every

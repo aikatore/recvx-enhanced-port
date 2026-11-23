@@ -718,10 +718,11 @@ list and the groups, and a row set to one of them shows the original.
 ### Co-op
 
 The host decides: its choices go to the guest as `EV_EMODEL` (protocol 61; at the session's start and on every change;
-a value per category), and the guest draws the host's (a guest's own page shows them read-only, "Set by the host.").
+a value per category; since 62 an import as its key, its source and folder name, not as its place in the host's list), and the guest draws the host's (a guest's own page shows them read-only, "Set by the host.").
 The picks come from the host's enemy seed, the room file and the slot, which both sides share, so both screens show the
 same models. Imported models count on each screen as its imports and checked games allow: partners need the same
-imports and the same games on, else the guest shows the original where it lacks one. Nothing else on the wire changed.
+imports and the same games on, else the guest shows the original where it lacks one (an import it does not have or
+whose game is unchecked there; a random group over imports while the two players' import lists differ, as the cast).
 
 ### Performance
 

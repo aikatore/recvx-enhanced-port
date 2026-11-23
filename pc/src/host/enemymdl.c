@@ -58,6 +58,23 @@ static const char* imp_id(int k, char* buf, int n)
     return buf;
 }
 static int imp_ok(int k) { return actor_imports[k].name && actor_import_shown(k); }
+unsigned emodel_import_key(int k)
+{
+    char b[64];
+    const char* s;
+    unsigned h = 2166136261u;
+    if (k < 0 || k >= imports() || !actor_import_file[k]) return 0;
+    h = (h ^ actor_import_src[k]) * 16777619u;
+    for (s = imp_id(k, b, sizeof(b)); *s; s++) h = (h ^ (unsigned char)*s) * 16777619u;
+    return h ? h : 1;
+}
+int emodel_import_find(unsigned key)
+{
+    int k, n = imports();
+    for (k = 0; key && k < n; k++)
+        if (imp_ok(k) && emodel_import_key(k) == key) return k;
+    return -1;
+}
 static int uc(int k) { return actor_import_src[k] == IMPORT_UMBRELLA; }
 static int uc_zombie(int k) { char b[64]; return uc(k) && !strncmp(imp_id(k, b, sizeof(b)), "EZ", 2); }
 static int uc_monster(int k) { char b[64]; return uc(k) && imp_id(k, b, sizeof(b))[0] == 'E' && !uc_zombie(k); }

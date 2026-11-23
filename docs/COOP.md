@@ -1,7 +1,7 @@
 # Online co-op
 
-Two players, each with their own copy of the game and the same build, play one game together
-over the internet or a LAN (UDP). Co-op is an optional addon: with it off the game behaves exactly
+Two players, each with their own copy of the game and a build of the same co-op version (Windows and Linux mix: "Windows
+and Linux" in Part 2), play one game together over the internet or a LAN (UDP). Co-op is an optional addon: with it off the game behaves exactly
 as without it (every hook is `#ifdef TARGET_PC` and `if (coop_on)`).
 
 Part 1 is for players: how to host, join and play. Part 2 is the reference: architecture,
@@ -37,7 +37,7 @@ Ways to start a session:
 ## Lobby
 
 MULTIPLAYER opens the new screens described in the next section; with Menu Style Legacy (or `--legacy-menu`), the lobby
-below, unchanged. Both use the same session, rules and wire (protocol 61; 61: the host's Enemy Models, `EV_EMODEL`, [ENEMIES.md](ENEMIES.md) "Enemy models"): a host on one can be joined from the other.
+below, unchanged. Both use the same session, rules and wire (protocol 62; 61: the host's Enemy Models, `EV_EMODEL`, [ENEMIES.md](ENEMIES.md) "Enemy models"): a host on one can be joined from the other.
 
 ### The new MULTIPLAYER screens
 
@@ -1810,7 +1810,7 @@ interpolated with the in-between frames; it snaps on camera cuts and in vanilla 
 
 ## Protocol 42
 
-`COOP_VERSION` is **60**; both players need builds with the same version (a mismatch is reported,
+`COOP_VERSION` is **62**; both players need builds with the same version (a mismatch is reported,
 e.g. "The host uses co-op compatibility version 38; yours is 40. Use matching game builds."). The co-op server does not
 look at the game protocol. Version history in short: 11 join code, 1200-byte datagrams, checked
 events, `EV_ATR`; 12 `EV_FX`; 13 `EV_GRANT`; 14 `EV_TSCREEN`; 15 `EV_GONE`; 16 player id and rejoin
@@ -1831,7 +1831,7 @@ bytes); 34 the cutscene cast gives Claire and Chris no pick (each screen shows t
 list, set: not checked; [ACTORS.md](ACTORS.md) "Enemy Models"), so `EnemyOpts` is 88 bytes and `Event` 96; 47 (44-46 were the separate phase prototypes) snapshot records, quantized and delta-coded against the frame the peer acknowledged (`Pose.snap_ack` in the old `rsv`), with the motion's anchor and speed and a zombie's neck, and no count cap ("Snapshot records"), and `OPT2_OWNERSHIP`,
 `EV_ENEOWN`, `EV_PLY_HIT` / `EV_GRAB` / `EV_UNGRAB` either way, `EV_UNGRAB` state 2 ("Engaged-player ownership"); 48 `EV_ENEOWN` and `EV_ESTATE` for the Cerberus, the Hunter/Sweeper,
 the Bandersnatch and the anatomist too (each type's `exp0` with its pointer words kept, the `type` field taken), never for a
-record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). 54: every type outside the boss fights is handed in, the dead ones too (`EV_ENEOWN` state 3 `stflg_b` 1), with up to 0x204 bytes of `exp0` (an enemy without a child its own size, `ATR_WORK` pointers as table and index); the extras the joiner killed are made dead on the host; `SPAWN_NOTE_DONE` carries the room's records' hash ("Room files that differ"). 55: `EneSnap.link` (1 + a linked part's parent slot, in the `SQ_ID` field's bits 16..23): a zombie's upper half is matched by its zombie, not by its slot ("Room files that differ"). 56: the player first in a room runs its enemies until it leaves ("Who runs the enemies"): `EV_ENEOWN` 1 a make-before-break hand-over (`pset` 1: the giver leaves; `tid` 0: without its state; `stflg_b`: its frame), 5 the room's runner (`COOP_ROOM_*`), 6 "it runs here now"; `COOP_HIT_FWD` (a hit passed on to the runner); `Pose.busy` `BUSY_PAUSED` 5 and `BUSY_DOOR` 6; snapshots also with the partner in another room; events that come ahead of a gap are kept; `EV_ESTATE` packed (`coop_zpack`). 57: bosses go with their state when their runner leaves through a door (`own_types` p3 2, their `rm_flg` bits after their work), a Black Widow with its legs off (leg records after its work), `EV_FX` `x1` / `ao` (an effect's `exp1` as a word of its owner's work: Alexia 1's burning blood) and `FX_POOL` (a blood pool as its call). 58: `EV_FX` `FX_CALL` (`fxc`: an effect starter's call with an enemy's or a player's node - the Tyrant's blood, claw planes and camera shakes, Steve's dust and sparks) and effect 301 (blood stains) as a generic entry. 59: `OPT2_SHOVE` 8 in `Pose.opts2` (the host's "Break Free Pushes Enemies" in effect, its Auto resolved) and `EV_ENE_HIT` `COOP_HIT_SHOVE` / `COOP_HIT_MARK` (a push for the enemy's runner from where the sender broke free; [ENEMIES.md](ENEMIES.md#breaking-free)). 60: `Pose.chr` 2 with `costume` 1 is the Dreamcast Steve (part file 16: the receiver's import, else the PS2's Steve; [IMPORT_DREAMCAST.md](IMPORT_DREAMCAST.md)); a build before it found no model there. `Pose.pflg` and `Pose.flr` were added inside protocol 18,
+record the room's scripts act on (a 47 peer would copy a zombie's `exp0` into theirs); within 48, `OPT2_OWNERSHIP` became the lobby rule "Shared Enemy Control", off by default (before, on unless `RECVX_COOP_OWNERSHIP=0`; nothing on the wire changed). 49: the randomizer's Types per Room is a target in Wild and Custom, and extra enemies may take kinds the room lacks under it (other enemies from the same seed; nothing on the wire changed). 50: extra enemies anywhere in a room, up to "Extra Enemies" whatever its records, each with a dead flag of its own (`SpawnNote.dead` 1024 + the bit, `EV_FLAGS` words 120..160), and the randomizer's records read from this visit's code (other enemies from the same seed). 51: extra enemies only where the player can walk (inside the camera zones, by the player's own walls, from the entry positions) and a random 0.."Extra Enemies" per room (other enemies from the same seed; nothing on the wire changed). 52: the guest makes the host's randomizer result of each room load instead of drawing its own (`EV_SPAWN` with `SpawnNote.pad` `SPAWN_NOTE_DONE`: the room file and how many notes follow, then `SPAWN_NOTE_RAND` per record changed; `SPAWN_NOTE_KEPT` is gone): the two sides classified the records from their own story flags. 53: a joiner that loads a room with the host elsewhere draws its randomizer result and extra enemies itself and sends them (`EV_SPAWN` from the joiner, `SPAWN_NOTE_XDONE`), the host that comes in while it is there makes the joiner's, and the joiner hands its enemies in with their state (`EV_ENEOWN` states 3 and 4, then `EV_UNGRAB`; "The hand-in"). 54: every type outside the boss fights is handed in, the dead ones too (`EV_ENEOWN` state 3 `stflg_b` 1), with up to 0x204 bytes of `exp0` (an enemy without a child its own size, `ATR_WORK` pointers as table and index); the extras the joiner killed are made dead on the host; `SPAWN_NOTE_DONE` carries the room's records' hash ("Room files that differ"). 55: `EneSnap.link` (1 + a linked part's parent slot, in the `SQ_ID` field's bits 16..23): a zombie's upper half is matched by its zombie, not by its slot ("Room files that differ"). 56: the player first in a room runs its enemies until it leaves ("Who runs the enemies"): `EV_ENEOWN` 1 a make-before-break hand-over (`pset` 1: the giver leaves; `tid` 0: without its state; `stflg_b`: its frame), 5 the room's runner (`COOP_ROOM_*`), 6 "it runs here now"; `COOP_HIT_FWD` (a hit passed on to the runner); `Pose.busy` `BUSY_PAUSED` 5 and `BUSY_DOOR` 6; snapshots also with the partner in another room; events that come ahead of a gap are kept; `EV_ESTATE` packed (`coop_zpack`). 57: bosses go with their state when their runner leaves through a door (`own_types` p3 2, their `rm_flg` bits after their work), a Black Widow with its legs off (leg records after its work), `EV_FX` `x1` / `ao` (an effect's `exp1` as a word of its owner's work: Alexia 1's burning blood) and `FX_POOL` (a blood pool as its call). 58: `EV_FX` `FX_CALL` (`fxc`: an effect starter's call with an enemy's or a player's node - the Tyrant's blood, claw planes and camera shakes, Steve's dust and sparks) and effect 301 (blood stains) as a generic entry. 59: `OPT2_SHOVE` 8 in `Pose.opts2` (the host's "Break Free Pushes Enemies" in effect, its Auto resolved) and `EV_ENE_HIT` `COOP_HIT_SHOVE` / `COOP_HIT_MARK` (a push for the enemy's runner from where the sender broke free; [ENEMIES.md](ENEMIES.md#breaking-free)). 60: `Pose.chr` 2 with `costume` 1 is the Dreamcast Steve (part file 16: the receiver's import, else the PS2's Steve; [IMPORT_DREAMCAST.md](IMPORT_DREAMCAST.md)); a build before it found no model there. 61: `EV_EMODEL` (the host's "Enemy Models"). 62: no address of the sender's process on the wire, so Windows and Linux builds play together ("Windows and Linux": `EV_ESTATE` sends what the receiver keeps of an enemy's work as zeros, the Tyrant's `ewP` and the zombie's line-of-sight wall are kept, a grab's stand-in goes masked), `EV_EMODEL` names an import by `em.key` (the guest draws the original without it), `COOP_HIT_MARK` is gone (Break Free has no grab immunity). `Pose.pflg` and `Pose.flr` were added inside protocol 18,
 `Pose.rcase` inside protocol 22, the aim pitch in `Pose.pflg`'s spare bits inside protocol 23 (0 means "not
 sent", and receivers fall back; a receiver before the pitch reads `pflg & 6` only and keeps the straight pose).
 
@@ -1940,7 +1940,7 @@ enemy's (`mode[0]` 0) to one whose own Init ran.
 
 | Type | Id | Direction | Payload |
 |---|---|---|---|
-| `EV_ENE_HIT` | 1 | either | Our shot hit a puppet: joints, damage, hit bits, hit point/direction, weapon; `flg` also carries the shooter's aim height (`at_flg & 0xE` << 8, with `COOP_HIT_AIM`) and `COOP_HIT_PRECISE` when the shooter's "Precise Shots" judged it (a zombie's head then bursts only from a head hit), `COOP_HIT_FWD` (protocol 56) when the receiver of the shooter's event passed it on to the game running the enemy (once at most). Protocol 59: `COOP_HIT_SHOVE` (no hit: the sender broke free from a grab at `dp`, the runner knocks the enemy back, `pc_shove_apply`; only with `COOP_HIT_FWD`, no joints, damage or other bits) and with it `COOP_HIT_MARK` (nothing to push: only the sender's grab immunity) |
+| `EV_ENE_HIT` | 1 | either | Our shot hit a puppet: joints, damage, hit bits, hit point/direction, weapon; `flg` also carries the shooter's aim height (`at_flg & 0xE` << 8, with `COOP_HIT_AIM`) and `COOP_HIT_PRECISE` when the shooter's "Precise Shots" judged it (a zombie's head then bursts only from a head hit), `COOP_HIT_FWD` (protocol 56) when the receiver of the shooter's event passed it on to the game running the enemy (once at most). Protocol 59: `COOP_HIT_SHOVE` (no hit: the sender broke free from a grab at `dp`, the runner knocks the enemy back, `pc_shove_apply`; only with `COOP_HIT_FWD`, no joints, damage or other bits) (protocol 59..61 also `COOP_HIT_MARK` 0x10000, the sender's grab immunity; refused since 62) |
 | `EV_PLY_HIT` | 2 | host | A host enemy hit the partner's stand-in: hp delta, flag bits, modes, direction |
 | `EV_BLOB` | 3 | host | Game state chunk (save region; `pad` 1: its items are the joiner's saved ones; 2: the host's Retry of a shared game over, with the joiner's items of that continue point) |
 | `EV_FLAGS` | 4 | either | 1..6 changed flag words: set and cleared bits, base event id |
@@ -1964,6 +1964,7 @@ enemy's (`mode[0]` 0) to one whose own Init ran.
 | `EV_SKIP` | 22 | host | Both pressed skip: the cutscene ends now (`op` `SKIP_GO` 1; `stg`/`rom` the host's room) |
 | `EV_CASTOFF` | 24 | host | The cutscene cast's "Custom" list ([ACTORS.md](ACTORS.md) "Custom": a bit per "All models" entry, set: not checked): bytes `at`..`at`+`n`-1 (`at` a multiple of 64, `n` 1..64, within 272; `pad` 0), each chunk that changed and all of them to a new partner, before `EV_EOPTS`. The guest keeps them for the session (its own list stays) |
 | `EV_ENEOWN` | 25 | either | Who runs enemy `idx` (`gr` fields): 0 refused (the giver runs it on), 1 a hand-over (`EV_ESTATE` transfer `tid`, 0 none; `pset` 1 the giver leaves; `stflg_b` its frame; `flg_b` type and look), 2 taken back / the receiver runs it already, 3 a guest's claim (guest only), 4 the host's answer (host only), 5 the room's runner (`child`: `COOP_ROOM_CLAIM` host, `COOP_ROOM_DONE` guest, `COOP_ROOM_HOST` host), 6 the receiver of a hand-over runs it now (`stflg_b`: its frame) |
+| `EV_EMODEL` | 26 | host | Its "Enemy Models" ([ENEMIES.md](ENEMIES.md) "Enemy models"), at the session's start and on every change: `v` a choice per category (`enemymdl.h`; the unused ones 0); (protocol 62) an import is `EM_IMPORT` with its `key` (`emodel_import_key`: its source and folder name), never its index in the host's list. The guest draws the original for an import it lacks (or whose game it has unchecked) and for a random group over imports while the two import lists differ (`PoseExt.imp_id`) |
 | `EV_BRSEED` | 23 | host | While it plays BioRand, to each new partner and when they change: its pack's seed string (`str[68]`, `log_pl0.txt`'s `Seed:`, BioRand's alphabet, `R` and the dashes in place; all 0: unknown) and the first 12 hex digits of its CLI archive's SHA-256 (`dig[12]`, lower case; all 0: unknown). The guest decodes the string too (`biorand_seed_decode`; one it cannot read counts as unknown). |
 
 Transfers (`EV_BLOB`, `EV_ESTATE`, `EV_OWN`) carry a transfer id, total size, offset (a multiple of
@@ -1996,6 +1997,53 @@ Trade screen ops (`EV_TSCREEN`):
 * The host adopts the first sender whose datagrams open with keys of the join code (see "Security");
   once a partner is there, datagrams from anyone else are dropped (a stranger with the code gets
   "busy", rate limited).
+
+### Windows and Linux
+
+Windows and Linux builds of the same `COOP_VERSION` play together (a Steam Deck joins a Windows host). What guarantees it:
+
+* The wire is the 32-bit game's own little-endian layout on both (`Pose`, `PoseExt`, `Event` 96 bytes, `EneSnap` and the
+  snapshot records, each field of a fixed type; `_Static_assert`s in `coop_proto.c` and `coop_glue.c`). Both builds are
+  i686 with the same structs (`BH_PWORK` 1408 bytes).
+* No address of the sender's process crosses (protocol 62). The two builds place their memory elsewhere (`ene` is at
+  0x30afcea0 in the Linux build and 0x30a30f60 in the Windows one), and so do two builds of other commits. Everything that
+  names something in memory goes as an index or is left out:
+  * an enemy's state (`EV_ESTATE`, `ene_pack`): of its `BH_PWORK` only the allow-listed plain fields (`ene_fields`;
+    models, motion sets, links, works, matrices, capsules go as zeros), its model as `mdl` (index into its own `mdl[]`),
+    its motion set as `mnw` (offset in its set); of its work (`exp0`, `own_types`) every pointer either as a record of the
+    room's collision (`atr`: table and index), the Tyrant's action as its `En19ActTbl` row, or kept by the receiver, which
+    has its own (`keep`: other enemies, children, effects, joint rows, its own player). The kept ranges go as zeros.
+    Before 62 they went as the sender's values (ignored by the receiver), except the Tyrant's `ewP` (0xC0, outside its
+    keep range), which the receiver took: its plane fight's wind and fall code read another address there;
+  * the stand-in in a grab's state (`grab_out`): masked like an enemy;
+  * a Black Widow's legs off (`BwLeg`): plain values only (the leg's work is floats, ints and a flag word);
+  * effects (`EV_FX`): their enemy or player as a slot or `FX_SENDER`/`FX_RECEIVER`, their models as indices, a spark
+    burst's 18 parameter words (no pointer among them); an entry with any other pointer is not sent;
+  * hits, flags, items, the save region (`EV_BLOB`), items (`EV_OWN`), triggers (script offsets), box and trade
+    contents, the cast list, Enemy Models (imports by key): values and indices only.
+
+| struct copied byte-wise | pointer fields | on the wire |
+|---|---|---|
+| `BH_PWORK` (`EV_ESTATE`, an enemy) | `mskp`, `skp[]`, `mbp[]`, `txp[]`, `mdl[]`, `mlwP`, `lkwkp`, `exp0..3`, `mtx`, `obj_a/b`, `mnwP/Pb`, `mtn_tp`, `cpcl`, `kdnp`, `dan_ap` | zeros (`ene_mask`); `mlwP` as `mdl`, `mnwP` as `mnw` |
+| `BH_PWORK` (`EV_ESTATE`, the grab's stand-in, `grab_out`) | as above | zeros (62; before: raw, read only through the allow-list) |
+| `exp0` zombie (en01/en01b) | 0x00..0x20 parts and children, 0x70 line-of-sight wall, 0x74 stairs | zeros, kept (0x70 since 62) |
+| `exp0` Cerberus, Hunter/Sweeper, Bandersnatch, anatomist | walls, stairs, the other Hunter, helper, joint row | zeros, kept |
+| `exp0` Black Widow / Giant Black Widow | legs, babies (kept); surfaces (`atr`) | zeros / table+index |
+| `exp0` moth, bat, Spotter, albinoid, baby spider, ceiling trap | wings, effects, walls (kept or `atr`) | zeros / table+index |
+| `exp0` Tyrant (`FW_WORK`) | 0x48 `prgP` (row), 0x68 `b_prgP`, 0x94..0xB8 `ply_act`, **0xC0 `ewP`**, 0x1D4 `e0aP`, 0x1DC/0x1E0 claws, 0x1E8 `cam_clrP` | row index; zeros, kept (0xC0 since 62: before, the sender's address) |
+| `exp0` Gulp Worm, Alexia 1, Alfred, Monster Steve | segments, walls, fire effects, laser, joint row | zeros, kept / `atr` |
+| `BwLeg.x0` (a Black Widow's leg off, 0xD4 bytes) | none | as is (62: floats checked to the end) |
+| `OR_WORK.free4` (`FX_BURST`, 18 words) | none (counts, floats, colours) | as is |
+| `SYS_WORK` save region (`EV_BLOB`) | none | as is |
+
+Test aid `RECVX_COOP_PTRSCAN=1` logs every word we send in an event or an enemy state that points into the first 16 MB
+of our image (code, tables, data, `eff[]`, `ene[]`, `ply`, `sys`: a float there is below 2e-9). Pointers into the arena
+higher up read as ordinary floats, which is why the table above is kept by hand (`own_types`; any new hand-over type
+needs its pointer fields in `keep` or `atr`). `pc/tools/coop_crossplay_check.sh OUT [PORT]` (about two minutes; needs
+`build/pc/recvx_shift`, this build relinked with `-Ttext-segment=0x30100000`): the guest runs the relocated build, the
+host this one, a zombie scene with grabs and a Tyrant handed over with its state; it fails on a crash or any pointer on
+the wire. With the protocol 62 changes taken out it fails: a zombie's parts (state words 0x588..0x590), the Tyrant's
+`ply_act` and effect table (0x638, 0x754) and its `ewP` (0x640, the relocated guest's `ene` 0x30bfc9a0: wrong on the host).
 
 ## Security
 
@@ -2177,6 +2225,7 @@ Environment variables for headless and scripted runs. Frames are co-op frames un
 | `RECVX_COOP_KILL="hostframe:slot[:damage],..."` | A lethal hit (or one of that damage) on our enemy in that slot, as the weapon code leaves it. |
 | `RECVX_COOP_OWNERSHIP=0\|1` | Host: forces "Shared Enemy Control" (engaged-player ownership) off (0: the host runs the enemies, only zombie grabs of the joiner go over) or on (1), whatever the setting says; the joiner follows the host's rule either way. |
 | `RECVX_COOP_SCENE="hostframe:slot:frames"` | Host: from that frame its game stops its enemies as a scene does (`Pose.busy` `BUSY_PAUSED`; after `PAUSE_LEAVE` frames they go to the joiner, leaving), and in the frame it hands `slot` over the scene's event takes that one back (`EV_ENEOWN` 2 in the same datagram as the hand-over; `coop_scene_check.sh`). |
+| `RECVX_COOP_PTRSCAN=1` | Linux: log every word we send in an event or an enemy state that points into the first 16 MB of our image ("pointer on the wire"; "Windows and Linux", `coop_crossplay_check.sh`). |
 | `RECVX_COOP_ALIVE="hostframe,..."` | Log the room's living, shown enemies (slot:type), how many `ed_flg` bits are set, and `rm_flg` (a kill-count door's bit). |
 | `RECVX_COOP_ENEPOS="hostframe,..."` | Log the room's enemies (not linked parts): slot:type.look@x,z,hp,mode0, `D` dead, `H` hidden (also one of ours waiting for the runner's state, protocol 56; `coop_handin_check.sh`, `coop_owner_check.sh`), `G` the guest's game runs it. |
 | `RECVX_COOP_WARP="hostframe:x:z,..."` | Both players to x/z at that host frame. |

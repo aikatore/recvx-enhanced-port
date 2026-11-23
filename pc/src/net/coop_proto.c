@@ -384,9 +384,8 @@ int coop_check_event(const Event* e, int from_host)
             if (e->u.eh.jnt[k] < -1 || e->u.eh.jnt[k] >= 64) return COOP_BAD_FIELD;
             if (e->u.eh.dam[k] < 0 || e->u.eh.dam[k] > 10000 || (e->u.eh.jnt[k] < 0 && e->u.eh.dam[k])) return COOP_BAD_FIELD;
         }
-        if ((e->u.eh.flg & ~(4u | 0xE00u | COOP_HIT_AIM | COOP_HIT_PRECISE | COOP_HIT_FWD | COOP_HIT_SHOVE | COOP_HIT_MARK)) || (e->u.eh.flg2 & ~4u) || (e->u.eh.comb_flg & ~0x70u)) return COOP_BAD_FIELD;
-        if ((e->u.eh.flg & COOP_HIT_MARK) && !(e->u.eh.flg & COOP_HIT_SHOVE)) return COOP_BAD_FIELD;
-        if ((e->u.eh.flg & COOP_HIT_SHOVE) && ((e->u.eh.flg & ~(COOP_HIT_SHOVE | COOP_HIT_MARK | COOP_HIT_FWD)) || e->u.eh.flg2 || e->u.eh.comb_flg ||
+        if ((e->u.eh.flg & ~(4u | 0xE00u | COOP_HIT_AIM | COOP_HIT_PRECISE | COOP_HIT_FWD | COOP_HIT_SHOVE)) || (e->u.eh.flg2 & ~4u) || (e->u.eh.comb_flg & ~0x70u)) return COOP_BAD_FIELD;
+        if ((e->u.eh.flg & COOP_HIT_SHOVE) && ((e->u.eh.flg & ~(COOP_HIT_SHOVE | COOP_HIT_FWD)) || e->u.eh.flg2 || e->u.eh.comb_flg ||
                                              e->u.eh.jnt[0] != -1)) return COOP_BAD_FIELD;   /* (protocol 59) a push: nothing of a hit */
         if (e->u.eh.wpnr_no < 0 || e->u.eh.wpnr_no >= 23 || e->u.eh.djnt_no < -1 || e->u.eh.djnt_no >= 64) return COOP_BAD_FIELD;
         return fins(e->u.eh.dp, 3) && fins(e->u.eh.dv, 3) ? COOP_OK : COOP_BAD_FLOAT;
@@ -521,7 +520,8 @@ int coop_check_event(const Event* e, int from_host)
         return !e->u.br.str[0] || (e->u.br.str[0] == 'R' && e->u.br.str[4] == '-' && e->u.br.str[9] == '-') ? COOP_OK : COOP_BAD_FIELD;
     case EV_EMODEL:   /* a choice per category, the unused ones 0 */
         for (k = 0; k < COOP_EMODEL_CATS; k++)
-            if (!emodel_valid(e->u.em.v[k]) || (k >= EM_CATS && e->u.em.v[k])) return COOP_BAD_FIELD;
+            if (!emodel_valid(e->u.em.v[k]) || (k >= EM_CATS && e->u.em.v[k]) || (e->u.em.v[k] >= EM_IMPORT && e->u.em.v[k] != EM_IMPORT) ||
+                (e->u.em.v[k] == EM_IMPORT) != (e->u.em.key[k] != 0)) return COOP_BAD_FIELD;   /* (protocol 62: an import by its key) */
         return COOP_OK;
     case EV_CASTOFF:   /* a chunk of the bit list, in place */
         return e->u.co.n >= 1 && e->u.co.n <= COOP_CASTOFF_CHUNK && !(e->u.co.at % COOP_CASTOFF_CHUNK) && e->u.co.at + e->u.co.n <= COOP_CASTOFF_MAX &&

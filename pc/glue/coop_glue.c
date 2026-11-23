@@ -1205,8 +1205,9 @@ static int fins_n(const float* f, int n) { while (n--) if (!(fabsf(*f++) < 1e6f)
    hand-over copied the zombie's 0xB0 bytes less a 0x24-byte pointer head, which only the zombie has. */
 typedef struct { unsigned char id, p3; unsigned short exp0, keep[6][2], atr[3]; unsigned int rmf; } OwnType;   /* p3 2: a boss (rmf below) */
 static const OwnType own_types[] = {
-    { 1, 1, 0xB0, { { 0x00, 0x28 }, { 0x74, 0x78 } } },     /* zombie: 0x00..0x23 its parts (en01 bhEne01_Init), 0x24 its eff[] shadow,
-                                                               0x74 the stairs (ATR_WORK*: their in-use mark is the setter's) */
+    { 1, 1, 0xB0, { { 0x00, 0x28 }, { 0x70, 0x78 } } },     /* zombie: 0x00..0x23 its parts (en01 bhEne01_Init), 0x24 its eff[] shadow,
+                                                               0x70 the wall in its line of sight (ATR_WORK*, only tested for NULL; protocol 62), 0x74 the stairs
+                                                               (ATR_WORK*: their in-use mark is the setter's) */
     { 4, 1, 0x58, { { 0x3C, 0x48 } } },                     /* Cerberus: 0x3C wall, 0x40 stairs, 0x44 line of sight (ATR_WORK*) */
     { 5, 1, 0x84, { { 0x60, 0x68 }, { 0x74, 0x78 }, { 0x7C, 0x80 } } },   /* Hunter, Sweeper: 0x60 the other Hunter, 0x64 its helper, 0x74 a
                                                                floor area (ATR_WORK*), 0x7C into its joint_tree */
@@ -1223,9 +1224,11 @@ static const OwnType own_types[] = {
     { 10, 0, 0x24 },                                        /* ant A (en10) */
     { 11, 0, 0x70, { { 0x60, 0x64 } }, { 0x58 } },          /* Spotter (en11): 0x60 its search light (eff[]); 0x58 the wall it sits on */
     { 15, 0, 0x64 },                                        /* Nosferatu (en15, bhGetFreeMemory): no pointers */
-    { 19, 0, 0x204, { { 0x68, 0x6C }, { 0x88, 0xC0 }, { 0x1D4, 0x1E4 }, { 0x1E8, 0x1EC } } },   /* Tyrant (en19 FW_WORK): 0x68 b_prgP,
+    { 19, 0, 0x204, { { 0x68, 0x6C }, { 0x88, 0xC4 }, { 0x1D4, 0x1E4 }, { 0x1E8, 0x1EC } } },   /* Tyrant (en19 FW_WORK): 0x68 b_prgP,
                                                                0x88 ply_act (its blow on its own game's player), 0x1D4 its effect
-                                                               table and claws, 0x1E8 cam_clr; 0x48 prgP goes as its En19ActTbl row */
+                                                               table and claws, 0x1E8 cam_clr; 0x48 prgP goes as its En19ActTbl row.
+                                                               0xC0 ewP (itself, Init): before protocol 62 it went as the sender's
+                                                               address, which a Windows and a Linux build do not share */
     { 20, 0, 0x30 },                                        /* ant B (en20) */
     { 21, 0, 0x18, { { 0x14, 0x18 } } },                    /* albinoid infant (en21): 0x14..0x17 its grab of its own game's player */
     { 22, 0, 0xB0, { { 0x48, 0x50 } } },                    /* albinoid adult (en22): 0x48 wall (ATR_WORK*), 0x4C its light effect;
@@ -1380,7 +1383,7 @@ static int bw_legs_ok(const BH_PWORK* ep, const unsigned char* in)
         if (!r.on) continue;
         if (!bw_leg(ep, k) || !bw_obj(ep, k) || r.on != 1 || r.mode[0] < 1 || r.mode[0] > 2 || r.mode[2] || r.mode[3] > 3 ||
             !finite3(r.p[0], r.p[1], r.p[2]) || !fins_n(r.ar, 4) || !fins_n(r.mtx, 16) || !fins_n((const float*)(r.x0 + 4), (0xC4 - 4) / 4) ||
-            (unsigned int)*(const int*)(r.x0 + 0xC4) > 2)
+            (unsigned int)*(const int*)(r.x0 + 0xC4) > 2 || !fins_n((const float*)(r.x0 + 0xC8), (BW_LEG_X0 - 0xC8) / 4))   /* (0..3: its flags) */
             return 0;
     }
     return 1;
@@ -1424,6 +1427,9 @@ static void ene_pack(BH_PWORK* ep, unsigned char* out)
     memset(x, 0, ENE_EXP0);
     if (!ep->exp0 || !t) return;
     memcpy(x, ep->exp0, t->exp0);
+    /* (protocol 62) what the receiver keeps as its own goes as zeros: its pointers are addresses of our process, which a
+       Windows and a Linux build (or two builds) do not share - none goes on the wire (test aid RECVX_COOP_PTRSCAN) */
+    for (k = 0; k < 6 && t->keep[k][1]; k++) memset(x + t->keep[k][0], 0, t->keep[k][1] - t->keep[k][0]);
     for (k = 0; k < 3 && t->atr[k]; k++) { uint32_t w = atr_enc(*(ATR_WORK**)(ep->exp0 + t->atr[k])); memcpy(x + t->atr[k], &w, 4); }
     if (ep->id == 19) { uint32_t w = ty_act_enc(*(void**)(ep->exp0 + 0x48)); memcpy(x + 0x48, &w, 4); }
     if (ep->id == 3) bw_pack(ep, out + ESTATE_ENE);
@@ -1530,12 +1536,37 @@ static int ene_unpack(BH_PWORK* ep, const unsigned char* in, int mdl, int mnw)
 }
 #undef FLD
 
+/* test aid RECVX_COOP_PTRSCAN=1 (Linux): every word of an event and of an enemy state we send that points into the first
+   16 MB of our image is logged ("pointer on the wire"): the code, its tables and data, and eff[], ene[], ply, sys. A float
+   there is below 2e-9, so a hit is an address. A Windows and a Linux build (or two builds of other commits) place them
+   elsewhere: none may cross (docs/COOP.md "Windows and Linux"; pc/tools/coop_crossplay_check.sh). (Pointers into the game's
+   arena, higher up - an enemy's work, the room's collision - read as ordinary floats: own_types' table keeps those) */
+#ifdef __linux__
+extern char __executable_start[];
+#endif
+static void ptr_scan(const void* p, int n, const char* what, int idx)
+{
+#ifdef __linux__
+    static int on = -1;
+    uint32_t lo = (uint32_t)(uintptr_t)__executable_start, w;
+    int k;
+    if (on < 0) on = getenv("RECVX_COOP_PTRSCAN") && atoi(getenv("RECVX_COOP_PTRSCAN"));
+    for (k = 0; on && k + 4 <= n; k += 4) {
+        memcpy(&w, (const char*)p + k, 4);
+        if (w - lo < (16u << 20)) host_log("coop: test: pointer on the wire: %s (slot %d) word 0x%X = 0x%08X\n", what, idx, k, w);
+    }
+#else
+    (void)p; (void)n; (void)what; (void)idx;
+#endif
+}
+
 /* our grab state to the partner: the EV_ESTATE chunks of one transfer, whose id goes with EV_GRAB/UNGRAB/ENEOWN; n bytes of
    estate_out, packed (protocol 56) */
 static int estate_events(int n) { return (coop_zpack(estate_out, n, estate_z, sizeof(estate_z)) + 63) / 64 + 1; }   /* (with the event naming it) */
 static unsigned short send_estate(int n)
 {
     int off, z = coop_zpack(estate_out, n, estate_z, sizeof(estate_z));
+    ptr_scan(estate_out, n, "EV_ESTATE", -1);
     if (!++xfer_tid) xfer_tid = 1;
     for (off = 0; off < z; off += 64) {
         Event e = { 0 };
@@ -1839,6 +1870,7 @@ static void grab_out(int i, BH_PWORK* ep)
     ene_pack(ep, estate_out);
     if (c < PC_ENE_SLOTS) ene_pack(&ene[c], estate_out + ESTATE_ENE);
     memcpy(estate_out + ESTATE_PLY, &ply2, sizeof(BH_PWORK));
+    ene_mask(estate_out + ESTATE_PLY);   /* (protocol 62: grab_in reads only allow-listed fields; the stand-in's pointers stay here) */
     e.u.gr.tid = send_estate(ESTATE_SIZE);
     e.type = EV_GRAB;
     e.idx = i;
@@ -2166,6 +2198,7 @@ static void queue_event(Event* e)
     int was = ring.overflow;
     e->stg = ev_room >= 0 ? ev_room >> 8 : sys->stg_no;
     e->rom = ev_room >= 0 ? ev_room & 0xFF : sys->rom_no;
+    if (e->type != EV_ESTATE) { char w[16]; snprintf(w, sizeof(w), "event %d", e->type); ptr_scan(&e->u, (int)sizeof(e->u), w, e->idx); }   /* (EV_ESTATE: send_estate) */
     if (!coop_ring_push(&ring, e)) {
         if (!was) host_log("coop: %d events not acknowledged by the partner: resynchronising\n", COOP_RING);
         return;
@@ -3894,22 +3927,22 @@ static void capture_hits(void)
 }
 /* "Break Free Pushes Enemies" (shove_glue.c, protocol 59): our player broke free next to enemy i, which the partner's game
    runs (or will: as a hit, kept or passed on), so that game knocks it back - a COOP_HIT_SHOVE EV_ENE_HIT from the point
-   (x, z). marker: only so the partner knows (its immunity), nothing to push. 0: we run it, the caller pushes it */
+   (x, z). 0: we run it, the caller pushes it. (`marker`: unused since protocol 62, no grab immunity; shove_glue.c still passes 0) */
 int pc_shove_apply(BH_PWORK* ep, float cx, float cz);
-void pc_shove_partner(void);
 int coop_runs(int i) { return we_run(i) && !giving[i]; }
 int coop_plp_partner(void) { return plp == &ply2; }
 int coop_shove(int i, float x, float z, int marker)
 {
     Event e = { 0 };
     int n;
-    if (i < 0 || i >= PC_ENE_SLOTS || (coop_runs(i) && !marker) || echo_delay) return 0;
+    (void)marker;
+    if (i < 0 || i >= PC_ENE_SLOTS || coop_runs(i) || echo_delay) return 0;
     for (n = 0; n < 6; n++) e.u.eh.jnt[n] = -1;
     e.type = EV_ENE_HIT; e.idx = i;
-    e.u.eh.flg = COOP_HIT_SHOVE | (marker ? COOP_HIT_MARK : 0);
+    e.u.eh.flg = COOP_HIT_SHOVE;
     e.u.eh.djnt_no = -1;
     e.u.eh.dp[0] = x; e.u.eh.dp[1] = plp->py; e.u.eh.dp[2] = z;
-    if (take_at[i] && !marker) { e.stg = sys->stg_no; e.rom = sys->rom_no; defer_hit(&e); }
+    if (take_at[i]) { e.stg = sys->stg_no; e.rom = sys->rom_no; defer_hit(&e); }
     else queue_event(&e);
     return 1;
 }
@@ -3921,11 +3954,9 @@ static void hit_apply(const Event* e)
     int n;
     if (e->idx >= sys->ewk_n || !(ep->flg & 0x1) || !ep->mlwP) return;
     if (e->u.eh.flg & COOP_HIT_SHOVE) {   /* (protocol 59) a push, not a hit */
-        if (!(e->u.eh.flg & COOP_HIT_MARK)) {
-            int m0 = ep->mode0, m2 = ep->mode2, ok = pc_shove_apply(ep, e->u.eh.dp[0], e->u.eh.dp[2]);
-            host_log("breakfree: enemy %d (id %d) mode %d/%d %s for the partner%s\n", e->idx, ep->id, m0, m2, ok ? "pushed" : "not pushed",
-                     ok ? "" : m0 == 2 || m0 == 3 ? " (busy: pushed if it walks again soon)" : "");
-        }
+        int m0 = ep->mode0, m2 = ep->mode2, ok = pc_shove_apply(ep, e->u.eh.dp[0], e->u.eh.dp[2]);
+        host_log("breakfree: enemy %d (id %d) mode %d/%d %s for the partner%s\n", e->idx, ep->id, m0, m2, ok ? "pushed" : "not pushed",
+                 ok ? "" : m0 == 2 || m0 == 3 ? " (busy: pushed if it walks again soon)" : "");
         return;
     }
     for (n = 0; n < 6; n++)   /* joints of its model only (coop_check_event: 0..63, damage bounded) */
@@ -4717,19 +4748,52 @@ static void castoff_sync(void)
     castoff_sid = peer_sid;
 }
 /* the host's "Enemy Models" (EV_EMODEL, protocol 61): at the session's start and whenever they change */
-static unsigned short emodel_sent[COOP_EMODEL_CATS];
+/* (protocol 62) an import goes as its key, not as its index in our list: that list is made in the order each player
+   imported its games, so the guest drew another import (a UC zombie came out as an Outbreak survivor). One of a game
+   unchecked here goes as Original (we draw the original then too) */
+static Event emodel_sent;
 static unsigned int emodel_sid;
 void emodel_from_host(const unsigned short* v);   /* enemymdl_glue.c */
 static void emodel_sync(void)
 {
     Event e = { 0 };
     int c;
-    for (c = 0; c < EM_CATS; c++) e.u.em.v[c] = (uint16_t)g_emodel[c];
-    if (emodel_sid == peer_sid && !memcmp(emodel_sent, e.u.em.v, sizeof(emodel_sent))) return;
+    for (c = 0; c < EM_CATS; c++) {
+        int v = g_emodel[c], k = v - EM_IMPORT;
+        unsigned key = v >= EM_IMPORT && k < actor_import_n && actor_import_shown(k) ? emodel_import_key(k) : 0;
+        e.u.em.v[c] = (uint16_t)(v < EM_IMPORT ? v : key ? EM_IMPORT : EM_ORIGINAL);
+        e.u.em.key[c] = key;
+    }
+    if (emodel_sid == peer_sid && !memcmp(&emodel_sent.u.em, &e.u.em, sizeof(e.u.em))) return;
     e.type = EV_EMODEL;
     queue_event(&e);
-    memcpy(emodel_sent, e.u.em.v, sizeof(emodel_sent));
+    emodel_sent = e;
     emodel_sid = peer_sid;
+}
+/* guest: the host's choices here. An import by its key, Original when we have none with it (not imported, or its game
+   unchecked here); a random group that draws imports only while both list the same imports (cast_import_id, the cast's
+   rule): the picks go by the position in the member list, so another list drew another model on each screen. Again when
+   either list changes */
+static struct { int have; Event e; unsigned mine, host; } em_in;
+static void emodel_guest(int force)
+{
+    unsigned short v[COOP_EMODEL_CATS] = { 0 };
+    unsigned mine, host;
+    int c;
+    if (!em_in.have) return;
+    mine = cast_import_id(); host = coop_partner_import_id();
+    if (!force && mine == em_in.mine && host == em_in.host) return;
+    em_in.mine = mine; em_in.host = host;
+    for (c = 0; c < EM_CATS; c++) {
+        int x = em_in.e.u.em.v[c], k = x == EM_IMPORT ? emodel_import_find(em_in.e.u.em.key[c]) : -1;
+        if (x == EM_IMPORT) x = k >= 0 ? EM_IMPORT + k : EM_ORIGINAL;
+        else if (emodel_group_imports(x) && mine != host) x = EM_ORIGINAL;
+        if (x != em_in.e.u.em.v[c] && (em_in.e.u.em.v[c] != EM_IMPORT || x == EM_ORIGINAL))
+            host_log("enemymdl: the host's %s: %s, Original here\n", emodel_cat_name(c),
+                     em_in.e.u.em.v[c] == EM_IMPORT ? "an import we do not have (or its game is unchecked)" : "a random group over other imports than ours");
+        v[c] = (unsigned short)x;
+    }
+    emodel_from_host(v);
 }
 
 static void eopts_send(void)
@@ -4841,6 +4905,7 @@ static void enemy_sync(void)
     static int was;
     int now;
     if (!is_host && have_peer && !echo_delay && kept_out.sent_sid != peer_sid && kept_out.gen == enemy_room_gen) kept_send();   /* (the guest's, protocol 53) */
+    if (!is_host) emodel_guest(0);   /* (the host's import list or ours changed) */
     if (!is_host || !have_peer || echo_delay) { was = 0; return; }
     castoff_sync();
     if (eopts_sid != peer_sid || memcmp(&eopts_sent, &g_enemy_opts, sizeof(eopts_sent))) eopts_send();
@@ -8258,7 +8323,7 @@ static void skip_frame(void)
 static int apply_event(const Event* e)
 {
     if (e->type == EV_EOPTS) { if (!is_host) enemy_opts_from_host(&e->u.eo); return 1; }   /* before the blob it precedes */
-    if (e->type == EV_EMODEL) { if (!is_host) emodel_from_host(e->u.em.v); return 1; }
+    if (e->type == EV_EMODEL) { if (!is_host) { em_in.e = *e; em_in.have = 1; emodel_guest(1); } return 1; }
     if (e->type == EV_CASTOFF) { if (!is_host) enemy_cast_off_from_host(e->u.co.at, e->u.co.n, e->u.co.bits); return 1; }   /* (and EV_EOPTS) */
     if (e->type == EV_BRSEED) {   /* the host's BioRand seed string (checked: coop_check_event; decoded here) and CLI digest */
         BioOpts o;
@@ -8345,10 +8410,6 @@ static int apply_event(const Event* e)
                        e->type == EV_PLY_HIT ? (plp ? plp->hp : 0) : e->idx < PC_ENE_SLOTS ? ene[e->idx].hp : 0);
     if (e->type == EV_ENE_HIT && sys && plp) {   /* (by the room of our enemies: in a door we hand them over, a hit then is the receiver's) */
         int i = e->idx, ours = (e->stg * 256 + e->rom) == (run_room & 0xFFFF);
-        if ((e->u.eh.flg & COOP_HIT_SHOVE) && !(e->u.eh.flg & COOP_HIT_FWD)) {   /* (protocol 59) the partner broke free: no grab on it for a while */
-            pc_shove_partner();
-            if (e->u.eh.flg & COOP_HIT_MARK) return 1;
-        }
         if (!ours || i >= (int)sys->ewk_n || i >= PC_ENE_SLOTS || !(ene[i].flg & 0x1)) {
             if (!ours && !(e->u.eh.flg & COOP_HIT_FWD) && have_peer && (e->stg != sys->stg_no || e->rom != sys->rom_no)) {   /* (we left that
                                                     room: the partner plays there, it runs them) */
@@ -8517,6 +8578,7 @@ static void stop(void)
     spawn_pending(0);
     enemy_opts_from_host(NULL);   /* single player again: our own enemy options */
     emodel_from_host(NULL);
+    em_in.have = 0;
     note_msg[0] = 0;
     was_game = 0;
     coop_on = 0;
