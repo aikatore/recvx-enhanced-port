@@ -87,7 +87,10 @@ int import_present(int src)
 }
 
 /* <dir>/<source>/manifest.txt: a header, then one line per model:
-   item|id|name|variant|ok|nodes|meshes|verts|tris|textures|player|female|note */
+   item|id|name|variant|ok|nodes|meshes|verts|tris|textures|player|female|note
+   The header's version: 2 since the models' single triangles are joined into strips (impmodel.c join_tris; Umbrella
+   Chronicles' zombie EZ00 drew 5631 one-triangle strips, its Smoother Motion and draws cost 4 x a frame: import_old) */
+#define MANIFEST_VERSION 2
 typedef struct Save { int src, n; const ImportItem* it; const char* iso; } Save;
 
 static int write_manifest(FILE* f, void* ud)
@@ -96,7 +99,7 @@ static int write_manifest(FILE* f, void* ud)
     char when[64];
     time_t t = time(NULL);
     strftime(when, sizeof(when), "%Y-%m-%d %H:%M", localtime(&t));
-    fprintf(f, "# recvx import manifest 1: %s (%s)\nsource|%s\niso|%s\nwhen|%s\n", import_sources[s->src].title,
+    fprintf(f, "# recvx import manifest %d: %s (%s)\nsource|%s\niso|%s\nwhen|%s\n", MANIFEST_VERSION, import_sources[s->src].title,
             import_sources[s->src].serial, import_sources[s->src].key, s->iso, when);
     for (int i = 0; i < s->n; i++) {
         const ImportItem* x = &s->it[i];
@@ -104,6 +107,20 @@ static int write_manifest(FILE* f, void* ud)
                 x->verts, x->tris, x->textures, x->player, x->female, x->note);
     }
     return ferror(f) ? -1 : 0;
+}
+
+int import_old(int src)
+{
+    char p[1100], line[128];
+    int v = MANIFEST_VERSION;
+    FILE* f;
+    if (src != IMPORT_UMBRELLA) return 0;   /* (Outbreak's strips were joined already: no gain worth an import) */
+    source_dir(src, p, sizeof(p));
+    SDL_strlcat(p, "/manifest.txt", sizeof(p));
+    if (!(f = pc_fopen(p, "r"))) return 0;
+    if (!fgets(line, sizeof(line), f) || sscanf(line, "# recvx import manifest %d", &v) != 1) v = 1;
+    fclose(f);
+    return v < MANIFEST_VERSION;
 }
 
 int import_results(int src, ImportItem* out, int max, char* when, int wn)
@@ -207,6 +224,7 @@ void import_registry_load(void)
     for (int src = 0; src < IMPORT_SOURCES; src++) {
         char dir[1100];
         int n = import_results(src, items, ITEMS_MAX, NULL, 0);
+        if (n && import_old(src)) host_log("import: %s: an older import; import it again (F9) for the zombie EZ00's faster drawing\n", import_sources[src].key);
         source_dir(src, dir, sizeof(dir));
         for (int g = 0; g < IMPORT_GROUPS; g++)   /* grouped (the manifest is in disc order): the lobby's list shows the groups */
         for (int i = 0; i < n; i++) {

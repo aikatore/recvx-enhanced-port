@@ -969,6 +969,76 @@ static int inst_still(const Frame* p, const Frame* c, const Inst* b)
     return n >= 3;
 }
 
+/* The previous frame's instances that could pair with one of the new frame at all. inst_pair pairs
+   groups of equal strip and order only, so an instance sharing no (strip, order) with b gives -1 and
+   is never chosen: judging only those that share one makes the same choice. Imported models drawn as
+   enemies made the full scan grow with the square of the crowd: their see-through strips are drawn one
+   by one, each an instance of the model's tag (ten UC zombies: ~800 one-strip instances of one mesh,
+   14000 inst_pair calls and 800 x 800 boxes compared a frame). An index of the previous frame's groups
+   by (mesh, strip, order), built once per match, lists the instances that share one (cand_of): small
+   instances (up to IDX_SMALL groups) in a table of their own; a large one (a whole body) is looked up
+   only in that one, and all large instances of its mesh are judged (few, and the bodies of one model
+   share all their strips: looking up each of its strips among them cost bodies^2 x strips). */
+#define IDX_SMALL 8
+typedef struct { uint32_t mesh, strip, ord, m, next; } IdxKey;   /* m: the instance's place in order[]; next: + 1, 0 none */
+static IdxKey* ikey; static size_t cap_ikey;
+static uint32_t* ihead[2]; static size_t cap_ihead, ihash;   /* [0] small, [1] large instances: hash -> first key + 1 */
+static uint32_t *stamp, *cand; static size_t cap_cand;
+static uint32_t idx_hash(uint32_t mesh, uint32_t strip, uint32_t ord)
+{
+    uint32_t h = mesh * 0x9E3779B1u ^ strip * 0x85EBCA77u ^ ord * 0xC2B2AE3Du;
+    return (h ^ (h >> 15)) & (uint32_t)(ihash - 1);
+}
+static void idx_build(const Frame* p, const uint32_t* order)
+{
+    size_t n = 0, ng = 0, cap = cap_ihead, cc = cap_cand;
+    for (size_t m = 0; m < p->nin; m++) if (!MENU_TAG(p->in[order[m]].mesh)) ng += p->in[order[m]].ng;
+    for (ihash = 64; ihash < ng * 2; ihash *= 2) {}
+    GROW(ikey, 0, cap_ikey, ng);
+    GROW(ihead[0], 0, cap_ihead, ihash);
+    if (cap_ihead != cap) ihead[1] = xrealloc(ihead[1], cap_ihead * sizeof(*ihead[1]));
+    GROW(stamp, 0, cap_cand, p->nin);
+    if (cap_cand != cc) cand = xrealloc(cand, cap_cand * sizeof(*cand));
+    memset(ihead[0], 0, ihash * sizeof(*ihead[0]));
+    memset(ihead[1], 0, ihash * sizeof(*ihead[1]));
+    memset(stamp, 0, p->nin * sizeof(*stamp));
+    for (size_t m = 0; m < p->nin; m++) {
+        const Inst* a = &p->in[order[m]];
+        uint32_t* head = ihead[a->ng > IDX_SMALL];
+        if (MENU_TAG(a->mesh)) continue;
+        for (uint32_t k = 0; k < a->ng; k++) {
+            const Group* h = &p->g[a->g0 + k];
+            uint32_t x = idx_hash(a->mesh, h->strip, h->ord);
+            ikey[n] = (IdxKey){ a->mesh, h->strip, h->ord, (uint32_t)m, head[x] };
+            head[x] = (uint32_t)++n;
+        }
+    }
+}
+static int by_value(const void* a, const void* b) { uint32_t x = *(const uint32_t*)a, y = *(const uint32_t*)b; return x < y ? -1 : x > y; }
+/* into cand[], in order of m: the unused instances of p that may pair with instance i of c (those of its
+   mesh from lo on in order[]); their number */
+static size_t cand_of(const Frame* p, const uint32_t* order, size_t lo, const Frame* c, size_t i, const uint8_t* used)
+{
+    const Inst* b = &c->in[i];
+    size_t n = 0;
+    int large = b->ng > IDX_SMALL;
+    for (int t = 0; t <= !large; t++)
+        for (uint32_t k = 0; k < b->ng; k++) {
+            const Group* g = &c->g[b->g0 + k];
+            for (uint32_t e = ihead[t][idx_hash(b->mesh, g->strip, g->ord)]; e; e = ikey[e - 1].next) {
+                const IdxKey* q = &ikey[e - 1];
+                if (q->mesh != b->mesh || q->strip != g->strip || q->ord != g->ord || stamp[q->m] == i + 1 || used[q->m]) continue;
+                stamp[q->m] = (uint32_t)i + 1;
+                cand[n++] = q->m;
+            }
+        }
+    if (large)
+        for (size_t m = lo; m < p->nin && p->in[order[m]].mesh == b->mesh; m++)
+            if (p->in[order[m]].ng > IDX_SMALL && !used[m]) cand[n++] = (uint32_t)m;   /* (none of them stamped: not in table 0) */
+    qsort(cand, n, sizeof(*cand), by_value);
+    return n;
+}
+
 /* match frame c against p; 1 if in-between frames make sense */
 int stream_match(const Frame* p, const Frame* c)
 {
@@ -1004,6 +1074,7 @@ int stream_match(const Frame* p, const Frame* c)
     sort_frame = p;
     qsort(order, p->nin, sizeof(*order), by_mesh);
     memset(used, 0, p->nin);
+    idx_build(p, order);
 
     for (size_t i = 0; i < c->nin; i++) {
         const Inst* b = &c->in[i];
@@ -1021,13 +1092,14 @@ int stream_match(const Frame* p, const Frame* c)
             /* the same choice as below (the nearest, the first in order of the nearest), with fewer
                candidates judged: the one whose box is nearest first, then only those whose boxes could
                do as well (a crowd of 30 zombies: 3000 judged a frame before, 750 now) */
-            size_t first = (size_t)-1;
+            size_t first = (size_t)-1, nc = cand_of(p, order, lo, c, i, used);   /* (only those that can pair: idx_build) */
             long gap = 2 * JUMP + 1, d;
-            for (size_t m = lo; m < p->nin && p->in[order[m]].mesh == b->mesh; m++)
-                if (!used[m] && (d = inst_gap(p, order[m], c, i)) < gap) { gap = d; first = m; }
+            for (size_t q = 0; q < nc; q++)
+                if ((d = inst_gap(p, order[cand[q]], c, i)) < gap) { gap = d; first = cand[q]; }
             if (first != (size_t)-1 && (d = inst_pair(p, &p->in[order[first]], c, b)) >= 0) { best_d = d; best = first; }
-            for (size_t m = lo; m < p->nin && p->in[order[m]].mesh == b->mesh; m++) {
-                if (used[m] || m == first) continue;
+            for (size_t q = 0; q < nc; q++) {
+                size_t m = cand[q];
+                if (m == first) continue;
                 gap = inst_gap(p, order[m], c, i);
                 if (gap > best_d || (gap == best_d && m > best)) continue;
                 d = inst_pair(p, &p->in[order[m]], c, b);

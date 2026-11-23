@@ -86,6 +86,7 @@ static struct {
     int cat, src, what;                 /* the category, the game (import_sources[]), the groups to extract */
     int picking;                        /* the file dialog is open (lobby_io.c) */
     int players, npcs, have;            /* what the game's manifest lists as playable (its offered groups); a manifest is there */
+    int old;                            /* an older import (import_old) */
     char when[64];
     char msg[320], say[192];
     int err, say_t, say_err;
@@ -203,6 +204,7 @@ static void look(void)
         if (items[i].group == IMPORT_GROUP_NPCS && (OFFERED & IMPORT_NPCS)) im.npcs++;
     }
     im.have = n > 0;
+    im.old = im.have && import_old(im.src);
 }
 
 static const char* counts(char* t, int n)
@@ -540,8 +542,9 @@ static void draw_page(void)
         if (im.have) {
             char c[96];
             snprintf(t, sizeof(t), "%s%s%s", counts(c, sizeof(c)), im.when[0] ? tr(" On ") : "", im.when);
+            if (im.old) snprintf(t + strlen(t), sizeof(t) - strlen(t), " %s", tr("An older import: import again."));
         } else snprintf(t, sizeof(t), tr("Nothing imported yet."));
-        pc_ui_text(ROW_X - 4, INFO_Y + 52, t, SMALL_SC, 0xFFFFFFFF);
+        info_line(INFO_Y + 52, t, im.old ? 0xFFFFC060 : 0xFFFFFFFF);
     } else pc_ui_text_wrap(ROW_X - 4, INFO_Y, 552, "Import content from your own discs of other games. It is saved to the mods folder; "
                            "nothing is downloaded.", SMALL_SC, 0xFFC0C0C0, 3);
     if (im.say_t > 0) { snprintf(t, sizeof(t), "%s", im.say); col = im.say_err ? 0xFFFFC060 : 0xFFFFE080; }

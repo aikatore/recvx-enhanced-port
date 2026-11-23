@@ -12,8 +12,11 @@
  *    category with a choice gets its model (emodel_pick: per type, or one of a random group's for the room, by seed, room
  *    and slot), each model loaded once into a display slot (6; a seventh: the enemy takes a model of its category already
  *    shown, else stays itself);
+ *  - then the other models the room's records' categories can show (a random group's EM_ROOM_PICKS for the room) are
+ *    loaded too, into display slots left free, while the spawn pool keeps half its room (preload);
  *  - every game frame (spawn_glue.c spawn_frame): enemies that came since (extra enemies, the spawner, a co-op host's
- *    spawn notes) get theirs;
+ *    spawn notes, a record's event enemy) get theirs: preloaded, no load in that frame (a catalogue model 8-20 ms: its
+ *    room file read and decoded); a model the preload left out is loaded then, into a free slot or one preloaded and unused;
  *  - the room's textures released (spawn_glue.c spawn_release, the door; njReleaseTextureAll): the models go.
  * The choices take effect at the next room load. Co-op: the host's (EV_EMODEL), so both screens show the same.
  */
@@ -32,12 +35,14 @@ int coop_is_guest(void);
 int variant_of_slot(int slot);          /* variant_glue.c */
 int variant_put(int who, BH_PWORK* ep, BH_PWORK* r);
 int cast_slot(const BH_PWORK* ep);      /* cast_glue.c */
+int spawn_pool_free(void);              /* spawn_glue.c */
 extern int cast_n, pc_variant_n;
 
 #define ESLOTS (ACTOR_CAST - ACTOR_ENEMY)
 
 static short smodel[ESLOTS] = { -1, -1, -1, -1, -1, -1 };   /* the model display slot k shows */
 static signed char scat[ESLOTS];        /* the category it was loaded for (a slot-less enemy of it takes it) */
+static unsigned char pre[ESLOTS];       /* preloaded, no enemy drawn as it yet: given up when an enemy needs a slot */
 static signed char eslot[PC_ENE_SLOTS]; /* enemy slot -> display slot, -1 drawn as itself */
 static unsigned short ekey[PC_ENE_SLOTS];   /* (type << 8 | model version) + 1 it was decided for; 0 not yet */
 static unsigned char drawn[PC_ENE_SLOTS];   /* its body was drawn as the model last time (its linked parts are not drawn then) */
@@ -78,11 +83,14 @@ static int slot_of(int m, int c)
     int k, i;
     char nb[96];
     for (k = 0; k < ESLOTS; k++)
-        if (smodel[k] >= 0 && !actor_shown(ACTOR_ENEMY + k)) smodel[k] = -1;   /* (njReleaseTextureAll unloaded it: game over, the title) */
+        if (smodel[k] >= 0 && !actor_shown(ACTOR_ENEMY + k)) smodel[k] = -1, pre[k] = 0;   /* (njReleaseTextureAll unloaded it: game over, the title) */
     for (k = 0; k < ESLOTS; k++) if (smodel[k] == m) return k;
     for (i = 0; i < nfailed; i++) if (failed[i] == m) return -1;
     for (k = 0; k < ESLOTS && smodel[k] >= 0; k++);
+    if (k == ESLOTS) for (k = 0; k < ESLOTS && !pre[k]; k++);   /* (none free: one preloaded and unused) */
     if (k == ESLOTS) return -1;
+    pre[k] = 0;
+    smodel[k] = -1;
     {
         uint64_t t0 = SDL_GetTicksNS();
         const char* name = emodel_choice_name(m < ACTOR_MODELS ? EM_MODEL + m : EM_IMPORT + m - ACTOR_MODELS, nb, sizeof(nb));
@@ -119,8 +127,31 @@ static void decide(int s)
         for (k = 0; k < ESLOTS && !(smodel[k] >= 0 && scat[k] == c); k++);
     if (k >= ESLOTS) { host_log("enemymdl: room %04d slot %d (type %d model %d): no model, drawn as itself\n", room_now, s, ep->id, ep->mdlver); return; }
     eslot[s] = (signed char)k;
+    pre[k] = 0;
     host_log("enemymdl: room %04d slot %d (type %d model %d, %s): drawn as %s\n", room_now, s, ep->id, ep->mdlver, emodel_cat_name(c),
              emodel_choice_name(smodel[k] < ACTOR_MODELS ? EM_MODEL + smodel[k] : EM_IMPORT + smodel[k] - ACTOR_MODELS, nb, sizeof(nb)));
+}
+
+/* the models the room's records' categories can still show (an enemy that comes later picks among its category's
+   EM_ROOM_PICKS for the room: emodel_pick's slot only chooses among them), loaded now into free display slots while
+   the spawn pool keeps half its room (it is the spawned enemies' too) */
+static void preload(void)
+{
+    uint64_t t0 = SDL_GetTicksNS();
+    int k, i, c, v, m, n = 0, seen = 0;
+    for (k = 0; rom && k < rom->ene_n; k++) {
+        if ((c = emodel_cat(rom->enep[k].id, rom->enep[k].mdlver)) < 0 || (seen & 1 << c) || !(v = emodel_now()[c])) continue;
+        seen |= 1 << c;
+        for (i = 0; i < EM_ROOM_PICKS; i++) {
+            int j, nfree = 0, had = 0;
+            if ((m = emodel_pick(v, (unsigned)enemy_opts()->seed, room_now, c, i)) < 0) break;
+            for (j = 0; j < ESLOTS; j++) { had |= smodel[j] == m; nfree += smodel[j] < 0; }
+            if (had) continue;
+            if (!nfree || spawn_pool_free() < (16 << 20)) { host_log("enemymdl: room %04d: preload stopped (%s)\n", room_now, nfree ? "spawn pool" : "no display slot"); return; }
+            if ((j = slot_of(m, c)) >= 0) { pre[j] = 1; n++; }
+        }
+    }
+    if (n) host_log("enemymdl: room %04d: %d more models preloaded, %.1f ms\n", room_now, n, (SDL_GetTicksNS() - t0) / 1e6);
 }
 
 /* enemyopt_glue.c enemy_room_finished: after the randomizer (a randomized Hunter gets the Hunter's choice) */
@@ -139,6 +170,7 @@ void emodel_room(void)
     for (s = 0; s < (int)sys->ewk_n && s < PC_ENE_SLOTS; s++)
         if (ene[s].flg & 0x1) { decide(s); n += eslot[s] >= 0; }
     host_log("enemymdl: room %04d: %d enemies drawn as other models, %.1f ms\n", room_now, n, (SDL_GetTicksNS() - t0) / 1e6);
+    preload();
 }
 
 /* spawn_glue.c spawn_frame, every game frame: enemies that came since */
@@ -156,6 +188,7 @@ void emodel_release(void)
     int k;
     for (k = 0; k < ESLOTS; k++)
         if (smodel[k] >= 0) { actor_set(ACTOR_ENEMY + k, -1); smodel[k] = -1; }
+    memset(pre, 0, sizeof(pre));
     on = 0;
     memset(ekey, 0, sizeof(ekey));
 }

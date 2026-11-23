@@ -574,6 +574,108 @@ static float tile(float lo, float hi)
     return b > a && b - lo < hi - (a + 1) ? b : a;
 }
 
+/* ---------------------------------------------------------------- joining triangles into strips
+   Converters write a triangle list as one 3-corner strip per triangle (Umbrella Chronicles' bodies are all lists: 5600 strips,
+   one draw each). The single triangles of a group (one texture, one pass) are joined into strips through the edges they share:
+   a corner is the chunk's (vertex, u, v), so a joined strip draws the very same corners; each triangle keeps its turn (the
+   strip's odd triangles are flipped) and at most NATIVE_STRIP corners (native_glue.c pc_native_strip draws no more). */
+typedef struct Corner { uint16_t x, u, v; } Corner;
+typedef struct Edge { uint64_t key; int t, third; } Edge;   /* a triangle's directed edge (its corners' ids), its strip, the corner opposite */
+#define NATIVE_STRIP 64
+static int edge_cmp(const void* a, const void* b)
+{
+    const Edge *x = a, *y = b;
+    return x->key != y->key ? (x->key < y->key ? -1 : 1) : x->t - y->t;
+}
+static uint64_t ekey(int a, int b) { return (uint64_t)(uint32_t)a << 32 | (uint32_t)b; }
+static int edge_at(const Edge* e, int ne, uint64_t key)   /* the first edge with the key (ne: none) */
+{
+    int lo = 0, hi = ne;
+    while (lo < hi) { int mid = (lo + hi) / 2; if (e[mid].key < key) lo = mid + 1; else hi = mid; }
+    return lo;
+}
+typedef struct Tris { const Edge* e; int ne; const int *id, *first; const unsigned char* used; } Tris;
+static int free_sides(const Tris* T, int t)   /* the unused triangles across t's edges: the fewest go first (fewer left alone) */
+{
+    int n = 0, at = T->first[t];
+    for (int j = 0; j < 3; j++) {
+        uint64_t k = ekey(T->id[at + (j + 1) % 3], T->id[at + j]);
+        for (int i = edge_at(T->e, T->ne, k); i < T->ne && T->e[i].key == k; i++) n += !T->used[T->e[i].t];
+    }
+    return n;
+}
+static int next_tri(const Tris* T, uint64_t key, int only)   /* an unused triangle with the edge, the fewest free sides (only >= 0: that one); -1 */
+{
+    int best = -1, bf = 4;
+    for (int i = edge_at(T->e, T->ne, key); i < T->ne && T->e[i].key == key; i++) {
+        int t = T->e[i].t, f;
+        if (T->used[t] || (only >= 0 && t != only) || (f = free_sides(T, t)) >= bf) continue;
+        best = i; bf = f;
+    }
+    return best;
+}
+/* c: the strips' corners back to back, len[*ns] their lengths; rewritten in place. keep_order: a strip only takes the next
+   triangle (the order is kept: blended strips show through each other); else any. 0: out of memory */
+static int join_tris(Corner* c, int* len, int* ns, int keep_order)
+{
+    int n = *ns, nc = 0, ne = 0, no = 0, oc = 0;
+    for (int s = 0; s < n; s++) nc += len[s];
+    Edge* key = malloc(sizeof(Edge) * (size_t)(nc ? nc : 1));
+    Edge* e = malloc(sizeof(Edge) * (size_t)(nc ? nc : 1));
+    int *id = malloc(sizeof(int) * (size_t)(nc ? nc : 1)), *first = malloc(sizeof(int) * (size_t)(n ? n : 1)), *olen = malloc(sizeof(int) * (size_t)(n ? n : 1));
+    Corner* out = malloc(sizeof(Corner) * (size_t)(nc ? nc : 1));
+    unsigned char *used = calloc(n ? n : 1, 1), *tri = calloc(n ? n : 1, 1);
+    int ok = key && e && id && first && olen && out && used && tri;
+    if (ok) {
+        for (int i = 0; i < nc; i++) key[i] = (Edge){ (uint64_t)c[i].x << 32 | (uint32_t)c[i].u << 16 | c[i].v, i, 0 };
+        qsort(key, (size_t)nc, sizeof(Edge), edge_cmp);
+        for (int i = 0, k = -1; i < nc; i++) { if (!i || key[i].key != key[i - 1].key) k++; id[key[i].t] = k; }
+        for (int s = 0, at = 0; s < n; at += len[s++]) {
+            first[s] = at;
+            if (len[s] != 3 || id[at] == id[at + 1] || id[at + 1] == id[at + 2] || id[at] == id[at + 2]) continue;   /* (a degenerate one stays) */
+            tri[s] = 1;
+            for (int j = 0; j < 3; j++) e[ne++] = (Edge){ ekey(id[at + j], id[at + (j + 1) % 3]), s, at + (j + 2) % 3 };
+        }
+        qsort(e, (size_t)ne, sizeof(Edge), edge_cmp);
+        Tris T = { e, ne, id, first, used };
+        for (int s0 = 0; s0 < n; s0++)
+            while (!used[s0]) {
+                int s = s0, w = oc;
+                if (!tri[s]) {   /* a longer strip: as it was */
+                    used[s] = 1;
+                    memcpy(out + oc, c + first[s], sizeof(Corner) * (size_t)len[s]);
+                    oc += len[s]; olen[no++] = len[s];
+                    continue;
+                }
+                if (!keep_order)   /* the start: the triangle with the fewest free sides (all before s0 are taken) */
+                    for (int t = s0 + 1, bf = free_sides(&T, s0); t < n && bf; t++)
+                        if (tri[t] && !used[t]) { int f = free_sides(&T, t); if (f < bf) { bf = f; s = t; } }
+                used[s] = 1;
+                int at = first[s], rot = 0, bf = 4;   /* turned so that the best neighbour follows: corners a b c, the next on c -> b */
+                for (int r = 0; r < 3; r++) {
+                    int f = next_tri(&T, ekey(id[at + (r + 2) % 3], id[at + (r + 1) % 3]), keep_order ? s + 1 : -1);
+                    if (f >= 0 && free_sides(&T, e[f].t) < bf) { bf = free_sides(&T, e[f].t); rot = r; }
+                }
+                for (int j = 0; j < 3; j++) out[oc++] = c[at + (rot + j) % 3];
+                int last = s, pid[2] = { id[at + (rot + 1) % 3], id[at + (rot + 2) % 3] };   /* the last two corners' ids */
+                while (oc - w < NATIVE_STRIP) {
+                    int i = oc - w - 2;   /* the new triangle's place: even a -> b, odd b -> a (the strip flips it) */
+                    int f = next_tri(&T, (i & 1) ? ekey(pid[1], pid[0]) : ekey(pid[0], pid[1]), keep_order ? last + 1 : -1);
+                    if (f < 0) break;
+                    used[e[f].t] = 1; last = e[f].t;
+                    out[oc++] = c[e[f].third];
+                    pid[0] = pid[1]; pid[1] = id[e[f].third];
+                }
+                olen[no++] = oc - w;
+            }
+        memcpy(c, out, sizeof(Corner) * (size_t)oc);
+        memcpy(len, olen, sizeof(int) * (size_t)no);
+        *ns = no;
+    }
+    free(key); free(e); free(id); free(first); free(olen); free(out); free(used); free(tri);
+    return ok;
+}
+
 int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gindex, const ImpFit* fit, char* err, int en)
 {
     int map[IMP_NODES], kept[CV_MAX], par[CV_MAX], nk = 0, order[CV_MAX], no = 0, ok = 0;
@@ -716,43 +818,51 @@ int imp_write_cvxm(const ImpModel* m, const char* path, float scale, unsigned gi
         static const unsigned char mat[12] = { 0x13, 0x25, 4, 0, 0x7f, 0x7f, 0x7f, 0xff, 0x7f, 0x7f, 0x7f, 0xff };
         put(&plist, mat, sizeof(mat));
         if (k >= 0) { put(&plist, "\x08\x04", 2); put16(&plist, (uint16_t)(0x4000 | k)); }
-        int s = 0;
-        while (s < m->ns) {   /* one chunk of strips, at most ~60000 shorts */
+        /* the group's strips as the chunk stores them (Corner: vertex, u, v), in order, the runs of single triangles joined */
+        Corner* c = malloc(sizeof(Corner) * (size_t)(m->nidx ? m->nidx : 1));
+        int* len = malloc(sizeof(int) * (size_t)nstrip), nc = 0, ns = 0;
+        if (!c || !len) { free(c); free(len); mlb.bad = 1; break; }
+        for (int s = 0; s < m->ns; s++) {
+            const ImpStrip* st = &m->strip[s];
+            if (st->tex != k || st->n < 3 || st->n > 32767 || (see && see[s]) != pass) continue;
+            float fu = 1e30f, fv = 1e30f, u1 = -1e30f, v1 = -1e30f;
+            for (int i = 0; i < st->n; i++) {
+                const float* t = suv(m, st->first + i);
+                fu = fminf(fu, t[0]); fv = fminf(fv, t[1]); u1 = fmaxf(u1, t[0]); v1 = fmaxf(v1, t[1]);
+            }
+            /* the strip moved by whole tiles (the textures repeat in Outbreak, the game clamps): into the tile
+               of its lowest UV, or of its highest when less of it sticks out that way (Yoko's jeans: v 1.99..2.14,
+               the seat drawn from the skin at the texture's bottom edge). The same for a clamped (Wii) texture: a strip
+               inside 0..1 stays, one mostly outside moves in (the zombie EZ33's shirt at v 1..2), its overhang clamped
+               as the Wii shows it; Umbrella Chronicles' repeating textures come cut into tiles (uc.c cut_tiles) */
+            fu = tile(fu, u1); fv = tile(fv, v1);
+            for (int i = 0; i < st->n; i++) {
+                const float* t = suv(m, st->first + i);
+                float u = (t[0] - fu) * 1023.0f + 0.5f, v = (t[1] - fv) * 1023.0f + 0.5f;
+                c[nc++] = (Corner){ (uint16_t)m->idx[st->first + i], (uint16_t)(u < 0 ? 0 : u > 65535 ? 65535 : u),
+                                    (uint16_t)(v < 0 ? 0 : v > 65535 ? 65535 : v) };
+            }
+            len[ns++] = st->n;
+        }
+        /* (alpha-blended strips keep their order: they show through each other) */
+        if (!join_tris(c, len, &ns, pass)) { free(c); free(len); mlb.bad = 1; break; }
+        int s = 0, at = 0;
+        while (s < ns) {   /* one chunk of strips, at most ~60000 shorts */
             size_t head = plist.n;
             uint16_t cnt = 0;
             put(&plist, NULL, 6);
-            for (; s < m->ns && plist.n - head < 120000 && cnt < 0x3FFF; s++) {
-                const ImpStrip* st = &m->strip[s];
-                if (st->tex != k || st->n < 3 || st->n > 32767 || (see && see[s]) != pass) continue;
-                float fu = 1e30f, fv = 1e30f, u1 = -1e30f, v1 = -1e30f;
-                for (int i = 0; i < st->n; i++) {
-                    const float* t = suv(m, st->first + i);
-                    fu = fminf(fu, t[0]); fv = fminf(fv, t[1]); u1 = fmaxf(u1, t[0]); v1 = fmaxf(v1, t[1]);
-                }
-                /* the strip moved by whole tiles (the textures repeat in Outbreak, the game clamps): into the tile
-                   of its lowest UV, or of its highest when less of it sticks out that way (Yoko's jeans: v 1.99..2.14,
-                   the seat drawn from the skin at the texture's bottom edge). The same for a clamped (Wii) texture: a strip
-                   inside 0..1 stays, one mostly outside moves in (the zombie EZ33's shirt at v 1..2), its overhang clamped
-                   as the Wii shows it; Umbrella Chronicles' repeating textures come cut into tiles (uc.c cut_tiles) */
-                fu = tile(fu, u1); fv = tile(fv, v1);
-                put16(&plist, (uint16_t)st->n);
-                for (int i = 0; i < st->n; i++) {
-                    int x = m->idx[st->first + i];
-                    const float* t = suv(m, st->first + i);
-                    float u = (t[0] - fu) * 1023.0f + 0.5f, v = (t[1] - fv) * 1023.0f + 0.5f;
-                    put16(&plist, (uint16_t)x);
-                    put16(&plist, (uint16_t)(u < 0 ? 0 : u > 65535 ? 65535 : u));
-                    put16(&plist, (uint16_t)(v < 0 ? 0 : v > 65535 ? 65535 : v));
-                }
+            for (; s < ns && plist.n - head < 120000 && cnt < 0x3FFF; at += len[s++]) {
+                put16(&plist, (uint16_t)len[s]);
+                for (int i = 0; i < len[s]; i++) { put16(&plist, c[at + i].x); put16(&plist, c[at + i].u); put16(&plist, c[at + i].v); }
                 cnt++;
             }
-            if (!cnt) { plist.n = head; continue; }
             uint16_t words = (uint16_t)((plist.n - head - 4) / 2);
             plist.p[head] = 0x42;   /* NJD_CS_UVH */
             plist.p[head + 1] = 0x12 | (pass ? 0x08 : 0);   /* ignore specular, double side (+ use alpha) */
             memcpy(plist.p + head + 2, &words, 2);
             memcpy(plist.p + head + 4, &cnt, 2);
         }
+        free(c); free(len);
     }
     free(see);
     put(&plist, "\xFF\0\0\0", 4);

@@ -184,6 +184,7 @@ unsigned char* spawn_pool_alloc(int len, int mis)
     return pool + at;
 }
 
+int spawn_pool_free(void) { return POOL_SIZE - pool_n; }   /* (enemymdl_glue.c preload) */
 int spawn_pool_owns(const void* p) { return (const unsigned char*)p >= pool && (const unsigned char*)p < pool + pool_n; }
 
 /* the texture list l is kept for the room's release (its first texture is one of a kept list's) */

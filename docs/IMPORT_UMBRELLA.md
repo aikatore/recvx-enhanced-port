@@ -171,7 +171,18 @@ Per model, in this order:
    CVX's Chris 0.56).
 10. **The `.cvxm`** (`imp_write_cvxm`, version 5, 6 with hand poses): **UVs**: every strip in one tile (`cut_tiles`, or
    moved by whole tiles into the one holding most of it: the round-9 rule). **See-through** strips (hair, lashes: texels under 255 alpha) are drawn last, blended. **The blink** as a morph
-   block: per moving vertex its offset with the eyes closed (56..271 vertices).
+   block: per moving vertex its offset with the eyes closed (56..271 vertices). **Strips**: a triangle list (0x90) or a
+   fan or quads give one 3-corner strip per triangle; the zombie EZ00's whole body is lists: 5631 strips of one
+   triangle, each one draw and one Smoother Motion group per zombie (four of them: 19 fps). The writer joins the single
+   triangles of each texture and pass into strips through the edges they share (`impmodel.c join_tris`): a corner is
+   the chunk's (vertex, u, v) as written, so a joined strip draws the same corners, each triangle keeps its turn (a
+   strip's odd triangles are flipped), at most 64 corners (`pc_native_strip` draws no more); the see-through strips
+   keep their order (they show through each other), the opaque ones are taken greedily (the fewest free sides first).
+   EZ00: 5631 -> 1560 strips (3.6 triangles a strip, as EZ01's 4.0); the other 61 models lose 1..76 strips. The same
+   triangles: in the game EZ00's zombies differ from the old file's in ~30 edge pixels an image by at most 32 levels
+   (where two triangles meet: the corners come in another order), none further. **Import again** for it: the manifest
+   says `# recvx import manifest 2`; an Umbrella Chronicles import of version 1 shows "An older import: import again."
+   on its IMPORT page and logs it (`import.c import_old`).
 
 ### `.cvxm` version 5 and the vertex limit
 
