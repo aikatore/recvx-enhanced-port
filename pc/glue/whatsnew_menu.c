@@ -379,3 +379,6 @@ int pc_whatsnew(void)
     if (r) { wn.open = 0; host_log("whatsnew: closed\n"); }
     return r;
 }
+
+/* lobby_glue.c pc_lobby_close: the title left with the screen up (it opens afresh next time) */
+void pc_whatsnew_close(void) { wn.open = 0; }

@@ -147,7 +147,7 @@ enum { I_RESUME, I_CAMERA, I_SETTINGS, I_SETUP, I_COOP, I_SPOILER, I_CHEATS, I_T
 static const char* const items[I_N] = { "RESUME", "Camera", "SETTINGS", "GAME SETUP", "CO-OP", "SPOILER LOG", "CHEATS AND TOOLS", "RETURN TO TITLE" };
 static const char* const item_help[I_N] = {
     "Back to the game.",
-    "Switch between the fixed cameras and the over-the-shoulder camera (F5).",
+    "Switch between the fixed cameras, the over-the-shoulder camera and first person (F5).",
     "How you like to play: gameplay, camera, controls, display, graphics, audio, language and co-op.",
     "This game's rules: enemies, characters and co-op rules. Changes apply from the next room.",
     "Your co-op session: partner and connection, trading, addresses, leaving.",
@@ -324,6 +324,7 @@ static int pause_input(int port)
     ui_device(press, mt.moved || mt.left || mt.right || esc);
     if (options_button()) { CallSystemSe(0, 0); AdvWork.OptFadeType = 0; return -1; }
     if (coop_page && !coop_on) coop_page = 0;   /* (the session ended meanwhile) */
+    if (!item_shown(pause_sel)) move(1);        /* (... with the cursor on CO-OP) */
     if (coop_page) return coop_input(press, rept, ok, cancel, esc, x);
     hit = item_at(x, mt.y);
     if (hit >= 0 && (mt.moved || mt.left) && hit != pause_sel) { pause_sel = hit; CallSystemSe(0, 2); }

@@ -373,6 +373,7 @@ typedef struct { const unsigned char* d; uint32_t n, symb, ib; } Sar;
 static uint32_t ref(const Sar* s, uint32_t o) { return in(o, 8, s->n) ? s->ib + be32(s->d + o + 4) : 0; }
 static const char* sar_name(const Sar* s, uint32_t id)
 {
+    if (!in(s->symb, 12, s->n)) return "";
     uint32_t st = s->symb + 8 + be32(s->d + s->symb + 8), o;
     if (!in(st, 4, s->n) || id >= be32(s->d + st) || !in(st + 4 + 4 * id, 4, s->n) || !in(o = s->symb + 8 + be32(s->d + st + 4 + 4 * id), 1, s->n) ||
         !memchr(s->d + o, 0, s->n - o)) return "";
@@ -430,6 +431,7 @@ int uc_voice_extract(RvzDisc* disc, const char* outdir)
     {   /* the stream sounds VO_... the game plays */
         uint32_t snd = ref(&s, s.ib);
         ns = in(snd, 4, sn) ? be32(sar + snd) : 0;
+        if (ns > 65536) ns = 0;   /* (the disc has 2234; a damaged count: none, not a wrapped calloc) */
         ids = calloc(ns + 1, sizeof *ids);
         for (uint32_t i = 0; ids && i < ns; i++) {
             uint32_t e = ref(&s, snd + 4 + 8 * i);
@@ -446,6 +448,7 @@ int uc_voice_extract(RvzDisc* disc, const char* outdir)
     for (int pass = 0; l && pass < 2; pass++) {   /* the lines, then the grunt banks' waves */
         uint32_t groups = ref(&s, s.ib + 32);
         ng = pass && in(groups, 4, sn) ? be32(sar + groups) : 0;
+        if (ng > 65536) ng = 0;
         for (int i = 0; i < (pass ? (int)ng * 16 : nid) && nl < nid + 128; i++) {
             short* pcm = NULL;
             int rate = 0, n = 0, bank = 0, wave = 0;

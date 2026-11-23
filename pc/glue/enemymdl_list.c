@@ -49,7 +49,7 @@ static void step(int c, int d, int group)
     int i, v = g_emodel[c];
     char nb[96];
     if (el.ro) { CallSystemSe(0, 1); return; }
-    nch = emodel_choices(ch, CHOICES);
+    if ((nch = emodel_choices(ch, CHOICES)) <= 0) return;   /* (Original is always listed: never) */
     for (i = 0; i < nch && ch[i] != v; i++);
     if (i == nch) i = 0;   /* (a value no longer listed: from Original) */
     if (group) {

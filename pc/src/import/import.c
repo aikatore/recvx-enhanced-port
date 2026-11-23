@@ -123,7 +123,7 @@ int import_results(int src, ImportItem* out, int max, char* when, int wn)
         char* fld[13] = { 0 };
         int k = 0;
         for (char* s = line + 5; s && k < 13; k++) { fld[k] = s; s = strchr(s, '|'); if (s) *s++ = 0; }
-        if (k < 12) continue;
+        if (k < 12 || strpbrk(fld[0], "/\\:") || strstr(fld[0], "..")) continue;   /* (the id names a folder in the import dir: no path) */
         ImportItem* x = &out[n++];
         memset(x, 0, sizeof(*x));
         snprintf(x->id, sizeof(x->id), "%s", fld[0]);

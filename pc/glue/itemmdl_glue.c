@@ -1,4 +1,4 @@
-/* "Show Randomized Item Models" (GAMEPLAY, ini biorand_item_models, default 0; docs/BIORAND_INGAME.md "Item models (2026-11-21)"):
+/* "Show Randomized Item Models" (GAME SETUP > BIORAND, ini biorand_item_models, default 1; docs/BIORAND_INGAME.md "Item models (2026-11-21)"):
  * in a BioRand game an item spot whose pickup BioRand changed (its record's type, docs/modding/ROOM_FORMAT.md "Generated
  * pickups"; the id stays the model shown) shows the new item's ground model instead, where some room has one.
  *

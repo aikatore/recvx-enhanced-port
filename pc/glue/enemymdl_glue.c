@@ -45,6 +45,7 @@ static int on, room_now;
 static int host_v[EM_CATS], have_host;
 static short failed[8];                 /* models that did not load this room (not tried again) */
 static int nfailed;
+static int unshown;                     /* categories whose choice drew nothing this room (logged once) */
 
 const int* emodel_now(void)
 {
@@ -108,7 +109,12 @@ static void decide(int s)
     eslot[s] = -1;
     drawn[s] = 0;
     if (ep != root(ep) || variant_of_slot(s) || (c = emodel_cat(ep->id, ep->mdlver)) < 0 || !(v = emodel_now()[c])) return;
-    if ((m = emodel_pick(v, (unsigned)enemy_opts()->seed, room_now, c, s)) < 0) return;
+    if ((m = emodel_pick(v, (unsigned)enemy_opts()->seed, room_now, c, s)) < 0) {
+        if (!(unshown & 1 << c)) host_log("enemymdl: room %04d: %s = %s has no model to show (an import whose game is unchecked in the import lists?): drawn as themselves\n",
+                                          room_now, emodel_cat_name(c), emodel_choice_name(v, nb, sizeof(nb)));
+        unshown |= 1 << c;
+        return;
+    }
     if ((k = slot_of(m, c)) < 0)   /* no slot left (or not loadable): a model of its category shown already */
         for (k = 0; k < ESLOTS && !(smodel[k] >= 0 && scat[k] == c); k++);
     if (k >= ESLOTS) { host_log("enemymdl: room %04d slot %d (type %d model %d): no model, drawn as itself\n", room_now, s, ep->id, ep->mdlver); return; }
@@ -124,7 +130,7 @@ void emodel_room(void)
     int s, n = 0;
     memset(ekey, 0, sizeof(ekey));
     memset(eslot, -1, sizeof(eslot));
-    nfailed = 0;
+    nfailed = unshown = 0;
     room_now = room_file_now();
     on = emodel_any(emodel_now());
     if (!on) return;

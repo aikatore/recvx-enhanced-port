@@ -344,7 +344,7 @@ An enemy attacking or reeling then (mode0 2 or 3: the grabber letting go) is pus
 frames of the push (60 to 78 after the player stands). Left alone: bosses and the other types, enemy variants, the
 records the room's scripts act on (`enemy_rec_scripted`), a Cerberus of another type or lying (exp0 `0x10` bit
 `0x100000`: one thrown off a grab), a Hunter in the air, a Bandersnatch holding a player, the dead, the hidden,
-linked parts. There is **no grab immunity** afterwards (`pc_grab_immune` answers no; the user found the 2.5 s window
+linked parts. There is **no grab immunity** afterwards (removed: the user found the 2.5 s window
 too long, 2026-11-22): the push and the stagger alone give the player room.
 
 **Co-op**: each game watches its own player. Our game sees only its own player's release (the grab code runs where the grabbing enemy runs), so a hold the partner's game ran pushes as our player stands. Enemies our game runs are pushed at once; one the partner's game runs gets
@@ -383,8 +383,7 @@ default Off): 156 + 311 frames, none differs from main.
 Co-op (two instances over loopback, 3/9 with two zombies, a Hunter and a Bandersnatch spawned by the host, both
 mashing): the guest broke free 5 times and the host 9 times; each sent the enemies the other game ran as pushes (10
 and 13 events), and their runner knocked back those that walked or stood or did within 45 frames (2 and 5; the others
-were busy with the other player, mostly holding it); the partner's immunity refused 64 (the guest's game) and 9 (the
-host's, Shared Enemy Control on) grab tests on the partner's stand-in. Both screens show the same falls. `coop_owner_check.sh` keeps the rule
+were busy with the other player, mostly holding it). (That run still had the grab immunity, since removed.) Both screens show the same falls. `coop_owner_check.sh` keeps the rule
 off: its position samples read the end of a Hunter's wall knock-back (DG09 puts its position where its body lies) as a
 jump when the other game has just come into the room.
 
