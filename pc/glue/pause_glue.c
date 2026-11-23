@@ -4,7 +4,8 @@
  * With Menu Style Legacy (or --legacy-menu) none of this runs: pc_new_menu_on() is 0 and the old OPTION screen is unchanged.
  *
  * PAUSE: RESUME, Camera (Fixed / Over Shoulder / First Person, the F5 setting), SETTINGS, GAME SETUP (this game's rules: the same row
- * screen), CO-OP (in a session: the F3 window), SPOILER LOG (the F8 screen, a BioRand game outside co-op), CHEATS AND
+ * screen), CO-OP (in a session: its own page, Trade, Show Addresses, Remove
+ * Partner, End Session / Leave, the F3 window), SPOILER LOG (the F8 screen, a BioRand game outside co-op), CHEATS AND
  * TOOLS (the same row screen; Advanced Tools opens the F2 window), RETURN TO TITLE (the old question). Select / View
  * (Backspace) opens it as it opened OPTION; with the Modern third-person controller layout its options button (Start)
  * opens and closes it; Cancel, Select or the controller's Start resume. Co-op does not pause: the header says so.

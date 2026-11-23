@@ -252,7 +252,7 @@ const MenuRow menu_rows[] = {
     { MC_CHAR_ADV, NULL, ML_SET, "Match Model Animations" },
     { MC_CHAR_ADV, NULL, ML_SET, "Animated Faces (Experimental)" },
     { MC_CHARACTERS, NULL, ML_IMPORT, NULL, MC_IMPORT_CHARS, "Import Characters",
-      .help = "Add characters from Resident Evil Outbreak File 2 and Resident Evil: The Umbrella Chronicles as looks. Shortcut: EXTRA > IMPORT > CHARACTERS." },
+      .help = "Add characters from Resident Evil Outbreak File 2, Resident Evil: The Umbrella Chronicles and Code: Veronica on the Dreamcast as looks. Shortcut: EXTRA > IMPORT > CHARACTERS." },
     { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_GAME_UC, "Umbrella Chronicles", N("Off", "On"),
       .help = "On: its imported characters are in the look lists and random looks, also as story characters in cutscenes, with their voice lines. In co-op, both players need the same games on." },
     { MC_CHARACTERS, NULL, ML_VAR, NULL, SV_GAME_OB, "Outbreak File 2", N("Off", "On"),

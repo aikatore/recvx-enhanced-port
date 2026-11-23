@@ -2,7 +2,7 @@
  * right, help and a value preview below, a button bar that follows the device used last. One screen for SETTINGS, GAME
  * SETUP and CHEATS AND TOOLS; the rows come from the layout table (pc/src/host/menu_layout.c) over the settings table
  * (settings.c), so it stores no values. It draws no background or title: its host does (pause_glue.c in the game's
- * OPTION task; title mode 30 later), so any category can be shown in either.
+ * OPTION task; lobby_glue.c on the title), so any category can be shown in either.
  *
  * Input, the same everywhere: the cursor is always on the rows; Up/Down choose, Left/Right change, Confirm opens or runs,
  * Cancel (or Esc, a right click) goes back, L1/R1 (Q/W, a click on the list) switch the category, holding Triangle
@@ -125,7 +125,7 @@ static struct {
     int slot;                         /* the binding slot chosen */
     int list;                         /* 1 the cast's Custom list, 2 the enemy rates, 3 Give Item's items */
     int confirm, confirm_yes;         /* RESET CATEGORY's question */
-    int hold;                         /* hold-to-default: ms the button went down, 0 up */
+    uint64_t hold;                    /* hold-to-default: ms the button went down, 0 up */
     int held_done;
     char msg[160]; int msg_t;
     unsigned char pending[256];       /* actions that run when OPTION closes */
@@ -168,8 +168,9 @@ static int setting_of(const MenuRow* m)   /* cached menu_setting(m->ref) */
 {
     static short map[512];
     static int done;
-    if (!done) { for (int i = 0; i < menu_rows_n && i < 512; i++) map[i] = (short)menu_setting(menu_rows[i].ref); done = 1; }
-    return map[m - menu_rows];
+    int i = (int)(m - menu_rows);
+    if (!done) { for (int k = 0; k < menu_rows_n && k < 512; k++) map[k] = (short)menu_setting(menu_rows[k].ref); done = 1; }
+    return i < 512 ? map[i] : menu_setting(m->ref);   /* (a table grown past the map: looked up) */
 }
 static const Setting* row_set(const Row* r) { return r->kind == R_ITEM && r->set >= 0 ? &g_settings[r->set] : NULL; }
 static int top_cat(int c) { while (menu_cats[c].parent >= 0) c = menu_cats[c].parent; return c; }
@@ -252,7 +253,11 @@ static const char* value_text(const Row* r, char* buf, int n)
             if (v) snprintf(buf, n, "%d%%", v); else snprintf(buf, n, "%s", tr("Off"));
             return buf;
         }
-        if (m->names && !s->name) { int v = shown_get(r) - s->lo; snprintf(buf, n, "%s", tr(m->names[v < 0 ? 0 : v])); return buf; }
+        if (m->names && !s->name) {   /* (a value past the range, an old ini's: the last name) */
+            int v = shown_get(r) - s->lo, k = settings_hi(s) - s->lo;
+            snprintf(buf, n, "%s", tr(m->names[v < 0 ? 0 : v > k ? k : v]));
+            return buf;
+        }
         return settings_value_of(s, shown_get(r), buf, n);
     case ML_SCREEN:
         if (m->arg != 1) return NULL;
@@ -449,6 +454,7 @@ static void scroll_to_sel(void)
 
 static void move_sel(int dir, int sound)
 {
+    if (!nrows) return;   /* (every category ends in a Reset or heading row today) */
     for (int k = 0; k < nrows; k++) {
         SEL = (SEL + dir + nrows) % nrows;
         if (!heading(&rows[SEL])) break;
@@ -1111,7 +1117,7 @@ static void bar_draw(void)
 {
     float x = 20;
     for (int i = 0; i < nhints; i++) {
-        float fill = hints[i].action == UG_DEFAULT && st.hold && !st.held_done ? (float)(SDL_GetTicks() - (uint64_t)st.hold) / 500.0f : 0;
+        float fill = hints[i].action == UG_DEFAULT && st.hold && !st.held_done ? (float)(SDL_GetTicks() - st.hold) / 500.0f : 0;
         hint_x0[i] = x;
         x = ui_hint(x, Y_BAR, hints[i].glyph, hints[i].word, fill);
         hint_x1[i] = x - 12;
@@ -1663,8 +1669,8 @@ static int input(int port)
     }
     /* hold Triangle for half a second, or Delete: the row's default */
     if (on & st.def) {
-        if (!st.hold) st.hold = (int)SDL_GetTicks() | 1;
-        if (!st.held_done && SDL_GetTicks() - (uint64_t)st.hold >= 500) { st.held_done = 1; do_default(&rows[SEL]); }
+        if (!st.hold) st.hold = SDL_GetTicks() | 1;
+        if (!st.held_done && SDL_GetTicks() - st.hold >= 500) { st.held_done = 1; do_default(&rows[SEL]); }
     } else st.hold = 0, st.held_done = 0;
     if (del) { do_default(&rows[SEL]); return UR_STAY; }
     /* the mouse */

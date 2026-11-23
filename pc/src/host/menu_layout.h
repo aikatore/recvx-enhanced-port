@@ -113,8 +113,8 @@ float ui_hint_w(const char* glyph, const char* word);   /* its width, without th
 void ui_frame_plain(const char* root, const char* const* path, int n);   /* the row screen's panel, breadcrumb and bar rule alone */
 
 /* GAME SETUP (pc/glue/setup_glue.c, game thread): where it is shown, and its rows that are not table rows. ui_rows.c asks
-   these for every row of a GAME SETUP category (wherever it is shown: NEW GAME, the pause menu, later the lobby). */
-enum { SC_NEWGAME, SC_INGAME, SC_LOBBY_HOST, SC_LOBBY_GUEST };   /* the context: the lobby's for P3 (a guest reads only) */
+   these for every row of a GAME SETUP category (wherever it is shown: NEW GAME, the pause menu, the lobby). */
+enum { SC_NEWGAME, SC_INGAME, SC_LOBBY_HOST, SC_LOBBY_GUEST };   /* the context (a lobby guest reads only) */
 extern int g_setup_ctx;
 int  setup_cat_shown(int c);
 int  setup_row_shown(const MenuRow* m, int shown);   /* shown: what the table says */

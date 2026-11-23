@@ -973,7 +973,7 @@ void setup_track(void)
 const char* setup_host_changed(void) { return hc.at && net_ms() - hc.at < 6000 ? hc.msg : NULL; }
 
 /* the lobby's GAME SETUP box (view 1: a guest's, the host's values): what starts, BioRand, the modifiers, the co-op rules
-   not at their defaults; the count. brief: "Normal, 3 changes" (Edit Game Setup's value) */
+   not at their defaults; the count (out NULL with max 0: none). brief: "Normal, 3 changes" (Edit Game Setup's value) */
 int setup_lobby_lines(char out[][128], int max, int view, char* brief, int nb)
 {
     static const char* const diff[] = { "Normal", "Easy", "Very Easy" };

@@ -1,4 +1,5 @@
-/* The settings table shared by the native OPTION menu (ENHANCED SETTINGS) and the F1 overlay.
+/* The settings table shared by the new menu (menu_layout.c, SETTINGS), the native OPTION menu (ENHANCED SETTINGS) and
+   the F1 overlay.
    docs/ARCHITECTURE.md "Settings": to add a setting, add its variable's ini key in config.c and
    one entry here; both menus show it (F1 on the CO-OP and EXTRAS pages only with SET_F1). Rows
    are in menu order, .group starts a heading. */

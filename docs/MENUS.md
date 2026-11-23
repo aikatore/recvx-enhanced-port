@@ -31,7 +31,8 @@ The rows' values, ranges, locks and help are the settings table's (the same as F
 table has no help for get theirs from the layout, ctest `menu_help`); some rows have new names (Banding Reduction, Shoulder Right / Left, Smooth Motion, Active Controller, ...). Vibration is one row:
 Off turns the game's vibration off (the system save's VIBRATION), a percentage turns it on at that strength.
 
-**Search** (SETTINGS only, the keyboard's): Ctrl+F or `/` (or a click on the bar's Search), then type. Every SETTINGS
+**Search** (SETTINGS only, the keyboard's): Ctrl+F or `/` (the US layout's key right of `.`: the key is read by
+position, so on other layouts it is another key; Ctrl+F is the same everywhere), or a click on the bar's Search, then type. Every SETTINGS
 row whose label, old name (the table's label, e.g. "Mouse Camera Style"), help or value holds the text is listed under its
 category; Enter or Down goes to the results, which change as anywhere else; Esc (Back) closes the search, L1 / R1 and a click on a category too.
 
@@ -77,11 +78,11 @@ the same screen with Game Type BioRand, on its BIORAND category. Categories:
 
 | Category | Rows |
 |---|---|
-| OVERVIEW | Game Type (Standard / BioRand), Difficulty (Normal / Easy / Very Easy, ini `newgame_difficulty`: Difficulty Select is not shown in the new menu), Preset (Original / Remix / Chaos / Custom), Your Character ▸ (a shortcut to CHARACTERS), ACTIVE MODIFIERS (BioRand's seed, every rule that differs from the original game, a Looks line; BioRand's status or the seed below it), START GAME |
+| OVERVIEW | Game Type (Standard / BioRand), Difficulty (Normal / Easy / Very Easy, ini `newgame_difficulty`: Difficulty Select is not shown in the new menu), Start From (the co-op lobby's only: a new game or a save), Preset (Original / Remix / Chaos / Custom), Your Character ▸ (a shortcut to CHARACTERS), ACTIVE MODIFIERS (BioRand's seed, every rule that differs from the original game, a Looks line; BioRand's status or the seed below it), START GAME |
 | RULES | Save Without Ink Ribbons, Extra Item Boxes and Herbs, Headshots and Piercing, Break Free Pushes Enemies (Off / Auto / On; [ENEMIES.md](ENEMIES.md#breaking-free)) |
 | ENEMIES | Extra Enemies, Rearranged Enemies, Enemy Randomizer, Enemy Pool (Custom: Enemy Rates), Max Enemy Types per Room, Randomize Event Enemies (those three greyed while the randomizer is off), Enemy Randomizer Seed (Confirm: type it), RANDOM SEED |
 | CHARACTERS | YOU: You Look Like (Original / Chosen Model / Random), Claire and Chris (Same Look / Separate Looks), Your Look ▸ or Claire's Look ▸ and Chris's Look ▸ (the 3D picker), Random From (Story Characters / Any Model / Custom: Your Random Looks) with Random, In Cutscenes, Advanced ▸, Import Characters ▸ (IMPORT > CHARACTERS, shown in place), then a row per imported game with models: Umbrella Chronicles, Outbreak File 2, Code: Veronica (Dreamcast) (Off / On, Off at first: the game's models in the lists and random pools; [ACTORS.md](ACTORS.md) "Imported games"). STORY CHARACTERS IN CUTSCENES: Story Characters (Original / Swapped / Any Model / Custom: Story Character Looks), Keep Their Look. MONSTERS YOU FIGHT: Enemy Models ▸ (a model per enemy type, the zombies as one row; [ENEMIES.md](ENEMIES.md) "Enemy models"). MONSTERS IN CUTSCENES: Cutscene Monsters (Original / Any Monster / Like Story Characters (only with Story Characters on) / Custom: Monster Looks). VOICES: Voices Match Used Character, Extra Mouth Movement (greyed while voices are off) |
-| BIORAND | only with Game Type BioRand. SEED (Seed: Confirm types it; RANDOM SEED, COPY / PASTE SEED STRING), DOORS (4), ITEMS (3, Show Randomized Item Models and Item Pool and Weapons ▸ with the 22 detail rows), a note that BioRand changes no enemy here, Check for BioRand Updates |
+| BIORAND | only with Game Type BioRand. SEED (Seed: Confirm types it; RANDOM SEED, COPY / PASTE SEED STRING), DOORS (4), ITEMS (Randomize Items, Allow Alternative Routes, Hidden Key Items, Show Randomized Item Models, Item Pool and Weapons ▸ with the 22 detail rows), a note that BioRand changes no enemy here, Check for BioRand Updates |
 
 The value preview shows, for every CHARACTERS row, **IN CUTSCENES THIS GAME** (who looks like whom: Claire and Chris,
 the other story characters, the monsters, the voices); for START GAME what starts (READY or "generates first", game type,
@@ -256,7 +257,8 @@ pressed last). A hold (Default) fills a gold bar under its icon.
   `ML_OUTPUT`, `ML_PRESET`, `ML_WINDOW` (an F-key window), `ML_TEXT` (a co-op text), `ML_IMPORT` (EXTRA > IMPORT on one
   of its categories, in place: `MS_IMPORT`'s `MC_IMPORT_*`, where Import Memory Card Saves has its home) and `ML_RETIRED` (Difficulty Select:
   Difficulty is GAME SETUP's own row). GAME SETUP adds `ML_VAR` (a row over the game's variables, not one table row:
-  `SV_*`, setup_glue.c), `ML_MERGED` (a table row shown inside an `ML_VAR` row: Model Selection in Story Characters; it
+  `SV_*`, setup_glue.c), `ML_MERGED` (a table row shown inside an `ML_VAR` row: Model Selection in Story Characters, also Character Models,
+  Randomize Cutscene Cast and Enemy Models; it
   counts as its home), `ML_BIO` (a BioRand option by its `biorand_opt` key), `ML_ACTION` (START GAME, RANDOM SEED, ...)
   and `ML_INFO` (lines of text: ACTIVE MODIFIERS). The new menu stores no values: everything is read and written through
   the settings table or the variables the old menus use (`g_enemy_opts`, `g_appear_*`, `g_coop.chr`, `g_biorand_*`,

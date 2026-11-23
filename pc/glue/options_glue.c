@@ -53,7 +53,7 @@ int  rate_list_input(const MouseTake* m, unsigned int press, unsigned int rept, 
 void rate_list_draw(void);
 const char* rate_list_help(void);
 const char* rate_list_summary(const unsigned char* rate, char* buf, int n);
-void emodel_list_open(int ro, float x0, float x1, float y0, float h, float sc);   /* enemymdl_list.c: "Enemy Models" (st.list 3) */
+void emodel_list_open(int ro, float x0, float x1, float y0, float h, float sc);   /* enemymdl_list.c: "Enemy Models" (this file's st.list 3; ui_rows.c has its own, 4) */
 int  emodel_list_input(const MouseTake* m, unsigned int press, unsigned int rept, unsigned int ok, unsigned int cancel);
 void emodel_list_draw(void);
 const char* emodel_list_help(void);

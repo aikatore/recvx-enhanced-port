@@ -61,6 +61,7 @@ The title menu has **LOAD GAME**, **NEW GAME**, **OPTION**, **EXTRA**, **MULTIPL
   it is unlocked (a cleared game, or **Battle Game Unlocked** in Gameplay).
 - Choose with up/down and confirm, or point and click. Cancel or a right click goes back to the
   title menu. Leaving Battle Game returns to EXTRA.
+- **WHAT'S NEW** (the button in the corner, or Triangle / Y) shows the changelog of the version you play.
 
 ## Controls
 
@@ -228,14 +229,16 @@ Gamepad, "Third Person: Modern Gamepad").
 
 ### Vibration
 
-A rumble gamepad vibrates as the DualShock 2 did. Turn it on or off in the game's **OPTION ->
-VIBRATION**; it is greyed out until a rumble gamepad is connected. **Vibration Strength** (CONTROLS)
-sets how strong.
+A rumble gamepad vibrates as the DualShock 2 did. **SETTINGS -> CONTROLS -> Vibration** does both: Off
+turns the game's vibration off, a strength turns it on that strong. With Menu Style Legacy it is the game's
+**OPTION -> VIBRATION** (greyed out until a rumble gamepad is connected) and **Vibration Strength** (CONTROLS)
+for how strong.
 
 ### Rebinding
 
-In **OPTION -> ENHANCED SETTINGS -> CONTROLS** (DEVICE picks keyboard or gamepad) or **F1 ->
-Controls** (click a binding, press the key; right click clears). Each action has two slots. While
+In **OPTION -> SETTINGS -> CONTROLS -> BUTTONS -> Customize Keyboard and Mouse** or **Customize
+Controller** (with Menu Style Legacy: **OPTION -> ENHANCED SETTINGS -> CONTROLS**, DEVICE picks keyboard or gamepad)
+or **F1 -> Controls** (click a binding, press the key; right click clears). Each action has two slots. While
 waiting for a key, Esc cancels and Delete clears. A key another action uses is swapped to it.
 `recvx.ini` stores them as `key_...` / `pad_...` lines (ARCHITECTURE.md, "Binding ini format").
 
@@ -258,6 +261,8 @@ pad only to the focused window: turn Steam Input off for the game.
 | F2 | cheats and tools |
 | F3 | co-op window |
 | F5 | the next camera: Fixed, Over Shoulder, First Person |
+| F8 | the BioRand spoiler log (with `--dev`, in a BioRand game) |
+| F9 | the import window (models and languages from other discs) |
 | F11 | windowed / fullscreen |
 | Page Up; F or Page Down | fly up / down (noclip cheat) |
 | none until you set one | Save Anywhere, Item Box Anywhere, Load Anywhere (the F2 cheats Save Now, Open Item Box, Load Game) |
@@ -290,7 +295,7 @@ widescreen, no intro or door animations, fast loading); turn them off for a PS2-
 | Frame Rate Limit | Display Rate | 30 to 144 frames shown per second; the game runs at 30 anyway |
 | Show Frame Rate | On | counter at the top right |
 | Aspect Ratio | Widescreen | 3D fills the window, 2D and menus stay 4:3. Or Original (4:3), Stretch |
-| Internal Resolution | Auto | Auto follows the window, or 1x to 8x of 640x448. Above the window's size the picture is scaled down smoothly (supersampling) |
+| Internal Resolution | Auto | Auto follows the window, or 1x to 8x of 640x480. Above the window's size the picture is scaled down smoothly (supersampling) |
 | Anti-Aliasing | Off | smooths the jagged edges of the 3D scene. SMAA keeps textures sharper, FXAA smooths more (also fine texture detail). Text, menus, the inventory, map and movies are never touched. Needs Hardware 3D Rendering. Costs more the higher the Internal Resolution; well above the window it is hardly needed |
 | Dithering | Off | reduces colour banding (visible steps in smooth gradients: dark fog, light falling off on walls, glows), which a CRT hid on the PS2. On keeps the 3D scene finer than the 256 levels a screen shows and spreads the in-between shades as a fine, fixed pattern. Deband also smooths the wider steps baked into some textures, softening faint texture detail a little. Text and other 2D are not dithered; menus, the inventory, map and movies stay exactly as with Off. With On, rooms show up to one level brighter than Off, as bright as on the PS2 (Off loses a level when the finished picture is copied). Needs Hardware 3D Rendering. On costs next to nothing; Deband costs about as much as FXAA (more the higher the Internal Resolution) |
 | Smoother Motion | On | smooth in-between frames up to your monitor's rate; gameplay stays at 30 FPS. Off: "vanilla" |
@@ -320,7 +325,7 @@ until the right square on the white strip is.
 | Skip Door Animations | Instant | Off: played. Instant: a short load screen instead. Skippable: any button ends them |
 | Fast Loading | On | room changes without the PS2's disc waits |
 | Battle Game Unlocked | On | Battle Game (title menu, EXTRA) from the start, all five characters; saves and records unchanged |
-| Difficulty Select | On | see [Difficulty select](#difficulty-select) |
+| Difficulty Select | On | Menu Style Legacy only; see [Difficulty select](#difficulty-select) |
 | Quick Knife | On | see [Quick knife](#quick-knife) |
 | Auto-climb Stairs | On | walk into stairs to climb them. Ledges, doors and items still need the button |
 | Aim Scoped Weapons Normally | Off | the sniper rifle and the linear launcher aim and fire like the other weapons instead of through the scope ([Scoped weapons aimed normally](#scoped-weapons-aimed-normally)) |
@@ -497,8 +502,8 @@ COOP.md, "Settings".
 
 ## Difficulty select
 
-With **Difficulty Select** on, NEW GAME asks for the difficulty, as the European and Japanese
-releases do:
+NEW GAME's GAME SETUP has **Difficulty** in OVERVIEW (remembered, ini `newgame_difficulty`). With Menu Style
+Legacy, **Difficulty Select** on makes NEW GAME ask for it instead, as the European and Japanese releases do:
 
 | Difficulty | What changes |
 |---|---|
@@ -536,18 +541,24 @@ File format: ARCHITECTURE.md, "Save system".
 Two players, each with their own copy of the same version, play one game over the internet or a
 LAN.
 
-1. **Host**: title menu -> **MULTIPLAYER** -> *Direct* -> **HOST A GAME**. Choose START (new
-   game or a save) and GAME RULES, **OPEN THE LOBBY**, then **COPY JOIN ADDRESS** and send it.
-2. Over the internet, UDP port 7140 must reach the host. Automatic Port Forwarding tries this; otherwise
-   forward it in your router and allow it in the firewall. If that is impossible, use a VPN such as
-   Tailscale or your own co-op server (COOP.md, "Playing over the internet").
-3. **Partner**: MULTIPLAYER -> *Direct* -> **JOIN A GAME**, paste the address
-   (`ip:port#CODE`) into ADDRESS, **JOIN**.
-4. Host: **START THE GAME**.
+1. **Host**: title menu -> **MULTIPLAYER** -> **HOST GAME**. The lobby opens with a **ROOM CODE**;
+   **COPY ROOM CODE** and send it. **Edit Game Setup** chooses what starts (Start From: a new game or a save)
+   and the rules; your partner can already join.
+2. **Partner**: MULTIPLAYER -> **JOIN GAME**, type the code into **Room Code or Address**, **JOIN**, then
+   **READY**.
+3. Host: **START GAME**.
 
-Without port forwarding, through the co-op server **eu.cvxenhanced.de** (filled in; the game
-contacts it only when you host or join this way): both choose *Via server* instead of *Direct*;
-the host sends the **ROOM CODE** (COPY ROOM CODE), the partner types it into CODE.
+**Connection** (SETTINGS > CO-OP, also MULTIPLAYER -> Co-op Settings) decides the way: Automatic (the default)
+makes the room on the co-op server **eu.cvxenhanced.de** (filled in; the game contacts it only when you host or
+join this way), tries a direct connection and else plays through the server's relay. **Direct** needs no server:
+the lobby shows a **JOIN ADDRESS** (`ip:port#CODE`) to copy instead, which the partner pastes into Room Code or
+Address; over the internet UDP port 7140 must then reach the host. Automatic Port Forwarding tries this; otherwise
+forward it in your router and allow it in the firewall, or use a VPN such as Tailscale or your own co-op server
+(COOP.md, "Playing over the internet").
+
+With **Menu Style** Legacy the old screens stay: MULTIPLAYER -> *Via server* or *Direct* -> **HOST A GAME**
+(START, GAME RULES, **OPEN THE LOBBY**, COPY ROOM CODE / COPY JOIN ADDRESS) and **JOIN A GAME** (CODE or
+ADDRESS, **JOIN**); the host then picks **START THE GAME**.
 
 F3 offers the same in a small window, also during a game. Everything else: COOP.md.
 
@@ -585,7 +596,8 @@ Co-op partners need the same `enemies.ini`. Modding guide: modding/README.md.
 
 ## Cheats and tools (F2)
 
-F2 (or the EXTRAS page) is for testing and fun:
+PAUSE -> **CHEATS AND TOOLS** (in a game; F2 opens the same as a window; with Menu Style
+Legacy the EXTRAS page) is for testing and fun:
 
 - **Infinite Health**, **Heal Now**, **Infinite Ammo**.
 - **Pass Through Walls**: Walls, or Walls and Flight (Page Up and F / Page Down, or R2 / L2).
@@ -600,12 +612,12 @@ F2 (or the EXTRAS page) is for testing and fun:
 - **Load Game**: the load screen where you stand, with the save system you play with. A loaded save starts
   as from the title's LOAD GAME; backing out returns to the game as it was. Not in a co-op session.
 
-On the EXTRAS page, Heal Now, Save Now, Load Game and Open Item Box run when you leave the menu; they need a
-game in progress.
+In CHEATS AND TOOLS (and the EXTRAS page), Heal Now, Save Now, Load Game and Open Item Box run when you leave
+the menu; they need a game in progress.
 
 Save Now, Load Game and Open Item Box work while you control your character: not in a cutscene, door, menu,
 message, grab, first-person view, with the weapon raised or in the Battle Game. F2 says why when
-not. Each can have a key: OPTION -> ENHANCED SETTINGS -> CONTROLS or F1 -> Controls, HOTKEYS (Save
+not. Each can have a key: SETTINGS -> CONTROLS -> BUTTONS (Customize Keyboard and Mouse) or F1 -> Controls, HOTKEYS (Save
 Anywhere, Item Box Anywhere, Load Anywhere; none by default; ini `key_cheat_save`, `key_cheat_box`,
 `key_cheat_load`).
 

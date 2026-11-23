@@ -1853,7 +1853,7 @@ static int edit_hidden(void) { return lb.edit == F_PW || (g_coop.hide_ip && (lb.
 static void draw_rows(void)
 {
     int r;
-    char label[64], val[96];
+    char label[64], val[128];
     text(ROW_X - 4, HEAD_Y, heading(), 0.5f, 0xFFFFE080);
     for (r = 0; r < R_N; r++) {
         int sel = r == lb.row, locked = row_locked(r);
@@ -2249,7 +2249,7 @@ static const char* nm_value(int r, char* buf, int n)
     case NR_CHAR: if (your_character()) ui_rows_value(your_character(), buf, n); break;
     case NR_ITEMS: items_label(buf, n, g_coop.items); break;
     case NR_FOLLOW: case NR_SHOWADDR: snprintf(buf, n, "%s", tr((r == NR_FOLLOW ? g_coop.follow : nm.show_addr) ? "On" : "Off")); break;
-    case NR_SETUP: case NR_GSETUP: { char lines[1][128]; setup_lobby_lines(lines, 0, r == NR_GSETUP, buf, n); break; }
+    case NR_SETUP: case NR_GSETUP: setup_lobby_lines(NULL, 0, r == NR_GSETUP, buf, n); break;   /* (only the brief: no lines) */
     case NR_FROM: snprintf(buf, n, "%s", g_coop.start >= 3 ? "" : tr("New Game")); if (g_coop.start >= 3) save_label(buf, n, g_coop.start - 3); break;
     case NR_READY: snprintf(buf, n, "%s", tr(nm.ready ? "Yes" : "No")); break;
     }
