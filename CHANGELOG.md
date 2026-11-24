@@ -9,52 +9,30 @@
 
 ### Changes
 
-- **Move While Aiming (Fixed Cameras)**: an option to walk while aiming, firing and reloading with the fixed cameras.
-- **What's New**: a button on the title screen shows the changes of the installed version.
-- **Imported models**: each imported game (Umbrella Chronicles, Outbreak File 2, the Dreamcast disc) has its own
-  checkbox in the model lists and under GAME SETUP > CHARACTERS; only checked games show up in the lists and random
-  picks, and all start unchecked. With Umbrella Chronicles checked and its voices imported, its characters also join
-  the cutscene randomizer and speak their own lines.
-- **BioRand**: items on the floor now show the item you will actually get instead of the original one (Show Randomized
-  Item Models, on by default).
-- **Umbrella Chronicles import**: the player characters, monsters and other characters of Resident Evil: The Umbrella
-  Chronicles (Wii, from your own .rvz disc image) can be imported under IMPORT > CHARACTERS and used as character
-  models, with blinking, lip movement and hands that grip held weapons. Their voice lines can be imported too, so
-  Randomize Voice Lines lets imported characters speak with their own voices.
-- **Break Free Pushes Enemies**: a new option (off by default) so that breaking free from any grab pushes every enemy
-  close by back, so several enemy types can no longer pass you from grab to grab.
-- **Dreamcast import**: Steve with his Dreamcast hairstyle can be imported from your own Dreamcast disc 1 (CUE/BIN, GDI
-  or CHD): his cutscene, event and in-game models, used in cutscenes, when you play him, as a cast model or as your
-  look, talking and blinking like the original.
-- **Enemy Models**: zombies (as one group), anatomists, Hunters, Sweepers, Bandersnatches and the Tyrant can be drawn
-  as other models while you fight them: a single model, or random picks from Code: Veronica or an imported game.
-- **First Person**: a third camera mode next to Fixed and Over Shoulder, with free mouse look, the precise hit
-  detection of the over-the-shoulder camera, hip fire with the left mouse button, your own body (without the head) in
-  view, also as another model, and its own field of view and HUD settings (On, Off, Minimal).
-- **Aim Scoped Weapons Normally**: an option to aim and fire the sniper rifle and the linear launcher like other
-  weapons, with auto-aim, instead of through the scope.
+- **Move While Aiming (Fixed Cameras)**: walk while aiming, firing and reloading with the fixed cameras.
+- **What's New**: a title screen button shows the changes of the installed version.
+- **Imported models**: a checkbox per imported game decides whether its models show up in the lists and random picks.
+- **BioRand**: items on the floor show the item you will actually get (Show Randomized Item Models).
+- **Umbrella Chronicles import**: its characters and monsters from your own Wii disc image, with blinking, lip
+  movement, gripping hands and their own voice lines; they can also join the cutscene randomizer.
+- **Dreamcast import**: Steve with his Dreamcast hairstyle from your own Dreamcast disc, in cutscenes and in game.
+- **Enemy Models**: draw zombies, Hunters and other enemies you fight as other models, single or random.
+- **First Person**: a new camera mode with free mouse look, precise hits, hip fire and your own body in view.
+- **Break Free Pushes Enemies**: an option to push nearby enemies back when you break free from a grab.
+- **Aim Scoped Weapons Normally**: aim the sniper rifle and linear launcher like other weapons instead of through the
+  scope.
 
 ### Fixes
 
-- **Smoother Motion**: imported models in larger numbers (for example zombies drawn as Umbrella Chronicles zombies) no
-  longer drop the frame rate. Import Umbrella Chronicles again for the full speed-up.
-- **Co-op**: your partner moves smoothly over laggy connections, less data is sent while you are in different rooms,
-  the switch to the relay server is much faster when the direct connection drops, and Windows and Linux players can
-  play together without the Tyrant breaking.
-- Characters swapped in cutscenes now put their hands where the original's are and blink and close their eyes with
-  it.
-- The sniper rifle aimed normally no longer points up in the over-the-shoulder camera when you play as another model.
-- **Smoother Motion**: effects such as fire, sparks, muzzle flashes, searchlights, particles and rain now move smoothly
-  too.
-- **Co-op**: the partner now sees boss effects such as Alexia's burning blood and fire, the Tyrant's blood and claws
-  and Steve's dust, also when arriving later in the fight.
-- In the over-the-shoulder camera, the effect of a shot hitting a wall now appears where the crosshair is, also at close
-  walls and in front of shelves or stairs.
-- **Outbreak import**: Yoko's default outfit no longer shows a torn patch on the back, Cindy's skirt now moves with
-  her legs, and small texture glitches on other outfits (belts, badges, shoes) are gone. Import the characters again
-  to get the fixes.
-- With an imported language, shots hitting walls and some other effects no longer show boxes with letters or
-  coloured squares instead of sparks, smoke or gas.
+- **Smoother Motion**: effects now move smoothly too, and many imported models no longer drop the frame rate (import
+  Umbrella Chronicles again for the full speed-up).
+- **Co-op**: smoother partner movement on laggy connections, a faster switch to the relay server, boss effects shown to
+  the partner, and Windows and Linux players can play together.
+- Swapped characters in cutscenes put their hands where the original's are and blink with it.
+- The sniper rifle no longer points up when aimed normally as another model.
+- Shots hitting walls show their effect where the crosshair is.
+- **Outbreak import**: fixes for Yoko's and Cindy's outfits and small texture glitches (import again).
+- Imported languages no longer break effect textures.
 
 ## 0.8.0 (2026-11-15)
 
