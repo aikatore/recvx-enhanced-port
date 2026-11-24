@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.1 (2026-11-24)
 
 > [!NOTE]
 > Sorry for the delay for this update, but GTA6 is a time hog :D  This version adds new imports and updates the
