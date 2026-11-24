@@ -1827,9 +1827,44 @@ static void hands_back(int who)
     real[who].src = NULL;
 }
 
+/* The effects our player's control starts at a weapon hand and leaves there (bhSetGunFire: the muzzle flash, its smoke,
+   at the muzzle point of hand node 9 or 13, lkono that node, not linked to it): the game's own hand (actor_hands_back) is
+   not where the model holds the weapon, so the flash showed beside the drawn gun (first person: nearer the middle of the
+   view). After the model's hands are put on the nodes (actor_pose), each such effect started this tick is moved with the
+   hand from the game's to the model's: its position and its matrix (the flash's quad turns with the barrel). Linked ones
+   (flg 0x80) follow the node by themselves. fx_was: the effects alive before bhControlPlayer */
+static unsigned char fx_was[512];
+static void fx_move(const float* from, const float* to, const float* p, float* out, int point)
+{
+    float l[3];
+    int j, c;
+    for (j = 0; j < 3; j++) l[j] = (p[0] - point * from[12]) * from[j * 4] + (p[1] - point * from[13]) * from[j * 4 + 1] + (p[2] - point * from[14]) * from[j * 4 + 2];
+    for (c = 0; c < 3; c++) out[c] = l[0] * to[c] + l[1] * to[4 + c] + l[2] * to[8 + c] + point * to[12 + c];
+}
+void actor_fire_fx(void)
+{
+    int i, r;
+    if (real[0].src != plp || !plp || !plp->mlwP || plp->mlwP->obj_num < 14) return;
+    for (i = 0; i < 512; i++) {
+        O_WRK* op = &eff[i];
+        const float *from, *to;
+        float q[3];
+        if (fx_was[i] || !(op->flg & 1) || (op->flg & 0x80) || (op->lkono != 9 && op->lkono != 13)) continue;
+        fx_was[i] = 1;
+        from = real[0].mtx[op->lkono == 9 ? 1 : 2];
+        to = plp->mlwP->owP[op->lkono].mtx;
+        fx_move(from, to, &op->px, q, 1);
+        op->px = q[0]; op->py = q[1]; op->pz = q[2];
+        if (op->mtx == (float(*)[16])op->mtxbuf)
+            for (r = 0; r < 4; r++) fx_move(from, to, &(*op->mtx)[r * 4], &(*op->mtx)[r * 4], r == 3);
+    }
+}
+
 /* game.c, before bhControlPlayer */
 void actor_hands_back(void)
 {
+    int i;
+    for (i = 0; i < 512; i++) fx_was[i] = eff[i].flg & 1;
     actor_ticks++;
     pc_plp_frm = -1;   /* (set again by this tick's bhControlPlayer) */
     if (!real[0].src) aim_ofs[0] = aim_ofs[1] = aim_ofs[2] = 0, aim_set = 0;
@@ -2623,6 +2658,98 @@ int actor_hand_free(int who, int node)
 int actor_head_node(int who) { return dg[who].model >= 0 && dg[who].rig.ok ? dg[who].rig.map[5] : -1; }
 /* its neck (the head's parent role), else its head: first person hides from there */
 int actor_neck_node(int who) { return dg[who].model >= 0 && dg[who].rig.ok && dg[who].rig.map[4] >= 0 ? dg[who].rig.map[4] : actor_head_node(who); }
+/* First person (tps_glue.c tps_fp_hide), around our own draw while the eye is pulled back behind the head (a long gun
+   aimed, k = how far): the body is cut away but the forearms and hands, which hold the weapon. Each mesh of ours drawn
+   tags the vertices it writes into the vertex work buffer (pc_mesh_begin: its vertex chunk's index offset and count) in
+   pc_body_cut: 0 kept (the forearms and every node below them: hands, fingers), 1 cut (native_glue.c pushes their near
+   plane out by pc_body_cut_near, k * 10: the cut sweeps out from the eye as the eye moves back, no pop), 2 / 3 the right /
+   left upper arm: put on its elbow (pc_body_elbow, view space) and cut just there, so the forearm's triangles to it close
+   the arm at the elbow (a cut there showed the sleeve's inside; the upper arms and shoulders filled the view from
+   behind). Nodes: the game's skeleton's 7, 8 and 11, 12 (also a part file's), the "You appear as" model's roles. A skinned
+   mesh (the player's body is one, on node 1) by each vertex's node: the game's skin table (npCalcSkin: per node a flag,
+   the mesh, with flag 2 the mesh's vertices in order, node << 24 | blend level << 16; npCalcSkinFM leaves nodes 11..14
+   out of it), an imported model's by each vertex's strongest bone. k = 0: none cut */
+extern unsigned char pc_body_cut[65536];
+extern float pc_body_cut_near, pc_body_elbow[2][3];
+static unsigned char cut_tag[2][NODES];
+static signed char cut_elbow[2][2];
+static BH_PWORK* cut_w[2];
+static int cut_n[2];
+static void cut_nodes(int s, BH_PWORK* w, const signed char* role)
+{
+    const NJS_CNK_OBJECT* o = w && w->mlwP ? w->mlwP->objP : NULL;
+    int n = o ? w->mlwP->obj_num : 0, st[NODES], sp = 0, cur = -1, i, arms = role && role[7] >= 0 && role[8] >= 0 && role[11] >= 0 && role[12] >= 0;
+    cut_w[s] = w; cut_n[s] = 0;
+    if (!o || n > NODES) return;
+    cut_elbow[s][0] = arms ? role[8] : -1; cut_elbow[s][1] = arms ? role[12] : -1;
+    for (i = 0; i < n; i++) {   /* (pre-order, child/sibling: as rig_build; no arms known: all of it cut, as hidden before) */
+        unsigned char t = cur >= 0 ? cut_tag[s][cur] : 1;
+        cut_tag[s][i] = !arms ? 1 : i == role[8] || i == role[12] ? 0 : i == role[7] ? 2 : i == role[11] ? 3 : t;
+        if (o[i].sibling && sp < NODES) st[sp++] = cur;
+        cur = o[i].child ? i : sp ? st[--sp] : -1;
+    }
+    cut_n[s] = n;
+}
+void actor_fp_cut(float k)
+{
+    static const signed char own[22] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21 };
+    Disguise* d = &dg[0];
+    pc_body_cut_near = k > 0.01f ? k * 10.0f : 0.0f;
+    if (!pc_body_cut_near) return;
+    cut_nodes(0, plp, plp && plp->mlwP && plp->mlwP->obj_num >= 14 ? own : NULL);
+    cut_nodes(1, d->model >= 0 && d->rig.ok ? &d->w : NULL, d->rig.map);
+}
+/* node k's vertex table in w's skin (n entries), NULL: none */
+static const int* cut_skin(const BH_PWORK* w, int k, int* n)
+{
+    const int* p = (w->mlwP->flg & 0x80) ? w->skp[w->mdl_no] : NULL;
+    int i, flg, fm = (w->mdflg & 0x100) != 0;
+    for (i = 0; p && i <= k; i++) {
+        if (fm && i >= 11 && i <= 14) continue;
+        if (!(flg = *p++)) continue;
+        p++;   /* (the mesh) */
+        if (!(flg & 2)) continue;
+        if (i == k) { *n = *p; return p + 1; }
+        p += 1 + *p;
+    }
+    return NULL;
+}
+void actor_fp_cut_tag(const void* model)
+{
+    const unsigned short* h = model ? (const unsigned short*)((const NJS_CNK_MODEL*)model)->vlist : NULL;
+    const unsigned char* t;
+    const int* e;
+    int s, k = 0, off, cnt, i, j, nb;
+    if (!h) return;
+    off = h[2]; cnt = h[3];
+    if (off + cnt > (int)sizeof(pc_body_cut)) cnt = (int)sizeof(pc_body_cut) - off;
+    if (cnt <= 0) return;
+    for (s = 0; s < 2; s++) {
+        for (k = 0; k < cut_n[s] && cut_w[s]->mlwP->objP[k].model != model; k++) {}
+        if (k < cut_n[s]) break;
+    }
+    if (s == 2) { memset(pc_body_cut + off, 0, cnt); return; }   /* (not ours) */
+    t = cut_tag[s];
+    for (i = 0; i < 2; i++)   /* the elbows as this draw has them (a part file's are put on the skeleton for it) */
+        if (cut_elbow[s][i] >= 0)
+            njCalcPoint(cam.mtx, (NJS_POINT3*)&cut_w[s]->mlwP->owP[(int)cut_elbow[s][i]].mtx[12], (NJS_POINT3*)pc_body_elbow[i]);
+    memset(pc_body_cut + off, t[k], cnt);
+    if (s == 1 && dg[0].skin && k == 1) {   /* an imported model: its one mesh on the pelvis */
+        for (i = 0; i < dg[0].nv && i < cnt; i++) {
+            const CvxmSkin* v = &dg[0].skin[i];
+            for (nb = 0, j = 1; j < 4; j++) if (v->w[j] > v->w[nb]) nb = j;
+            pc_body_cut[off + i] = v->node[nb] < cut_n[1] ? t[v->node[nb]] : 1;
+        }
+    } else if ((e = cut_skin(cut_w[s], k, &nb))) {
+        int fm = (cut_w[s]->mdflg & 0x100) != 0;
+        for (i = 0; i < nb && i < cnt; i++) {
+            int b = e[i] >> 24;
+            if (fm && b > 10) b += 4;
+            pc_body_cut[off + i] = b < cut_n[s] ? t[b] : 1;
+        }
+    }
+}
+
 /* our player is drawn as another model (actor_put_player draws it; actor_on also counts the partner, enemies and the cast) */
 int actor_player_look(void) { return (dg[0].model >= 0 && dg[0].posed) || sh[0].body; }
 

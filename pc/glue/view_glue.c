@@ -34,8 +34,11 @@ static int margin_next;
 void pc_margin_next(int mode) { margin_next = mode; }
 static void take_view(void);
 static int view_taken;
+extern float pc_body_cut_near;   /* native_glue.c: first person, our body cut away but its arms */
+void actor_fp_cut_tag(const void* model);   /* actor_glue.c */
 void pc_mesh_begin(const void* model)
 {
+    if (pc_body_cut_near > 0.0f) actor_fp_cut_tag(model);   /* (its vertices: cut or kept) */
     if (!view_taken) take_view();   /* the first mesh of a frame: the camera it is drawn with */
     pc_cur_mesh = (uint32_t)(uintptr_t)model; pc_cur_strip = 0; stream_tag(pc_cur_mesh);
     pc_margin_mesh = margin_next; margin_next = 0;

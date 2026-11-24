@@ -675,7 +675,11 @@ weapon of a hand the model lacks floated at the invisible source's hand.
 
 * **Weapon hands** (`actor_pose`): the source's hand nodes 9/13 get the model's hand position and
   the copy's hand rotation for the tick's effects, objects and drawing, so weapons sit in the
-  model's hands and the muzzle flash starts there.
+  model's hands. The muzzle flash and its smoke (`bhSetGunFire`, during `bhControlPlayer`, from the
+  game's own hand: not linked to it, `lkono` 9 or 13) are moved with the hand from the game's to the
+  model's right after the pose (`actor_fire_fx`, from `coop_look.c self_keep`): before, they showed
+  beside the drawn gun, in first person nearer the middle of the view (Kevin: 0.06..0.08 of the
+  view's tangent; the game's model and the part files have the game's hand and were right).
 * **Hand pieces on imported models** (`actor_weapon_hands`): a weapon model is a hand piece, object 0
   (the character's gloved hand around the grip; unarmed: the fist), with the weapon as its child. On
   an imported model (which has its own hands) object 0 is hidden (`NJD_EVAL_HIDE`, the weapon below it

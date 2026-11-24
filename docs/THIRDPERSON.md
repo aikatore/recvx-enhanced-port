@@ -206,13 +206,25 @@ character differ. Off it is not used at all (`fp` is 0: every first-person branc
   variants and the partner's look set too): in such rooms our own head stayed in the view. What the head wears (Claire's ponytail, Wesker's
   glasses: `sys->obwp[2]` on node 5) is not drawn (`tps_fp_objects`, a hook around `bhDrawObjItm` in `game.c
   bhAllDrawModel`). Looking down shows the legs, the arms and the weapon in the hand. While the eye is pulled back behind
-  the head (a low weapon aimed, `fp_back` > 0.3) the body would fill the view from inside: then, and with the setting
-  Off, the body is not drawn (the nodes' hide flag, `evalflags 0x8`; "You appear as": not drawn) and the weapon model
-  (its hand piece holding it, object 0, and the weapon) stays; a model with hands of its own shows the weapon's hand
-  piece then (`actor_weapon_hands` hides it otherwise). Without the body the lowered weapon is not drawn either (it hung
-  at the hip under the view: `sys->pt_flg` 1 off around `bhDrawObjItm`, which draws the objects linked to a work with id
-  1210 on, the weapons, only with the player). For our draw only: the shadow, the pose and the co-op partner's view of
-  us are unchanged.
+  the head (a weapon aimed or raised below the eyes: `fp_back` > 0.01) the back and shoulders would fill the view: the
+  body is cut away but the forearms and hands, which stay on the weapon (`actor_glue.c actor_fp_cut`). Each mesh of ours
+  drawn tags the vertices it writes into the vertex work buffer (`view_glue.c pc_mesh_begin`, `pc_body_cut`) by their
+  node: the forearms and below kept; the upper arms put on the elbow and cut just there, so the forearm is closed at the
+  elbow (cut by a plane the sleeve's inside showed); the rest cut by a near plane pushed out by `fp_back` x 10 for these
+  vertices (`native_glue.c pc_native_strip`; strips without vertex numbers, the see-through ones drawn from the ordering
+  table such as hair and fur, `pc_native_prim3d`, are all cut: the cut sweeps out from the eye as the eye moves back, no
+  pop). The player's body is one skinned mesh on node 1: by the skin table's node of each vertex (`npCalcSkin`), an
+  imported model's by each vertex's strongest bone, "You appear as" by its arm roles (7, 8, 11, 12). Before, the whole
+  body was hidden there (`fp_back` >= 0.3): raising the handgun the gun and its glove showed alone for 13 game frames
+  (Claire; with Steve's, Wesker's or the Dreamcast Steve's part file, whose hand is lower, for most of the aim), and the
+  shotgun's, rifles' and launchers' left hand floated on the fore-grip without an arm while aimed. With the
+  setting Off the body is not drawn (the nodes' hide flag, `evalflags 0x8`; "You appear as": not drawn) and the weapon
+  model (its hand piece holding it, object 0, and the weapon) stays; a model with hands of its own shows the weapon's
+  hand piece then (`actor_weapon_hands` hides it otherwise). Without the body the lowered weapon is not drawn either (it
+  hung at the hip under the view: `sys->pt_flg` 1 off around `bhDrawObjItm`, which draws the objects linked to a work
+  with id 1210 on, the weapons, only with the player). For our draw only: the shadow, the pose and the co-op partner's
+  view of us are unchanged. Test aid `RECVX_FP_TRACE=1`: per drawn frame `fp_back`, the weapon's modes and whether the
+  body is drawn.
 * **Moving**: the mouse turns the view, W/A/S/D walk towards that direction seen from the view, the body turned to it
   at once (`tps_player`; the game has no sideways walk: A/D turn the body 90 degrees and walk; before, beyond 50 degrees
   0.3 of the way a frame, which curved a strafe and turned before walking back). Back (S, also with A/D) is the game's

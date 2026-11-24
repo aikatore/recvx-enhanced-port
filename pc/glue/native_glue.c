@@ -30,6 +30,11 @@ extern float fVu1AspectH, fVu1Projection, fVu1OffsetX, fVu1OffsetY;
 extern float Ps2_zbuff_b;
 extern int pc_margin_mesh;   /* view_glue.c: the mesh being drawn shows only in the hor+ margins (2, 3: pc_margin_reaches_43) */
 extern float pc_margin_player[2];
+/* first person, around our own draw (actor_glue.c actor_fp_cut): the vertices of the vertex work buffer that are cut away
+   (1: the body but its arms) and how much farther their near plane is (0: nothing cut) */
+unsigned char pc_body_cut[65536];
+float pc_body_cut_near;
+float pc_body_elbow[2][3];   /* tag 2 / 3: put on the right / left elbow (view space) and cut there */
 
 /* hor+ widescreen, while a menu task runs (main.c njUserMain): its 2D is kept inside the 4:3
    screen, GS x 1728..2368 where the Ninja 2D calls put it, as the PS2's 640-wide display shows
@@ -117,7 +122,9 @@ void pc_native_strip(const unsigned short* idx_uv, int n, const VU1_STRIP_BUF* v
     for (int i = 0; i < n; i++) {
         const VU1_STRIP_BUF* p = &vbuf[idx_uv[i * 3]];
         const float in[4] = { p->fIr, p->fIg, p->fIb, p->fNz };
-        float col[4], w = p->fVz, z = -Ps2_zbuff_b * p->fIz - Ps2_zbuff_a;
+        const int cut = pc_body_cut_near > 0.0f ? pc_body_cut[idx_uv[i * 3]] : 0;
+        const float* ve = cut >= 2 ? pc_body_elbow[cut - 2] : &p->fVx;   /* (view-space x, y, z) */
+        float col[4], w = ve[2], z = -Ps2_zbuff_b * p->fIz - Ps2_zbuff_a;
         NativeVertex* o = &v[i];
         if (dbg > 0) {
             dbg--;
@@ -125,15 +132,15 @@ void pc_native_strip(const unsigned short* idx_uv, int n, const VU1_STRIP_BUF* v
                     p->fVx, p->fVy, p->fVz, p->fSx, p->fSy, kx * p->fVx / p->fVz, ky * p->fVy / p->fVz, p->fIz, 1.0f / p->fVz, z, p->fFog);
         }
         vertex_color(color_mode, in, col);
-        o->x = fVu1OffsetX * w + kx * p->fVx;
-        o->y = fVu1OffsetY * w + ky * p->fVy;
+        o->x = fVu1OffsetX * w + kx * ve[0];
+        o->y = fVu1OffsetY * w + ky * ve[1];
         o->z = -Ps2_zbuff_b - Ps2_zbuff_a * w;   /* z * w, z = -b * Iz - a with Iz = 1 / Vz */
         o->w = w;
         o->s = uv_scale * (float)idx_uv[i * 3 + 1];
         o->t = uv_scale * (float)idx_uv[i * 3 + 2];
         o->r = to_byte(col[0]); o->g = to_byte(col[1]); o->b = to_byte(col[2]); o->a = to_byte(col[3]);
         o->fog = p->fFog;   /* wrapped to the GS's 8 bits only when drawn: clipping and blending use the real value */
-        o->near_d = w - _fNaViwClipNear;
+        o->near_d = cut >= 2 ? -0.01f : cut ? w - _fNaViwClipNear - pc_body_cut_near : w - _fNaViwClipNear;
         o->far_d = _fNaViwClipFar - w;
         o->cull = (single && p->fNz > 0.0f) | (pc_margin_mesh ? 4 : 0);
     }
@@ -168,7 +175,8 @@ uint32_t pc_native_prim3d(unsigned int prim, const VU1_PRIM_BUF* in, int n, int 
         o->t = p->fQ != 0.0f ? p->fT / p->fQ : 0.0f;
         o->r = to_byte(p->fR); o->g = to_byte(p->fG); o->b = to_byte(p->fB); o->a = to_byte(p->fA);
         o->fog = p->fF;
-        o->near_d = w - _fNaViwClipNear;
+        o->near_d = w - _fNaViwClipNear - pc_body_cut_near;   /* (first person, our body: these strips (its see-through
+                                                                  parts: hair, fur) have no vertex numbers, all cut) */
         o->far_d = _fNaViwClipFar - w;
         o->cull = ((p->ulKick & 0x8001) == 0x8001 ? 2 : 0) | (pc_margin_mesh ? 4 : 0);
     }

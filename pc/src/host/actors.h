@@ -137,6 +137,7 @@ void actor_pose(int who, struct BH_PWORK* src);   /* after src's bhSetMotion and
 void actor_draw(int who);               /* bhPutModel: the caller sets camera matrix, lights, textures state */
 struct BH_PWORK* actor_work(int who);   /* its work (model, node matrices), NULL when none is shown */
 void actor_weapon_hands(int who, struct O_WRK* wpn, int n);   /* the weapon models' hand pieces hidden while slot who shows an imported model (it has its own hands) */
+void actor_fire_fx(void);   /* after actor_pose(0, plp): the muzzle flash our control started this tick moved to the model's hand (actor_glue.c) */
 int  actor_hand_free(int who, int node);   /* 1: the source's hand node (9, 13) is at the model's hand, which has no mesh of its own */
 int  actor_head(int who, float* out);   /* world position of its head node (else its highest node); 0 when none is shown */
 int  actor_head_node(int who);          /* its head node (the rig's head role), -1: none found or none shown */

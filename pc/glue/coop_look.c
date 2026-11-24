@@ -305,6 +305,7 @@ static void self_keep(void)
     if (actor_shown(0) && !self_cine) op->flg &= ~0x1;   /* also when the game set up the player again (story switch) */
     actor_source(0, plp, self_mesh >= 0 && self_ours() ? self_mesh & 3 : actor_shown(0) ? -1 : sys->ply_id, sys->ply_id, tps_aim_pitch());   /* gender-matched animations */
     actor_pose(0, plp);
+    actor_fire_fx();   /* the muzzle flash started this tick: at the model's hand */
     actor_weapon_hands(0, sys->obwp, 2);   /* an imported model: its own hands on the weapon, not the piece's */
     if (self_mesh < 0 || !self_ours()) return;
     keep_bones(&plp->mdl[0], self_bone);

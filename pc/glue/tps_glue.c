@@ -2509,7 +2509,8 @@ extern int actor_fp_nohead;
 extern unsigned char pl_sleep_cnt;   /* system.c: a few frames the player is drawn although hidden (event.c) */
 int actor_player_look(void);   /* actor_glue.c: we are drawn as another model */
 /* the body is drawn: the setting, and the eye not pulled back behind the head (a weapon held low, aimed: fp_track) */
-static int fp_body(void) { return g_tps.fp_body && fp_back < 0.3f; }
+static int fp_body(void) { return g_tps.fp_body; }
+void actor_fp_cut(float k);   /* actor_glue.c: the body cut away but its arms (k = fp_back; 0 nothing) */
 int tps_fp_hide(int on)
 {
     static unsigned hid;   /* the nodes hidden here */
@@ -2519,10 +2520,17 @@ int tps_fp_hide(int on)
         for (i = 0; i < n && i < 32; i++) if (hid & (1u << i)) o[i].evalflags &= ~0x8;
         hid = 0;
         actor_fp_nohead = 0;
+        actor_fp_cut(0);
         return 0;
     }
     if (!tps_cam_active || fp_w <= 0.15f || !o) return 0;
-    if (fp_body()) { actor_fp_nohead = 1; return 0; }
+    {   /* test aid RECVX_FP_TRACE: per drawn frame the eye's pull-back, the weapon up (mode1 1) and how the body is drawn */
+        static int t = -1;
+        if (t < 0) t = getenv("RECVX_FP_TRACE") != NULL;
+        if (t) printf("fp: frame %u back %.2f wpn %d mode %d/%d body %d look %d\n", (unsigned)gs_frame_count(), fp_back, plp->wpnr_no,
+                      plp->mode1, plp->mode2, fp_body(), actor_player_look());
+    }
+    if (fp_body()) { actor_fp_nohead = 1; actor_fp_cut(fp_back); return 0; }
     if (actor_player_look() || n > 32) {   /* (game.c skips its whole draw block: its pl_sleep_cnt count down, here) */
         if (pl_sleep_cnt && ((sys->pt_flg & 1) || (plp->stflg & 0x01000000))) pl_sleep_cnt--;
         return 1;
